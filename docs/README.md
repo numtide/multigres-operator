@@ -20,8 +20,8 @@ The operator creates and manages all necessary Kubernetes resources for these co
 
 ## Technology
 
-- **Language**: Go 1.24+
-- **Framework**: Kubebuilder v3
+- **Language**: Go
+- **Framework**: Kubebuilder
 - **Observability**: OpenTelemetry (traces, metrics, logs)
 - **Testing**: Go testing + envtest (100% coverage goal)
 
@@ -29,12 +29,12 @@ The operator creates and manages all necessary Kubernetes resources for these co
 
 ```
 src/multigres-operator/
-├── api/v1alpha1/      # CRD definitions
-├── cmd/multigres-operator/      # Main entry point
-├── internal/          # Controller and resource builders
-├── config/            # Kubernetes manifests
-├── docs/              # Architecture and guides
-└── plans/             # Planning documents
+├── api/v1alpha1/           # CRD definitions
+├── cmd/multigres-operator/ # Main entry point
+├── internal/               # Controller and resource builders
+├── config/                 # Kubernetes manifests
+├── docs/                   # Architecture and guides
+└── plans/                  # Planning documents
 ```
 
 ## Documentation
