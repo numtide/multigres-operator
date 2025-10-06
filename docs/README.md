@@ -27,11 +27,19 @@ The operator creates and manages all necessary Kubernetes resources for these co
 
 ## Project Structure
 
+### Code
+
 ```
-src/multigres-operator/
+ROOT/src/multigres-operator/
 ├── api/v1alpha1/           # CRD definitions
 ├── cmd/multigres-operator/ # Main entry point
-├── internal/               # Controller and resource builders
+└── internal/               # Controller and resource builders
+```
+
+### Documentation and Configuration
+
+```
+ROOT
 ├── config/                 # Kubernetes manifests
 ├── docs/                   # Architecture and guides
 └── plans/                  # Planning documents
