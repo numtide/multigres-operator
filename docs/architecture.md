@@ -41,7 +41,7 @@
 ```
 multigres-operator/
 ├── api/v1alpha1/           # CRD definitions and types
-├── cmd/operator/           # Main entry point
+├── cmd/multigres-operator/ # Main entry point
 ├── internal/
 │   ├── controller/         # Main reconciler and component reconcilers
 │   │   ├── etcd/
