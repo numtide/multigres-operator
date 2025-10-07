@@ -22,9 +22,43 @@ on:
 permissions:
   contents: write
   packages: write
+  security-events: write
 
 jobs:
+  scan-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - uses: actions/dependency-review-action@v4
+        # this action requires a base and head
+        if: ${{ github.event_name == 'pull_request' }}
+
+  scan-codeql:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: actions,go
+      - uses: github/codeql-action/analyze@v3
+
+  scan-nix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Check Nix flake inputs
+        uses: DeterminateSystems/flake-checker-action@main
+        with:
+          send-statistics: false
+
   build-go:
+    needs: [ scan-dependencies, scan-codeql, scan-nix ]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -68,6 +102,8 @@ jobs:
         with:
           name: multigres-operator-${{matrix.arch}}
           path: dist/*
+          if-no-files-found: error
+          retention-days: 7
 
   build-push-container:
     needs: [ build-go ]
@@ -79,49 +115,77 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
+      - name: Set up Docker for multi-platform
+        uses: docker/setup-docker-action@v4
+        with:
+          daemon-config: |
+            {
+              "debug": true,
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Log into registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract container metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=branch,prefix=
-            type=ref,event=tag,prefix=
-            type=sha,format=short,prefix=
-            type=sha,format=long,prefix=
 
       - uses: actions/download-artifact@v5
         with:
           pattern: multigres-operator-*
           path: dist/
 
-      - name: Build and push container image
-        id: build-and-push
+      - name: Log into registry
+        if: ${{ inputs.push-container-image }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build container image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Containerfile
           platforms: linux/${{ join(fromJson(inputs.architectures), ',linux/') }}
-          push: ${{ inputs.push-container-image }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          push: false
+          tags: "ghcr.io/${{ github.repository }}:${{ github.sha }}"
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          outputs: type=oci,dest=container-image.tar
+
+      - name: Push to registry
+        if: ${{ inputs.push-container-image }}
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}"
+          docker push "$IMAGE:${{ github.sha }}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:${{ github.ref_name }}"
+            docker push "$IMAGE:${{ github.ref_name }}"
+          fi
+
+  scan-container:
+    # requires that the container image be pushed already because
+    # the scanner runs in a container with a different local registry
+    # possible improvement: only push latest and tag versions after scanning
+    needs: [ build-push-container ]
+    if: ${{ inputs.push-container-image }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan image with grype
+        uses: anchore/scan-action@v6
+        with:
+          image: "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+
 
   create-release:
-    needs: [ build-go ]
+    needs: [ scan-container ]
     runs-on: ubuntu-latest
     if: ${{ inputs.create-release }}
     steps:
