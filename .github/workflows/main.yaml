@@ -1,0 +1,16 @@
+name: Build main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/build-and-release.yaml
+    with:
+      push-container-image: true

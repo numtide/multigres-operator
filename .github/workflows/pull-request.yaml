@@ -1,0 +1,12 @@
+name: Run checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/build-and-release.yaml
