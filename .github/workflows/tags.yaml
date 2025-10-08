@@ -1,0 +1,17 @@
+name: Release tag
+
+on:
+  push:
+    tags:
+      - '**'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  run:
+    uses: ./.github/workflows/build-and-release.yaml
+    with:
+      push-container-image: true
+      create-release: true

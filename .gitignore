@@ -1,0 +1,9 @@
+# direnv
+.direnv/
+
+# nix
+result
+result-*
+
+# generic
+dist/
