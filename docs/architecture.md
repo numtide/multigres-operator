@@ -40,36 +40,68 @@
 
 ```
 multigres-operator/
-├── api/v1alpha1/           # CRD definitions and types
+├── go.mod                  # Root module (primarily for cmd)
 ├── cmd/multigres-operator/ # Main entry point
-├── internal/
-│   ├── controller/         # Main reconciler and component reconcilers
-│   │   ├── etcd/
-│   │   ├── multigateway/
-│   │   ├── multiorch/
-│   │   └── multipooler/
-│   ├── resources/          # Pure resource builder functions
-│   ├── webhook/            # Admission webhooks (defaulting, validation)
-│   └── testutil/           # Test helpers and utilities
+├── pkg/
+│   ├── cluster-handler/    # Cluster-level orchestration (separate Go module)
+│   │   ├── go.mod
+│   │   └── controller/
+│   │       └── multigrescluster/  # MultigresCluster reconciler
+│   ├── data-handler/       # Data plane management (separate Go module)
+│   │   ├── go.mod
+│   │   └── controller/
+│   │       └── cell/       # Cell reconciler
+│   └── resource-handler/   # Component resources (separate Go module)
+│       ├── go.mod
+│       └── controller/
+│           ├── multigateway/
+│           ├── multiorch/
+│           ├── multipooler/
+│           └── etcd/
 ├── config/                 # Kubernetes manifests for operator deployment
 ├── docs/                   # Architecture, conventions, and development guides
 └── plans/                  # Planning documents
+
+Note: go.work file can be created locally for development convenience. It is in .gitignore.
 ```
 
-### API Layer (`api/v1alpha1`)
-- **Purpose**: Defines Multigres custom resource schema
-- **Components**: MultigresSpec, MultigresStatus, component specs (MultiGatewaySpec, MultiOrchSpec, MultiPoolerSpec, EtcdSpec)
-- **Validation**: Kubebuilder markers for OpenAPI validation and defaults
+### Multi-Module Architecture
 
-### Controller Layer (`internal/controller`)
-- **MultigresReconciler**: Main controller - manages lifecycle, finalizers, status aggregation
-- **Component Reconcilers**: etcd, multigateway, multiorch, multipooler reconcilers run in parallel
-- **Responsibilities**: Create/update resources, check component health, update status
+The operator is organized into three independent Go modules with clear separation of concerns. Developers can use **Go workspaces** locally (`go.work`) for easier cross-module development, though this file is not committed to the repository:
 
-### Resource Layer (`internal/resources`)
-- **Pure Functions**: Build Kubernetes manifests (Deployments, StatefulSets, Services, HPAs)
-- **Label Management**: Consistent label generation for resource selection
-- **No Side Effects**: Same input always produces same output
+#### Cluster Handler Module (`pkg/cluster-handler`)
+- **Purpose**: High-level cluster orchestration
+- **Responsibilities**:
+  - Manages MultigresCluster custom resource
+  - Coordinates creation of child resources (MultiGateway, MultiOrch, MultiPooler, Etcd, Cell)
+  - Aggregates status from child resources
+  - Handles cluster-wide lifecycle (finalizers, upgrades)
+- **Independence**: Can be tested and versioned separately from resource handlers
+
+#### Data Handler Module (`pkg/data-handler`)
+- **Purpose**: Data plane management and topology
+- **Responsibilities**:
+  - Manages Cell custom resource (data topology abstraction)
+  - Handles data plane configuration and routing
+  - Coordinates with Vitess/Multigres data components
+- **Independence**: Data plane logic isolated from control plane and resource management
+
+#### Resource Handler Module (`pkg/resource-handler`)
+- **Purpose**: Individual component resource management
+- **Responsibilities**:
+  - Manages component CRDs: MultiGateway, MultiOrch, MultiPooler, Etcd
+  - Creates and reconciles Kubernetes resources (Deployments, StatefulSets, Services, HPAs)
+  - Implements pure resource builder functions
+  - Component-specific health checking and status reporting
+- **Independence**: Component reconcilers can evolve independently of cluster orchestration
+
+### Benefits of Multi-Module Structure
+
+- **Clear Boundaries**: Each module has distinct responsibilities and can be understood independently
+- **Independent Testing**: Unit and integration tests scoped to each module
+- **Parallel Development**: Teams can work on different modules without conflicts
+- **Selective Imports**: Main binary only imports what it needs from each module
+- **Version Flexibility**: Modules can evolve at different paces (though currently developed in lockstep)
 
 ## Core Components
 
@@ -85,14 +117,14 @@ The operator follows a standard Kubernetes reconciliation pattern:
 
 ### Component Reconcilers
 
-Each Multigres component has its own reconciler:
+The **resource-handler** module contains individual reconcilers for each Multigres component:
 
-- **etcd Reconciler**: Manages StatefulSet for etcd cluster, headless and client Services
-- **multigateway Reconciler**: Manages Deployment, Service, and optional HPA for MultiGateway
-- **multiorch Reconciler**: Manages Deployment and optional HPA for MultiOrch
-- **multipooler Reconciler**: Manages StatefulSet with multi-container pods (pooler, pgctld, postgres), and optional HPA
+- **etcd Reconciler** (`pkg/resource-handler/controller/etcd`): Manages StatefulSet for etcd cluster, headless and client Services
+- **multigateway Reconciler** (`pkg/resource-handler/controller/multigateway`): Manages Deployment, Service, and optional HPA for MultiGateway
+- **multiorch Reconciler** (`pkg/resource-handler/controller/multiorch`): Manages Deployment and optional HPA for MultiOrch
+- **multipooler Reconciler** (`pkg/resource-handler/controller/multipooler`): Manages StatefulSet with multi-container pods (pooler, pgctld, postgres), and optional HPA
 
-All component reconcilers run in parallel.
+All component reconcilers run in parallel and are independent of each other.
 
 ### Resource Builders
 
@@ -146,8 +178,8 @@ Current preference is init container pattern (same as Istio, NGINX Ingress), but
 ## Technology Stack
 
 ### Language and Runtime
-- **Language**: Go 1.24+
-- **Key Features**: Concurrency, interfaces, strong typing
+- **Language**: Go 1.25+
+- **Key Features**: Concurrency, interfaces, strong typing, workspaces for multi-module projects
 
 ### Key Dependencies
 - **Framework**: Kubebuilder v3 - scaffolding and patterns for Kubernetes operators
