@@ -117,7 +117,7 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 ## Finalizer Handling
 
-- Add finalizer `cell.multigres.io/finalizer` on Cell creation
+- Add finalizer `cell.multigres.com/finalizer` on Cell creation
 - On deletion, remove Cell entry from Topo Server before removing finalizer
 - Ensures Cell is properly deregistered before CR is deleted
 
