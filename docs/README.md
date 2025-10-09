@@ -31,9 +31,14 @@ The operator creates and manages all necessary Kubernetes resources for these co
 
 ```
 multigres-operator/
-├── api/v1alpha1/           # CRD definitions
+├── go.mod                  # Root module
 ├── cmd/multigres-operator/ # Main entry point
-└── internal/               # Controller and resource builders
+└── pkg/                    # Multi-module structure
+    ├── cluster-handler/    # Cluster orchestration (separate module)
+    ├── data-handler/       # Data plane management (separate module)
+    └── resource-handler/   # Component resources (separate module)
+
+Note: go.work can be created locally for development. It is in .gitignore
 ```
 
 ### Documentation and Configuration

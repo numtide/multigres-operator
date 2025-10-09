@@ -5,13 +5,13 @@
 ## Development Environment
 
 ### Language Configuration
-- **Language**: Go 1.24+
-- **Build System**: Make for task orchestration, Go modules for dependencies
-- **Project Structure**: Standard Kubebuilder layout - `api/`, `cmd/`, `internal/`, `config/`
+- **Language**: Go 1.25+
+- **Build System**: Make for task orchestration, Go workspaces for multi-module management
+- **Project Structure**: Multi-module workspace - `go.work`, `pkg/{module}/`, `cmd/`, `config/`
 - **Linting**: golangci-lint (configured in `.golangci.yml`)
 
 ### Required Tools
-- **go**: 1.24 or higher
+- **go**: 1.25 or higher (workspace support required)
 - **kubectl**: Kubernetes CLI for cluster interaction
 - **kind**: Local Kubernetes cluster for testing (or other local cluster)
 - **kubebuilder**: Optional - for regenerating CRDs and scaffolding
@@ -22,10 +22,14 @@
 - **kustomize**: Included with kubectl 1.14+, used for manifest management
 
 ### Dependency Management
-- **Go Modules**: `go.mod` and `go.sum` for dependency tracking
-- **Version Pinning**: Pin controller-runtime and client-go to compatible versions
-- **Vendor Directory**: Not used - rely on module cache
-- **Updating Dependencies**: Use `go get -u` carefully, test thoroughly after updates
+- **Per-Module Dependencies**: Each module (`cluster-handler`, `data-handler`, `resource-handler`) has its own `go.mod` and `go.sum`
+- **Version Pinning**: Pin controller-runtime and client-go to compatible versions in each module
+- **Go Workspaces (Local Only)**:
+  - Create `go.work` locally for easier multi-module development: `go work init ./pkg/cluster-handler ./pkg/data-handler ./pkg/resource-handler`
+  - `go.work` is in `.gitignore`
+  - **IMPORTANT**: `go.work` MUST NOT be committed - committing it would break the build and cause artifacts to ignore pinned versions
+  - Workspaces simplify local development by allowing cross-module references without publishing
+- **Updating Dependencies**: Update in each module separately with `go get -u`, test thoroughly after updates
 
 ## Coding Standards
 
@@ -64,15 +68,17 @@ Common markers:
 
 ### Testing Strategy
 
-**Unit Tests** (internal/resources, internal/webhook):
+**Unit Tests** (per module):
 - Test pure resource builder functions with table-driven tests
 - Mock nothing - builders are pure functions
 - Focus on correct Kubernetes manifest generation
+- Run tests in each module: `cd pkg/resource-handler && go test ./...`
 
-**Integration Tests** (internal/controller):
+**Integration Tests** (per module):
 - Use `envtest` - provides real Kubernetes API without full cluster
 - Test reconciliation loops end-to-end
 - Verify resource creation, updates, and status updates
+- Each module has its own integration tests scoped to its controllers
 
 **Test Commands**:
 ```bash
@@ -145,12 +151,13 @@ make manifests
 make install
 ```
 
-**Controller Changes** (`internal/controller/`):
-- Run `make test` frequently during development
+**Controller Changes** (`pkg/{module}/controller/`):
+- Run tests in the specific module: `cd pkg/resource-handler && go test ./...`
 - Integration tests catch reconciliation bugs early
 - Use `make run` for quick iteration (no docker build needed)
+- Changes in one module don't require rebuilding others during local development
 
-**Resource Builder Changes** (`internal/resources/`):
-- Write/update table-driven tests first
-- Run `make test` - very fast feedback loop
-- Integration tests verify end-to-end behavior
+**Module-Specific Development**:
+- **Resource Handler** (`pkg/resource-handler`): Component reconcilers and resource builders
+- **Cluster Handler** (`pkg/cluster-handler`): MultigresCluster orchestration logic
+- **Data Handler** (`pkg/data-handler`): Cell management and data plane configuration
