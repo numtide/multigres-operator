@@ -1,7 +1,9 @@
 ---
 title: Create Cell management Go module with upstream Multigres dependency
 state: draft
-tags: []
+tags:
+- toposerver
+- crd
 ---
 
 # Summary
