@@ -210,13 +210,90 @@ Use CRD validation markers only (no admission webhooks at this stage):
 
 ## Implementation Tasks
 
-1. Use `kubebuilder create api` to scaffold each CRD type
-2. Define Go structs for Spec and Status of each type
-3. Add kubebuilder markers for validation, defaults, print columns
-4. Run `make manifests` to generate CRD YAML
-5. Create sample CR manifests in `config/samples/`
-6. Test CRD installation and validation
-7. Document field meanings in godoc comments
+### Project Initialization (One Time)
+
+```bash
+# Initialize kubebuilder project
+kubebuilder init --domain multigres.com --repo github.com/numtide/multigres-operator
+```
+
+Generates project structure, `Makefile` with targets (`make manifests`, `make install`, etc.), and dependencies.
+
+### Create CRDs (Once Per Type)
+
+```bash
+kubebuilder create api --group multigres --version v1alpha1 --kind MultigresCluster --resource --controller
+kubebuilder create api --group multigres --version v1alpha1 --kind MultiGateway --resource --controller
+kubebuilder create api --group multigres --version v1alpha1 --kind MultiOrch --resource --controller
+kubebuilder create api --group multigres --version v1alpha1 --kind MultiPooler --resource --controller
+kubebuilder create api --group multigres --version v1alpha1 --kind Etcd --resource --controller
+```
+
+Generates `api/v1alpha1/{kind}_types.go` and `internal/controller/{kind}_controller.go` scaffolds.
+
+### Define API Types
+
+Edit `api/v1alpha1/{kind}_types.go` to add fields with validation markers:
+
+```go
+type MultiGatewaySpec struct {
+    // +kubebuilder:validation:Minimum=1
+    // +kubebuilder:default=1
+    Replicas int32 `json:"replicas,omitempty"`
+
+    Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+    Affinity *corev1.Affinity `json:"affinity,omitempty"`
+}
+```
+
+Add type-level markers for CRD configuration:
+
+```go
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type=boolean,JSONPath=`.status.ready`
+type MultiGateway struct { ... }
+```
+
+### Generate and Install CRDs
+
+```bash
+# Generate CRD YAML from Go types (runs controller-gen)
+make manifests
+
+# Apply CRDs to cluster (runs kubectl apply -f config/crd/bases/)
+make install
+```
+
+### Create Sample CRs
+
+Create `config/samples/multigres_v1alpha1_{kind}.yaml`:
+
+```yaml
+apiVersion: multigres.com/v1alpha1
+kind: MultiGateway
+metadata:
+  name: multigateway-sample
+spec:
+  replicas: 3
+```
+
+### Test and Verify
+
+```bash
+kubectl get crds | grep multigres.com
+kubectl apply -f config/samples/
+kubectl explain multigateway.spec
+```
+
+### When to Use Each Command
+
+| Scenario | Commands |
+|----------|----------|
+| First time setup | `kubebuilder init` |
+| Add new CRD type | `kubebuilder create api` |
+| Modify existing CRD fields | Edit `api/v1alpha1/*.go` → `make manifests` → `make install` |
+| Regular development | Edit Go types → `make manifests` → `make install` → test |
 
 ## Test Plan
 
