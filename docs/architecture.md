@@ -72,7 +72,7 @@ The operator is organized into three independent Go modules with clear separatio
 #### Cluster Handler Module (`pkg/cluster-handler`)
 - **Purpose**: High-level cluster orchestration
 - **Responsibilities**:
-  - Manages MultigresCluster custom resource
+  - Uses the `MultigresCluster` custom resource as its primary input
   - Coordinates creation of child resources (MultiGateway, MultiOrch, MultiPooler, Etcd, Cell)
   - Aggregates status from child resources
   - Handles cluster-wide lifecycle (finalizers, upgrades)
@@ -81,7 +81,7 @@ The operator is organized into three independent Go modules with clear separatio
 #### Data Handler Module (`pkg/data-handler`)
 - **Purpose**: Data plane management and topology
 - **Responsibilities**:
-  - Manages Cell custom resource (data topology abstraction)
+  - Uses the `Cell` custom resource as its primary input (data topology abstraction)
   - Handles data plane configuration and routing
   - Coordinates with Vitess/Multigres data components
 - **Independence**: Data plane logic isolated from control plane and resource management
@@ -89,7 +89,7 @@ The operator is organized into three independent Go modules with clear separatio
 #### Resource Handler Module (`pkg/resource-handler`)
 - **Purpose**: Individual component resource management
 - **Responsibilities**:
-  - Manages component CRDs: MultiGateway, MultiOrch, MultiPooler, Etcd
+  - Uses the `MultiGateway`, `MultiOrch`, `MultiPooler`, `Etcd` custom resources as its primary inputs
   - Creates and reconciles Kubernetes resources (Deployments, StatefulSets, Services, HPAs)
   - Implements pure resource builder functions
   - Component-specific health checking and status reporting
