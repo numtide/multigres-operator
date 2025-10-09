@@ -44,7 +44,7 @@ The `MultigresCluster` CRD provides a convenient higher-level abstraction for us
 
 # Proposal
 
-Create the following CRD types in the `multigres.io/v1alpha1` API group:
+Create the following CRD types in the `multigres.com/v1alpha1` API group:
 
 1. **MultigresCluster** - Top-level resource representing a complete Multigres deployment
 2. **MultiGateway** - Deployment configuration for the gateway component
@@ -195,7 +195,7 @@ labels:
   app.kubernetes.io/instance: <cr-name>
   app.kubernetes.io/component: <gateway|orch|pooler|etcd>
   app.kubernetes.io/managed-by: multigres-operator
-  multigres.io/cluster: <multigrescluster-name>  # If created by MultigresCluster
+  multigres.com/cluster: <multigrescluster-name>  # If created by MultigresCluster
 ```
 
 ## Validation Strategy
