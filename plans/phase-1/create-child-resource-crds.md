@@ -116,7 +116,6 @@ Each component spec should include:
 
 **Example Affinity Use Cases**:
 - **Anti-affinity for HA**: Spread etcd replicas across different nodes/zones to survive node failures
-- **Co-location**: Place MultiPooler near Postgres instances for low latency
 - **Node isolation**: Dedicate specific nodes for database workloads using node affinity
 - **Zone spreading**: Distribute replicas across availability zones using topology spread constraints
 
