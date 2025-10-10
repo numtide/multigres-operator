@@ -125,7 +125,7 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 ## Error Handling
 
-- **Etcd unreachable**: Set `TopoServerReachable: false`, requeue with backoff
+- **Etcd unreachable**: Set `spec.topoServerReachable: false`, requeue with backoff
 - **Invalid component references**: Log warning, continue (components may not exist yet)
 - **Registration failure**: Update Condition with error details, requeue
 
