@@ -17,41 +17,111 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// NOTE: json tags are required.  Any new fields you add must have json tags for
+// the fields to be serialized.
 
-// MultiGatewaySpec defines the desired state of MultiGateway
+// MultiGatewaySpec defines the desired state of MultiGateway.
 type MultiGatewaySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of MultiGateway. Edit multigateway_types.go to remove/update
+	// Image is the container image for MultiGateway.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:default="multigres/multigateway:latest"
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	Image string `json:"image,omitempty"`
+
+	// ImagePullSecrets is an optional list of references to secrets in the same namespace
+	// to use for pulling the image.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// Replicas is the desired number of MultiGateway pods.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Resources defines the resource requirements for the MultiGateway container.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ServiceAccountName is the name of the ServiceAccount to use for the MultiGateway pods.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// ServiceType determines how the MultiGateway Service is exposed.
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer
+	// +kubebuilder:default="ClusterIP"
+	// +optional
+	ServiceType corev1.ServiceType `json:"serviceType,omitempty"`
+
+	// HTTPPort is the port for HTTP traffic.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=15100
+	// +optional
+	HTTPPort int32 `json:"httpPort,omitempty"`
+
+	// GRPCPort is the port for gRPC traffic.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=15170
+	// +optional
+	GRPCPort int32 `json:"grpcPort,omitempty"`
+
+	// PostgresPort is the port for PostgreSQL protocol traffic.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=15432
+	// +optional
+	PostgresPort int32 `json:"postgresPort,omitempty"`
+
+	// ServiceAnnotations are annotations to add to the MultiGateway Service.
+	// +optional
+	ServiceAnnotations map[string]string `json:"serviceAnnotations,omitempty"`
+
+	// Affinity defines pod affinity and anti-affinity rules.
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// Tolerations allows pods to schedule onto nodes with matching taints.
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// NodeSelector is a selector which must be true for the pod to fit on a node.
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// TopologySpreadConstraints controls how pods are spread across topology domains.
+	// +optional
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
+	// PodAnnotations are annotations to add to the MultiGateway pods.
+	// +optional
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+
+	// PodLabels are additional labels to add to the MultiGateway pods.
+	// +optional
+	PodLabels map[string]string `json:"podLabels,omitempty"`
 }
 
 // MultiGatewayStatus defines the observed state of MultiGateway.
 type MultiGatewayStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Ready indicates whether the MultiGateway is healthy and available.
+	Ready bool `json:"ready"`
 
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	// Replicas is the desired number of replicas.
+	Replicas int32 `json:"replicas"`
 
-	// conditions represent the current state of the MultiGateway resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
+	// ReadyReplicas is the number of ready replicas.
+	ReadyReplicas int32 `json:"readyReplicas"`
+
+	// ObservedGeneration reflects the generation of the most recently observed MultiGateway spec.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions represent the latest available observations of the MultiGateway's state.
 	// +listType=map
 	// +listMapKey=type
 	// +optional
@@ -60,6 +130,9 @@ type MultiGatewayStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type=boolean,JSONPath=`.status.ready`
+// +kubebuilder:printcolumn:name="Replicas",type=string,JSONPath=`.status.readyReplicas`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // MultiGateway is the Schema for the multigateways API
 type MultiGateway struct {
