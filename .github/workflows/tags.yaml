@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - '**'
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
 
 permissions:
   contents: write
