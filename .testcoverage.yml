@@ -1,0 +1,22 @@
+# (mandatory)
+# Path to coverage profile file (output of `go test -coverprofile` command).
+#
+# For cases where there are many coverage profiles, such as when running
+# unit tests and integration tests separately, you can combine all those
+# profiles into one. In this case, the profile should have a comma-separated list
+# of profile files, e.g., 'cover_unit.out,cover_integration.out'.
+profile: cover.out
+
+# Holds coverage thresholds percentages, values should be in range [0-100].
+threshold:
+  # (optional; default 0)
+  # Minimum coverage percentage required for individual files.
+  file: 70
+
+  # (optional; default 0)
+  # Minimum coverage percentage required for each package.
+  package: 80
+
+  # (optional; default 0)
+  # Minimum overall project coverage percentage required.
+  total: 95

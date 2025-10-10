@@ -6,4 +6,5 @@ import (
 
 func TestNothing(t *testing.T) {
 	// TODO: write real tests
+	main()
 }
