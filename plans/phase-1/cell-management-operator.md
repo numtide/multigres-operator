@@ -1,5 +1,5 @@
 ---
-title: Create Cell management Go module as Multigres aware operator internal
+title: Create Cell management Go module with upstream Multigres dependency
 state: draft
 tags: []
 ---
