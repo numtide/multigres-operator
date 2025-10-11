@@ -1,6 +1,6 @@
 ---
 title: Create CRDs for each resource to be deployed
-state: draft
+state: ready
 tags:
 - multigateway
 - multipooler
@@ -206,6 +206,58 @@ Use CRD validation markers only (no admission webhooks at this stage):
 - Enum values for service types, storage classes
 - Pattern validation for image names
 - Required vs optional field marking
+
+## MultiPooler Architecture
+
+MultiPooler has unique characteristics compared to other components due to its multi-container architecture:
+
+### Deployment Type
+StatefulSet (like Etcd) - requires persistent storage and stable network identity
+
+### Multi-Container Pod
+Each MultiPooler pod runs 3 containers:
+1. **multipooler** - Connection pooler that manages PostgreSQL connections
+2. **pgctld** - Control daemon for managing PostgreSQL lifecycle
+3. **postgres** - The actual PostgreSQL database instance
+
+### Key Characteristics
+- Each MultiPooler pod couples a Postgres instance with its own connection pooler
+- All three containers run on the same pod for efficiency and low-latency communication
+- Requires persistent storage for PostgreSQL data (similar to Etcd)
+
+### Service Ports
+- **HTTP**: 15200 (default) - for multipooler HTTP API
+- **gRPC**: 15270 (default) - for multipooler gRPC API
+- **PostgreSQL**: 5432 (default) - for PostgreSQL protocol connections
+
+### MultiPooler-Specific Spec Fields
+
+Beyond the common component fields (replicas, resources, serviceAccountName, affinity, tolerations, nodeSelector, topologySpreadConstraints, podAnnotations, podLabels), MultiPooler needs:
+
+**Container Configuration**:
+- `multipoolerImage` (string) - Container image for multipooler
+- `pgctldImage` (string) - Container image for pgctld
+- `postgresImage` (string) - Container image for postgres
+- `multipoolerResources` (ResourceRequirements) - Resource requirements for multipooler container
+- `pgctldResources` (ResourceRequirements) - Resource requirements for pgctld container
+- `postgresResources` (ResourceRequirements) - Resource requirements for postgres container
+
+**Port Configuration**:
+- `httpPort` (int32, default 15200) - HTTP port for multipooler API
+- `grpcPort` (int32, default 15270) - gRPC port for multipooler API
+- `postgresPort` (int32, default 5432) - PostgreSQL protocol port
+
+**Cell Configuration**:
+- `cellName` (string) - Name of the cell this MultiPooler belongs to
+
+**Storage Configuration** (like Etcd):
+- `storageClassName` (*string) - Optional, uses default StorageClass if not specified
+- `storageSize` (string, default "10Gi") - Size of persistent volume
+- `volumeClaimTemplate` (*corev1.PersistentVolumeClaimSpec) - For advanced PVC customization
+
+### Reference
+- Architecture: https://multigres.com/docs/architecture
+- Configuration: https://github.com/multigres/multigres/blob/main/go/provisioner/local/config.go
 
 ## Implementation Tasks
 
