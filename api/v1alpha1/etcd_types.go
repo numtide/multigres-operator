@@ -21,11 +21,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// NOTE: json tags are required.  Any new fields you add must have json tags for
+// the fields to be serialized.
 
 // EtcdSpec defines the desired state of Etcd.
 type EtcdSpec struct {
+	// CellName is the name of the cell this MultiOrch belongs to.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	CellName string `json:"cellName,omitempty"`
+
 	// Image is the container image for Etcd.
 	// NOTE: The version information is taken from Multigres repo's local
 	// provisioning setup:

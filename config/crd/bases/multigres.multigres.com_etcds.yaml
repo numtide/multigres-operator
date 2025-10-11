@@ -961,6 +961,11 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              cellName:
+                description: CellName is the name of the cell this MultiOrch belongs
+                  to.
+                minLength: 1
+                type: string
               image:
                 default: gcr.io/etcd-development/etcd:v3.5.9
                 description: |-
