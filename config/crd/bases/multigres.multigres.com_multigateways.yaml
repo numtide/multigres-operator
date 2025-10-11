@@ -961,6 +961,11 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              cellName:
+                description: CellName is the name of the cell this MultiGateway belongs
+                  to.
+                minLength: 1
+                type: string
               grpcPort:
                 default: 15170
                 description: GRPCPort is the port for gRPC traffic.

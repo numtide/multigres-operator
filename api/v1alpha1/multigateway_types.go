@@ -26,6 +26,11 @@ import (
 
 // MultiGatewaySpec defines the desired state of MultiGateway.
 type MultiGatewaySpec struct {
+	// CellName is the name of the cell this MultiGateway belongs to.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	CellName string `json:"cellName,omitempty"`
+
 	// Image is the container image for MultiGateway.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:default="multigres/multigateway:latest"
