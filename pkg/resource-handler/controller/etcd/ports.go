@@ -2,6 +2,7 @@ package etcd
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -57,6 +58,56 @@ func buildContainerPorts(opts ...PortOption) []corev1.ContainerPort {
 			Name:          "peer",
 			ContainerPort: options.peerPort,
 			Protocol:      corev1.ProtocolTCP,
+		},
+	}
+}
+
+// buildHeadlessServicePorts creates service ports for the headless service.
+// Includes both client and peer ports for StatefulSet pod discovery.
+func buildHeadlessServicePorts(opts ...PortOption) []corev1.ServicePort {
+	options := &portOptions{
+		clientPort: ClientPort,
+		peerPort:   PeerPort,
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	return []corev1.ServicePort{
+		{
+			Name:       "client",
+			Port:       options.clientPort,
+			TargetPort: intstr.FromString("client"),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "peer",
+			Port:       options.peerPort,
+			TargetPort: intstr.FromString("peer"),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	}
+}
+
+// buildClientServicePorts creates service ports for the client service.
+// Only includes the client port for external access.
+func buildClientServicePorts(opts ...PortOption) []corev1.ServicePort {
+	options := &portOptions{
+		clientPort: ClientPort,
+		peerPort:   PeerPort,
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	return []corev1.ServicePort{
+		{
+			Name:       "client",
+			Port:       options.clientPort,
+			TargetPort: intstr.FromString("client"),
+			Protocol:   corev1.ProtocolTCP,
 		},
 	}
 }
