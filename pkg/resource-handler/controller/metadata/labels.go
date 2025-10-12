@@ -12,6 +12,9 @@ const (
 	// LabelAppInstance is the standard label key for the unique instance name.
 	LabelAppInstance = "app.kubernetes.io/instance"
 
+	// LabelAppVersion is the standard label key for the application version.
+	LabelAppVersion = "app.kubernetes.io/version"
+
 	// LabelAppComponent is the standard label key for the component within the
 	// application.
 	LabelAppComponent = "app.kubernetes.io/component"
