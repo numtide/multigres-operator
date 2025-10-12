@@ -36,6 +36,9 @@ const (
 const (
 	// LabelMultigresCell identifies which cell a resource belongs to.
 	LabelMultigresCell = "multigres.com/cell"
+
+	// DefaultCellName is the default cell name when none is specified.
+	DefaultCellName = "multigres-global-topo"
 )
 
 // BuildStandardLabels builds the standard Kubernetes labels for a Multigres
@@ -52,9 +55,7 @@ const (
 //   - app.kubernetes.io/component: <componentName>
 //   - app.kubernetes.io/part-of: "multigres"
 //   - app.kubernetes.io/managed-by: "multigres-operator"
-//
-// If cellName is provided and non-empty:
-//   - multigres.com/cell: <cellName>
+//   - multigres.com/cell: <cellName> (uses "multigres-global-topo" if empty)
 //
 // Example usage:
 //
