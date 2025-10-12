@@ -9,10 +9,10 @@ import (
 
 const (
 	// ClientPort is the default port for etcd client connections.
-	ClientPort = 2379
+	ClientPort int32 = 2379
 
 	// PeerPort is the default port for etcd peer connections.
-	PeerPort = 2380
+	PeerPort int32 = 2380
 )
 
 // buildContainerPorts creates the port definitions for the etcd container.

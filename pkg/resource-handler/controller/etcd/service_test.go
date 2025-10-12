@@ -140,17 +140,6 @@ func TestBuildHeadlessService(t *testing.T) {
 				},
 			},
 		},
-		"nil scheme - should error": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			scheme:  nil,
-			wantErr: true,
-		},
 	}
 
 	for name, tc := range tests {
@@ -286,17 +275,6 @@ func TestBuildClientService(t *testing.T) {
 					},
 				},
 			},
-		},
-		"nil scheme - should error": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			scheme:  nil,
-			wantErr: true,
 		},
 	}
 

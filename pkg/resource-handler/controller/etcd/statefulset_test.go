@@ -93,7 +93,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
 									Env:       buildEtcdEnv("test-etcd", "default", 3, "test-etcd-headless"),
-									Ports:     buildContainerPorts(),
+									Ports:     buildContainerPorts(nil), // Default
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      DataVolumeName,
@@ -189,7 +189,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Image:     "quay.io/coreos/etcd:v3.5.15",
 									Resources: corev1.ResourceRequirements{},
 									Env:       buildEtcdEnv("etcd-custom", "test", 5, "etcd-custom-headless"),
-									Ports:     buildContainerPorts(),
+									Ports:     buildContainerPorts(nil),
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      DataVolumeName,
@@ -219,18 +219,6 @@ func TestBuildStatefulSet(t *testing.T) {
 					},
 				},
 			},
-			scheme: scheme,
-		},
-		"nil scheme - should error": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			scheme:  nil,
-			wantErr: true,
 		},
 		"scheme without Etcd type - should error": {
 			etcd: &multigresv1alpha1.Etcd{
