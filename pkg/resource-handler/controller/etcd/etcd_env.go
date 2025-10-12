@@ -7,10 +7,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// BuildEtcdEnv constructs all environment variables for etcd clustering in
+// buildEtcdEnv constructs all environment variables for etcd clustering in
 // StatefulSets. This combines pod identity, etcd config, and cluster peer
 // discovery details.
-func BuildEtcdEnv(etcdName, namespace string, replicas int32, serviceName string) []corev1.EnvVar {
+func buildEtcdEnv(etcdName, namespace string, replicas int32, serviceName string) []corev1.EnvVar {
 	envVars := make([]corev1.EnvVar, 0)
 
 	// Add pod identity variables from downward API

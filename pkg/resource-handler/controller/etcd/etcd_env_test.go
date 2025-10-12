@@ -277,7 +277,7 @@ func TestBuildEtcdEnv(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := BuildEtcdEnv(tc.etcdName, tc.namespace, tc.replicas, tc.serviceName)
+			got := buildEtcdEnv(tc.etcdName, tc.namespace, tc.replicas, tc.serviceName)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("BuildEtcdEnv() mismatch (-want +got):\n%s", diff)
 			}
