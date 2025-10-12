@@ -64,20 +64,23 @@ const (
 //	//   "app.kubernetes.io/name": "multigres",
 //	//   "app.kubernetes.io/instance": "my-etcd",
 //	//   "app.kubernetes.io/component": "etcd",
+//	//   "app.kubernetes.io/part-of": "multigres",
 //	//   "app.kubernetes.io/managed-by": "multigres-operator",
 //	//   "multigres.com/cell": "cell-1"
 //	// }
 func BuildStandardLabels(resourceName, componentName, cellName string) map[string]string {
-	labels := map[string]string{
-		LabelAppName:      AppNameMultigres,
-		LabelAppInstance:  resourceName,
-		LabelAppComponent: componentName,
-		LabelAppManagedBy: ManagedByMultigres,
+	// Use default cell name if not provided
+	if cellName == "" {
+		cellName = DefaultCellName
 	}
 
-	// Only add cell label if cellName is provided and non-empty
-	if cellName != "" {
-		labels[LabelMultigresCell] = cellName
+	labels := map[string]string{
+		LabelAppName:       AppNameMultigres,
+		LabelAppInstance:   resourceName,
+		LabelAppComponent:  componentName,
+		LabelAppPartOf:     AppNameMultigres,
+		LabelAppManagedBy:  ManagedByMultigres,
+		LabelMultigresCell: cellName,
 	}
 
 	return labels
