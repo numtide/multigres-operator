@@ -12,9 +12,16 @@ const (
 	// LabelAppInstance is the standard label key for the unique instance name.
 	LabelAppInstance = "app.kubernetes.io/instance"
 
+	// LabelAppVersion is the standard label key for the application version.
+	LabelAppVersion = "app.kubernetes.io/version"
+
 	// LabelAppComponent is the standard label key for the component within the
 	// application.
 	LabelAppComponent = "app.kubernetes.io/component"
+
+	// LabelAppPartOf is the standard label key for the name of a higher level
+	// application this one is part of.
+	LabelAppPartOf = "app.kubernetes.io/part-of"
 
 	// LabelAppManagedBy is the standard label key for the tool managing the
 	// resource.
@@ -32,6 +39,9 @@ const (
 const (
 	// LabelMultigresCell identifies which cell a resource belongs to.
 	LabelMultigresCell = "multigres.com/cell"
+
+	// DefaultCellName is the default cell name when none is specified.
+	DefaultCellName = "multigres-global-topo"
 )
 
 // BuildStandardLabels builds the standard Kubernetes labels for a Multigres
@@ -46,10 +56,9 @@ const (
 //   - app.kubernetes.io/name: "multigres"
 //   - app.kubernetes.io/instance: <resourceName>
 //   - app.kubernetes.io/component: <componentName>
+//   - app.kubernetes.io/part-of: "multigres"
 //   - app.kubernetes.io/managed-by: "multigres-operator"
-//
-// If cellName is provided and non-empty:
-//   - multigres.com/cell: <cellName>
+//   - multigres.com/cell: <cellName> (uses "multigres-global-topo" if empty)
 //
 // Example usage:
 //
@@ -58,20 +67,23 @@ const (
 //	//   "app.kubernetes.io/name": "multigres",
 //	//   "app.kubernetes.io/instance": "my-etcd",
 //	//   "app.kubernetes.io/component": "etcd",
+//	//   "app.kubernetes.io/part-of": "multigres",
 //	//   "app.kubernetes.io/managed-by": "multigres-operator",
 //	//   "multigres.com/cell": "cell-1"
 //	// }
 func BuildStandardLabels(resourceName, componentName, cellName string) map[string]string {
-	labels := map[string]string{
-		LabelAppName:      AppNameMultigres,
-		LabelAppInstance:  resourceName,
-		LabelAppComponent: componentName,
-		LabelAppManagedBy: ManagedByMultigres,
+	// Use default cell name if not provided
+	if cellName == "" {
+		cellName = DefaultCellName
 	}
 
-	// Only add cell label if cellName is provided and non-empty
-	if cellName != "" {
-		labels[LabelMultigresCell] = cellName
+	labels := map[string]string{
+		LabelAppName:       AppNameMultigres,
+		LabelAppInstance:   resourceName,
+		LabelAppComponent:  componentName,
+		LabelAppPartOf:     AppNameMultigres,
+		LabelAppManagedBy:  ManagedByMultigres,
+		LabelMultigresCell: cellName,
 	}
 
 	return labels
