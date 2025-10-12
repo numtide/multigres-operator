@@ -5,16 +5,25 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
 func TestBuildContainerPorts(t *testing.T) {
 	tests := map[string]struct {
-		opts []PortOption
+		etcd *multigresv1alpha1.Etcd
 		want []corev1.ContainerPort
 	}{
 		"default ports": {
-			opts: nil,
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
 			want: []corev1.ContainerPort{
 				{
 					Name:          "client",
@@ -24,72 +33,6 @@ func TestBuildContainerPorts(t *testing.T) {
 				{
 					Name:          "peer",
 					ContainerPort: 2380,
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
-		},
-		"custom client port": {
-			opts: []PortOption{WithClientPort(3379)},
-			want: []corev1.ContainerPort{
-				{
-					Name:          "client",
-					ContainerPort: 3379,
-					Protocol:      corev1.ProtocolTCP,
-				},
-				{
-					Name:          "peer",
-					ContainerPort: 2380,
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
-		},
-		"custom peer port": {
-			opts: []PortOption{WithPeerPort(3380)},
-			want: []corev1.ContainerPort{
-				{
-					Name:          "client",
-					ContainerPort: 2379,
-					Protocol:      corev1.ProtocolTCP,
-				},
-				{
-					Name:          "peer",
-					ContainerPort: 3380,
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
-		},
-		"both ports customized": {
-			opts: []PortOption{
-				WithClientPort(9379),
-				WithPeerPort(9380),
-			},
-			want: []corev1.ContainerPort{
-				{
-					Name:          "client",
-					ContainerPort: 9379,
-					Protocol:      corev1.ProtocolTCP,
-				},
-				{
-					Name:          "peer",
-					ContainerPort: 9380,
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
-		},
-		"zero port values - should use zero": {
-			opts: []PortOption{
-				WithClientPort(0),
-				WithPeerPort(0),
-			},
-			want: []corev1.ContainerPort{
-				{
-					Name:          "client",
-					ContainerPort: 0,
-					Protocol:      corev1.ProtocolTCP,
-				},
-				{
-					Name:          "peer",
-					ContainerPort: 0,
 					Protocol:      corev1.ProtocolTCP,
 				},
 			},
@@ -98,7 +41,7 @@ func TestBuildContainerPorts(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildContainerPorts(tc.opts...)
+			got := buildContainerPorts(tc.etcd)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildContainerPorts() mismatch (-want +got):\n%s", diff)
 			}
@@ -108,11 +51,17 @@ func TestBuildContainerPorts(t *testing.T) {
 
 func TestBuildHeadlessServicePorts(t *testing.T) {
 	tests := map[string]struct {
-		opts []PortOption
+		etcd *multigresv1alpha1.Etcd
 		want []corev1.ServicePort
 	}{
 		"default ports": {
-			opts: nil,
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
 			want: []corev1.ServicePort{
 				{
 					Name:       "client",
@@ -128,48 +77,11 @@ func TestBuildHeadlessServicePorts(t *testing.T) {
 				},
 			},
 		},
-		"custom client port": {
-			opts: []PortOption{WithClientPort(3379)},
-			want: []corev1.ServicePort{
-				{
-					Name:       "client",
-					Port:       3379,
-					TargetPort: intstr.FromString("client"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "peer",
-					Port:       2380,
-					TargetPort: intstr.FromString("peer"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-		},
-		"both ports customized": {
-			opts: []PortOption{
-				WithClientPort(9379),
-				WithPeerPort(9380),
-			},
-			want: []corev1.ServicePort{
-				{
-					Name:       "client",
-					Port:       9379,
-					TargetPort: intstr.FromString("client"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "peer",
-					Port:       9380,
-					TargetPort: intstr.FromString("peer"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildHeadlessServicePorts(tc.opts...)
+			got := buildHeadlessServicePorts(tc.etcd)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildHeadlessServicePorts() mismatch (-want +got):\n%s", diff)
 			}
@@ -179,11 +91,17 @@ func TestBuildHeadlessServicePorts(t *testing.T) {
 
 func TestBuildClientServicePorts(t *testing.T) {
 	tests := map[string]struct {
-		opts []PortOption
+		etcd *multigresv1alpha1.Etcd
 		want []corev1.ServicePort
 	}{
 		"default port": {
-			opts: nil,
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
 			want: []corev1.ServicePort{
 				{
 					Name:       "client",
@@ -193,22 +111,11 @@ func TestBuildClientServicePorts(t *testing.T) {
 				},
 			},
 		},
-		"custom client port": {
-			opts: []PortOption{WithClientPort(3379)},
-			want: []corev1.ServicePort{
-				{
-					Name:       "client",
-					Port:       3379,
-					TargetPort: intstr.FromString("client"),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildClientServicePorts(tc.opts...)
+			got := buildClientServicePorts(tc.etcd)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildClientServicePorts() mismatch (-want +got):\n%s", diff)
 			}

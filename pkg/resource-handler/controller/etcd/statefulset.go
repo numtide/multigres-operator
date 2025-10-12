@@ -82,7 +82,7 @@ func BuildStatefulSet(etcd *multigresv1alpha1.Etcd, scheme *runtime.Scheme) (*ap
 							Image:     image,
 							Resources: etcd.Spec.Resources,
 							Env:       buildEtcdEnv(etcd.Name, etcd.Namespace, replicas, headlessServiceName),
-							Ports:     buildContainerPorts(),
+							Ports:     buildContainerPorts(etcd),
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      DataVolumeName,
