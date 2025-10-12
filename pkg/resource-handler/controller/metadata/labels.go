@@ -16,6 +16,10 @@ const (
 	// application.
 	LabelAppComponent = "app.kubernetes.io/component"
 
+	// LabelAppPartOf is the standard label key for the name of a higher level
+	// application this one is part of.
+	LabelAppPartOf = "app.kubernetes.io/part-of"
+
 	// LabelAppManagedBy is the standard label key for the tool managing the
 	// resource.
 	LabelAppManagedBy = "app.kubernetes.io/managed-by"
@@ -46,6 +50,7 @@ const (
 //   - app.kubernetes.io/name: "multigres"
 //   - app.kubernetes.io/instance: <resourceName>
 //   - app.kubernetes.io/component: <componentName>
+//   - app.kubernetes.io/part-of: "multigres"
 //   - app.kubernetes.io/managed-by: "multigres-operator"
 //
 // If cellName is provided and non-empty:
