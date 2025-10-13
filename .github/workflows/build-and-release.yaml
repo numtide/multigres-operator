@@ -65,9 +65,30 @@ jobs:
             echo "::error::CodeQL produced ${count} alerts (warning/error)."
             exit 1
           fi
+  scan-intermediate-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan intermediate image with grype
+        id: scan
+        uses: anchore/scan-action@f6601287cdb1efc985d6b765bbf99cb4c0ac29d8 # v7.0.0
+        continue-on-error: true
+        with:
+          cache-db: true
+          image: "alpine:3.22.2" # sync this with Containerfile
+          output-file: grype.sarif
+          severity-cutoff: high
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@e296a935590eb16afc0c0108289f68c87e2a89a5 # v4.30.7
+        with:
+          sarif_file: grype.sarif
+      - name: Check success or failure
+        if: ${{ steps.scan.outcome == 'failure' }}
+        run: |-
+          jq '.runs[0].results | map(select(.level == "error"))' grype.sarif
+          exit 1
 
   build-go:
-    needs: [ scan-dependencies, scan-codeql ]
+    needs: [ scan-dependencies, scan-codeql, scan-intermediate-image ]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -86,7 +107,12 @@ jobs:
 
       - name: Run tests
         run: |-
-          go test -v ./...
+          go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+
+      - name: Check test coverage
+        uses: vladopajic/go-test-coverage@cc5012c2cfa84542e02b079141958a885861d326 # v2.17.0
+        with:
+          config: ./.testcoverage.yml
 
       - name: Build
         run: |-
@@ -170,7 +196,7 @@ jobs:
 
       # grype requires that the container image be pushed already because
       # the scanner runs in a container with a different local registry
-      - name: Scan image with grype
+      - name: Scan final image with grype
         id: scan
         uses: anchore/scan-action@f6601287cdb1efc985d6b765bbf99cb4c0ac29d8 # v7.0.0
         continue-on-error: true
@@ -178,14 +204,16 @@ jobs:
           cache-db: true
           image: "ghcr.io/${{ github.repository }}:${{ github.sha }}"
           output-file: grype.sarif
-          severity-cutoff: critical # TODO: lower this once vulns are fixed
+          severity-cutoff: high
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@e296a935590eb16afc0c0108289f68c87e2a89a5 # v4.30.7
         with:
           sarif_file: grype.sarif
       - name: Check success or failure
         if: ${{ steps.scan.outcome == 'failure' }}
-        run: exit 1
+        run: |-
+          jq '.runs[0].results | map(select(.level == "error"))' grype.sarif
+          exit 1
 
       - name: Push to registry (proper)
         if: ${{ inputs.push-container-image }}
