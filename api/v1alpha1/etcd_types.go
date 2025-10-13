@@ -26,7 +26,7 @@ import (
 
 // EtcdSpec defines the desired state of an Etcd cluster managed by the operator
 type EtcdSpec struct {
-	// CellName is the name of the cell this MultiOrch belongs to.
+	// CellName is the name of the cell this Etcd belongs to.
 	// +kubebuilder:validation:MinLength=1
 	// +optional
 	CellName string `json:"cellName,omitempty"`
