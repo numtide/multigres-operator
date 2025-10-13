@@ -183,14 +183,16 @@ jobs:
           cache-db: true
           image: "ghcr.io/${{ github.repository }}:${{ github.sha }}"
           output-file: grype.sarif
-          severity-cutoff: critical # TODO: lower this once vulns are fixed
+          severity-cutoff: high
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@e296a935590eb16afc0c0108289f68c87e2a89a5 # v4.30.7
         with:
           sarif_file: grype.sarif
       - name: Check success or failure
         if: ${{ steps.scan.outcome == 'failure' }}
-        run: exit 1
+        run: |-
+          jq '.runs[0].results | map(select(.level == "error"))' grype.sarif
+          exit 1
 
       - name: Push to registry (proper)
         if: ${{ inputs.push-container-image }}
