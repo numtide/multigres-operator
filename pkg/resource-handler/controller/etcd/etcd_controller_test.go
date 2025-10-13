@@ -27,14 +27,13 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		etcd                *multigresv1alpha1.Etcd
-		existingObjects     []client.Object
-		failureConfig       *testutil.FailureConfig
-		wantStatefulSet     bool
-		wantHeadlessService bool
-		wantClientService   bool
-		wantFinalizer       bool
-		wantErr             bool
+		etcd            *multigresv1alpha1.Etcd
+		existingObjects []client.Object
+		failureConfig   *testutil.FailureConfig
+		// TODO: If wantErr is false but failureConfig is set, assertions may fail
+		// due to failure injection. This should be addressed when we need to test
+		// partial failures that don't prevent reconciliation success.
+		wantErr bool
 	}{
 		"create all resources for new Etcd": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -45,10 +44,6 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				Spec: multigresv1alpha1.EtcdSpec{},
 			},
 			existingObjects:     []client.Object{},
-			wantStatefulSet:     true,
-			wantHeadlessService: true,
-			wantClientService:   true,
-			wantFinalizer:       true,
 		},
 		"update existing resources": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -84,10 +79,6 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantStatefulSet:     true,
-			wantHeadlessService: true,
-			wantClientService:   true,
-			wantFinalizer:       true,
 		},
 		"etcd with cellName": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -100,10 +91,6 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			existingObjects:     []client.Object{},
-			wantStatefulSet:     true,
-			wantHeadlessService: true,
-			wantClientService:   true,
-			wantFinalizer:       true,
 		},
 		"error on StatefulSet create": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -260,55 +247,68 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				return
 			}
 
-			// Verify StatefulSet was created
-			if tc.wantStatefulSet {
-				sts := &appsv1.StatefulSet{}
-				err := fakeClient.Get(context.Background(), types.NamespacedName{
-					Name:      tc.etcd.Name,
-					Namespace: tc.etcd.Namespace,
-				}, sts)
-				if err != nil {
-					t.Errorf("Expected StatefulSet to exist, got error: %v", err)
+			// For success cases, verify all resources were created with correct labels
+			expectedCellName := tc.etcd.Spec.CellName
+			if expectedCellName == "" {
+				expectedCellName = "multigres-global-topo"
+			}
+
+			// Verify StatefulSet
+			sts := &appsv1.StatefulSet{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{
+				Name:      tc.etcd.Name,
+				Namespace: tc.etcd.Namespace,
+			}, sts)
+			if err != nil {
+				t.Errorf("StatefulSet should exist, got error: %v", err)
+			} else {
+				if sts.Labels["multigres.com/cell"] != expectedCellName {
+					t.Errorf("StatefulSet cell label = %v, want %v", sts.Labels["multigres.com/cell"], expectedCellName)
+				}
+				if sts.Labels["app.kubernetes.io/component"] != "etcd" {
+					t.Errorf("StatefulSet component label = %v, want etcd", sts.Labels["app.kubernetes.io/component"])
 				}
 			}
 
-			// Verify headless Service was created
-			if tc.wantHeadlessService {
-				svc := &corev1.Service{}
-				err := fakeClient.Get(context.Background(), types.NamespacedName{
-					Name:      tc.etcd.Name + "-headless",
-					Namespace: tc.etcd.Namespace,
-				}, svc)
-				if err != nil {
-					t.Errorf("Expected headless Service to exist, got error: %v", err)
+			// Verify headless Service
+			headlessSvc := &corev1.Service{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{
+				Name:      tc.etcd.Name + "-headless",
+				Namespace: tc.etcd.Namespace,
+			}, headlessSvc)
+			if err != nil {
+				t.Errorf("Headless Service should exist, got error: %v", err)
+			} else {
+				if headlessSvc.Labels["multigres.com/cell"] != expectedCellName {
+					t.Errorf("Headless Service cell label = %v, want %v", headlessSvc.Labels["multigres.com/cell"], expectedCellName)
 				}
 			}
 
-			// Verify client Service was created
-			if tc.wantClientService {
-				svc := &corev1.Service{}
-				err := fakeClient.Get(context.Background(), types.NamespacedName{
-					Name:      tc.etcd.Name,
-					Namespace: tc.etcd.Namespace,
-				}, svc)
-				if err != nil {
-					t.Errorf("Expected client Service to exist, got error: %v", err)
+			// Verify client Service
+			clientSvc := &corev1.Service{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{
+				Name:      tc.etcd.Name,
+				Namespace: tc.etcd.Namespace,
+			}, clientSvc)
+			if err != nil {
+				t.Errorf("Client Service should exist, got error: %v", err)
+			} else {
+				if clientSvc.Labels["multigres.com/cell"] != expectedCellName {
+					t.Errorf("Client Service cell label = %v, want %v", clientSvc.Labels["multigres.com/cell"], expectedCellName)
 				}
 			}
 
-			// Verify finalizer was added
-			if tc.wantFinalizer {
-				etcd := &multigresv1alpha1.Etcd{}
-				err := fakeClient.Get(context.Background(), types.NamespacedName{
-					Name:      tc.etcd.Name,
-					Namespace: tc.etcd.Namespace,
-				}, etcd)
-				if err != nil {
-					t.Fatalf("Failed to get Etcd: %v", err)
-				}
-				if !slices.Contains(etcd.Finalizers, finalizerName) {
-					t.Errorf("Expected finalizer %s to be present", finalizerName)
-				}
+			// Verify finalizer
+			etcd := &multigresv1alpha1.Etcd{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{
+				Name:      tc.etcd.Name,
+				Namespace: tc.etcd.Namespace,
+			}, etcd)
+			if err != nil {
+				t.Fatalf("Failed to get Etcd: %v", err)
+			}
+			if !slices.Contains(etcd.Finalizers, finalizerName) {
+				t.Errorf("Finalizer %s should be present", finalizerName)
 			}
 		})
 	}
