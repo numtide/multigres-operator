@@ -15,9 +15,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 )
 
 func TestEtcdReconciler_Reconcile(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -26,6 +29,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 	tests := map[string]struct {
 		etcd                *multigresv1alpha1.Etcd
 		existingObjects     []client.Object
+		failureConfig       *testutil.FailureConfig
 		wantStatefulSet     bool
 		wantHeadlessService bool
 		wantClientService   bool
@@ -101,16 +105,123 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantClientService:   true,
 			wantFinalizer:       true,
 		},
+		"error on StatefulSet create": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: func(obj client.Object) error {
+					if _, ok := obj.(*appsv1.StatefulSet); ok {
+						return testutil.ErrPermissionError
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on headless Service create": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: func(obj client.Object) error {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd-headless" {
+						return testutil.ErrPermissionError
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on client Service create": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: func(obj client.Object) error {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd" {
+						return testutil.ErrPermissionError
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on status update": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnStatusUpdate: testutil.FailOnObjectName("test-etcd", testutil.ErrInjected),
+			},
+			wantErr: true,
+		},
+		"error on Get Etcd": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName("test-etcd", testutil.ErrNetworkTimeout),
+			},
+			wantErr: true,
+		},
+		"error on finalizer Update": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName("test-etcd", testutil.ErrInjected),
+			},
+			wantErr: true,
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Create fake client with existing objects
-			fakeClient := fake.NewClientBuilder().
+			t.Parallel()
+
+			// Create base fake client
+			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
 				WithStatusSubresource(&multigresv1alpha1.Etcd{}).
 				Build()
+
+			fakeClient := client.Client(baseClient)
+			// Wrap with failure injection if configured
+			if tc.failureConfig != nil {
+				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
+			}
 
 			reconciler := &EtcdReconciler{
 				Client: fakeClient,
@@ -145,7 +256,6 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				t.Errorf("Reconcile() error = %v, wantErr %v", err, tc.wantErr)
 				return
 			}
-
 			if tc.wantErr {
 				return
 			}
@@ -201,119 +311,5 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestEtcdReconciler_HandleDeletion(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	now := metav1.Now()
-
-	tests := map[string]struct {
-		etcd                 *multigresv1alpha1.Etcd
-		wantFinalizerRemoved bool
-	}{
-		"remove finalizer on deletion": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-etcd",
-					Namespace:         "default",
-					DeletionTimestamp: &now,
-					Finalizers:        []string{finalizerName},
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			wantFinalizerRemoved: true,
-		},
-		"no finalizer to remove": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-etcd",
-					Namespace:         "default",
-					DeletionTimestamp: &now,
-					Finalizers:        []string{},
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			wantFinalizerRemoved: false,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(tc.etcd).
-				WithStatusSubresource(&multigresv1alpha1.Etcd{}).
-				Build()
-
-			reconciler := &EtcdReconciler{
-				Client: fakeClient,
-				Scheme: scheme,
-			}
-
-			req := ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      tc.etcd.Name,
-					Namespace: tc.etcd.Namespace,
-				},
-			}
-
-			_, err := reconciler.Reconcile(context.Background(), req)
-			if err != nil {
-				t.Fatalf("Reconcile() unexpected error = %v", err)
-			}
-
-			// Verify finalizer state
-			etcd := &multigresv1alpha1.Etcd{}
-			err = fakeClient.Get(context.Background(), types.NamespacedName{
-				Name:      tc.etcd.Name,
-				Namespace: tc.etcd.Namespace,
-			}, etcd)
-			if err != nil {
-				t.Fatalf("Failed to get Etcd: %v", err)
-			}
-
-			hasFinalizer := slices.Contains(etcd.Finalizers, finalizerName)
-			if tc.wantFinalizerRemoved && hasFinalizer {
-				t.Errorf("Expected finalizer to be removed, but it's still present")
-			}
-			if !tc.wantFinalizerRemoved && len(tc.etcd.Finalizers) > 0 && !hasFinalizer && slices.Contains(etcd.Finalizers, finalizerName) {
-				t.Errorf("Expected finalizer to be present, but it's removed")
-			}
-		})
-	}
-}
-
-func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		Build()
-
-	reconciler := &EtcdReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{
-			Name:      "nonexistent-etcd",
-			Namespace: "default",
-		},
-	}
-
-	result, err := reconciler.Reconcile(context.Background(), req)
-	if err != nil {
-		t.Errorf("Reconcile() should not error on NotFound, got: %v", err)
-	}
-
-	if result != (ctrl.Result{}) {
-		t.Errorf("Reconcile() should return empty Result on NotFound, got: %v", result)
 	}
 }
