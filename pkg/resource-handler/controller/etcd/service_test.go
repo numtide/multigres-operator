@@ -40,7 +40,9 @@ func TestBuildHeadlessService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "test-etcd",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -59,7 +61,9 @@ func TestBuildHeadlessService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "test-etcd",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "multigres-global-topo",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -99,6 +103,7 @@ func TestBuildHeadlessService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "etcd-zone1",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 					},
@@ -119,6 +124,7 @@ func TestBuildHeadlessService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "etcd-zone1",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 					},
@@ -190,7 +196,9 @@ func TestBuildClientService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "test-etcd",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -209,7 +217,9 @@ func TestBuildClientService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "test-etcd",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "multigres-global-topo",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -242,6 +252,7 @@ func TestBuildClientService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "etcd-zone2",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone2",
 					},
@@ -262,6 +273,7 @@ func TestBuildClientService(t *testing.T) {
 						"app.kubernetes.io/name":       "multigres",
 						"app.kubernetes.io/instance":   "etcd-zone2",
 						"app.kubernetes.io/component":  "etcd",
+						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone2",
 					},
