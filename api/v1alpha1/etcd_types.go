@@ -126,7 +126,8 @@ type EtcdStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Ready",type=boolean,JSONPath=`.status.ready`
-// +kubebuilder:printcolumn:name="Replicas",type=string,JSONPath=`.status.readyReplicas`
+// +kubebuilder:printcolumn:name="DesiredReplicas",type=string,JSONPath=`.status.replicas`
+// +kubebuilder:printcolumn:name="ReadyReplicas",type=string,JSONPath=`.status.readyReplicas`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Etcd is the Schema for the etcds API
