@@ -47,7 +47,7 @@ type EtcdSpec struct {
 
 	// Replicas is the desired number of Etcd members.
 	// For high availability, use an odd number (typically 3 or 5).
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:default=3
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
