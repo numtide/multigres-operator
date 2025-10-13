@@ -12,6 +12,8 @@ import (
 )
 
 func TestFakeClientWithFailures_Get(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -71,6 +73,8 @@ func TestFakeClientWithFailures_Get(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod).
@@ -89,6 +93,8 @@ func TestFakeClientWithFailures_Get(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_Create(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -135,6 +141,8 @@ func TestFakeClientWithFailures_Create(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
@@ -151,6 +159,8 @@ func TestFakeClientWithFailures_Create(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_Update(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -179,6 +189,8 @@ func TestFakeClientWithFailures_Update(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod).
@@ -196,6 +208,8 @@ func TestFakeClientWithFailures_Update(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_Delete(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -230,6 +244,8 @@ func TestFakeClientWithFailures_Delete(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod.DeepCopy()).
@@ -247,6 +263,8 @@ func TestFakeClientWithFailures_Delete(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_StatusUpdate(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -275,6 +293,8 @@ func TestFakeClientWithFailures_StatusUpdate(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod).
@@ -293,6 +313,8 @@ func TestFakeClientWithFailures_StatusUpdate(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_List(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -323,6 +345,8 @@ func TestFakeClientWithFailures_List(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod).
@@ -341,6 +365,8 @@ func TestFakeClientWithFailures_List(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_Patch(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -369,6 +395,8 @@ func TestFakeClientWithFailures_Patch(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod.DeepCopy()).
@@ -387,6 +415,8 @@ func TestFakeClientWithFailures_Patch(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_DeleteAllOf(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -417,6 +447,8 @@ func TestFakeClientWithFailures_DeleteAllOf(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod).
@@ -434,6 +466,8 @@ func TestFakeClientWithFailures_DeleteAllOf(t *testing.T) {
 }
 
 func TestFakeClientWithFailures_StatusPatch(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
@@ -462,6 +496,8 @@ func TestFakeClientWithFailures_StatusPatch(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod.DeepCopy()).
@@ -481,6 +517,8 @@ func TestFakeClientWithFailures_StatusPatch(t *testing.T) {
 }
 
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -489,6 +527,8 @@ func TestHelperFunctions(t *testing.T) {
 	}
 
 	t.Run("FailOnObjectName - matching name", func(t *testing.T) {
+		t.Parallel()
+
 		fn := FailOnObjectName("test-pod", ErrInjected)
 		err := fn(pod)
 		if err != ErrInjected {
@@ -497,6 +537,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("FailOnObjectName - different name", func(t *testing.T) {
+		t.Parallel()
+
 		fn := FailOnObjectName("other-pod", ErrInjected)
 		err := fn(pod)
 		if err != nil {
@@ -505,6 +547,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("FailOnKeyName - matching name", func(t *testing.T) {
+		t.Parallel()
+
 		fn := FailOnKeyName("test-pod", ErrInjected)
 		err := fn(client.ObjectKey{Name: "test-pod", Namespace: "default"})
 		if err != ErrInjected {
@@ -513,6 +557,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("FailOnKeyName - different name", func(t *testing.T) {
+		t.Parallel()
+
 		fn := FailOnKeyName("other-pod", ErrInjected)
 		err := fn(client.ObjectKey{Name: "test-pod", Namespace: "default"})
 		if err != nil {
@@ -521,6 +567,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("FailOnNamespace - matching namespace", func(t *testing.T) {
+		t.Parallel()
+
 		fn := FailOnNamespace("default", ErrInjected)
 		err := fn(pod)
 		if err != ErrInjected {
@@ -529,6 +577,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("FailOnNamespace - different namespace", func(t *testing.T) {
+		t.Parallel()
+
 		fn := FailOnNamespace("other-ns", ErrInjected)
 		err := fn(pod)
 		if err != nil {
@@ -537,6 +587,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("FailAfterNCalls", func(t *testing.T) {
+		t.Parallel()
+
 		fn := FailAfterNCalls(2, ErrInjected)()
 
 		// First call - should succeed
@@ -561,6 +613,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("AlwaysFail with object", func(t *testing.T) {
+		t.Parallel()
+
 		fn := AlwaysFail(ErrInjected)
 		err := fn(pod)
 		if err != ErrInjected {
@@ -569,6 +623,8 @@ func TestHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("AlwaysFail with key", func(t *testing.T) {
+		t.Parallel()
+
 		fn := AlwaysFail(ErrNetworkTimeout)
 		err := fn(client.ObjectKey{Name: "test", Namespace: "default"})
 		if err != ErrNetworkTimeout {
@@ -578,7 +634,11 @@ func TestHelperFunctions(t *testing.T) {
 }
 
 func TestHelperFunctions_Panic(t *testing.T) {
+	t.Parallel()
+
 	t.Run("FailOnObjectName - panics on nil object", func(t *testing.T) {
+		t.Parallel()
+
 		defer func() {
 			if r := recover(); r == nil {
 				t.Errorf("Expected panic when meta.Accessor fails on nil")
@@ -590,6 +650,8 @@ func TestHelperFunctions_Panic(t *testing.T) {
 	})
 
 	t.Run("FailOnNamespace - panics on nil object", func(t *testing.T) {
+		t.Parallel()
+
 		defer func() {
 			if r := recover(); r == nil {
 				t.Errorf("Expected panic when meta.Accessor fails on nil")
