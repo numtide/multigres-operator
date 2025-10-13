@@ -10,3 +10,5 @@ dist/
 
 # Go
 go.work
+cover.out
+cover.html
