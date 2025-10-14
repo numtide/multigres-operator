@@ -65,6 +65,7 @@ jobs:
             echo "::error::CodeQL produced ${count} alerts (warning/error)."
             exit 1
           fi
+
   scan-intermediate-image:
     runs-on: ubuntu-latest
     steps:
@@ -88,7 +89,7 @@ jobs:
           exit 1
 
   build-go:
-    needs: [ scan-dependencies, scan-intermediate-image ]
+    needs: [ scan-dependencies ]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -163,11 +164,6 @@ jobs:
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          pattern: multigres-operator-*
-          path: dist/
-
       - name: Log into registry
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
@@ -227,18 +223,3 @@ jobs:
             docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:${{ github.ref_name }}"
             docker push "$IMAGE:${{ github.ref_name }}"
           fi
-
-  create-release:
-    needs: [ build-scan-push-container ]
-    runs-on: ubuntu-latest
-    if: ${{ inputs.create-release }}
-    steps:
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          pattern: "*"
-          path: dist/
-
-      - name: Release
-        uses: softprops/action-gh-release@aec2ec56f94eb8180ceec724245f64ef008b89f5 # v2.4.0
-        with:
-          files: dist/**

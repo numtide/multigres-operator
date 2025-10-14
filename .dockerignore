@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Local development environment (Nix, direnv)
+.direnv/
+result*
+flake.nix
+flake.lock
+devshell.nix
+.envrc*
+
+# Build artifacts and local tools
+bin/
+dist/
+
+# Test and linting artifacts
+cover.out
+cover.html
+.golangci.toml
+.testcoverage.yml
+
+# CI/CD & Temporary files
+Dockerfile.cross
+
+# Documentation and planning
+docs/
+plans/
+README.md
+*.md
+
+# Project and configuration files not needed for the build
+Makefile
+PROJECT
+scripts/
