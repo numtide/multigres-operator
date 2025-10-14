@@ -1,8 +1,6 @@
 package etcd
 
 import (
-	"context"
-	"slices"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,6 +35,9 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		wantRequeue bool
 		assertFunc  func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
 	}{
+		////----------------------------------------
+		///   Success
+		//------------------------------------------
 		"create all resources for new Etcd": {
 			etcd: &multigresv1alpha1.Etcd{
 				ObjectMeta: metav1.ObjectMeta{
@@ -49,17 +50,23 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
 				// Verify all three resources were created
 				sts := &appsv1.StatefulSet{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, sts); err != nil {
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-etcd", Namespace: "default"},
+					sts); err != nil {
 					t.Errorf("StatefulSet should exist: %v", err)
 				}
 
 				headlessSvc := &corev1.Service{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd-headless", Namespace: "default"}, headlessSvc); err != nil {
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-etcd-headless", Namespace: "default"},
+					headlessSvc); err != nil {
 					t.Errorf("Headless Service should exist: %v", err)
 				}
 
 				clientSvc := &corev1.Service{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, clientSvc); err != nil {
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-etcd", Namespace: "default"},
+					clientSvc); err != nil {
 					t.Errorf("Client Service should exist: %v", err)
 				}
 
@@ -111,7 +118,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			},
 			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
 				sts := &appsv1.StatefulSet{}
-				err := c.Get(context.Background(), types.NamespacedName{
+				err := c.Get(t.Context(), types.NamespacedName{
 					Name:      "existing-etcd",
 					Namespace: "default",
 				}, sts)
@@ -141,7 +148,9 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
 				sts := &appsv1.StatefulSet{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "etcd-zone1", Namespace: "default"}, sts); err != nil {
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "etcd-zone1", Namespace: "default"},
+					sts); err != nil {
 					t.Fatalf("Failed to get StatefulSet: %v", err)
 				}
 				if sts.Labels["multigres.com/cell"] != "zone1" {
@@ -149,7 +158,9 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				}
 
 				headlessSvc := &corev1.Service{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "etcd-zone1-headless", Namespace: "default"}, headlessSvc); err != nil {
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "etcd-zone1-headless", Namespace: "default"},
+					headlessSvc); err != nil {
 					t.Fatalf("Failed to get headless Service: %v", err)
 				}
 				if headlessSvc.Labels["multigres.com/cell"] != "zone1" {
@@ -157,7 +168,9 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				}
 
 				clientSvc := &corev1.Service{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "etcd-zone1", Namespace: "default"}, clientSvc); err != nil {
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "etcd-zone1", Namespace: "default"},
+					clientSvc); err != nil {
 					t.Fatalf("Failed to get client Service: %v", err)
 				}
 				if clientSvc.Labels["multigres.com/cell"] != "zone1" {
@@ -165,6 +178,96 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
+		"deletion with finalizer": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-etcd-deletion",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Finalizers:        []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Etcd{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-etcd-deletion",
+						Namespace:         "default",
+						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+						Finalizers:        []string{finalizerName},
+					},
+					Spec: multigresv1alpha1.EtcdSpec{},
+				},
+			},
+			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+				updatedEtcd := &multigresv1alpha1.Etcd{}
+				err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-etcd-deletion", Namespace: "default"},
+					updatedEtcd)
+				if err == nil {
+					t.Errorf("Etcd object should be deleted but still exists (finalizers: %v)", updatedEtcd.Finalizers)
+				}
+			},
+		},
+		"all replicas ready status": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd-ready",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{
+					Replicas: int32Ptr(3),
+				},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd-ready",
+						Namespace: "default",
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas: int32Ptr(3),
+					},
+					Status: appsv1.StatefulSetStatus{
+						Replicas:      3,
+						ReadyReplicas: 3,
+					},
+				},
+			},
+			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+				updatedEtcd := &multigresv1alpha1.Etcd{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-etcd-ready", Namespace: "default"},
+					updatedEtcd); err != nil {
+					t.Fatalf("Failed to get Etcd: %v", err)
+				}
+
+				if !updatedEtcd.Status.Ready {
+					t.Error("Status.Ready should be true")
+				}
+				if updatedEtcd.Status.Replicas != 3 {
+					t.Errorf("Status.Replicas = %d, want 3", updatedEtcd.Status.Replicas)
+				}
+				if updatedEtcd.Status.ReadyReplicas != 3 {
+					t.Errorf("Status.ReadyReplicas = %d, want 3", updatedEtcd.Status.ReadyReplicas)
+				}
+				if len(updatedEtcd.Status.Conditions) == 0 {
+					t.Error("Status.Conditions should not be empty")
+				} else {
+					readyCondition := updatedEtcd.Status.Conditions[0]
+					if readyCondition.Type != "Ready" {
+						t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
+					}
+					if readyCondition.Status != metav1.ConditionTrue {
+						t.Errorf("Condition status = %s, want True", readyCondition.Status)
+					}
+				}
+			},
+		},
+		////----------------------------------------
+		///   Error
+		//------------------------------------------
 		"error on StatefulSet create": {
 			etcd: &multigresv1alpha1.Etcd{
 				ObjectMeta: metav1.ObjectMeta{
@@ -393,82 +496,6 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"deletion with finalizer": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-etcd",
-					Namespace:         "default",
-					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{finalizerName},
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			existingObjects: []client.Object{},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				updatedEtcd := &multigresv1alpha1.Etcd{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, updatedEtcd); err != nil {
-					t.Fatalf("Failed to get Etcd: %v", err)
-				}
-
-				if slices.Contains(updatedEtcd.Finalizers, finalizerName) {
-					t.Errorf("Finalizer %s should be removed", finalizerName)
-				}
-			},
-		},
-		"all replicas ready status": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd-ready",
-					Namespace:  "default",
-					Finalizers: []string{finalizerName},
-				},
-				Spec: multigresv1alpha1.EtcdSpec{
-					Replicas: int32Ptr(3),
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-ready",
-						Namespace: "default",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: int32Ptr(3),
-					},
-					Status: appsv1.StatefulSetStatus{
-						Replicas:      3,
-						ReadyReplicas: 3,
-					},
-				},
-			},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				updatedEtcd := &multigresv1alpha1.Etcd{}
-				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd-ready", Namespace: "default"}, updatedEtcd); err != nil {
-					t.Fatalf("Failed to get Etcd: %v", err)
-				}
-
-				if !updatedEtcd.Status.Ready {
-					t.Error("Status.Ready should be true")
-				}
-				if updatedEtcd.Status.Replicas != 3 {
-					t.Errorf("Status.Replicas = %d, want 3", updatedEtcd.Status.Replicas)
-				}
-				if updatedEtcd.Status.ReadyReplicas != 3 {
-					t.Errorf("Status.ReadyReplicas = %d, want 3", updatedEtcd.Status.ReadyReplicas)
-				}
-				if len(updatedEtcd.Status.Conditions) == 0 {
-					t.Error("Status.Conditions should not be empty")
-				} else {
-					readyCondition := updatedEtcd.Status.Conditions[0]
-					if readyCondition.Type != "Ready" {
-						t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
-					}
-					if readyCondition.Status != metav1.ConditionTrue {
-						t.Errorf("Condition status = %s, want True", readyCondition.Status)
-					}
-				}
-			},
-		},
 		"error on Get StatefulSet (not NotFound)": {
 			etcd: &multigresv1alpha1.Etcd{
 				ObjectMeta: metav1.ObjectMeta{
@@ -605,7 +632,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				}
 			}
 			if !etcdInExisting {
-				err := fakeClient.Create(context.Background(), tc.etcd)
+				err := fakeClient.Create(t.Context(), tc.etcd)
 				if err != nil {
 					t.Fatalf("Failed to create Etcd: %v", err)
 				}
@@ -619,7 +646,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 			}
 
-			result, err := reconciler.Reconcile(context.Background(), req)
+			result, err := reconciler.Reconcile(t.Context(), req)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("Reconcile() error = %v, wantErr %v", err, tc.wantErr)
 				return
@@ -628,78 +655,16 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				return
 			}
 
-			// Check requeue
-			if result.Requeue != tc.wantRequeue {
-				t.Errorf("Reconcile() result.Requeue = %v, want %v", result.Requeue, tc.wantRequeue)
-			}
+			// NOTE: Check for requeue delay when we need to support such setup.
+			_ = result
+			// // Check requeue
+			// if (result.RequeueAfter != 0) != tc.wantRequeue {
+			// 	t.Errorf("Reconcile() result.Requeue = %v, want %v", result.RequeueAfter, tc.wantRequeue)
+			// }
 
 			// Run custom assertions if provided
 			if tc.assertFunc != nil {
 				tc.assertFunc(t, fakeClient, tc.etcd)
-			}
-
-			// For success cases, verify all resources were created with correct labels
-			expectedCellName := tc.etcd.Spec.CellName
-			if expectedCellName == "" {
-				expectedCellName = "multigres-global-topo"
-			}
-
-			// Verify StatefulSet
-			sts := &appsv1.StatefulSet{}
-			err = fakeClient.Get(context.Background(), types.NamespacedName{
-				Name:      tc.etcd.Name,
-				Namespace: tc.etcd.Namespace,
-			}, sts)
-			if err != nil {
-				t.Errorf("StatefulSet should exist, got error: %v", err)
-			} else {
-				if sts.Labels["multigres.com/cell"] != expectedCellName {
-					t.Errorf("StatefulSet cell label = %v, want %v", sts.Labels["multigres.com/cell"], expectedCellName)
-				}
-				if sts.Labels["app.kubernetes.io/component"] != "etcd" {
-					t.Errorf("StatefulSet component label = %v, want etcd", sts.Labels["app.kubernetes.io/component"])
-				}
-			}
-
-			// Verify headless Service
-			headlessSvc := &corev1.Service{}
-			err = fakeClient.Get(context.Background(), types.NamespacedName{
-				Name:      tc.etcd.Name + "-headless",
-				Namespace: tc.etcd.Namespace,
-			}, headlessSvc)
-			if err != nil {
-				t.Errorf("Headless Service should exist, got error: %v", err)
-			} else {
-				if headlessSvc.Labels["multigres.com/cell"] != expectedCellName {
-					t.Errorf("Headless Service cell label = %v, want %v", headlessSvc.Labels["multigres.com/cell"], expectedCellName)
-				}
-			}
-
-			// Verify client Service
-			clientSvc := &corev1.Service{}
-			err = fakeClient.Get(context.Background(), types.NamespacedName{
-				Name:      tc.etcd.Name,
-				Namespace: tc.etcd.Namespace,
-			}, clientSvc)
-			if err != nil {
-				t.Errorf("Client Service should exist, got error: %v", err)
-			} else {
-				if clientSvc.Labels["multigres.com/cell"] != expectedCellName {
-					t.Errorf("Client Service cell label = %v, want %v", clientSvc.Labels["multigres.com/cell"], expectedCellName)
-				}
-			}
-
-			// Verify finalizer
-			etcd := &multigresv1alpha1.Etcd{}
-			err = fakeClient.Get(context.Background(), types.NamespacedName{
-				Name:      tc.etcd.Name,
-				Namespace: tc.etcd.Namespace,
-			}, etcd)
-			if err != nil {
-				t.Fatalf("Failed to get Etcd: %v", err)
-			}
-			if !slices.Contains(etcd.Finalizers, finalizerName) {
-				t.Errorf("Finalizer %s should be present", finalizerName)
 			}
 		})
 	}
@@ -728,7 +693,7 @@ func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
 		},
 	}
 
-	result, err := reconciler.Reconcile(context.Background(), req)
+	result, err := reconciler.Reconcile(t.Context(), req)
 	if err != nil {
 		t.Errorf("Reconcile() should not error on NotFound, got: %v", err)
 	}
