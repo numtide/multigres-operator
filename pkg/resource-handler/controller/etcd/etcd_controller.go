@@ -257,6 +257,7 @@ func (r *EtcdReconciler) buildConditions(etcd *multigresv1alpha1.Etcd, sts *apps
 }
 
 // SetupWithManager sets up the controller with the Manager.
+// TODO: This is missing test coverage, and will need to use envtest setup.
 func (r *EtcdReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.Etcd{}).
