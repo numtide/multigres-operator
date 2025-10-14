@@ -36,7 +36,10 @@ const (
 
 // BuildStatefulSet creates a StatefulSet for the Etcd cluster.
 // Returns a deterministic StatefulSet based on the Etcd spec.
-func BuildStatefulSet(etcd *multigresv1alpha1.Etcd, scheme *runtime.Scheme) (*appsv1.StatefulSet, error) {
+func BuildStatefulSet(
+	etcd *multigresv1alpha1.Etcd,
+	scheme *runtime.Scheme,
+) (*appsv1.StatefulSet, error) {
 	replicas := DefaultReplicas
 	// TODO: Debatable whether this defaulting makes sense.
 	if etcd.Spec.Replicas != nil {
@@ -81,8 +84,13 @@ func BuildStatefulSet(etcd *multigresv1alpha1.Etcd, scheme *runtime.Scheme) (*ap
 							Name:      "etcd",
 							Image:     image,
 							Resources: etcd.Spec.Resources,
-							Env:       buildEtcdEnv(etcd.Name, etcd.Namespace, replicas, headlessServiceName),
-							Ports:     buildContainerPorts(etcd),
+							Env: buildEtcdEnv(
+								etcd.Name,
+								etcd.Namespace,
+								replicas,
+								headlessServiceName,
+							),
+							Ports: buildContainerPorts(etcd),
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      DataVolumeName,

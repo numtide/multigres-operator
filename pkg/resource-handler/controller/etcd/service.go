@@ -14,7 +14,10 @@ import (
 
 // BuildHeadlessService creates a headless Service for the Etcd StatefulSet.
 // Headless services are required for StatefulSet pod DNS records.
-func BuildHeadlessService(etcd *multigresv1alpha1.Etcd, scheme *runtime.Scheme) (*corev1.Service, error) {
+func BuildHeadlessService(
+	etcd *multigresv1alpha1.Etcd,
+	scheme *runtime.Scheme,
+) (*corev1.Service, error) {
 	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName, etcd.Spec.CellName)
 
 	svc := &corev1.Service{
@@ -40,7 +43,10 @@ func BuildHeadlessService(etcd *multigresv1alpha1.Etcd, scheme *runtime.Scheme) 
 
 // BuildClientService creates a client Service for external access to Etcd.
 // This service load balances across all etcd members.
-func BuildClientService(etcd *multigresv1alpha1.Etcd, scheme *runtime.Scheme) (*corev1.Service, error) {
+func BuildClientService(
+	etcd *multigresv1alpha1.Etcd,
+	scheme *runtime.Scheme,
+) (*corev1.Service, error) {
 	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName, etcd.Spec.CellName)
 
 	svc := &corev1.Service{

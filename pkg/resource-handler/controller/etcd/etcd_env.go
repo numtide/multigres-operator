@@ -78,12 +78,18 @@ func buildEtcdConfigEnv(etcdName, serviceName, namespace string) []corev1.EnvVar
 			Value: "http://0.0.0.0:2380",
 		},
 		{
-			Name:  "ETCD_ADVERTISE_CLIENT_URLS",
-			Value: fmt.Sprintf("http://$(POD_NAME).%s.$(POD_NAMESPACE).svc.cluster.local:2379", serviceName),
+			Name: "ETCD_ADVERTISE_CLIENT_URLS",
+			Value: fmt.Sprintf(
+				"http://$(POD_NAME).%s.$(POD_NAMESPACE).svc.cluster.local:2379",
+				serviceName,
+			),
 		},
 		{
-			Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
-			Value: fmt.Sprintf("http://$(POD_NAME).%s.$(POD_NAMESPACE).svc.cluster.local:2380", serviceName),
+			Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS",
+			Value: fmt.Sprintf(
+				"http://$(POD_NAME).%s.$(POD_NAMESPACE).svc.cluster.local:2380",
+				serviceName,
+			),
 		},
 		{
 			Name:  "ETCD_INITIAL_CLUSTER_STATE",

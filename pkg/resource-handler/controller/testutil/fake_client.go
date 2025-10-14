@@ -58,7 +58,12 @@ func NewFakeClientWithFailures(baseClient client.Client, config *FailureConfig) 
 	}
 }
 
-func (c *fakeClientWithFailures) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (c *fakeClientWithFailures) Get(
+	ctx context.Context,
+	key client.ObjectKey,
+	obj client.Object,
+	opts ...client.GetOption,
+) error {
 	if c.config.OnGet != nil {
 		if err := c.config.OnGet(key); err != nil {
 			return err
@@ -67,7 +72,11 @@ func (c *fakeClientWithFailures) Get(ctx context.Context, key client.ObjectKey, 
 	return c.Client.Get(ctx, key, obj, opts...)
 }
 
-func (c *fakeClientWithFailures) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+func (c *fakeClientWithFailures) List(
+	ctx context.Context,
+	list client.ObjectList,
+	opts ...client.ListOption,
+) error {
 	if c.config.OnList != nil {
 		if err := c.config.OnList(list); err != nil {
 			return err
@@ -76,7 +85,11 @@ func (c *fakeClientWithFailures) List(ctx context.Context, list client.ObjectLis
 	return c.Client.List(ctx, list, opts...)
 }
 
-func (c *fakeClientWithFailures) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (c *fakeClientWithFailures) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
 	if c.config.OnCreate != nil {
 		if err := c.config.OnCreate(obj); err != nil {
 			return err
@@ -85,7 +98,11 @@ func (c *fakeClientWithFailures) Create(ctx context.Context, obj client.Object, 
 	return c.Client.Create(ctx, obj, opts...)
 }
 
-func (c *fakeClientWithFailures) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (c *fakeClientWithFailures) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.UpdateOption,
+) error {
 	if c.config.OnUpdate != nil {
 		if err := c.config.OnUpdate(obj); err != nil {
 			return err
@@ -94,7 +111,12 @@ func (c *fakeClientWithFailures) Update(ctx context.Context, obj client.Object, 
 	return c.Client.Update(ctx, obj, opts...)
 }
 
-func (c *fakeClientWithFailures) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (c *fakeClientWithFailures) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	opts ...client.PatchOption,
+) error {
 	if c.config.OnPatch != nil {
 		if err := c.config.OnPatch(obj); err != nil {
 			return err
@@ -103,7 +125,11 @@ func (c *fakeClientWithFailures) Patch(ctx context.Context, obj client.Object, p
 	return c.Client.Patch(ctx, obj, patch, opts...)
 }
 
-func (c *fakeClientWithFailures) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+func (c *fakeClientWithFailures) Delete(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.DeleteOption,
+) error {
 	if c.config.OnDelete != nil {
 		if err := c.config.OnDelete(obj); err != nil {
 			return err
@@ -112,7 +138,11 @@ func (c *fakeClientWithFailures) Delete(ctx context.Context, obj client.Object, 
 	return c.Client.Delete(ctx, obj, opts...)
 }
 
-func (c *fakeClientWithFailures) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+func (c *fakeClientWithFailures) DeleteAllOf(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.DeleteAllOfOption,
+) error {
 	if c.config.OnDeleteAllOf != nil {
 		if err := c.config.OnDeleteAllOf(obj); err != nil {
 			return err
@@ -133,7 +163,11 @@ type statusWriterWithFailures struct {
 	config *FailureConfig
 }
 
-func (s *statusWriterWithFailures) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+func (s *statusWriterWithFailures) Update(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.SubResourceUpdateOption,
+) error {
 	if s.config.OnStatusUpdate != nil {
 		if err := s.config.OnStatusUpdate(obj); err != nil {
 			return err
@@ -142,7 +176,12 @@ func (s *statusWriterWithFailures) Update(ctx context.Context, obj client.Object
 	return s.StatusWriter.Update(ctx, obj, opts...)
 }
 
-func (s *statusWriterWithFailures) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+func (s *statusWriterWithFailures) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	opts ...client.SubResourcePatchOption,
+) error {
 	if s.config.OnStatusPatch != nil {
 		if err := s.config.OnStatusPatch(obj); err != nil {
 			return err

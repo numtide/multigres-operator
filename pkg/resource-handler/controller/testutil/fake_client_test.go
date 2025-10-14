@@ -456,7 +456,11 @@ func TestFakeClientWithFailures_DeleteAllOf(t *testing.T) {
 
 			fakeClient := NewFakeClientWithFailures(baseClient, tc.config)
 
-			err := fakeClient.DeleteAllOf(context.Background(), &corev1.Pod{}, client.InNamespace("default"))
+			err := fakeClient.DeleteAllOf(
+				context.Background(),
+				&corev1.Pod{},
+				client.InNamespace("default"),
+			)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("DeleteAllOf() error = %v, wantErr %v", err, tc.wantErr)
