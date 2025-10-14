@@ -35,6 +35,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		// partial failures that don't prevent reconciliation success.
 		wantErr     bool
 		wantRequeue bool
+		assertFunc  func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
 	}{
 		"create all resources for new Etcd": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -55,6 +56,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.EtcdSpec{
 					Replicas: int32Ptr(5),
+					Image:    "quay.io/coreos/etcd:v3.5.15",
 				},
 			},
 			existingObjects: []client.Object{
@@ -64,7 +66,11 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: int32Ptr(3), // old value
+						Replicas: int32Ptr(3), // will be updated to 5
+					},
+					Status: appsv1.StatefulSetStatus{
+						Replicas:      3,
+						ReadyReplicas: 3,
 					},
 				},
 				&corev1.Service{
@@ -79,6 +85,24 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 				},
+			},
+			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+				sts := &appsv1.StatefulSet{}
+				err := c.Get(context.Background(), types.NamespacedName{
+					Name:      "existing-etcd",
+					Namespace: "default",
+				}, sts)
+				if err != nil {
+					t.Fatalf("Failed to get StatefulSet: %v", err)
+				}
+
+				if *sts.Spec.Replicas != 5 {
+					t.Errorf("StatefulSet replicas = %d, want 5", *sts.Spec.Replicas)
+				}
+
+				if sts.Spec.Template.Spec.Containers[0].Image != "quay.io/coreos/etcd:v3.5.15" {
+					t.Errorf("StatefulSet image = %s, want quay.io/coreos/etcd:v3.5.15", sts.Spec.Template.Spec.Containers[0].Image)
+				}
 			},
 		},
 		"etcd with cellName": {
@@ -522,6 +546,11 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			// Check requeue
 			if result.Requeue != tc.wantRequeue {
 				t.Errorf("Reconcile() result.Requeue = %v, want %v", result.Requeue, tc.wantRequeue)
+			}
+
+			// Run custom assertions if provided
+			if tc.assertFunc != nil {
+				tc.assertFunc(t, fakeClient, tc.etcd)
 			}
 
 			// For success cases, verify all resources were created with correct labels
