@@ -192,6 +192,277 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		"error on StatefulSet Update": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{
+					Replicas: int32Ptr(5),
+				},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd",
+						Namespace: "default",
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas: int32Ptr(3),
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: func(obj client.Object) error {
+					if _, ok := obj.(*appsv1.StatefulSet); ok {
+						return testutil.ErrInjected
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on headless Service Update": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd",
+						Namespace: "default",
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd-headless",
+						Namespace: "default",
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: func(obj client.Object) error {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd-headless" {
+						return testutil.ErrInjected
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on client Service Update": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd",
+						Namespace: "default",
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd-headless",
+						Namespace: "default",
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd",
+						Namespace: "default",
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: func(obj client.Object) error {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd" {
+						return testutil.ErrInjected
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on Get StatefulSet in updateStatus": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd-status",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd-status",
+						Namespace: "default",
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				// Fail StatefulSet Get after first successful call
+				// First Get succeeds (in reconcileStatefulSet)
+				// Second Get fails (in updateStatus)
+				OnGet: testutil.FailKeyAfterNCalls(1, testutil.ErrNetworkTimeout),
+			},
+			wantErr: true,
+		},
+		"deletion with finalizer": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-etcd",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Finalizers:        []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+		},
+		"all replicas ready status": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd-ready",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{
+					Replicas: int32Ptr(3),
+				},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd-ready",
+						Namespace: "default",
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas: int32Ptr(3),
+					},
+					Status: appsv1.StatefulSetStatus{
+						Replicas:      3,
+						ReadyReplicas: 3,
+					},
+				},
+			},
+		},
+		"error on Get StatefulSet (not NotFound)": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func(key client.ObjectKey) error {
+					// Fail StatefulSet Get with non-NotFound error
+					if key.Name == "test-etcd" {
+						return testutil.ErrNetworkTimeout
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on Get headless Service (not NotFound)": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd",
+						Namespace: "default",
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func(key client.ObjectKey) error {
+					// Fail headless Service Get with non-NotFound error
+					if key.Name == "test-etcd-headless" {
+						return testutil.ErrNetworkTimeout
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on Get client Service (not NotFound)": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-etcd-svc",
+					Namespace:  "default",
+					Finalizers: []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd-svc",
+						Namespace: "default",
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-etcd-svc-headless",
+						Namespace: "default",
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnNamespacedKeyName("test-etcd-svc", "default", testutil.ErrNetworkTimeout),
+			},
+			wantErr: true,
+		},
+		"deletion error on finalizer removal": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-etcd-del",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Finalizers:        []string{finalizerName},
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Etcd{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-etcd-del",
+						Namespace:         "default",
+						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+						Finalizers:        []string{finalizerName},
+					},
+					Spec: multigresv1alpha1.EtcdSpec{},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName("test-etcd-del", testutil.ErrInjected),
+			},
+			wantErr: true,
+		},
 	}
 
 	for name, tc := range tests {
