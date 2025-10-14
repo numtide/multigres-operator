@@ -46,6 +46,29 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				Spec: multigresv1alpha1.EtcdSpec{},
 			},
 			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+				// Verify all three resources were created
+				sts := &appsv1.StatefulSet{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, sts); err != nil {
+					t.Errorf("StatefulSet should exist: %v", err)
+				}
+
+				headlessSvc := &corev1.Service{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd-headless", Namespace: "default"}, headlessSvc); err != nil {
+					t.Errorf("Headless Service should exist: %v", err)
+				}
+
+				clientSvc := &corev1.Service{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, clientSvc); err != nil {
+					t.Errorf("Client Service should exist: %v", err)
+				}
+
+				// Verify default values were applied
+				// Note: Only checking replicas here - full resource validation is in statefulset_test.go
+				if *sts.Spec.Replicas != DefaultReplicas {
+					t.Errorf("StatefulSet replicas = %d, want default %d", *sts.Spec.Replicas, DefaultReplicas)
+				}
+			},
 		},
 		"update existing resources": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -116,6 +139,31 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+				sts := &appsv1.StatefulSet{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "etcd-zone1", Namespace: "default"}, sts); err != nil {
+					t.Fatalf("Failed to get StatefulSet: %v", err)
+				}
+				if sts.Labels["multigres.com/cell"] != "zone1" {
+					t.Errorf("StatefulSet cell label = %s, want zone1", sts.Labels["multigres.com/cell"])
+				}
+
+				headlessSvc := &corev1.Service{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "etcd-zone1-headless", Namespace: "default"}, headlessSvc); err != nil {
+					t.Fatalf("Failed to get headless Service: %v", err)
+				}
+				if headlessSvc.Labels["multigres.com/cell"] != "zone1" {
+					t.Errorf("Headless Service cell label = %s, want zone1", headlessSvc.Labels["multigres.com/cell"])
+				}
+
+				clientSvc := &corev1.Service{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "etcd-zone1", Namespace: "default"}, clientSvc); err != nil {
+					t.Fatalf("Failed to get client Service: %v", err)
+				}
+				if clientSvc.Labels["multigres.com/cell"] != "zone1" {
+					t.Errorf("Client Service cell label = %s, want zone1", clientSvc.Labels["multigres.com/cell"])
+				}
+			},
 		},
 		"error on StatefulSet create": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -356,6 +404,16 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				Spec: multigresv1alpha1.EtcdSpec{},
 			},
 			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+				updatedEtcd := &multigresv1alpha1.Etcd{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, updatedEtcd); err != nil {
+					t.Fatalf("Failed to get Etcd: %v", err)
+				}
+
+				if slices.Contains(updatedEtcd.Finalizers, finalizerName) {
+					t.Errorf("Finalizer %s should be removed", finalizerName)
+				}
+			},
 		},
 		"all replicas ready status": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -382,6 +440,33 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 						ReadyReplicas: 3,
 					},
 				},
+			},
+			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+				updatedEtcd := &multigresv1alpha1.Etcd{}
+				if err := c.Get(context.Background(), types.NamespacedName{Name: "test-etcd-ready", Namespace: "default"}, updatedEtcd); err != nil {
+					t.Fatalf("Failed to get Etcd: %v", err)
+				}
+
+				if !updatedEtcd.Status.Ready {
+					t.Error("Status.Ready should be true")
+				}
+				if updatedEtcd.Status.Replicas != 3 {
+					t.Errorf("Status.Replicas = %d, want 3", updatedEtcd.Status.Replicas)
+				}
+				if updatedEtcd.Status.ReadyReplicas != 3 {
+					t.Errorf("Status.ReadyReplicas = %d, want 3", updatedEtcd.Status.ReadyReplicas)
+				}
+				if len(updatedEtcd.Status.Conditions) == 0 {
+					t.Error("Status.Conditions should not be empty")
+				} else {
+					readyCondition := updatedEtcd.Status.Conditions[0]
+					if readyCondition.Type != "Ready" {
+						t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
+					}
+					if readyCondition.Status != metav1.ConditionTrue {
+						t.Errorf("Condition status = %s, want True", readyCondition.Status)
+					}
+				}
 			},
 		},
 		"error on Get StatefulSet (not NotFound)": {
