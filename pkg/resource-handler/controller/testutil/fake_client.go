@@ -202,23 +202,48 @@ func FailOnNamespace(namespace string, err error) func(client.Object) error {
 }
 
 // AlwaysFail returns the given error for all operations.
-func AlwaysFail(err error) func(interface{}) error {
+func AlwaysFail(err error) func(any) error {
 	return func(interface{}) error {
 		return err
 	}
 }
 
-// FailAfterNCalls returns an error after N successful calls.
-func FailAfterNCalls(n int, err error) func() func(interface{}) error {
+// FailKeyAfterNCalls returns an ObjectKey failure function that fails after N successful calls.
+// Use for OnGet.
+func FailKeyAfterNCalls(n int, err error) func(client.ObjectKey) error {
 	count := 0
-	return func() func(interface{}) error {
-		return func(interface{}) error {
-			count++
-			if count > n {
-				return err
-			}
-			return nil
+	return func(client.ObjectKey) error {
+		count++
+		if count > n {
+			return err
 		}
+		return nil
+	}
+}
+
+// FailObjAfterNCalls returns an Object failure function that fails after N successful calls.
+// Use for OnCreate, OnUpdate, OnDelete, OnPatch, OnDeleteAllOf, OnStatusUpdate, OnStatusPatch.
+func FailObjAfterNCalls(n int, err error) func(client.Object) error {
+	count := 0
+	return func(client.Object) error {
+		count++
+		if count > n {
+			return err
+		}
+		return nil
+	}
+}
+
+// FailObjListAfterNCalls returns an ObjectList failure function that fails after N successful calls.
+// Use for OnList.
+func FailObjListAfterNCalls(n int, err error) func(client.ObjectList) error {
+	count := 0
+	return func(client.ObjectList) error {
+		count++
+		if count > n {
+			return err
+		}
+		return nil
 	}
 }
 

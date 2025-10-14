@@ -616,29 +616,57 @@ func TestHelperFunctions(t *testing.T) {
 		}
 	})
 
-	t.Run("FailAfterNCalls", func(t *testing.T) {
+	t.Run("FailKeyAfterNCalls", func(t *testing.T) {
 		t.Parallel()
 
-		fn := FailAfterNCalls(2, ErrInjected)()
+		fn := FailKeyAfterNCalls(2, ErrInjected)
 
 		// First call - should succeed
-		if err := fn(nil); err != nil {
+		if err := fn(client.ObjectKey{Name: "test", Namespace: "default"}); err != nil {
 			t.Errorf("Call 1: expected no error, got %v", err)
 		}
 
 		// Second call - should succeed
-		if err := fn(nil); err != nil {
+		if err := fn(client.ObjectKey{Name: "test", Namespace: "default"}); err != nil {
 			t.Errorf("Call 2: expected no error, got %v", err)
 		}
 
 		// Third call - should fail
-		if err := fn(nil); err != ErrInjected {
+		if err := fn(client.ObjectKey{Name: "test", Namespace: "default"}); err != ErrInjected {
 			t.Errorf("Call 3: expected ErrInjected, got %v", err)
 		}
+	})
 
-		// Fourth call - should fail
-		if err := fn(nil); err != ErrInjected {
-			t.Errorf("Call 4: expected ErrInjected, got %v", err)
+	t.Run("FailObjAfterNCalls", func(t *testing.T) {
+		t.Parallel()
+
+		fn := FailObjAfterNCalls(1, ErrPermissionError)
+
+		// First call - should succeed
+		if err := fn(pod); err != nil {
+			t.Errorf("Call 1: expected no error, got %v", err)
+		}
+
+		// Second call - should fail
+		if err := fn(pod); err != ErrPermissionError {
+			t.Errorf("Call 2: expected ErrPermissionError, got %v", err)
+		}
+	})
+
+	t.Run("FailObjListAfterNCalls", func(t *testing.T) {
+		t.Parallel()
+
+		fn := FailObjListAfterNCalls(1, ErrNetworkTimeout)
+		podList := &corev1.PodList{}
+
+		// First call - should succeed
+		if err := fn(podList); err != nil {
+			t.Errorf("Call 1: expected no error, got %v", err)
+		}
+
+		// Second call - should fail
+		if err := fn(podList); err != ErrNetworkTimeout {
+			t.Errorf("Call 2: expected ErrNetworkTimeout, got %v", err)
 		}
 	})
 
