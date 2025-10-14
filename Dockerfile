@@ -3,7 +3,7 @@
 # Github workflow step anchore/scan-action scans only the final image
 # sync this intermediate FROM reference with:
 #   build-and-release.yaml => scan-intermediate-image
-FROM alpine:3.22.2 AS builder
+FROM golang:1.25.3-alpine3.22 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
