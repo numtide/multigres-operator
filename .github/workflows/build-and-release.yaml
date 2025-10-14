@@ -88,7 +88,7 @@ jobs:
           exit 1
 
   build-go:
-    needs: [ scan-dependencies, scan-codeql, scan-intermediate-image ]
+    needs: [ scan-dependencies, scan-intermediate-image ]
     runs-on: ubuntu-latest
     strategy:
       matrix:
