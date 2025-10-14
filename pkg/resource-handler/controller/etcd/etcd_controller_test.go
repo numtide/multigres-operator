@@ -590,3 +590,35 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		})
 	}
 }
+
+func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		Build()
+
+	reconciler := &EtcdReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	// Reconcile non-existent resource
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "nonexistent-etcd",
+			Namespace: "default",
+		},
+	}
+
+	result, err := reconciler.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Errorf("Reconcile() should not error on NotFound, got: %v", err)
+	}
+	if result.Requeue {
+		t.Errorf("Reconcile() should not requeue on NotFound")
+	}
+}
