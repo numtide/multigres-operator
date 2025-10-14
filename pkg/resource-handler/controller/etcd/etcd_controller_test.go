@@ -33,7 +33,8 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		// TODO: If wantErr is false but failureConfig is set, assertions may fail
 		// due to failure injection. This should be addressed when we need to test
 		// partial failures that don't prevent reconciliation success.
-		wantErr bool
+		wantErr     bool
+		wantRequeue bool
 	}{
 		"create all resources for new Etcd": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -43,7 +44,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.EtcdSpec{},
 			},
-			existingObjects:     []client.Object{},
+			existingObjects: []client.Object{},
 		},
 		"update existing resources": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -90,7 +91,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					CellName: "zone1",
 				},
 			},
-			existingObjects:     []client.Object{},
+			existingObjects: []client.Object{},
 		},
 		"error on StatefulSet create": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -238,13 +239,18 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 			}
 
-			_, err := reconciler.Reconcile(context.Background(), req)
+			result, err := reconciler.Reconcile(context.Background(), req)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("Reconcile() error = %v, wantErr %v", err, tc.wantErr)
 				return
 			}
 			if tc.wantErr {
 				return
+			}
+
+			// Check requeue
+			if result.Requeue != tc.wantRequeue {
+				t.Errorf("Reconcile() result.Requeue = %v, want %v", result.Requeue, tc.wantRequeue)
 			}
 
 			// For success cases, verify all resources were created with correct labels
