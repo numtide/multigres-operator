@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: multiorches.multigres.multigres.com
+  name: multiorches.multigres.com
 spec:
-  group: multigres.multigres.com
+  group: multigres.com
   names:
     kind: MultiOrch
     listKind: MultiOrchList
