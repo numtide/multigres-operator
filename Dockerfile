@@ -1,5 +1,10 @@
-# Build the manager binary
+# Containerfile for multigres-operator
+
+# Github workflow step anchore/scan-action scans only the final image
+# sync this intermediate FROM reference with:
+#   build-and-release.yaml => scan-intermediate-image
 FROM golang:1.25 AS builder
+
 ARG TARGETOS
 ARG TARGETARCH
 
