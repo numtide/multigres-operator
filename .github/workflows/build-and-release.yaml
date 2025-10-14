@@ -88,12 +88,9 @@ jobs:
           jq '.runs[0].results | map(select(.level == "error"))' grype.sarif
           exit 1
 
-  build-go:
+  test-go:
     needs: [ scan-dependencies ]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: ${{ fromJson(inputs.architectures) }}
     steps:
       - name: Check out code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -115,34 +112,8 @@ jobs:
         with:
           config: ./.testcoverage.yml
 
-      - name: Build
-        run: |-
-          mkdir -p $GITHUB_WORKSPACE/dist
-
-          CGO_ENABLED=0 \
-          GOARCH=${{ matrix.arch }} \
-          GOOS=linux \
-            go build \
-            -ldflags '\
-              -s -w \
-              -buildid=${{ github.sha }} \
-              -X main.version=${{ github.ref_name }} \
-              -X main.commit=${{ github.sha }} \
-            ' \
-            -trimpath -mod=readonly \
-            -o $GITHUB_WORKSPACE/dist/multigres-operator-${{ matrix.arch }} \
-            ./cmd/multigres-operator
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: multigres-operator-${{matrix.arch}}
-          path: dist/*
-          if-no-files-found: error
-          retention-days: 7
-
   build-scan-push-container:
-    needs: [ build-go ]
+    needs: [ test-go ]
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
