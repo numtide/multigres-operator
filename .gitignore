@@ -12,3 +12,6 @@ dist/
 go.work
 cover.out
 cover.html
+
+# kubebuilder
+bin/
