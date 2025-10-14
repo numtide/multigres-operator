@@ -177,6 +177,16 @@ func FailOnKeyName(name string, err error) func(client.ObjectKey) error {
 	}
 }
 
+// FailOnNamespacedKeyName returns an error if both the key name and namespace match.
+func FailOnNamespacedKeyName(name, namespace string, err error) func(client.ObjectKey) error {
+	return func(key client.ObjectKey) error {
+		if key.Name == name && key.Namespace == namespace {
+			return err
+		}
+		return nil
+	}
+}
+
 // FailOnNamespace returns an error if the namespace matches.
 func FailOnNamespace(namespace string, err error) func(client.Object) error {
 	return func(obj client.Object) error {

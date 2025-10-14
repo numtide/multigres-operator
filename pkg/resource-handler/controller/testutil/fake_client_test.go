@@ -566,6 +566,36 @@ func TestHelperFunctions(t *testing.T) {
 		}
 	})
 
+	t.Run("FailOnNamespacedKeyName - matching name and namespace", func(t *testing.T) {
+		t.Parallel()
+
+		fn := FailOnNamespacedKeyName("test-pod", "default", ErrInjected)
+		err := fn(client.ObjectKey{Name: "test-pod", Namespace: "default"})
+		if err != ErrInjected {
+			t.Errorf("Expected ErrInjected, got %v", err)
+		}
+	})
+
+	t.Run("FailOnNamespacedKeyName - matching name but different namespace", func(t *testing.T) {
+		t.Parallel()
+
+		fn := FailOnNamespacedKeyName("test-pod", "default", ErrInjected)
+		err := fn(client.ObjectKey{Name: "test-pod", Namespace: "kube-system"})
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+	})
+
+	t.Run("FailOnNamespacedKeyName - different name but matching namespace", func(t *testing.T) {
+		t.Parallel()
+
+		fn := FailOnNamespacedKeyName("test-pod", "default", ErrInjected)
+		err := fn(client.ObjectKey{Name: "other-pod", Namespace: "default"})
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+	})
+
 	t.Run("FailOnNamespace - matching namespace", func(t *testing.T) {
 		t.Parallel()
 
