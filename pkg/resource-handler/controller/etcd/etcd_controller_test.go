@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"slices"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -70,10 +71,17 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Client Service should exist: %v", err)
 				}
 
-				// Verify default values were applied
-				// Note: Only checking replicas here - full resource validation is in statefulset_test.go
+				// Verify defaults and finalizer
 				if *sts.Spec.Replicas != DefaultReplicas {
-					t.Errorf("StatefulSet replicas = %d, want default %d", *sts.Spec.Replicas, DefaultReplicas)
+					t.Errorf("StatefulSet replicas = %d, want %d", *sts.Spec.Replicas, DefaultReplicas)
+				}
+
+				updatedEtcd := &multigresv1alpha1.Etcd{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, updatedEtcd); err != nil {
+					t.Fatalf("Failed to get Etcd: %v", err)
+				}
+				if !slices.Contains(updatedEtcd.Finalizers, finalizerName) {
+					t.Errorf("Finalizer should be added")
 				}
 			},
 		},
@@ -262,6 +270,10 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					if readyCondition.Status != metav1.ConditionTrue {
 						t.Errorf("Condition status = %s, want True", readyCondition.Status)
 					}
+				}
+
+				if !slices.Contains(updatedEtcd.Finalizers, finalizerName) {
+					t.Errorf("Finalizer should be present")
 				}
 			},
 		},
