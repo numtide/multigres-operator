@@ -65,6 +65,7 @@ jobs:
             echo "::error::CodeQL produced ${count} alerts (warning/error)."
             exit 1
           fi
+
   scan-intermediate-image:
     runs-on: ubuntu-latest
     steps:
@@ -74,7 +75,7 @@ jobs:
         continue-on-error: true
         with:
           cache-db: true
-          image: "alpine:3.22.2" # sync this with Containerfile
+          image: "golang:1.25.3-alpine3.22" # sync this with Containerfile
           output-file: grype.sarif
           severity-cutoff: high
       - name: Upload SARIF file
@@ -87,12 +88,9 @@ jobs:
           jq '.runs[0].results | map(select(.level == "error"))' grype.sarif
           exit 1
 
-  build-go:
-    needs: [ scan-dependencies, scan-codeql, scan-intermediate-image ]
+  test-go:
+    needs: [ scan-dependencies ]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: ${{ fromJson(inputs.architectures) }}
     steps:
       - name: Check out code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -114,34 +112,8 @@ jobs:
         with:
           config: ./.testcoverage.yml
 
-      - name: Build
-        run: |-
-          mkdir -p $GITHUB_WORKSPACE/dist
-
-          CGO_ENABLED=0 \
-          GOARCH=${{ matrix.arch }} \
-          GOOS=linux \
-            go build \
-            -ldflags '\
-              -s -w \
-              -buildid=${{ github.sha }} \
-              -X main.version=${{ github.ref_name }} \
-              -X main.commit=${{ github.sha }} \
-            ' \
-            -trimpath -mod=readonly \
-            -o $GITHUB_WORKSPACE/dist/multigres-operator-${{ matrix.arch }} \
-            ./cmd/multigres-operator
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: multigres-operator-${{matrix.arch}}
-          path: dist/*
-          if-no-files-found: error
-          retention-days: 7
-
   build-scan-push-container:
-    needs: [ build-go ]
+    needs: [ test-go ]
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -163,11 +135,6 @@ jobs:
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          pattern: multigres-operator-*
-          path: dist/
-
       - name: Log into registry
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
@@ -179,7 +146,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
-          file: Containerfile
+          file: Dockerfile
           platforms: linux/${{ join(fromJson(inputs.architectures), ',linux/') }}
           load: true
           push: false
@@ -227,18 +194,3 @@ jobs:
             docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:${{ github.ref_name }}"
             docker push "$IMAGE:${{ github.ref_name }}"
           fi
-
-  create-release:
-    needs: [ build-scan-push-container ]
-    runs-on: ubuntu-latest
-    if: ${{ inputs.create-release }}
-    steps:
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
-        with:
-          pattern: "*"
-          path: dist/
-
-      - name: Release
-        uses: softprops/action-gh-release@aec2ec56f94eb8180ceec724245f64ef008b89f5 # v2.4.0
-        with:
-          files: dist/**
