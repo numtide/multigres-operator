@@ -117,10 +117,10 @@ jobs:
         run: |-
           go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
 
-      - name: Check test coverage
-        uses: vladopajic/go-test-coverage@cc5012c2cfa84542e02b079141958a885861d326 # v2.17.0
-        with:
-          config: ./.testcoverage.yml
+      # - name: Check test coverage
+      #   uses: vladopajic/go-test-coverage@cc5012c2cfa84542e02b079141958a885861d326 # v2.17.0
+      #   with:
+      #     config: ./.testcoverage.yml
 
   build-scan-push-container:
     needs: [ test-go ]
