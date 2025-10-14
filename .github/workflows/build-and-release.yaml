@@ -89,7 +89,17 @@ jobs:
           exit 1
 
   test-go:
-    needs: [ scan-dependencies ]
+    needs: [
+      scan-dependencies,
+
+      # these take a long time - allow them to fail the PR pipeline, but
+      # don't delay the test + build stages.
+      # this means that on main push and on tag push, these might fail while the
+      # test + build stages go ahead, but the likelihood is small if pull
+      # requests require passing checks.
+      # scan-codeql,
+      # scan-intermediate-image
+    ]
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
