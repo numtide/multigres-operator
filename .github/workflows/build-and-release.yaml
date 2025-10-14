@@ -74,7 +74,7 @@ jobs:
         continue-on-error: true
         with:
           cache-db: true
-          image: "alpine:3.22.2" # sync this with Containerfile
+          image: "golang:1.25" # sync this with Containerfile
           output-file: grype.sarif
           severity-cutoff: high
       - name: Upload SARIF file
