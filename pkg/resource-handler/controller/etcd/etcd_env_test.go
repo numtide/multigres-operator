@@ -50,8 +50,14 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
-				{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
-				{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
+					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+				},
+				{
+					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
+					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
 				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "my-etcd"},
 			},
@@ -65,8 +71,14 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
-				{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
-				{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
+					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+				},
+				{
+					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
+					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
 				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-etcd"},
 			},
@@ -80,8 +92,14 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
-				{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).very-long-etcd-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
-				{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).very-long-etcd-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
+					Value: "http://$(POD_NAME).very-long-etcd-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+				},
+				{
+					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
+					Value: "http://$(POD_NAME).very-long-etcd-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
 				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "very-long-etcd-cluster-name"},
 			},
@@ -194,11 +212,20 @@ func TestBuildEtcdEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
-				{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
-				{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
+					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+				},
+				{
+					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
+					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
 				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "my-etcd"},
-				{Name: "ETCD_INITIAL_CLUSTER", Value: "my-etcd-0=http://my-etcd-0.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-1=http://my-etcd-1.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-2=http://my-etcd-2.my-etcd-headless.default.svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_INITIAL_CLUSTER",
+					Value: "my-etcd-0=http://my-etcd-0.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-1=http://my-etcd-1.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-2=http://my-etcd-2.my-etcd-headless.default.svc.cluster.local:2380",
+				},
 			},
 		},
 		"single replica": {
@@ -227,13 +254,22 @@ func TestBuildEtcdEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
-				{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
-				{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
+					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+				},
+				{
+					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
+					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+				},
 				// Cluster setup won't happen in a single cluster, and these
 				// env variables are only used at startup.
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
 				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-etcd"},
-				{Name: "ETCD_INITIAL_CLUSTER", Value: "test-etcd-0=http://test-etcd-0.test-etcd-headless.test.svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_INITIAL_CLUSTER",
+					Value: "test-etcd-0=http://test-etcd-0.test-etcd-headless.test.svc.cluster.local:2380",
+				},
 			},
 		},
 		"zero replicas - no ETCD_INITIAL_CLUSTER": {
@@ -262,8 +298,14 @@ func TestBuildEtcdEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
-				{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).empty-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
-				{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).empty-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+				{
+					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
+					Value: "http://$(POD_NAME).empty-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+				},
+				{
+					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
+					Value: "http://$(POD_NAME).empty-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+				},
 				// Cluster setup won't happen in a single cluster, and these
 				// env variables are only used at startup. In case of scaling up
 				// from zero replica, the updated env variable will be picked up

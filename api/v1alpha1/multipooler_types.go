@@ -167,8 +167,8 @@ type MultiPooler struct {
 
 // MultiPoolerList contains a list of MultiPooler
 type MultiPoolerList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `              json:",inline"`
+	metav1.ListMeta `              json:"metadata,omitempty"`
 	Items           []MultiPooler `json:"items"`
 }
 

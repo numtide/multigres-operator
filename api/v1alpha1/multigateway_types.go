@@ -160,8 +160,8 @@ type MultiGateway struct {
 
 // MultiGatewayList contains a list of MultiGateway
 type MultiGatewayList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `               json:",inline"`
+	metav1.ListMeta `               json:"metadata,omitempty"`
 	Items           []MultiGateway `json:"items"`
 }
 

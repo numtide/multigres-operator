@@ -90,7 +90,10 @@ func (r *EtcdReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 }
 
 // handleDeletion handles cleanup when Etcd is being deleted.
-func (r *EtcdReconciler) handleDeletion(ctx context.Context, etcd *multigresv1alpha1.Etcd) (ctrl.Result, error) {
+func (r *EtcdReconciler) handleDeletion(
+	ctx context.Context,
+	etcd *multigresv1alpha1.Etcd,
+) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if slices.Contains(etcd.Finalizers, finalizerName) {
@@ -111,7 +114,10 @@ func (r *EtcdReconciler) handleDeletion(ctx context.Context, etcd *multigresv1al
 }
 
 // reconcileStatefulSet creates or updates the StatefulSet for Etcd.
-func (r *EtcdReconciler) reconcileStatefulSet(ctx context.Context, etcd *multigresv1alpha1.Etcd) error {
+func (r *EtcdReconciler) reconcileStatefulSet(
+	ctx context.Context,
+	etcd *multigresv1alpha1.Etcd,
+) error {
 	desired, err := BuildStatefulSet(etcd, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build StatefulSet: %w", err)
@@ -141,14 +147,21 @@ func (r *EtcdReconciler) reconcileStatefulSet(ctx context.Context, etcd *multigr
 }
 
 // reconcileHeadlessService creates or updates the headless Service for Etcd.
-func (r *EtcdReconciler) reconcileHeadlessService(ctx context.Context, etcd *multigresv1alpha1.Etcd) error {
+func (r *EtcdReconciler) reconcileHeadlessService(
+	ctx context.Context,
+	etcd *multigresv1alpha1.Etcd,
+) error {
 	desired, err := BuildHeadlessService(etcd, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build headless Service: %w", err)
 	}
 
 	existing := &corev1.Service{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: etcd.Namespace, Name: etcd.Name + "-headless"}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: etcd.Namespace, Name: etcd.Name + "-headless"},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new Service
@@ -172,7 +185,10 @@ func (r *EtcdReconciler) reconcileHeadlessService(ctx context.Context, etcd *mul
 }
 
 // reconcileClientService creates or updates the client Service for Etcd.
-func (r *EtcdReconciler) reconcileClientService(ctx context.Context, etcd *multigresv1alpha1.Etcd) error {
+func (r *EtcdReconciler) reconcileClientService(
+	ctx context.Context,
+	etcd *multigresv1alpha1.Etcd,
+) error {
 	desired, err := BuildClientService(etcd, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build client Service: %w", err)
@@ -232,7 +248,10 @@ func (r *EtcdReconciler) updateStatus(ctx context.Context, etcd *multigresv1alph
 }
 
 // buildConditions creates status conditions based on observed state.
-func (r *EtcdReconciler) buildConditions(etcd *multigresv1alpha1.Etcd, sts *appsv1.StatefulSet) []metav1.Condition {
+func (r *EtcdReconciler) buildConditions(
+	etcd *multigresv1alpha1.Etcd,
+	sts *appsv1.StatefulSet,
+) []metav1.Condition {
 	conditions := []metav1.Condition{}
 
 	// Ready condition

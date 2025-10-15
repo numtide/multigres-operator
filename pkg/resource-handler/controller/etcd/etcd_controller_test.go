@@ -73,7 +73,11 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 
 				// Verify defaults and finalizer
 				if *sts.Spec.Replicas != DefaultReplicas {
-					t.Errorf("StatefulSet replicas = %d, want %d", *sts.Spec.Replicas, DefaultReplicas)
+					t.Errorf(
+						"StatefulSet replicas = %d, want %d",
+						*sts.Spec.Replicas,
+						DefaultReplicas,
+					)
 				}
 
 				updatedEtcd := &multigresv1alpha1.Etcd{}
@@ -139,7 +143,10 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				}
 
 				if sts.Spec.Template.Spec.Containers[0].Image != "quay.io/coreos/etcd:v3.5.15" {
-					t.Errorf("StatefulSet image = %s, want quay.io/coreos/etcd:v3.5.15", sts.Spec.Template.Spec.Containers[0].Image)
+					t.Errorf(
+						"StatefulSet image = %s, want quay.io/coreos/etcd:v3.5.15",
+						sts.Spec.Template.Spec.Containers[0].Image,
+					)
 				}
 			},
 		},
@@ -162,7 +169,10 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get StatefulSet: %v", err)
 				}
 				if sts.Labels["multigres.com/cell"] != "zone1" {
-					t.Errorf("StatefulSet cell label = %s, want zone1", sts.Labels["multigres.com/cell"])
+					t.Errorf(
+						"StatefulSet cell label = %s, want zone1",
+						sts.Labels["multigres.com/cell"],
+					)
 				}
 
 				headlessSvc := &corev1.Service{}
@@ -172,7 +182,10 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get headless Service: %v", err)
 				}
 				if headlessSvc.Labels["multigres.com/cell"] != "zone1" {
-					t.Errorf("Headless Service cell label = %s, want zone1", headlessSvc.Labels["multigres.com/cell"])
+					t.Errorf(
+						"Headless Service cell label = %s, want zone1",
+						headlessSvc.Labels["multigres.com/cell"],
+					)
 				}
 
 				clientSvc := &corev1.Service{}
@@ -182,7 +195,10 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get client Service: %v", err)
 				}
 				if clientSvc.Labels["multigres.com/cell"] != "zone1" {
-					t.Errorf("Client Service cell label = %s, want zone1", clientSvc.Labels["multigres.com/cell"])
+					t.Errorf(
+						"Client Service cell label = %s, want zone1",
+						clientSvc.Labels["multigres.com/cell"],
+					)
 				}
 			},
 		},
@@ -213,7 +229,10 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					types.NamespacedName{Name: "test-etcd-deletion", Namespace: "default"},
 					updatedEtcd)
 				if err == nil {
-					t.Errorf("Etcd object should be deleted but still exists (finalizers: %v)", updatedEtcd.Finalizers)
+					t.Errorf(
+						"Etcd object should be deleted but still exists (finalizers: %v)",
+						updatedEtcd.Finalizers,
+					)
 				}
 			},
 		},
@@ -581,7 +600,11 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnNamespacedKeyName("test-etcd-svc", "default", testutil.ErrNetworkTimeout),
+				OnGet: testutil.FailOnNamespacedKeyName(
+					"test-etcd-svc",
+					"default",
+					testutil.ErrNetworkTimeout,
+				),
 			},
 			wantErr: true,
 		},

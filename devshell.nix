@@ -8,6 +8,7 @@ pkgs.mkShell {
     docker-buildx
     kubectl
     kind
+    golangci-lint
 
     # For some script use cases
     nodejs

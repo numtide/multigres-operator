@@ -102,8 +102,13 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env:       buildEtcdEnv("test-etcd", "default", 3, "test-etcd-headless"),
-									Ports:     buildContainerPorts(nil), // Default
+									Env: buildEtcdEnv(
+										"test-etcd",
+										"default",
+										3,
+										"test-etcd-headless",
+									),
+									Ports: buildContainerPorts(nil), // Default
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      DataVolumeName,
@@ -125,7 +130,9 @@ func TestBuildStatefulSet(t *testing.T) {
 								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse(DefaultStorageSize),
+										corev1.ResourceStorage: resource.MustParse(
+											DefaultStorageSize,
+										),
 									},
 								},
 							},
@@ -204,8 +211,13 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     "quay.io/coreos/etcd:v3.5.15",
 									Resources: corev1.ResourceRequirements{},
-									Env:       buildEtcdEnv("etcd-custom", "test", 5, "etcd-custom-headless"),
-									Ports:     buildContainerPorts(nil),
+									Env: buildEtcdEnv(
+										"etcd-custom",
+										"test",
+										5,
+										"etcd-custom-headless",
+									),
+									Ports: buildContainerPorts(nil),
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      DataVolumeName,
@@ -227,7 +239,9 @@ func TestBuildStatefulSet(t *testing.T) {
 								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse(DefaultStorageSize),
+										corev1.ResourceStorage: resource.MustParse(
+											DefaultStorageSize,
+										),
 									},
 								},
 							},
@@ -305,8 +319,13 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env:       buildEtcdEnv("test-etcd", "default", 3, "test-etcd-headless"),
-									Ports:     buildContainerPorts(nil),
+									Env: buildEtcdEnv(
+										"test-etcd",
+										"default",
+										3,
+										"test-etcd-headless",
+									),
+									Ports: buildContainerPorts(nil),
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      DataVolumeName,
@@ -416,8 +435,13 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env:       buildEtcdEnv("test-etcd", "default", 3, "test-etcd-headless"),
-									Ports:     buildContainerPorts(nil),
+									Env: buildEtcdEnv(
+										"test-etcd",
+										"default",
+										3,
+										"test-etcd-headless",
+									),
+									Ports: buildContainerPorts(nil),
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      DataVolumeName,
