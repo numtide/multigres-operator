@@ -70,7 +70,7 @@ spec:
   # globalTopoServer defines the topology server for the entire cluster.
   # Required.
   globalTopoServer:
-    # If 'managed' is true, the operator will create and manage the global EtcdLockserver CR.
+    # If 'managed' is true, the operator will create and manage the global topology server CR.
     # Optional. Defaults to 'true'.
     managed: true
     # The root path in etcd where this cluster's topology data will be stored.
