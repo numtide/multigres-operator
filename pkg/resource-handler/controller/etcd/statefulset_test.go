@@ -102,7 +102,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"test-etcd",
 										"default",
 										3,
@@ -211,7 +211,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     "quay.io/coreos/etcd:v3.5.15",
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"etcd-custom",
 										"test",
 										5,
@@ -319,7 +319,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"test-etcd",
 										"default",
 										3,
@@ -435,7 +435,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"test-etcd",
 										"default",
 										3,
