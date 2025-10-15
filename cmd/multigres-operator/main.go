@@ -37,6 +37,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	etcdcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/etcd"
+	multigatewaycontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/multigateway"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -236,6 +237,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Etcd")
+		os.Exit(1)
+	}
+	if err := (&multigatewaycontroller.MultiGatewayReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MultiGateway")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
