@@ -8,6 +8,7 @@ pkgs.mkShell {
     docker-buildx
     kubectl
     kind
+    kustomize
     golangci-lint
 
     # For some script use cases
