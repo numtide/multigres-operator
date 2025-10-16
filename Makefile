@@ -67,6 +67,7 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= multigres-operator-test-e2e
+KIND_CLUSTER_DEV ?= multigres-operator-dev
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
@@ -90,6 +91,37 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+
+.PHONY: deploy-kind
+deploy-kind: docker-build kustomize ## Build, load image to kind, install CRDs, and deploy operator to kind cluster
+	@echo "Setting up kind cluster '$(KIND_CLUSTER_DEV)'..."
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "Kind is not installed. Please install Kind manually."; \
+		exit 1; \
+	}
+	@case "$$($(KIND) get clusters)" in \
+		*"$(KIND_CLUSTER_DEV)"*) \
+			echo "Kind cluster '$(KIND_CLUSTER_DEV)' already exists." ;; \
+		*) \
+			echo "Creating Kind cluster '$(KIND_CLUSTER_DEV)'..."; \
+			$(KIND) create cluster --name $(KIND_CLUSTER_DEV) ;; \
+	esac
+	@echo "Loading image $(IMG) into kind cluster..."
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_DEV)
+	@echo "Installing CRDs..."
+	$(KUBECTL) --context kind-$(KIND_CLUSTER_DEV) apply -k config/crd
+	@echo "Deploying operator..."
+	cd config/deploy && $(KUSTOMIZE) edit set image controller=$(IMG)
+	$(KUBECTL) --context kind-$(KIND_CLUSTER_DEV) apply -k config/deploy
+	@echo "Deployment complete! Use 'kubectl --context kind-$(KIND_CLUSTER_DEV) get pods -n multigres-operator' to check status"
+
+.PHONY: undeploy-kind
+undeploy-kind: ## Undeploy operator from kind cluster
+	$(KUBECTL) --context kind-$(KIND_CLUSTER_DEV) delete --ignore-not-found=true -k config/deploy
+
+.PHONY: cleanup-kind
+cleanup-kind: ## Delete the kind cluster used for development
+	@$(KIND) delete cluster --name $(KIND_CLUSTER_DEV)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
