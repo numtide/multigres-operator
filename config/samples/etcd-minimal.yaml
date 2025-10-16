@@ -1,0 +1,7 @@
+apiVersion: multigres.com/v1alpha1
+kind: Etcd
+metadata:
+  name: etcd-sample
+  namespace: default
+spec:
+  cellName: cell-1
