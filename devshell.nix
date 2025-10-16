@@ -9,6 +9,7 @@ pkgs.mkShell {
     kubectl
     kind
     golangci-lint
+    minikube
 
     # For some script use cases
     nodejs
