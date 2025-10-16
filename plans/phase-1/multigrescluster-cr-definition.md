@@ -35,7 +35,7 @@ A well-defined API is critical for the success of the Multigres Operator. The mo
 
   * To provide an exhaustive definition of every subordinate Kubernetes resource created by the operator.
   * To include the final, formal Custom Resource Definition (CRD) schemas in this document.
-  * The feature set in this document will be implicit in the design of the CRs but not the main point of discussion.
+  * To decide the full feature set other than those inherent to CR design
 
 -----
 
@@ -61,7 +61,7 @@ The user interacts with the operator primarily through the `MultigresCluster` cu
 > Please note that this sample does not contain the tablegroups or shard definitions, which are discussed later in this document.
 
 ```yaml
-apiVersion: [multigres.com/v1alpha1](https://multigres.com/v1alpha1)
+apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
   name: example-multigres-cluster
@@ -434,8 +434,8 @@ spec:
   - port: 2380
     name: peer
   selector:
-    [multigres.com/cluster](https://multigres.com/cluster): example-cluster
-    [multigres.com/component](https://multigres.com/component): etcd
+    multigres.com/cluster: example-cluster
+    multigres.com/component: etcd
 ---
 # OPERATOR-CREATED: Client service for etcd.
 apiVersion: v1
@@ -448,8 +448,8 @@ spec:
   - port: 2379
     name: client
   selector:
-    [multigres.com/cluster](https://multigres.com/cluster): example-cluster
-    [multigres.com/component](https://multigres.com/component): etcd
+    multigres.com/cluster: example-cluster
+    multigres.com/component: etcd
 ---
 # OPERATOR-CREATED: StatefulSet to manage the etcd cluster pods.
 apiVersion: apps/v1
@@ -462,13 +462,13 @@ spec:
   replicas: 3
   selector:
     matchLabels:
-      [multigres.com/cluster](https://multigres.com/cluster): example-cluster
-      [multigres.com/component](https://multigres.com/component): etcd
+      multigres.com/cluster: example-cluster
+      multigres.com/component: etcd
   template:
     metadata:
       labels:
-        [multigres.com/cluster](https://multigres.com/cluster): example-cluster
-        [multigres.com/component](https://multigres.com/component): etcd
+        multigres.com/cluster: example-cluster
+        multigres.com/component: etcd
     spec:
       containers:
       - name: etcd
@@ -476,11 +476,11 @@ spec:
         command:
         - "etcd"
         - "--name=$(HOSTNAME)"
-        - "--listen-client-urls=[http://0.0.0.0:2379](http://0.0.0.0:2379)"
+        - "--listen-client-urls=http://0.0.0.0:2379"
         - "--advertise-client-urls=http://$(HOSTNAME).example-cluster-etcd-peer:2379"
-        - "--listen-peer-urls=[http://0.0.0.0:2380](http://0.0.0.0:2380)"
+        - "--listen-peer-urls=http://0.0.0.0:2380"
         - "--initial-advertise-peer-urls=http://$(HOSTNAME).example-cluster-etcd-peer:2380"
-        - "--initial-cluster=example-cluster-etcd-0=[http://example-cluster-etcd-0.example-cluster-etcd-peer:2380](http://example-cluster-etcd-0.example-cluster-etcd-peer:2380),example-cluster-etcd-1=[http://example-cluster-etcd-1.example-cluster-etcd-peer:2380](http://example-cluster-etcd-1.example-cluster-etcd-peer:2380),example-cluster-etcd-2=[http://example-cluster-etcd-2.example-cluster-etcd-peer:2380](http://example-cluster-etcd-2.example-cluster-etcd-peer:2380)"
+        - "--initial-cluster=example-cluster-etcd-0=http://example-cluster-etcd-0.example-cluster-etcd-peer:2380,example-cluster-etcd-1=http://example-cluster-etcd-1.example-cluster-etcd-peer:2380,example-cluster-etcd-2=http://example-cluster-etcd-2.example-cluster-etcd-peer:2380"
         - "--initial-cluster-token=multigres-etcd-cluster"
         - "--initial-cluster-state=new"
         - "--data-dir=/var/run/etcd/default.etcd"
@@ -563,8 +563,8 @@ spec:
     targetPort: 15433
     name: pg-client
   selector:
-    [multigres.com/component](https://multigres.com/component): multigateway
-    [multigres.com/cell](https://multigres.com/cell): us-east-1
+    multigres.com/component: multigateway
+    multigres.com/cell: us-east-1
 ---
 # OPERATOR-CREATED: Central admin UI/API.
 apiVersion: apps/v1
@@ -609,15 +609,15 @@ spec:
     whenScaled: Retain
   selector:
     matchLabels:
-      [multigres.com/cluster](https://multigres.com/cluster): example-cluster
-      [multigres.com/database](https://multigres.com/database): commerce
-      [multigres.com/shard](https://multigres.com/shard): "0"
+      multigres.com/cluster: example-cluster
+      multigres.com/database: commerce
+      multigres.com/shard: "0"
   template:
     metadata:
       labels:
-        [multigres.com/cluster](https://multigres.com/cluster): example-cluster
-        [multigres.com/database](https://multigres.com/database): commerce
-        [multigres.com/shard](https://multigres.com/shard): "0"
+        multigres.com/cluster: example-cluster
+        multigres.com/database: commerce
+        multigres.com/shard: "0"
     spec:
       securityContext:
         runAsUser: 1000
