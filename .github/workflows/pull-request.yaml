@@ -14,3 +14,5 @@ permissions:
 jobs:
   run:
     uses: ./.github/workflows/build-and-release.yaml
+    with:
+      architectures: '["amd64"]'
