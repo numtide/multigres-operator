@@ -407,6 +407,45 @@ The `managed: true/false` flag is a powerful feature, but it introduces some cha
 * Is it worth starting with a read-only child resources mode and then later design further flexibility?
 
 
+#### 4\. Architectural Model: The Operator as a Platform-Agnostic Delegator
+
+>This section could potentially be a whole different discussion and may require its own separate document to be collaborated with the Supabase team. 
+
+A foundational architectural decision for the Multigres Operator is determining the scope of its responsibilities. Specifically, we must define the boundary between Kubernetes-native resource management and the core, platform-agnostic logic of provisioning and configuring a Multigres cluster.
+
+An analysis of the Vitess Operator, reveals a common pattern where the operator is monolithic, absorbing all responsibilities for both Kubernetes resource creation and complex, domain-specific logic like topology initialization and shard management. While this creates a powerful, all-in-one solution for Kubernetes, it also tightly couples the entire system's lifecycle management to the Kubernetes control plane. This approach can limit the portability of the system and increase the complexity of the operator itself, making it difficult to manage Multigres on other platforms without significant re-engineering.
+
+In contrast, the current Multigres codebase includes a slim and elegant `local provisioner` [`provisioner/provisioner.go`](https://github.com/multigres/multigres/blob/main/go/provisioner/provisioner.go) used by the CLI. This tool adeptly handles local cluster setup, demonstrating a clean separation of concerns. However, its design is inherently tied to a single-node environment and is not suited for managing a distributed, highly-available cluster.
+
+We propose an architecture that combines the best of both worlds: leveraging the power of the Kubernetes Operator pattern while ensuring the core Multigres logic remains platform-agnostic. In this model, the Kubernetes Operator acts as a **delegator** or an **adapter**, rather than the central brain of the system.
+
+The key components of this architecture are:
+
+1.  **A Central Provisioning & Management Service:** We propose elevating the core provisioning logic into a dedicated, highly-available service within the cluster. This service (which could be an evolution of `MultiAdmin` or a new, purpose-built component) will expose a formal API (e.g., gRPC) for all high-level cluster operations. Its responsibilities would include:
+
+      * Initializing the global topology in `etcd`.
+      * Declaratively configuring cells and `TableGroups`.
+      * Orchestrating the creation and partitioning of shards.
+
+2.  **The Kubernetes Operator as an Integration Layer:** The operator's role becomes simpler and more focused. It is responsible for managing the lifecycle of Multigres components *on Kubernetes*, but it delegates the complex configuration logic to the central management service. Its reconciliation loop would look like this:
+
+      * Read the `MultigresCluster` Custom Resource.
+      * Create the necessary CRs that in turn manage `pods`, `Deployments` and `StatefulSets` to run the core services (like `MultiAdmin`, `MultiOrch`, etc.).
+      * Manage the config template that is passed to the Topology Management Service and its pods to instruct it to configure the topology, create shards, and register cells according to the `MultigresCluster` spec. 
+
+3.  **Unified Tooling via the CLI:** The existing `multigres` CLI [`cmd/multigres/command/cluster.go`](https://github.com/multigres/multigres/blob/main/go/cmd/multigres/command/cluster.go) would be modified to act as a client to this same central API. This provides a unified user experience for both developers and operators, whether they are managing a local instance or a production cluster. It also makes the creation of additional provisioners more standard.
+
+##### Strategic Advantages of This Approach
+
+  * **Platform Agnosticism:** This is the primary benefit. The core management logic is contained within a standard service, not a Kubernetes-specific controller. This means Multigres can be deployed and managed on any platform (e.g., VMs, other container orchestrators) using any tool that can interact with its API, such as Terraform, Ansible, or custom scripts.
+  * **Reduced Operator Complexity:** By delegating domain-specific logic, the Kubernetes Operator becomes simpler. Its focus narrows to managing the lifecycle of Kubernetes resources, making it easier to develop, test, and maintain.
+  * **Long-Term Flexibility:** Decoupling the control plane from the Kubernetes Operator prevents vendor lock-in to a single orchestration platform and provides maximum flexibility for future deployment scenarios.
+
+While this architectural decision represents a significant shift in how the operator interacts with the cluster, it has minimal impact on the user-facing `MultigresCluster` CRD. It is a strategic investment in the long-term health and adaptability of the Multigres platform.
+
+
+
+
 ---
 
 ## Appendix
