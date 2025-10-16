@@ -92,6 +92,7 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+## TODO: This is only temporary, we should have more streamlined setup.
 .PHONY: deploy-kind
 deploy-kind: docker-build kustomize ## Build, load image to kind, install CRDs, and deploy operator to kind cluster
 	@echo "Setting up kind cluster '$(KIND_CLUSTER_DEV)'..."
