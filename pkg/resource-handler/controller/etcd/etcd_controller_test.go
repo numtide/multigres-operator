@@ -732,7 +732,7 @@ func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
 	if err != nil {
 		t.Errorf("Reconcile() should not error on NotFound, got: %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Errorf("Reconcile() should not requeue on NotFound")
 	}
 }
