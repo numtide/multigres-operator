@@ -1,3 +1,6 @@
+# This sample is intended to represent a complete cluster.
+# Useful as a starting point and as a complete reference for all options.
+
 apiVersion: v1
 kind: Namespace
 metadata:
