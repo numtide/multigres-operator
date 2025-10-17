@@ -57,9 +57,13 @@ The operator's core responsibility is to translate the high-level state defined 
 ```ascii
 [MultiCluster] 🚀 (The root CR)
       │
-      ├── 🌍 Global Topology Server (etcd) Resources (if managed)
+      ├── 🌍 [GlobalTopoServer] (Child CR)
+      │    │
+      │    └── 🏛️ etcd Resources (if managed)
       │
-      ├── 🤖 MultiAdmin Resources
+      ├── 🤖 [MultiAdmin] (Child CR)
+      │    │
+      │    └── 🛠️ MultiAdmin Resources (Deployment, Service, etc.)
       │
       ├── 💠 [MultiCell] (Child CR)
       │    │
@@ -67,14 +71,16 @@ The operator's core responsibility is to translate the high-level state defined 
       │    │
       │    ├── 🧠 MultiOrch Resources (Deployment, etc.)
       │    │
-      │    └── 📡 Local Topology Server Resources (if managed)
+      │    └── 📡 [LocalTopoServer] (Child CR, if not using global)
+      │         │
+      │         └── 🏛️ etcd Resources (if managed)
       │
       └── 🗃️ [MultiTableGroup] (Child CR)
            │
            └── 📦 [MultiShard] (Child CR)
                 │
                 │
-                └── 🏊 MultiPooler Pods (Sidecar or Deployment)
+                └── 🏊 MultiPooler and postgres resources (pods or statefulset)
 ```
 
 ### API Definition (`MultigresCluster` CRD)
