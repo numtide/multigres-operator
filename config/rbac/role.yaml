@@ -19,6 +19,7 @@ rules:
 - apiGroups:
   - apps
   resources:
+  - deployments
   - statefulsets
   verbs:
   - create
@@ -32,6 +33,7 @@ rules:
   - multigres.com
   resources:
   - etcds
+  - multigateways
   verbs:
   - create
   - delete
@@ -44,12 +46,14 @@ rules:
   - multigres.com
   resources:
   - etcds/finalizers
+  - multigateways/finalizers
   verbs:
   - update
 - apiGroups:
   - multigres.com
   resources:
   - etcds/status
+  - multigateways/status
   verbs:
   - get
   - patch

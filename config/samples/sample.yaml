@@ -9,3 +9,10 @@ metadata:
   namespace: multigres-sample
   name: sample
 spec: {}
+---
+apiVersion: multigres.com/v1alpha1
+kind: MultiGateway
+metadata:
+  namespace: multigres-sample
+  name: sample
+spec: {}
