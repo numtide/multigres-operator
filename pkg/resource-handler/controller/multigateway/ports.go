@@ -54,9 +54,9 @@ func buildContainerPorts(mg *multigresv1alpha1.MultiGateway) []corev1.ContainerP
 	}
 }
 
-// buildClientServicePorts creates service ports for the client service.
+// buildServicePorts creates service ports for the client service.
 // Only includes the client port for external access.
-func buildClientServicePorts(mg *multigresv1alpha1.MultiGateway) []corev1.ServicePort {
+func buildServicePorts(mg *multigresv1alpha1.MultiGateway) []corev1.ServicePort {
 	httpPort := HTTPPort
 	grpcPort := GRPCPort
 	postgresPort := PostgresPort
@@ -75,8 +75,8 @@ func buildClientServicePorts(mg *multigresv1alpha1.MultiGateway) []corev1.Servic
 		{
 			Name:       "http",
 			Port:       httpPort,
-			TargetPort: intstr.FromString("http"),
 			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromString("http"),
 		},
 		{
 			Name:       "grpc",

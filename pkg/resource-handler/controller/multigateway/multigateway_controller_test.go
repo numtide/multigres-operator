@@ -1,4 +1,4 @@
-package etcd
+package multigateway
 
 import (
 	"slices"
@@ -17,7 +17,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 )
 
-func TestEtcdReconciler_Reconcile(t *testing.T) {
+func TestMultiGatewayReconciler_Reconcile(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
@@ -26,7 +26,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		etcd            *multigresv1alpha1.Etcd
+		mg              *multigresv1alpha1.MultiGateway
 		existingObjects []client.Object
 		failureConfig   *testutil.FailureConfig
 		// TODO: If wantErr is false but failureConfig is set, assertions may fail
@@ -34,77 +34,70 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		// partial failures that don't prevent reconciliation success.
 		wantErr     bool
 		wantRequeue bool
-		assertFunc  func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
+		assertFunc  func(t *testing.T, c client.Client, mg *multigresv1alpha1.MultiGateway)
 	}{
 		////----------------------------------------
 		///   Success
 		//------------------------------------------
-		"create all resources for new Etcd": {
-			etcd: &multigresv1alpha1.Etcd{
+		"create all resources for new MultiGateway": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-multigateway",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+			assertFunc: func(t *testing.T, c client.Client, mg *multigresv1alpha1.MultiGateway) {
 				// Verify all three resources were created
-				sts := &appsv1.StatefulSet{}
+				sts := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd", Namespace: "default"},
+					types.NamespacedName{Name: "test-multigateway", Namespace: "default"},
 					sts); err != nil {
-					t.Errorf("StatefulSet should exist: %v", err)
+					t.Errorf("Deployment should exist: %v", err)
 				}
 
-				headlessSvc := &corev1.Service{}
+				svc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd-headless", Namespace: "default"},
-					headlessSvc); err != nil {
-					t.Errorf("Headless Service should exist: %v", err)
-				}
-
-				clientSvc := &corev1.Service{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd", Namespace: "default"},
-					clientSvc); err != nil {
-					t.Errorf("Client Service should exist: %v", err)
+					types.NamespacedName{Name: "test-multigateway", Namespace: "default"},
+					svc); err != nil {
+					t.Errorf("Service should exist: %v", err)
 				}
 
 				// Verify defaults and finalizer
 				if *sts.Spec.Replicas != DefaultReplicas {
 					t.Errorf(
-						"StatefulSet replicas = %d, want %d",
+						"Deployment replicas = %d, want %d",
 						*sts.Spec.Replicas,
 						DefaultReplicas,
 					)
 				}
 
-				updatedEtcd := &multigresv1alpha1.Etcd{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, updatedEtcd); err != nil {
-					t.Fatalf("Failed to get Etcd: %v", err)
+				updatedMultiGateway := &multigresv1alpha1.MultiGateway{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-multigateway", Namespace: "default"}, updatedMultiGateway); err != nil {
+					t.Fatalf("Failed to get MultiGateway: %v", err)
 				}
-				if !slices.Contains(updatedEtcd.Finalizers, finalizerName) {
+				if !slices.Contains(updatedMultiGateway.Finalizers, finalizerName) {
 					t.Errorf("Finalizer should be added")
 				}
 			},
 		},
 		"update existing resources": {
-			etcd: &multigresv1alpha1.Etcd{
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "existing-etcd",
+					Name:       "existing-multigateway",
 					Namespace:  "default",
 					Finalizers: []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{
+				Spec: multigresv1alpha1.MultiGatewaySpec{
 					Replicas: int32Ptr(5),
-					Image:    "quay.io/coreos/etcd:v3.5.15",
+					Image:    "foo/bar:1.2.3",
 				},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-etcd",
+						Name:      "existing-multigateway",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
@@ -117,172 +110,162 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-etcd-headless",
+						Name:      "existing-multigateway-headless",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-etcd",
+						Name:      "existing-multigateway",
 						Namespace: "default",
 					},
 				},
 			},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				sts := &appsv1.StatefulSet{}
+			assertFunc: func(t *testing.T, c client.Client, mg *multigresv1alpha1.MultiGateway) {
+				dp := &appsv1.Deployment{}
 				err := c.Get(t.Context(), types.NamespacedName{
-					Name:      "existing-etcd",
+					Name:      "existing-multigateway",
 					Namespace: "default",
-				}, sts)
+				}, dp)
 				if err != nil {
-					t.Fatalf("Failed to get StatefulSet: %v", err)
+					t.Fatalf("Failed to get Deployment: %v", err)
 				}
 
-				if *sts.Spec.Replicas != 5 {
-					t.Errorf("StatefulSet replicas = %d, want 5", *sts.Spec.Replicas)
+				if *dp.Spec.Replicas != 5 {
+					t.Errorf("Deployment replicas = %d, want 5", *dp.Spec.Replicas)
 				}
 
-				if sts.Spec.Template.Spec.Containers[0].Image != "quay.io/coreos/etcd:v3.5.15" {
+				if dp.Spec.Template.Spec.Containers[0].Image != "foo/bar:1.2.3" {
 					t.Errorf(
-						"StatefulSet image = %s, want quay.io/coreos/etcd:v3.5.15",
-						sts.Spec.Template.Spec.Containers[0].Image,
+						"Deployment image = %s, want foo/bar:1.2.3",
+						dp.Spec.Template.Spec.Containers[0].Image,
 					)
 				}
 			},
 		},
-		"etcd with cellName": {
-			etcd: &multigresv1alpha1.Etcd{
+		"MultiGateway with cellName": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "etcd-zone1",
+					Name:      "multigateway-zone1",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{
+				Spec: multigresv1alpha1.MultiGatewaySpec{
 					CellName: "zone1",
 				},
 			},
 			existingObjects: []client.Object{},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				sts := &appsv1.StatefulSet{}
+			assertFunc: func(t *testing.T, c client.Client, mg *multigresv1alpha1.MultiGateway) {
+				dp := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "etcd-zone1", Namespace: "default"},
-					sts); err != nil {
-					t.Fatalf("Failed to get StatefulSet: %v", err)
+					types.NamespacedName{Name: "multigateway-zone1", Namespace: "default"},
+					dp); err != nil {
+					t.Fatalf("Failed to get Deployment: %v", err)
 				}
-				if sts.Labels["multigres.com/cell"] != "zone1" {
+				if dp.Labels["multigres.com/cell"] != "zone1" {
 					t.Errorf(
-						"StatefulSet cell label = %s, want zone1",
-						sts.Labels["multigres.com/cell"],
+						"Deployment cell label = %s, want zone1",
+						dp.Labels["multigres.com/cell"],
 					)
 				}
 
-				headlessSvc := &corev1.Service{}
+				svc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "etcd-zone1-headless", Namespace: "default"},
-					headlessSvc); err != nil {
-					t.Fatalf("Failed to get headless Service: %v", err)
+					types.NamespacedName{Name: "multigateway-zone1", Namespace: "default"},
+					svc); err != nil {
+					t.Fatalf("Failed to get Service: %v", err)
 				}
-				if headlessSvc.Labels["multigres.com/cell"] != "zone1" {
+				if svc.Labels["multigres.com/cell"] != "zone1" {
 					t.Errorf(
-						"Headless Service cell label = %s, want zone1",
-						headlessSvc.Labels["multigres.com/cell"],
-					)
-				}
-
-				clientSvc := &corev1.Service{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "etcd-zone1", Namespace: "default"},
-					clientSvc); err != nil {
-					t.Fatalf("Failed to get client Service: %v", err)
-				}
-				if clientSvc.Labels["multigres.com/cell"] != "zone1" {
-					t.Errorf(
-						"Client Service cell label = %s, want zone1",
-						clientSvc.Labels["multigres.com/cell"],
+						"Service cell label = %s, want zone1",
+						svc.Labels["multigres.com/cell"],
 					)
 				}
 			},
 		},
 		"deletion with finalizer": {
-			etcd: &multigresv1alpha1.Etcd{
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-etcd-deletion",
+					Name:              "test-multigateway-deletion",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 					Finalizers:        []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{
-				&multigresv1alpha1.Etcd{
+				&multigresv1alpha1.MultiGateway{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:              "test-etcd-deletion",
+						Name:              "test-multigateway-deletion",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{finalizerName},
 					},
-					Spec: multigresv1alpha1.EtcdSpec{},
+					Spec: multigresv1alpha1.MultiGatewaySpec{},
 				},
 			},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				updatedEtcd := &multigresv1alpha1.Etcd{}
+			assertFunc: func(t *testing.T, c client.Client, multigateway *multigresv1alpha1.MultiGateway) {
+				updatedMultiGateway := &multigresv1alpha1.MultiGateway{}
 				err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd-deletion", Namespace: "default"},
-					updatedEtcd)
+					types.NamespacedName{Name: "test-multigateway-deletion", Namespace: "default"},
+					updatedMultiGateway)
 				if err == nil {
 					t.Errorf(
-						"Etcd object should be deleted but still exists (finalizers: %v)",
-						updatedEtcd.Finalizers,
+						"MultiGateway object should be deleted but still exists (finalizers: %v)",
+						updatedMultiGateway.Finalizers,
 					)
 				}
 			},
 		},
 		"all replicas ready status": {
-			etcd: &multigresv1alpha1.Etcd{
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd-ready",
+					Name:       "test-multigateway-ready",
 					Namespace:  "default",
 					Finalizers: []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{
+				Spec: multigresv1alpha1.MultiGatewaySpec{
 					Replicas: int32Ptr(3),
 				},
 			},
 			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
+				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-ready",
+						Name:      "test-multigateway-ready",
 						Namespace: "default",
 					},
-					Spec: appsv1.StatefulSetSpec{
+					Spec: appsv1.DeploymentSpec{
 						Replicas: int32Ptr(3),
 					},
-					Status: appsv1.StatefulSetStatus{
+					Status: appsv1.DeploymentStatus{
 						Replicas:      3,
 						ReadyReplicas: 3,
 					},
 				},
 			},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				updatedEtcd := &multigresv1alpha1.Etcd{}
+			assertFunc: func(t *testing.T, c client.Client, multigateway *multigresv1alpha1.MultiGateway) {
+				updatedMultiGateway := &multigresv1alpha1.MultiGateway{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd-ready", Namespace: "default"},
-					updatedEtcd); err != nil {
-					t.Fatalf("Failed to get Etcd: %v", err)
+					types.NamespacedName{Name: "test-multigateway-ready", Namespace: "default"},
+					updatedMultiGateway); err != nil {
+					t.Fatalf("Failed to get MultiGateway: %v", err)
 				}
 
-				if !updatedEtcd.Status.Ready {
+				if !updatedMultiGateway.Status.Ready {
 					t.Error("Status.Ready should be true")
 				}
-				if updatedEtcd.Status.Replicas != 3 {
-					t.Errorf("Status.Replicas = %d, want 3", updatedEtcd.Status.Replicas)
+				if updatedMultiGateway.Status.Replicas != 3 {
+					t.Errorf("Status.Replicas = %d, want 3", updatedMultiGateway.Status.Replicas)
 				}
-				if updatedEtcd.Status.ReadyReplicas != 3 {
-					t.Errorf("Status.ReadyReplicas = %d, want 3", updatedEtcd.Status.ReadyReplicas)
+				if updatedMultiGateway.Status.ReadyReplicas != 3 {
+					t.Errorf(
+						"Status.ReadyReplicas = %d, want 3",
+						updatedMultiGateway.Status.ReadyReplicas,
+					)
 				}
-				if len(updatedEtcd.Status.Conditions) == 0 {
+				if len(updatedMultiGateway.Status.Conditions) == 0 {
 					t.Error("Status.Conditions should not be empty")
 				} else {
-					readyCondition := updatedEtcd.Status.Conditions[0]
+					readyCondition := updatedMultiGateway.Status.Conditions[0]
 					if readyCondition.Type != "Ready" {
 						t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
 					}
@@ -291,7 +274,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					}
 				}
 
-				if !slices.Contains(updatedEtcd.Finalizers, finalizerName) {
+				if !slices.Contains(updatedMultiGateway.Finalizers, finalizerName) {
 					t.Errorf("Finalizer should be present")
 				}
 			},
@@ -300,56 +283,59 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		///   Error
 		//------------------------------------------
 		"error on status update": {
-			etcd: &multigresv1alpha1.Etcd{
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-multigateway",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName("test-etcd", testutil.ErrInjected),
+				OnStatusUpdate: testutil.FailOnObjectName(
+					"test-multigateway",
+					testutil.ErrInjected,
+				),
 			},
 			wantErr: true,
 		},
-		"error on Get StatefulSet in updateStatus (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Get Deployment in updateStatus (network error)": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd-status",
+					Name:       "test-multigateway-status",
 					Namespace:  "default",
 					Finalizers: []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
+				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-status",
+						Name:      "test-multigateway-status",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				// Fail StatefulSet Get after first successful call
-				// First Get succeeds (in reconcileStatefulSet)
+				// Fail Deployment Get after first successful call
+				// First Get succeeds (in reconcileDeployment)
 				// Second Get fails (in updateStatus)
 				OnGet: testutil.FailKeyAfterNCalls(1, testutil.ErrNetworkTimeout),
 			},
 			wantErr: true,
 		},
-		"error on client Service create": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Service create": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-multigateway",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd" {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-multigateway" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -357,38 +343,38 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on client Service Update": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Service Update": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-multigateway",
 					Namespace:  "default",
 					Finalizers: []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-multigateway",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-headless",
+						Name:      "test-multigateway-headless",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-multigateway",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd" {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-multigateway" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -396,50 +382,50 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on Get client Service (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Get Service (network error)": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd-svc",
+					Name:       "test-multigateway-svc",
 					Namespace:  "default",
 					Finalizers: []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-svc",
+						Name:      "test-multigateway-svc",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-svc-headless",
+						Name:      "test-multigateway-svc-headless",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: testutil.FailOnNamespacedKeyName(
-					"test-etcd-svc",
+					"test-multigateway-svc",
 					"default",
 					testutil.ErrNetworkTimeout,
 				),
 			},
 			wantErr: true,
 		},
-		"error on headless Service create": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Deployment create": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-multigateway",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd-headless" {
+					if _, ok := obj.(*appsv1.Deployment); ok {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -447,110 +433,31 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on headless Service Update": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Deployment Update": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-multigateway",
 					Namespace:  "default",
 					Finalizers: []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-headless",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd-headless" {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get headless Service (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
-					Namespace:  "default",
-					Finalizers: []string{finalizerName},
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-etcd-headless" {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on StatefulSet create": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.EtcdSpec{},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
-					if _, ok := obj.(*appsv1.StatefulSet); ok {
-						return testutil.ErrPermissionError
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on StatefulSet Update": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
-					Namespace:  "default",
-					Finalizers: []string{finalizerName},
-				},
-				Spec: multigresv1alpha1.EtcdSpec{
+				Spec: multigresv1alpha1.MultiGatewaySpec{
 					Replicas: int32Ptr(5),
 				},
 			},
 			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
+				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-multigateway",
 						Namespace: "default",
 					},
-					Spec: appsv1.StatefulSetSpec{
+					Spec: appsv1.DeploymentSpec{
 						Replicas: int32Ptr(3),
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if _, ok := obj.(*appsv1.StatefulSet); ok {
+					if _, ok := obj.(*appsv1.Deployment); ok {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -558,19 +465,19 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on Get StatefulSet (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Get Deployment (network error)": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-multigateway",
 					Namespace:  "default",
 					Finalizers: []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-etcd" {
+					if key.Name == "test-multigateway" {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -579,56 +486,56 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on finalizer Update": {
-			etcd: &multigresv1alpha1.Etcd{
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-multigateway",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-etcd", testutil.ErrInjected),
+				OnUpdate: testutil.FailOnObjectName("test-multigateway", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},
 		"deletion error on finalizer removal": {
-			etcd: &multigresv1alpha1.Etcd{
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-etcd-del",
+					Name:              "test-multigateway-del",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 					Finalizers:        []string{finalizerName},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{
-				&multigresv1alpha1.Etcd{
+				&multigresv1alpha1.MultiGateway{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:              "test-etcd-del",
+						Name:              "test-multigateway-del",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{finalizerName},
 					},
-					Spec: multigresv1alpha1.EtcdSpec{},
+					Spec: multigresv1alpha1.MultiGatewaySpec{},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-etcd-del", testutil.ErrInjected),
+				OnUpdate: testutil.FailOnObjectName("test-multigateway-del", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},
-		"error on Get Etcd (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Get MultiGateway (network error)": {
+			mg: &multigresv1alpha1.MultiGateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-multigateway",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.MultiGatewaySpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName("test-etcd", testutil.ErrNetworkTimeout),
+				OnGet: testutil.FailOnKeyName("test-multigateway", testutil.ErrNetworkTimeout),
 			},
 			wantErr: true,
 		},
@@ -642,7 +549,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
-				WithStatusSubresource(&multigresv1alpha1.Etcd{}).
+				WithStatusSubresource(&multigresv1alpha1.MultiGateway{}).
 				Build()
 
 			fakeClient := client.Client(baseClient)
@@ -651,31 +558,31 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
 
-			reconciler := &EtcdReconciler{
+			reconciler := &MultiGatewayReconciler{
 				Client: fakeClient,
 				Scheme: scheme,
 			}
 
-			// Create the Etcd resource if not in existing objects
-			etcdInExisting := false
+			// Create the MultiGateway resource if not in existing objects
+			mgInExisting := false
 			for _, obj := range tc.existingObjects {
-				if etcd, ok := obj.(*multigresv1alpha1.Etcd); ok && etcd.Name == tc.etcd.Name {
-					etcdInExisting = true
+				if mg, ok := obj.(*multigresv1alpha1.MultiGateway); ok && mg.Name == tc.mg.Name {
+					mgInExisting = true
 					break
 				}
 			}
-			if !etcdInExisting {
-				err := fakeClient.Create(t.Context(), tc.etcd)
+			if !mgInExisting {
+				err := fakeClient.Create(t.Context(), tc.mg)
 				if err != nil {
-					t.Fatalf("Failed to create Etcd: %v", err)
+					t.Fatalf("Failed to create MultiGateway: %v", err)
 				}
 			}
 
 			// Reconcile
 			req := ctrl.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      tc.etcd.Name,
-					Namespace: tc.etcd.Namespace,
+					Name:      tc.mg.Name,
+					Namespace: tc.mg.Namespace,
 				},
 			}
 
@@ -697,13 +604,13 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 
 			// Run custom assertions if provided
 			if tc.assertFunc != nil {
-				tc.assertFunc(t, fakeClient, tc.etcd)
+				tc.assertFunc(t, fakeClient, tc.mg)
 			}
 		})
 	}
 }
 
-func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
+func TestMultiGatewayReconciler_ReconcileNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -713,7 +620,7 @@ func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := &EtcdReconciler{
+	reconciler := &MultiGatewayReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
@@ -721,7 +628,7 @@ func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
 	// Reconcile non-existent resource
 	req := ctrl.Request{
 		NamespacedName: types.NamespacedName{
-			Name:      "nonexistent-etcd",
+			Name:      "nonexistent-multigateway",
 			Namespace: "default",
 		},
 	}

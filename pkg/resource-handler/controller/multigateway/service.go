@@ -12,9 +12,9 @@ import (
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
 )
 
-// BuildClientService creates a client Service for external access to Etcd.
+// BuildService creates a client Service for external access to Etcd.
 // This service load balances across all etcd members.
-func BuildClientService(
+func BuildService(
 	mg *multigresv1alpha1.MultiGateway,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
@@ -29,7 +29,7 @@ func BuildClientService(
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
 			Selector: labels,
-			Ports:    buildClientServicePorts(mg),
+			Ports:    buildServicePorts(mg),
 		},
 	}
 

@@ -473,7 +473,7 @@ func TestBuildStatefulSet(t *testing.T) {
 				},
 			},
 		},
-		"scheme without Etcd type - should error": {
+		"scheme with incorrect type - should error": {
 			etcd: &multigresv1alpha1.Etcd{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-etcd",
@@ -481,7 +481,7 @@ func TestBuildStatefulSet(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.EtcdSpec{},
 			},
-			scheme:  runtime.NewScheme(), // empty scheme without Etcd type
+			scheme:  runtime.NewScheme(), // empty scheme with incorrect type
 			wantErr: true,
 		},
 	}

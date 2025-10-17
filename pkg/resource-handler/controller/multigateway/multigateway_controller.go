@@ -72,7 +72,7 @@ func (r *MultiGatewayReconciler) Reconcile(
 	}
 
 	// Reconcile Service
-	if err := r.reconcileClientService(ctx, mg); err != nil {
+	if err := r.reconcileService(ctx, mg); err != nil {
 		logger.Error(err, "Failed to reconcile client Service")
 		return ctrl.Result{}, err
 	}
@@ -143,14 +143,14 @@ func (r *MultiGatewayReconciler) reconcileDeployment(
 	return nil
 }
 
-// reconcileClientService creates or updates the client Service for MultiGateway.
-func (r *MultiGatewayReconciler) reconcileClientService(
+// reconcileService creates or updates the client Service for MultiGateway.
+func (r *MultiGatewayReconciler) reconcileService(
 	ctx context.Context,
 	mg *multigresv1alpha1.MultiGateway,
 ) error {
-	desired, err := BuildClientService(mg, r.Scheme)
+	desired, err := BuildService(mg, r.Scheme)
 	if err != nil {
-		return fmt.Errorf("failed to build client Service: %w", err)
+		return fmt.Errorf("failed to build Service: %w", err)
 	}
 
 	existing := &corev1.Service{}
@@ -159,11 +159,11 @@ func (r *MultiGatewayReconciler) reconcileClientService(
 		if errors.IsNotFound(err) {
 			// Create new Service
 			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create client Service: %w", err)
+				return fmt.Errorf("failed to create Service: %w", err)
 			}
 			return nil
 		}
-		return fmt.Errorf("failed to get client Service: %w", err)
+		return fmt.Errorf("failed to get Service: %w", err)
 	}
 
 	// Update existing Service
@@ -171,7 +171,7 @@ func (r *MultiGatewayReconciler) reconcileClientService(
 	existing.Spec.Selector = desired.Spec.Selector
 	existing.Labels = desired.Labels
 	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update client Service: %w", err)
+		return fmt.Errorf("failed to update Service: %w", err)
 	}
 
 	return nil
