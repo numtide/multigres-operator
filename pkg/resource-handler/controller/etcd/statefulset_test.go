@@ -102,7 +102,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"test-etcd",
 										"default",
 										3,
@@ -211,7 +211,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     "quay.io/coreos/etcd:v3.5.15",
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"etcd-custom",
 										"test",
 										5,
@@ -319,7 +319,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"test-etcd",
 										"default",
 										3,
@@ -435,7 +435,7 @@ func TestBuildStatefulSet(t *testing.T) {
 									Name:      "etcd",
 									Image:     DefaultImage,
 									Resources: corev1.ResourceRequirements{},
-									Env: buildEtcdEnv(
+									Env: buildContainerEnv(
 										"test-etcd",
 										"default",
 										3,
@@ -473,7 +473,7 @@ func TestBuildStatefulSet(t *testing.T) {
 				},
 			},
 		},
-		"scheme without Etcd type - should error": {
+		"scheme with incorrect type - should error": {
 			etcd: &multigresv1alpha1.Etcd{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-etcd",
@@ -481,7 +481,7 @@ func TestBuildStatefulSet(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.EtcdSpec{},
 			},
-			scheme:  runtime.NewScheme(), // empty scheme without Etcd type
+			scheme:  runtime.NewScheme(), // empty scheme with incorrect type
 			wantErr: true,
 		},
 	}
