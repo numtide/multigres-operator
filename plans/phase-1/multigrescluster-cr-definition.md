@@ -57,7 +57,7 @@ The operator's core responsibility is to translate the high-level state defined 
 ```ascii
 [MultiCluster] 🚀 (The root CR)
       │
-      ├── 🌍 [GlobalTopoServer] (Child CR)
+      ├── 🌍 [GlobalTopoServer] (Child CR if managed)
       │    │
       │    └── 🏛️ etcd Resources (if managed)
       │
@@ -71,7 +71,7 @@ The operator's core responsibility is to translate the high-level state defined 
       │    │
       │    ├── 🧠 MultiOrch Resources (Deployment, etc.)
       │    │
-      │    └── 📡 [LocalTopoServer] (Child CR, if not using global)
+      │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global)
       │         │
       │         └── 🏛️ etcd Resources (if managed)
       │
