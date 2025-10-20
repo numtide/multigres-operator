@@ -34,7 +34,10 @@ type MultiPoolerReconciler struct {
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile handles MultiPooler resource reconciliation.
-func (r *MultiPoolerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *MultiPoolerReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Fetch the MultiPooler instance
@@ -118,7 +121,11 @@ func (r *MultiPoolerReconciler) reconcileStatefulSet(
 	}
 
 	existing := &appsv1.StatefulSet{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: multipooler.Namespace, Name: multipooler.Name}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: multipooler.Namespace, Name: multipooler.Name},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new StatefulSet
@@ -179,10 +186,17 @@ func (r *MultiPoolerReconciler) reconcileHeadlessService(
 }
 
 // updateStatus updates the MultiPooler status based on observed state.
-func (r *MultiPoolerReconciler) updateStatus(ctx context.Context, multipooler *multigresv1alpha1.MultiPooler) error {
+func (r *MultiPoolerReconciler) updateStatus(
+	ctx context.Context,
+	multipooler *multigresv1alpha1.MultiPooler,
+) error {
 	// Get the StatefulSet to check status
 	sts := &appsv1.StatefulSet{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: multipooler.Namespace, Name: multipooler.Name}, sts)
+	err := r.Get(
+		ctx,
+		client.ObjectKey{Namespace: multipooler.Namespace, Name: multipooler.Name},
+		sts,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// StatefulSet not created yet
@@ -194,7 +208,8 @@ func (r *MultiPoolerReconciler) updateStatus(ctx context.Context, multipooler *m
 	// Update status fields
 	multipooler.Status.Replicas = sts.Status.Replicas
 	multipooler.Status.ReadyReplicas = sts.Status.ReadyReplicas
-	multipooler.Status.Ready = sts.Status.ReadyReplicas == sts.Status.Replicas && sts.Status.Replicas > 0
+	multipooler.Status.Ready = sts.Status.ReadyReplicas == sts.Status.Replicas &&
+		sts.Status.Replicas > 0
 	multipooler.Status.ObservedGeneration = multipooler.Generation
 
 	// Update conditions

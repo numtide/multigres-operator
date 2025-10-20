@@ -23,10 +23,8 @@ const (
 	PgctldMountPath = "/usr/local/bin/pgctld"
 )
 
-var (
-	// sidecarRestartPolicy is the restart policy for native sidecar containers
-	sidecarRestartPolicy = corev1.ContainerRestartPolicyAlways
-)
+// sidecarRestartPolicy is the restart policy for native sidecar containers
+var sidecarRestartPolicy = corev1.ContainerRestartPolicyAlways
 
 // buildMultiPoolerContainer creates the multipooler container spec.
 func buildMultiPoolerContainer(multipooler *multigresv1alpha1.MultiPooler) corev1.Container {

@@ -18,7 +18,11 @@ func BuildHeadlessService(
 	multipooler *multigresv1alpha1.MultiPooler,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	labels := metadata.BuildStandardLabels(multipooler.Name, ComponentName, multipooler.Spec.CellName)
+	labels := metadata.BuildStandardLabels(
+		multipooler.Name,
+		ComponentName,
+		multipooler.Spec.CellName,
+	)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

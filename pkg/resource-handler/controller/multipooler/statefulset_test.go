@@ -125,7 +125,9 @@ func TestBuildStatefulSet(t *testing.T) {
 								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse(DefaultStorageSize),
+										corev1.ResourceStorage: resource.MustParse(
+											DefaultStorageSize,
+										),
 									},
 								},
 							},
@@ -239,7 +241,9 @@ func TestBuildStatefulSet(t *testing.T) {
 								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse(DefaultStorageSize),
+										corev1.ResourceStorage: resource.MustParse(
+											DefaultStorageSize,
+										),
 									},
 								},
 							},

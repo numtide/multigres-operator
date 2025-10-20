@@ -278,7 +278,10 @@ func TestMultiPoolerReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Status.Replicas = %d, want 2", updatedMultiPooler.Status.Replicas)
 				}
 				if updatedMultiPooler.Status.ReadyReplicas != 2 {
-					t.Errorf("Status.ReadyReplicas = %d, want 2", updatedMultiPooler.Status.ReadyReplicas)
+					t.Errorf(
+						"Status.ReadyReplicas = %d, want 2",
+						updatedMultiPooler.Status.ReadyReplicas,
+					)
 				}
 				if len(updatedMultiPooler.Status.Conditions) == 0 {
 					t.Error("Status.Conditions should not be empty")
@@ -330,7 +333,8 @@ func TestMultiPoolerReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-multipooler-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-multipooler-headless" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -437,7 +441,8 @@ func TestMultiPoolerReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-multipooler-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-multipooler-headless" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -572,7 +577,8 @@ func TestMultiPoolerReconciler_Reconcile(t *testing.T) {
 			// Create the MultiPooler resource if not in existing objects
 			multipoolerInExisting := false
 			for _, obj := range tc.existingObjects {
-				if mp, ok := obj.(*multigresv1alpha1.MultiPooler); ok && mp.Name == tc.multipooler.Name {
+				if mp, ok := obj.(*multigresv1alpha1.MultiPooler); ok &&
+					mp.Name == tc.multipooler.Name {
 					multipoolerInExisting = true
 					break
 				}

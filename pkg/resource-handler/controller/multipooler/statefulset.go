@@ -43,7 +43,11 @@ func BuildStatefulSet(
 	}
 
 	headlessServiceName := multipooler.Name + "-headless"
-	labels := metadata.BuildStandardLabels(multipooler.Name, ComponentName, multipooler.Spec.CellName)
+	labels := metadata.BuildStandardLabels(
+		multipooler.Name,
+		ComponentName,
+		multipooler.Spec.CellName,
+	)
 	podLabels := metadata.MergeLabels(labels, multipooler.Spec.PodLabels)
 
 	sts := &appsv1.StatefulSet{
@@ -107,7 +111,9 @@ func BuildStatefulSet(
 
 // buildVolumeClaimTemplates creates the PVC templates for PostgreSQL data storage.
 // Caller decides whether to use VolumeClaimTemplate or build from simple fields.
-func buildVolumeClaimTemplates(multipooler *multigresv1alpha1.MultiPooler) []corev1.PersistentVolumeClaim {
+func buildVolumeClaimTemplates(
+	multipooler *multigresv1alpha1.MultiPooler,
+) []corev1.PersistentVolumeClaim {
 	if multipooler.Spec.VolumeClaimTemplate != nil {
 		return []corev1.PersistentVolumeClaim{
 			{
