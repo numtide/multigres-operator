@@ -121,7 +121,11 @@ func (r *MultiOrchReconciler) reconcileDeployment(
 	}
 
 	existing := &appsv1.Deployment{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: multiorch.Namespace, Name: multiorch.Name}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: multiorch.Namespace, Name: multiorch.Name},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new Deployment
@@ -154,7 +158,11 @@ func (r *MultiOrchReconciler) reconcileService(
 	}
 
 	existing := &corev1.Service{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: multiorch.Namespace, Name: multiorch.Name}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: multiorch.Namespace, Name: multiorch.Name},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new Service

@@ -65,7 +65,11 @@ func TestMultiOrchReconciler_Reconcile(t *testing.T) {
 
 				// Verify defaults
 				if *dp.Spec.Replicas != DefaultReplicas {
-					t.Errorf("Deployment replicas = %d, want %d", *dp.Spec.Replicas, DefaultReplicas)
+					t.Errorf(
+						"Deployment replicas = %d, want %d",
+						*dp.Spec.Replicas,
+						DefaultReplicas,
+					)
 				}
 
 				// Verify container
@@ -163,7 +167,10 @@ func TestMultiOrchReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get Deployment: %v", err)
 				}
 				if dp.Labels["multigres.com/cell"] != "cell-1" {
-					t.Errorf("Deployment cell label = %s, want cell-1", dp.Labels["multigres.com/cell"])
+					t.Errorf(
+						"Deployment cell label = %s, want cell-1",
+						dp.Labels["multigres.com/cell"],
+					)
 				}
 
 				svc := &corev1.Service{}
@@ -173,7 +180,10 @@ func TestMultiOrchReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get Service: %v", err)
 				}
 				if svc.Labels["multigres.com/cell"] != "cell-1" {
-					t.Errorf("Service cell label = %s, want cell-1", svc.Labels["multigres.com/cell"])
+					t.Errorf(
+						"Service cell label = %s, want cell-1",
+						svc.Labels["multigres.com/cell"],
+					)
 				}
 			},
 		},
@@ -252,7 +262,10 @@ func TestMultiOrchReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Status.Replicas = %d, want 2", updatedMultiOrch.Status.Replicas)
 				}
 				if updatedMultiOrch.Status.ReadyReplicas != 2 {
-					t.Errorf("Status.ReadyReplicas = %d, want 2", updatedMultiOrch.Status.ReadyReplicas)
+					t.Errorf(
+						"Status.ReadyReplicas = %d, want 2",
+						updatedMultiOrch.Status.ReadyReplicas,
+					)
 				}
 				if len(updatedMultiOrch.Status.Conditions) == 0 {
 					t.Error("Status.Conditions should not be empty")
@@ -518,7 +531,8 @@ func TestMultiOrchReconciler_Reconcile(t *testing.T) {
 			// Create the MultiOrch resource if not in existing objects
 			multiorchInExisting := false
 			for _, obj := range tc.existingObjects {
-				if mo, ok := obj.(*multigresv1alpha1.MultiOrch); ok && mo.Name == tc.multiorch.Name {
+				if mo, ok := obj.(*multigresv1alpha1.MultiOrch); ok &&
+					mo.Name == tc.multiorch.Name {
 					multiorchInExisting = true
 					break
 				}
