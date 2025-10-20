@@ -21,7 +21,6 @@ pkgs.mkShell rec {
 
   # Load custom bash code
   shellHook = ''
-    export PRJ_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-    export KUBEBUILDER_ASSETS="$PRJ_ROOT/bin/k8s/${env.ENVTEST_K8S_VERSION}.0-${pkgs.go.GOOS}-${pkgs.go.GOARCH}"
+    export KUBEBUILDER_ASSETS="$PWD/bin/k8s/${env.ENVTEST_K8S_VERSION}.0-${pkgs.go.GOOS}-${pkgs.go.GOARCH}"
   '';
 }
