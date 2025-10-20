@@ -61,9 +61,7 @@ The operator's core responsibility is to translate the high-level state defined 
       │    │
       │    └── 🏛️ etcd Resources (if managed)
       │
-      ├── 🤖 [MultiAdmin] (Child CR)
-      │    │
-      │    └── 🛠️ MultiAdmin Resources (Deployment, Service, etc.)
+      ├── 🤖 MultiAdmin Resources - Deployment, Services, Etc
       │
       ├── 💠 [MultiCell] (Child CR)
       │    │
@@ -78,7 +76,6 @@ The operator's core responsibility is to translate the high-level state defined 
       └── 🗃️ [MultiTableGroup] (Child CR)
            │
            └── 📦 [MultiShard] (Child CR)
-                │
                 │
                 └── 🏊 MultiPooler and postgres resources (pods or statefulset)
 ```
