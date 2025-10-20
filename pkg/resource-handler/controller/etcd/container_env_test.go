@@ -178,7 +178,7 @@ func TestBuildEtcdClusterPeerList(t *testing.T) {
 	}
 }
 
-func TestBuildEtcdEnv(t *testing.T) {
+func TestBuildContainerEnv(t *testing.T) {
 	tests := map[string]struct {
 		etcdName    string
 		namespace   string
@@ -319,9 +319,9 @@ func TestBuildEtcdEnv(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildEtcdEnv(tc.etcdName, tc.namespace, tc.replicas, tc.serviceName)
+			got := buildContainerEnv(tc.etcdName, tc.namespace, tc.replicas, tc.serviceName)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("BuildEtcdEnv() mismatch (-want +got):\n%s", diff)
+				t.Errorf("BuildContainerEnv() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

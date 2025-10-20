@@ -158,7 +158,7 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 	if err != nil {
 		t.Errorf("handleDeletion() should not error when no finalizer, got: %v", err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		t.Error("handleDeletion() should not requeue when no finalizer")
 	}
 }

@@ -1,5 +1,8 @@
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+# if :latest then Kubernetes defaults imagePullPolicy: Always
+# which fails if the image tag is intended to be used only locally
+# so default to :dev for improved DX and override when needed in pipelines
+IMG ?= controller:dev
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -119,6 +122,10 @@ run: manifests generate fmt vet ## Run a controller from your host.
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMG} .
+
+.PHONY: minikube-load
+minikube-load:
+	minikube image load ${IMG}
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
