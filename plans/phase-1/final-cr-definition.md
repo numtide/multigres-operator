@@ -26,9 +26,9 @@
                 └── 🏊 MultiPooler and postgres resources (pods or statefulset)
 ```
 
-## MultiGres Cluster
+## Multigres Cluster
 
-The only editable entry for the end-user. All other child CRs are read-only.
+This and the MultigressDeploymentTemplate are the only two editable entries for the end-user. All other child CRs are read-only.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -59,51 +59,76 @@ spec:
         resources:
           requests:
             storage: "10Gi"
-    # When external is defined, no toposerver CR is created        
+    # When external is defined, no toposerver CR is created
     # external:
     #   address: "my-external-etcd-client.etcd.svc:2379"
 
-  admin:
-    spec:
-      replicas: 1
-      resources:
-        requests:
-          cpu: "100m"
-          memory: "128Mi"
-        limits:
-          cpu: "200m"
-          memory: "256Mi"
+  # MultiAdmin now refers to a template.
+  multiadmin:
+    # This tells the controller to fetch the 'multiAdmin' section
+    # from the 'standard-ha' MultigresDeploymentTemplate resource.
+    templateName: "standard-ha"
+    # Optional overrides can be added here if needed
+    # overrides:
+    #   replicas: 2
+    # --- ALTERNATIVE: Inline Definition ---
+    # If 'templateName' is omitted, the controller uses this spec directly.
+    # spec:
+    #   replicas: 1
+    #   resources:
+    #     requests:
+    #       cpu: "100m"
+    #       memory: "128Mi"
+    #     limits:
+    #       cpu: "200m"
+    #       memory: "256Mi"
 
   cells:
     templates:
       - name: "us-east-1"
         spec:
+          # MultiGateway now refers to a template
           multiGateway:
-            replicas: 2
-            resources:
-              requests:
-                cpu: "500m"
-                memory: "512Mi"
-              limits:
-                cpu: "1"
-                memory: "1Gi"
-        # You can specify external per cell as well or it takes global by default        
-        #   topoServer:
-        #     external:
-        #       address: "etcd-us-east-1.my-domain.com:2379"
-        #       rootPath: "/multigres/us-east-1"
+            # This tells the controller to fetch the 'multiGateway' section
+            # from the 'standard-ha' MultigresDeploymentTemplate resource.
+            templateName: "standard-ha"
+            # Optional overrides can be added here
+            # overrides:
+            #   resources:
+            #     limits:
+            #       cpu: "2"
+          # --- ALTERNATIVE: Inline Definition ---
+          # If 'templateName' is omitted, the controller uses this spec directly.
+          # spec:
+          #   replicas: 2
+          #   resources:
+          #     requests:
+          #       cpu: "500m"
+          #       memory: "512Mi"
+          #     limits:
+          #       cpu: "1"
+          #       memory: "1Gi"
+          # You can specify external per cell as well or it takes global by default
+          #   topoServer:
+          #     external:
+          #       address: "etcd-us-east-1.my-domain.com:2379"
+          #       rootPath: "/multigres/us-east-1"
       - name: "us-west-2"
         spec:
           multiGateway:
-            replicas: 2
-            resources:
-              requests:
-                cpu: "500m"
-                memory: "512Mi"
-              limits:
-                cpu: "1"
-                memory: "1Gi"
-          topoServer:
+            # Using the template for this cell as well
+            templateName: "standard-ha"
+          # --- ALTERNATIVE: Inline Definition ---
+          # spec:
+          #   replicas: 2
+          #   resources:
+          #     requests:
+          #       cpu: "500m"
+          #       memory: "512Mi"
+          #     limits:
+          #       cpu: "1"
+          #       memory: "1Gi"
+          topoServer: # This cell uses a managed local topo server
             managedSpec:
               rootPath: "/multigres/us-west-2"
               image: quay.io/coreos/etcd:v3.5.17
@@ -113,94 +138,34 @@ spec:
                 resources:
                   requests:
                     storage: "5Gi"
-
   # ----------------------------------------------------------------
-  # Reusable Instance Type Definitions
-  # ----------------------------------------------------------------
-  deploymentSpecs:
-    - name: "default-ha"
-      replicas: 3
-      dataVolumeClaimTemplate:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: "250Gi"
-      postgres:
-        resources:
-          requests:
-            cpu: "2"
-            memory: "4Gi"
-          limits:
-            cpu: "4"
-            memory: "8Gi"
-      multipooler:
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "256Mi"
-          limits:
-            cpu: "1"
-            memory: "512Mi"
-
-    - name: "orders-ha-replica"
-      replicas: 2
-      dataVolumeClaimTemplate:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: "500Gi"
-      postgres:
-        resources:
-          requests:
-            cpu: "4"
-            memory: "8Gi"
-      multipooler:
-        resources:
-          requests:
-            cpu: "1"
-            memory: "512Mi"
-
-    - name: "orders-read-only"
-      replicas: 1
-      dataVolumeClaimTemplate:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: "500Gi"
-      postgres:
-        resources:
-          requests:
-            cpu: "2"
-            memory: "4Gi"
-      multipooler:
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "256Mi"
-          limits:
-            cpu: "1"
-            memory: "512Mi"
-
-  # ----------------------------------------------------------------
-  # Database Definitions (using Deployment Specs)
+  # Database Definitions
   # ----------------------------------------------------------------
   databases:
     templates:
       - name: "production_db"
         spec:
+          # MultiOrch now refers to a template
           multiorch:
-            spec:
-              replicas: 1
-              resources:
-                requests:
-                  cpu: "100m"
-                  memory: "128Mi"
-                limits:
-                  cpu: "200m"
-                  memory: "256Mi"
+            # This tells the controller to fetch the 'multiOrch' section
+            # from the 'standard-ha' MultigresDeploymentTemplate resource.
+            templateName: "standard-ha"
+            # Optional overrides can be added here
+            # overrides: { ... }
+          # --- ALTERNATIVE: Inline Definition ---
+          # If 'templateName' is omitted, the controller uses this spec directly.
+          # spec:
+          #   replicas: 1
+          #   resources:
+          #     requests:
+          #       cpu: "100m"
+          #       memory: "128Mi"
+          #     limits:
+          #       cpu: "200m"
+          #       memory: "256Mi"
 
           tableGroups:
-            # --- TABLEGROUP 1: An unsharded (single shard) default group ---
+            # --- TABLEGROUP 1: Uses the 'shardPool' section from an external template ---
             - name: "default"
               partitioning:
                 shards: 1
@@ -208,9 +173,11 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-east-1"
+                    # This name now refers to a MultigresDeploymentTemplate resource.
+                    # The controller will fetch its 'shardPool' section.
                     deploymentSpecName: "default-ha"
 
-            # --- TABLEGROUP 2: A sharded group for high-traffic tables ---
+            # --- TABLEGROUP 2: Uses other external templates ---
             - name: "orders_tg"
               partitioning:
                 shards: 2
@@ -218,13 +185,13 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-west-2"
-                    deploymentSpecName: "orders-ha-replica"
+                    deploymentSpecName: "orders-ha-replica" # Refers to another template CR
 
                   - type: "readOnly"
                     cell: "us-east-1"
-                    deploymentSpecName: "orders-read-only"
+                    deploymentSpecName: "orders-read-only" # Refers to another template CR
 
-            # --- TABLEGROUP 3: Example of using an override ---
+            # --- TABLEGROUP 3: Uses external template with overrides ---
             - name: "analytics_tg"
               partitioning:
                 shards: 1
@@ -232,7 +199,8 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-east-1"
-                    deploymentSpecName: "default-ha"
+                    deploymentSpecName: "default-ha" # Use template as base
+                    # Overrides are applied *after* fetching the template spec
                     overrides:
                       dataVolumeClaimTemplate:
                         resources:
@@ -244,6 +212,8 @@ spec:
                             cpu: "4"
             
             # --- TABLEGROUP 4: Using inline (non-templated) definition ---
+            # This demonstrates that inline definitions are still supported if
+            # 'deploymentSpecName' is omitted.
             - name: "custom_tg"
               partitioning:
                 shards: 1
@@ -251,6 +221,7 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-west-2"
+                    # No deploymentSpecName - Spec is fully defined here
                     replicas: 2 
                     dataVolumeClaimTemplate:
                       accessModes: ["ReadWriteOnce"]
@@ -271,7 +242,7 @@ spec:
                           cpu: "100m"
                           memory: "128Mi"
                         limits:
-                          cpu:s "200m"
+                          cpu: "200m"
                           memory: "256Mi"
 
 # --- Status ---
@@ -292,19 +263,98 @@ status:
   cells:
     us-east-1:
       gatewayAvailable: "True"
-      topoServerAvailable: "True"
+      topoServerAvailable: "True" # Assuming global is available (default)
     us-west-2:
       gatewayAvailable: "True"
+      topoServerAvailable: "True" # Assuming managed becomes available
   databases:
     production_db:
       desiredInstances: 14 
       readyInstances: 14
       servingWrites: "True"
       multiorchAvailable: "True" 
-  admin:
+  multiadmin:
     available: "True"
-    serviceName: "example-multigres-cluster-admin"
+    serviceName: "example-multigres-cluster-multiadmin"
 ```
+
+
+## MultigresDeploymentTemplate CR 
+
+```yaml
+# This defines a reusable template named "standard-ha".
+# It contains specifications for multiple component types.
+apiVersion: multigres.com/v1alpha1
+kind: MultigresDeploymentTemplate
+metadata:
+  # This is the name controllers will use to refer to the template
+  name: "standard-ha"
+  # Templates could be namespaced or cluster-scoped
+  # Let's assume namespaced for now.
+  namespace: multigres-platform # Or wherever platform admins manage these
+spec:
+  # --- Template for Postgres/Multipooler Shard Pods ---
+  shardPool:
+    replicas: 3
+    dataVolumeClaimTemplate:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: "250Gi"
+    postgres:
+      resources:
+        requests:
+          cpu: "2"
+          memory: "4Gi"
+        limits:
+          cpu: "4"
+          memory: "8Gi"
+    multipooler:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "256Mi"
+        limits:
+          cpu: "1"
+          memory: "512Mi"
+
+  # --- Template for MultiOrch ---
+
+  multiOrch:
+    replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+
+  # --- Template for MultiGateway ---
+
+  multiGateway:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+
+  # --- Template for MultiAdmin ---
+  multiAdmin:
+    replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+```
+
+
 
 ## toposerver - Read-Only Child of MultigresCluster (or cell if localtopology) 
 
@@ -372,6 +422,8 @@ status:
   clientServiceName: "example-multigres-cluster-global-client"
   peerServiceName: "example-multigres-cluster-global-peer"
 ```
+
+
 
 ## MultiCell CR - Read-Only Child of MultigresCluster
 
@@ -525,7 +577,6 @@ spec:
     multiorch: "multigres/multigres:latest"
   
 # The multiorch spec is copied from the parent database definition.
-  # The image here *is* resolved and stamped by the parent.
   multiorch:
     spec:
       replicas: 1
@@ -541,7 +592,6 @@ spec:
     shards: 2
 
   # This template is fully resolved from `deploymentSpecName`s.
-  # The 'image' fields are NOT embedded in the sub-components.
   shardTemplate:
     pools:
       - type: "replica"
