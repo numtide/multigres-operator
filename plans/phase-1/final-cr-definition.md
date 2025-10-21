@@ -1,5 +1,31 @@
 # Final Multigres Operator CR Definition
 
+```ascii
+[MultiCluster] 🚀 (The root CR)
+      │
+      ├── 🌍 [GlobalTopoServer] (Child CR if managed)
+      │    │
+      │    └── 🏛️ etcd Resources (if managed)
+      │
+      ├── 🤖 MultiAdmin Resources - Deployment, Services, Etc
+      │
+      ├── 💠 [MultiCell] (Child CR)
+      │    │
+      │    ├── 🚪 MultiGate Resources (Deployment, Service, etc.)
+      │    │
+      │    ├── 🧠 MultiOrch Resources (Deployment, etc.)
+      │    │
+      │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global)
+      │         │
+      │         └── 🏛️ etcd Resources (if managed)
+      │
+      └── 🗃️ [MultiTableGroup] (Child CR)
+           │
+           └── 📦 [MultiShard] (Child CR)
+                │
+                └── 🏊 MultiPooler and postgres resources (pods or statefulset)
+```
+
 ## MultiGres Cluster
 
 The only editable entry for the end-user. All other child CRs are read-only.
@@ -12,6 +38,7 @@ metadata:
   namespace: multigres
 spec:
   # Images are defined globally to avoid the danger of running multiple incongruent versions at once.
+  # The operator will eventually take care of rolling updates in a safe way.
   images:
     multigateway: "multigres/multigres:latest"
     multiorch: "multigres/multigres:latest"
@@ -60,10 +87,11 @@ spec:
               limits:
                 cpu: "1"
                 memory: "1Gi"
-          topoServer:
-            external:
-              address: "etcd-us-east-1.my-domain.com:2379"
-              rootPath: "/multigres/us-east-1"
+        # You can specify external per cell as well or it takes global by default        
+        #   topoServer:
+        #     external:
+        #       address: "etcd-us-east-1.my-domain.com:2379"
+        #       rootPath: "/multigres/us-east-1"
       - name: "us-west-2"
         spec:
           multiGateway:
@@ -105,7 +133,7 @@ spec:
           limits:
             cpu: "4"
             memory: "8Gi"
-      multiPooler:
+      multipooler:
         resources:
           requests:
             cpu: "500m"
@@ -126,7 +154,7 @@ spec:
           requests:
             cpu: "4"
             memory: "8Gi"
-      multiPooler:
+      multipooler:
         resources:
           requests:
             cpu: "1"
@@ -144,7 +172,7 @@ spec:
           requests:
             cpu: "2"
             memory: "4Gi"
-      multiPooler:
+      multipooler:
         resources:
           requests:
             cpu: "500m"
@@ -160,7 +188,7 @@ spec:
     templates:
       - name: "production_db"
         spec:
-          orchestrator:
+          multiorch:
             spec:
               replicas: 1
               resources:
@@ -237,7 +265,7 @@ spec:
                         limits:
                           cpu: "1"
                           memory: "2Gi"
-                    multiPooler:
+                    multipooler:
                       resources:
                         requests:
                           cpu: "100m"
@@ -272,7 +300,7 @@ status:
       desiredInstances: 14 
       readyInstances: 14
       servingWrites: "True"
-      orchestratorAvailable: "True" 
+      multiorchAvailable: "True" 
   admin:
     available: "True"
     serviceName: "example-multigres-cluster-admin"
@@ -360,7 +388,6 @@ status:
 apiVersion: multigres.com/v1alpha1
 kind: MultiCell
 metadata:
-  # Name is derived from the parent cluster + cell name
   name: "example-multigres-cluster-eu-central-1"
   namespace: multigres
   labels:
@@ -374,9 +401,16 @@ metadata:
     uid: "a1b2c3d4-1234-5678-90ab-f0e1d2c3b4a5"
     controller: true
 spec:
-  # This spec is copied from the template and resolved
+  # The logical name of the cell, copied from the template.
+  name: "eu-central-1"
+
+  # The parent MultigresCluster passes down the relevant
+  # images for this controller to use.
+  images:
+    multigateway: "multigres/multigres:latest"
+
+  # The resolved spec for the MultiGateway
   multiGateway:
-    image: "multigres/multigres:latest" # Resolved from parent spec.images
     replicas: 2
     resources:
       requests:
@@ -386,17 +420,20 @@ spec:
         cpu: "1"
         memory: "1Gi"
   
+  # A reference to the GLOBAL TopoServer.
+  # This is always populated by the parent controller.
+  globalTopoServer:
+    rootPath: "/multigres/global"
+    clientServiceName: "example-multigres-cluster-global-client"
+
   # --- CONFIG 1 (DEFAULT): Using the Global TopoServer ---
   #
   # Because the 'eu-central-1' cell in the parent CR had no 'topoServer'
-  # block, the MultigresCluster controller resolves the global
-  # TopoServer and injects this 'global' reference.
-  # The MultiCell controller will use this info to find the
-  # 'example-multigres-cluster-global' TopoServer CR and use its
-  # client address.
+  # block, the MultigresCluster controller sets this to 'global'.
+  # The MultiCell controller will use this to configure its MultiGateway
+  # to talk to the global topo server.
   topoServer:
     global:
-      topoServerCRName: "example-multigres-cluster-global"
       rootPath: "/multigres/global"
 
   # --- ALTERNATIVE CONFIG 2 (External) ---
@@ -425,6 +462,17 @@ spec:
   #       resources:
   #         requests:
   #           storage: "5Gi"
+
+  # List of all cells in the cluster for discovery.
+  allCells:
+  - "us-east-1"
+  - "us-west-2"
+  - "eu-central-1"
+
+  # Topology flags for the MultiCell controller to act on.
+  topologyReconciliation:
+    registerCell: true
+    pruneTablets: true
 status:
   conditions:
   - type: Available
@@ -439,11 +487,13 @@ status:
   ## MultiTablegroup CR - Read-Only Child of MultigresCluster
 
 ```yaml
-# FILE: multitablegroup.yaml
+# This child CR is created from the 'orders_tg' entry
+# under 'production_db' in the MultigresCluster CR.
 #
-# This child CR is created from a `tableGroups` entry in the parent
-# `MultigresCluster`. It is a *resolved* spec, meaning all
-# `deploymentSpecName` references have been expanded.
+# The MultigresCluster controller does the following:
+# 1. Copies the *relevant* images (postgres, multipooler) into `spec.images`.
+# 2. Resolves and stamps the 'multiorch' spec.
+# 3. Resolves the `deploymentSpecName` entries into the 'shardTemplate'.
 #
 apiVersion: multigres.com/v1alpha1
 kind: MultiTableGroup
@@ -454,7 +504,7 @@ metadata:
   creationTimestamp: "2025-10-21T10:30:02Z"
   generation: 1
   resourceVersion: "12347"
-  uid: "d4e5f6a7-...-..."
+  uid: "d4e5f6a7-1234-5678-90ab-f0e1d2c3b4a7"
   labels:
     multigres.com/cluster: "example-multigres-cluster"
     multigres.com/database: "production_db"
@@ -467,9 +517,16 @@ metadata:
     controller: true
     blockOwnerDeletion: true
 spec:
-  # The per-database orchestrator spec is stamped here
-  orchestrator:
-    image: "multigres/multigres:latest" # Resolved from parent spec.images
+  # The parent MultigresCluster controller passes down the
+  # images relevant to this CR's children (MultiShard).
+  images:
+    multipooler: "multigres/multigres:latest"
+    postgres: "postgres:15.3"
+    multiorch: "multigres/multigres:latest"
+  
+# The multiorch spec is copied from the parent database definition.
+  # The image here *is* resolved and stamped by the parent.
+  multiorch:
     spec:
       replicas: 1
       resources:
@@ -480,16 +537,13 @@ spec:
           cpu: "200m"
           memory: "256Mi"
 
-  # The partitioning strategy is copied
   partitioning:
     shards: 2
 
-  # The shardTemplate contains the *resolved* pools.
-  # `deploymentSpecName` is gone, and the full spec is inlined.
+  # This template is fully resolved from `deploymentSpecName`s.
+  # The 'image' fields are NOT embedded in the sub-components.
   shardTemplate:
     pools:
-      # This block was resolved from `deploymentSpecName: "orders-ha-replica"`
-      # and global images.
       - type: "replica"
         cell: "us-west-2"
         replicas: 2
@@ -499,20 +553,16 @@ spec:
             requests:
               storage: "500Gi"
         postgres:
-          image: "postgres:15.3"
           resources:
             requests:
               cpu: "4"
               memory: "8Gi"
-        multiPooler:
-          image: "multigres/multigres:latest"
+        multipooler:
           resources:
             requests:
               cpu: "1"
               memory: "512Mi"
 
-      # This block was resolved from `deploymentSpecName: "orders-read-only"`
-      # and global images.
       - type: "readOnly"
         cell: "us-east-1"
         replicas: 1
@@ -522,13 +572,11 @@ spec:
             requests:
               storage: "500Gi"
         postgres:
-          image: "postgres:15.3"
           resources:
             requests:
               cpu: "2"
               memory: "4Gi"
-        multiPooler:
-          image: "multigres/multigres:latest"
+        multipooler:
           resources:
             requests:
               cpu: "500m"
@@ -544,42 +592,52 @@ status:
     message: "All shards are healthy"
   shards: 2
   readyShards: 2
-  orchestratorAvailable: "True"
+  multiorchAvailable: "True"
   ```
 
-  ## MultiShard CR - Read-Only Child of MultigresCluster
+  ## MultiShard CR - Read-Only Child of MultiTableGroup
 
 ```yaml
-# This child CR is created by the `MultiTableGroup` controller.
-# Because `orders_tg` has `shards: 2`, two of these will be created.
-# This is the first shard, "0".
+# FILE: multishard-sample.yaml
+#
+# This child CR is created by the 'MultiTableGroup' controller
+# for 'production-db-orders-tg'. This is shard "0" of 2.
+#
+# The MultiTableGroup controller copies its own 'spec.images'
+# and its 'spec.shardTemplate.pools' into this CR's spec.
 #
 apiVersion: multigres.com/v1alpha1
 kind: MultiShard
 metadata:
-  # Name is derived from its parent + shard index
   name: "production-db-orders-tg-0"
   namespace: multigres
   creationTimestamp: "2025-10-21T10:35:00Z"
   generation: 1
   resourceVersion: "12399"
-  uid: "e5f6a7b8-...-..."
+  uid: "e5f6a7b8-1234-5678-90ab-f0e1d2c3b4a8"
   labels:
     multigres.com/cluster: "example-multigres-cluster"
     multigres.com/database: "production_db"
     multigres.com/table-group: "orders_tg"
     multigres.com/shard: "0"
-  # OwnerReference points to the MultiTableGroup
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
     kind: MultiTableGroup
     name: "production-db-orders-tg"
-    uid: "d4e5f6a7-...-..." # This is the UID of the MultiTableGroup CR
+    uid: "d4e5f6a7-1234-5678-90ab-f0e1d2c3b4a7"
     controller: true
     blockOwnerDeletion: true
 spec:
-  # The spec is the resolved `shardTemplate` copied from the
-  # MultiTableGroup parent.
+  # This images struct is copied from the parent 'MultiTableGroup'.
+  # The MultiShard controller will read these values to build pods.
+  images:
+    multipooler: "multigres/multigres:latest"
+    postgres: "postgres:15.3"
+    multiorch: "multigres/multigres:latest"
+
+    
+  # The 'pools' block is a direct copy of the
+  # 'shardTemplate.pools' from the parent MultiTableGroup.
   pools:
     - type: "replica"
       cell: "us-west-2"
@@ -590,13 +648,11 @@ spec:
           requests:
             storage: "500Gi"
       postgres:
-        image: "postgres:15.3"
         resources:
           requests:
             cpu: "4"
             memory: "8Gi"
-      multiPooler:
-        image: "multigres/multigres:latest"
+      multipooler:
         resources:
           requests:
             cpu: "1"
@@ -610,13 +666,11 @@ spec:
           requests:
             storage: "500Gi"
       postgres:
-        image: "postgres:15.3"
         resources:
           requests:
             cpu: "2"
             memory: "4Gi"
-      multiPooler:
-        image: "multigres/multigres:latest"
+      multipooler:
         resources:
           requests:
             cpu: "500m"
@@ -631,6 +685,6 @@ status:
     lastTransitionTime: "2025-10-21T10:38:00Z"
     message: "Shard is healthy and serving"
   primaryCell: "us-west-2"
-  totalPods: 3 # 2 in us-west-2, 1 in us-east-1
+  totalPods: 3
   readyPods: 3
   ```
