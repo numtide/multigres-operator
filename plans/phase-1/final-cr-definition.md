@@ -35,8 +35,8 @@
    │   ├── multiadmin
    │   ├── multigateway
    │   ├── multiorch
-   │   └── shardPool
-   │   └── images
+   │   ├── shardPool
+   │   ├── images
    │   └── managedTopoServer
    │
    └── Watched by MultigresCluster controller ONLY when referenced
@@ -57,6 +57,7 @@ metadata:
 spec:
   # Images are defined globally to avoid the danger of running multiple incongruent versions at once.
   # The operator will eventually take care of rolling updates in a safe way.
+  # Optional
   images:
     deploymentTemplate: "standard-ha"
     # --- ALTERNATIVE: Inline Definition ---
@@ -70,6 +71,7 @@ spec:
   # ----------------------------------------------------------------
   # Base Cluster Configuration
   # ----------------------------------------------------------------
+  # Optional
   globalTopoServer:
     rootPath: "/multigres/global"
     deploymentTemplate: "standard-ha"
@@ -87,6 +89,7 @@ spec:
     # external:
     #   address: "my-external-etcd-client.etcd.svc:2379"
 
+  # Optional
   multiadmin:
     # This tells the controller to fetch the 'multiadmin' section
     # from the 'standard-ha' MultigresDeploymentTemplate resource.
@@ -96,7 +99,6 @@ spec:
     #   replicas: 2
     # --- ALTERNATIVE: Inline Definition ---
     # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-    # spec:
     #   replicas: 1
     #   resources:
     #     requests:
@@ -105,7 +107,7 @@ spec:
     #     limits:
     #       cpu: "200m"
     #       memory: "256Mi"
-
+  # Optional 
   cells:
     templates:
       - name: "us-east-1"
@@ -134,15 +136,14 @@ spec:
           multiorch:
             # ---  Inline Definition ---
             # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-            spec:
-              replicas: 1
-              resources:
-                requests:
-                  cpu: "100m"
-                  memory: "128Mi"
-                limits:
-                  cpu: "200m"
-                  memory: "256Mi"
+            replicas: 1
+            resources:
+            requests:
+                cpu: "100m"
+                memory: "128Mi"
+            limits:
+                cpu: "200m"
+                memory: "256Mi"
         # No topology config means it uses global by default
 
       - name: "us-west-2"
@@ -172,6 +173,7 @@ spec:
   # ----------------------------------------------------------------
   # Database Definitions
   # ----------------------------------------------------------------
+  # Optional
   databases:
     templates:
       - name: "production_db"
@@ -303,19 +305,32 @@ status:
 # A deletion of a template does not trigger the deletion of the underlying configuration, but it will trigger a warning/error.
 # Or we could prevent the deletion of the template altogether while in use --> better perhaps.
 # All fields that use a template in the MultigresCluster can be configured inline without a template and template fields can also be overridden.
-
+# None of the configuration blocks are required. A template can hold only images for example, but if a user tries to use it for something else, it would error out.
+# Incomplete config blocks will either error out, be completed with defaults, or overrides if present.
 apiVersion: multigres.com/v1alpha1
 kind: MultigresDeploymentTemplate
 metadata:
-  # This is the name controllers will use to refer to the template
   name: "standard-ha"
-  # Templates could be namespaced or cluster-scoped
-  # Let's assume namespaced for now.
-  namespace: multigres # Or wherever platform admins manage these
+  namespace: multigres
 spec:
   # --- Template for Postgres/Multipooler Shard Pods ---
   shardPool:
     replicas: 3
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: shard-pool
+            topologyKey: "kubernetes.io/hostname"
+        - weight: 50
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: shard-pool
+            topologyKey: "topology.kubernetes.io/zone"
     dataVolumeClaimTemplate:
       accessModes: ["ReadWriteOnce"]
       resources:
@@ -339,9 +354,17 @@ spec:
           memory: "512Mi"
 
   # --- Template for MultiOrch ---
-
   multiorch:
     replicas: 1
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: multiorch
+            topologyKey: "kubernetes.io/hostname"
     resources:
       requests:
         cpu: "100m"
@@ -351,9 +374,23 @@ spec:
         memory: "256Mi"
 
   # --- Template for MultiGateway ---
-
   multigateway:
     replicas: 2
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: multigateway
+            topologyKey: "kubernetes.io/hostname"
+        - weight: 50
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: multigateway
+            topologyKey: "topology.kubernetes.io/zone"
     resources:
       requests:
         cpu: "500m"
@@ -365,6 +402,15 @@ spec:
   # --- Template for MultiAdmin ---
   multiadmin:
     replicas: 1
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: multiadmin
+            topologyKey: "kubernetes.io/hostname"
     resources:
       requests:
         cpu: "100m"
@@ -372,8 +418,12 @@ spec:
       limits:
         cpu: "200m"
         memory: "256Mi"
+  
   # --- Template for all multigres images ---    
   images:
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
     multigateway: "multigres/multigres:latest"
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
@@ -383,11 +433,36 @@ spec:
   managedTopoServer:
     image: quay.io/coreos/etcd:v3.5.17
     replicas: 3
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: topo-server
+            topologyKey: "kubernetes.io/hostname"
+        - weight: 50
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: topo-server
+            topologyKey: "topology.kubernetes.io/zone"
     dataVolumeClaimTemplate:
       accessModes: ["ReadWriteOnce"]
       resources:
         requests:
-          storage: "10Gi"    
+          storage: "10Gi"
+ status:
+  # This list is populated by the MultigresCluster controllers using it.
+  # It shows which clusters are actively referencing this template.
+  # This can be used by a validating webhook to block deletion
+  # of the template while it is in use.
+  consumers:
+    - name: "example-multigres-cluster"
+      namespace: "multigres"
+    # - name: "other-cluster"
+    #   namespace: "default"
 ```
 
 
