@@ -88,7 +88,7 @@ spec:
       - name: "us-east-1"
         spec:
           # MultiGateway now refers to a template
-          multiGateway:
+          multigateway:
             # This tells the controller to fetch the 'multiGateway' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
             templateName: "standard-ha"
@@ -115,7 +115,7 @@ spec:
           #       rootPath: "/multigres/us-east-1"
       - name: "us-west-2"
         spec:
-          multiGateway:
+          multigateway:
             # Using the template for this cell as well
             templateName: "standard-ha"
           # --- ALTERNATIVE: Inline Definition ---
@@ -128,7 +128,7 @@ spec:
           #     limits:
           #       cpu: "1"
           #       memory: "1Gi"
-          topoServer: # This cell uses a managed local topo server
+          toposerver: # This cell uses a managed local topo server
             managedSpec:
               rootPath: "/multigres/us-west-2"
               image: quay.io/coreos/etcd:v3.5.17
@@ -145,7 +145,7 @@ spec:
     templates:
       - name: "production_db"
         spec:
-          # MultiOrch now refers to a template
+          # Should multiorch belong to a cell or a shard?
           multiorch:
             # This tells the controller to fetch the 'multiOrch' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
@@ -164,7 +164,7 @@ spec:
           #       cpu: "200m"
           #       memory: "256Mi"
 
-          tableGroups:
+          tablegroups:
             # --- TABLEGROUP 1: Uses the 'shardPool' section from an external template ---
             - name: "default"
               partitioning:
@@ -175,7 +175,7 @@ spec:
                     cell: "us-east-1"
                     # This name now refers to a MultigresDeploymentTemplate resource.
                     # The controller will fetch its 'shardPool' section.
-                    deploymentSpecName: "default-ha"
+                    multigresDeploymentTemplate: "default-ha"
 
             # --- TABLEGROUP 2: Uses other external templates ---
             - name: "orders_tg"
@@ -185,11 +185,11 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-west-2"
-                    deploymentSpecName: "orders-ha-replica" # Refers to another template CR
+                    multigresDeploymentTemplate: "orders-ha-replica" # Refers to another template CR
 
                   - type: "readOnly"
                     cell: "us-east-1"
-                    deploymentSpecName: "orders-read-only" # Refers to another template CR
+                    multigresDeploymentTemplate: "orders-read-only" # Refers to another template CR
 
             # --- TABLEGROUP 3: Uses external template with overrides ---
             - name: "analytics_tg"
@@ -199,7 +199,7 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-east-1"
-                    deploymentSpecName: "default-ha" # Use template as base
+                    multigresDeploymentTemplate: "default-ha" # Use template as base
                     # Overrides are applied *after* fetching the template spec
                     overrides:
                       dataVolumeClaimTemplate:
@@ -213,7 +213,7 @@ spec:
             
             # --- TABLEGROUP 4: Using inline (non-templated) definition ---
             # This demonstrates that inline definitions are still supported if
-            # 'deploymentSpecName' is omitted.
+            # 'MultigresDeploymentTemplate' is omitted.
             - name: "custom_tg"
               partitioning:
                 shards: 1
@@ -221,7 +221,6 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-west-2"
-                    # No deploymentSpecName - Spec is fully defined here
                     replicas: 2 
                     dataVolumeClaimTemplate:
                       accessModes: ["ReadWriteOnce"]
@@ -284,6 +283,13 @@ status:
 ```yaml
 # This defines a reusable template named "standard-ha".
 # It contains specifications for multiple component types.
+# This CR won't be a child of any other resource, but used for configuration.
+# These templates are watched and reconciled by the MultigresCluster controller and ONLY when they are referenced.
+# The templates get resolved into the child CRs of MultigresCluster, the child CRs are not aware of the existence of these templates.
+# The MultigresCluster controller updates only the relevant child resource when the template is changed.
+# A deletion of a template does not trigger the deletion of the underlying configuration, but it will trigger a warning/error.
+# Or we could prevent the deletion of the template altogether while in use --> better perhaps.
+
 apiVersion: multigres.com/v1alpha1
 kind: MultigresDeploymentTemplate
 metadata:
@@ -291,7 +297,7 @@ metadata:
   name: "standard-ha"
   # Templates could be namespaced or cluster-scoped
   # Let's assume namespaced for now.
-  namespace: multigres-platform # Or wherever platform admins manage these
+  namespace: multigres # Or wherever platform admins manage these
 spec:
   # --- Template for Postgres/Multipooler Shard Pods ---
   shardPool:
@@ -320,7 +326,7 @@ spec:
 
   # --- Template for MultiOrch ---
 
-  multiOrch:
+  multiorch:
     replicas: 1
     resources:
       requests:
@@ -332,7 +338,7 @@ spec:
 
   # --- Template for MultiGateway ---
 
-  multiGateway:
+  multigateway:
     replicas: 2
     resources:
       requests:
@@ -343,7 +349,7 @@ spec:
         memory: "1Gi"
 
   # --- Template for MultiAdmin ---
-  multiAdmin:
+  multiadmin:
     replicas: 1
     resources:
       requests:
@@ -545,7 +551,7 @@ status:
 # The MultigresCluster controller does the following:
 # 1. Copies the *relevant* images (postgres, multipooler) into `spec.images`.
 # 2. Resolves and stamps the 'multiorch' spec.
-# 3. Resolves the `deploymentSpecName` entries into the 'shardTemplate'.
+# 3. The multigresCluster controller watches and resolves the `multigresDeploymentTemplate` entries into the 'shardTemplate'.
 #
 apiVersion: multigres.com/v1alpha1
 kind: MultiTableGroup
@@ -591,7 +597,7 @@ spec:
   partitioning:
     shards: 2
 
-  # This template is fully resolved from `deploymentSpecName`s.
+# The multigresCluster controller watches and resolves the `multigresDeploymentTemplate` entries into the 'shardTemplate'.
   shardTemplate:
     pools:
       - type: "replica"
