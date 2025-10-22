@@ -67,12 +67,12 @@ spec:
   multiadmin:
     # This tells the controller to fetch the 'multiAdmin' section
     # from the 'standard-ha' MultigresDeploymentTemplate resource.
-    templateName: "standard-ha"
+    multigresDeploymentTemplate: "standard-ha"
     # Optional overrides can be added here if needed
     # overrides:
     #   replicas: 2
     # --- ALTERNATIVE: Inline Definition ---
-    # If 'templateName' is omitted, the controller uses this spec directly.
+    # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
     # spec:
     #   replicas: 1
     #   resources:
@@ -91,14 +91,14 @@ spec:
           multigateway:
             # This tells the controller to fetch the 'multiGateway' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
-            templateName: "standard-ha"
+            multigresDeploymentTemplate: "standard-ha"
             # Optional overrides can be added here
             # overrides:
             #   resources:
             #     limits:
             #       cpu: "2"
           # --- ALTERNATIVE: Inline Definition ---
-          # If 'templateName' is omitted, the controller uses this spec directly.
+          # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
           # spec:
           #   replicas: 2
           #   resources:
@@ -117,7 +117,7 @@ spec:
         spec:
           multigateway:
             # Using the template for this cell as well
-            templateName: "standard-ha"
+            multigresDeploymentTemplate: "standard-ha"
           # --- ALTERNATIVE: Inline Definition ---
           # spec:
           #   replicas: 2
@@ -149,11 +149,11 @@ spec:
           multiorch:
             # This tells the controller to fetch the 'multiOrch' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
-            templateName: "standard-ha"
+            multigresDeploymentTemplate: "standard-ha"
             # Optional overrides can be added here
             # overrides: { ... }
           # --- ALTERNATIVE: Inline Definition ---
-          # If 'templateName' is omitted, the controller uses this spec directly.
+          # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
           # spec:
           #   replicas: 1
           #   resources:
