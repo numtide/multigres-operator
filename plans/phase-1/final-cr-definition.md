@@ -44,7 +44,7 @@
 
 ## Multigres Cluster
 
-This and the MultigressDeploymentTemplate are the only two editable entries for the end-user. All other child CRs are read-only.
+This and the MultigresDeploymentTemplate are the only two editable entries for the end-user. All other child CRs are read-only.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -56,38 +56,44 @@ spec:
   # Images are defined globally to avoid the danger of running multiple incongruent versions at once.
   # The operator will eventually take care of rolling updates in a safe way.
   images:
-    multigateway: "multigres/multigres:latest"
-    multiorch: "multigres/multigres:latest"
-    multipooler: "multigres/multigres:latest"
-    multiadmin: "multigres/multigres:latest"
-    postgres: "postgres:15.3"
+    deploymentTemplate: "standard-ha"
+    # --- ALTERNATIVE: Inline Definition ---
+    # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
+    # multigateway: "multigres/multigres:latest"
+    # multiorch: "multigres/multigres:latest"
+    # multipooler: "multigres/multigres:latest"
+    # multiadmin: "multigres/multigres:latest"
+    # postgres: "postgres:15.3"
 
   # ----------------------------------------------------------------
   # Base Cluster Configuration
   # ----------------------------------------------------------------
   globalTopoServer:
     rootPath: "/multigres/global"
-    managedSpec:
-      image: quay.io/coreos/etcd:v3.5.17
-      replicas: 3
-      dataVolumeClaimTemplate:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: "10Gi"
-    # When external is defined, no toposerver CR is created
+    deploymentTemplate: "standard-ha"
+    # --- ALTERNATIVE: Inline Definition ---
+    # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
+    # managedSpec:
+    #   image: quay.io/coreos/etcd:v3.5.17
+    #   replicas: 3
+    #   dataVolumeClaimTemplate:
+    #     accessModes: ["ReadWriteOnce"]
+    #     resources:
+    #       requests:
+    #         storage: "10Gi"
+    # When external is defined, no topoServer CR is created
     # external:
     #   address: "my-external-etcd-client.etcd.svc:2379"
 
   multiadmin:
-    # This tells the controller to fetch the 'multiAdmin' section
+    # This tells the controller to fetch the 'multiadmin' section
     # from the 'standard-ha' MultigresDeploymentTemplate resource.
-    multigresDeploymentTemplate: "standard-ha"
+    deploymentTemplate: "standard-ha"
     # Optional overrides can be added here if needed
     # overrides:
     #   replicas: 2
     # --- ALTERNATIVE: Inline Definition ---
-    # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
+    # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
     # spec:
     #   replicas: 1
     #   resources:
@@ -102,18 +108,18 @@ spec:
     templates:
       - name: "us-east-1"
         spec:
-          # If no toposerver config is specified, it uses global by default
+          # If no topoServer config is specified, it uses global by default
           multigateway:
             # This tells the controller to fetch the 'multiGateway' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
-            multigresDeploymentTemplate: "standard-ha"
+            deploymentTemplate: "standard-ha"
             # Optional overrides can be added here
             # overrides:
             #   resources:
             #     limits:
             #       cpu: "2"
           # --- ALTERNATIVE: Inline Definition ---
-          # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
+          # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
           # spec:
           #   replicas: 2
           #   resources:
@@ -126,28 +132,28 @@ spec:
           multiorch:
             # This tells the controller to fetch the 'multiorch' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
-            multigresDeploymentTemplate: "standard-ha"
+            deploymentTemplate: "standard-ha"
             # Optional overrides can be added here
             # overrides: { ... }
-          # --- ALTERNATIVE: Inline Definition ---
-          # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
-          # spec:
-          #   replicas: 1
-          #   resources:
-          #     requests:
-          #       cpu: "100m"
-          #       memory: "128Mi"
-          #     limits:
-          #       cpu: "200m"
-          #       memory: "256Mi"
+            # --- ALTERNATIVE: Inline Definition ---
+            # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
+            # spec:
+            #   replicas: 1
+            #   resources:
+            #     requests:
+            #       cpu: "100m"
+            #       memory: "128Mi"
+            #     limits:
+            #       cpu: "200m"
+            #       memory: "256Mi"
 
       - name: "us-west-2"
         spec:
           multigateway:
             # Using the template for this cell as well
-            multigresDeploymentTemplate: "standard-ha"
+            deploymentTemplate: "standard-ha"
           multiorch:
-            multigresDeploymentTemplate: "standard-ha"
+            deploymentTemplate: "standard-ha"
           # --- ALTERNATIVE: Inline Definition ---
           # spec:
           #   replicas: 2
@@ -158,16 +164,18 @@ spec:
           #     limits:
           #       cpu: "1"
           #       memory: "1Gi"
-          toposerver: # This cell uses a managed local topo server
-            managedSpec:
-              rootPath: "/multigres/us-west-2"
-              image: quay.io/coreos/etcd:v3.5.17
-              replicas: 2
-              dataVolumeClaimTemplate:
-                accessModes: ["ReadWriteOnce"]
-                resources:
-                  requests:
-                    storage: "5Gi"
+          topoServer: # This cell uses a managed local topo server
+            deploymentTemplate: "standard-ha"
+            # --- ALTERNATIVE: Inline Definition ---
+            # managedSpec:
+            #   rootPath: "/multigres/us-west-2"
+            #   image: quay.io/coreos/etcd:v3.5.17
+            #   replicas: 2
+            #   dataVolumeClaimTemplate:
+            #     accessModes: ["ReadWriteOnce"]
+            #     resources:
+            #       requests:
+            #         storage: "5Gi"
           # You can specify external per cell as well or it takes global by default
           # external:
           #   address: "etcd-us-east-1.my-domain.com:2379"
@@ -190,7 +198,7 @@ spec:
                     cell: "us-east-1"
                     # This name now refers to a MultigresDeploymentTemplate resource.
                     # The controller will fetch its 'shardPool' section.
-                    multigresDeploymentTemplate: "default-ha"
+                    deploymentTemplate: "default-ha"
 
             # --- TABLEGROUP 2: Uses other external templates ---
             - name: "orders_tg"
@@ -200,11 +208,11 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-west-2"
-                    multigresDeploymentTemplate: "orders-ha-replica" # Refers to another template CR
+                    deploymentTemplate: "orders-ha-replica" # Refers to another template CR
 
                   - type: "readOnly"
                     cell: "us-east-1"
-                    multigresDeploymentTemplate: "orders-read-only" # Refers to another template CR
+                    deploymentTemplate: "orders-read-only" # Refers to another template CR
 
             # --- TABLEGROUP 3: Uses external template with overrides ---
             - name: "analytics_tg"
@@ -214,7 +222,7 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-east-1"
-                    multigresDeploymentTemplate: "default-ha" # Use template as base
+                    deploymentTemplate: "default-ha" # Use template as base
                     # Overrides are applied *after* fetching the template spec
                     overrides:
                       dataVolumeClaimTemplate:
@@ -374,11 +382,27 @@ spec:
       limits:
         cpu: "200m"
         memory: "256Mi"
+  # --- Template for all multigres images ---    
+  images:
+    multigateway: "multigres/multigres:latest"
+    multiorch: "multigres/multigres:latest"
+    multipooler: "multigres/multigres:latest"
+    multiadmin: "multigres/multigres:latest"
+    postgres: "postgres:15.3"
+
+  managedTopoServer:
+    image: quay.io/coreos/etcd:v3.5.17
+    replicas: 3
+    dataVolumeClaimTemplate:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: "10Gi"    
 ```
 
 
 
-## toposerver - Read-Only Child of MultigresCluster (or cell if localtopology) 
+## TopoServer - Read-Only Child of MultigresCluster (or cell if localtopology) 
 
 ```yaml
 # This child CR is created from the `spec.globalTopoServer` block 
@@ -405,7 +429,7 @@ metadata:
     controller: true
     blockOwnerDeletion: true
 spec:
-  # The spec is inherited directly from the 'managedSpec' block
+  # The spec is inherited from MultigresCluster
   # in the parent CR.
   rootPath: "/multigres/global"
   image: "quay.io/coreos/etcd:v3.5.17"
@@ -447,7 +471,7 @@ status:
 
 
 
-## MultiCell CR - Read-Only Child of MultigresCluster
+## Multicell CR - Read-Only Child of MultigresCluster
 
 
 ```yaml
@@ -456,17 +480,17 @@ status:
 # This 'MultiCell' CR is created from an item in the `spec.cells.templates` list
 # in the parent `MultigresCluster`.
 #
-# This specific example is for 'eu-central-1', which had no 'topoServer'
-# block, so it defaults to using the 'global' toposerver.
+# This specific example is for 'us-east-1', which had no 'topoServer'
+# block, so it defaults to using the 'global' topoServer.
 #
 apiVersion: multigres.com/v1alpha1
 kind: MultiCell
 metadata:
-  name: "example-multigres-cluster-eu-central-1"
+  name: "example-multigres-cluster-us-east-1"
   namespace: multigres
   labels:
     multigres.com/cluster: "example-multigres-cluster"
-    multigres.com/cell: "eu-central-1"
+    multigres.com/cell: "us-east-1"
   ownerReferences:
   # The MultiCell CR is owned by the MultigresCluster
   - apiVersion: multigres.com/v1alpha1
@@ -476,7 +500,7 @@ metadata:
     controller: true
 spec:
   # The logical name of the cell, copied from the template.
-  name: "eu-central-1"
+  name: "us-east-1"
 
   # The parent MultigresCluster passes down the relevant
   # images for this controller to use.
@@ -498,15 +522,14 @@ spec:
 
  # The multiorch spec is copied from multigrescluster.
   multiorch:
-    spec:
-      replicas: 1
-      resources:
-        requests:
-          cpu: "100m"
-          memory: "128Mi"
-        limits:
-          cpu: "200m"
-          memory: "256Mi"
+    replicas: 1
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+       limits:
+        cpu: "200m"
+        memory: "256Mi"
   
   # A reference to the GLOBAL TopoServer.
   # This is always populated by the parent controller.
@@ -514,9 +537,9 @@ spec:
     rootPath: "/multigres/global"
     clientServiceName: "example-multigres-cluster-global-client"
 
-  # --- CONFIG 1 (DEFAULT): Using the Global TopoServer ---
+  # ALTERNATIVE CONFIG: (Using the Global TopoServer)
   #
-  # Because the 'eu-central-1' cell in the parent CR had no 'topoServer'
+  # Because the 'us-east-1' cell in the parent CR had no 'topoServer'
   # block, the MultigresCluster controller sets this to 'global'.
   # The MultiCell controller will use this to configure its MultiGateway
   # to talk to the global topo server.
@@ -524,7 +547,7 @@ spec:
     global:
       rootPath: "/multigres/global"
 
-  # --- ALTERNATIVE CONFIG 2 (External) ---
+  # ALTERNATIVE CONFIG: Inline Definition (External)
   # If this were 'us-east-1', the MultigresCluster controller would
   # have copied the 'external' block directly, like this:
   #
@@ -533,7 +556,7 @@ spec:
   #     address: "etcd-us-east-1.my-domain.com:2379"
   #     rootPath: "/multigres/us-east-1"
 
-  # --- ALTERNATIVE CONFIG 3 (Managed Local) ---
+  # ALTERNATIVE CONFIG: (Managed Local) ---
   # If this were 'us-west-2', the MultigresCluster controller would
   # have copied the 'managedSpec' block directly, like this.
   # The MultiCell controller would then be responsible for creating
@@ -581,7 +604,7 @@ status:
 #
 # The MultigresCluster controller does the following:
 # 1. Copies the *relevant* images (postgres, multipooler) into `spec.images`.
-# 2. The multigresCluster controller watches and resolves the `multigresDeploymentTemplate` entries into the 'shardTemplate'.
+# 2. The multigresCluster controller watches and resolves the `deploymentTemplate` entries into the 'shardTemplate'.
 #
 apiVersion: multigres.com/v1alpha1
 kind: MultiTableGroup
@@ -610,13 +633,11 @@ spec:
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
-  
-
 
   partitioning:
     shards: 2
 
-# The multigresCluster controller watches and resolves the `multigresDeploymentTemplate` entries into the 'shardTemplate'.
+# The multigresCluster controller watches and resolves the `deploymentTemplate` entries into the 'shardTemplate'.
   shardTemplate:
     pools:
       - type: "replica"
