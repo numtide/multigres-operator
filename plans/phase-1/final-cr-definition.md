@@ -1,19 +1,22 @@
 # Final Multigres Operator CR Definition
 
 ```ascii
-[MultiCluster] 🚀 (The root CR)
+[MultigresCluster] 🚀 (The root CR - user-editable)
       │
       ├── 🌍 [GlobalTopoServer] (Child CR if managed)
       │    │
       │    └── 🏛️ etcd Resources (if managed)
       │
       ├── 🤖 MultiAdmin Resources - Deployment, Services, Etc
+      │    
       │
       ├── 💠 [MultiCell] (Child CR)
       │    │
       │    ├── 🚪 MultiGate Resources (Deployment, Service, etc.)
+      │    │    
       │    │
       │    ├── 🧠 MultiOrch Resources (Deployment, etc.)
+      │    │    
       │    │
       │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global)
       │         │
@@ -24,6 +27,19 @@
            └── 📦 [MultiShard] (Child CR)
                 │
                 └── 🏊 MultiPooler and postgres resources (pods or statefulset)
+                    
+
+
+📋 [MultigresDeploymentTemplate] (Separate CR - user-editable, NOT a child)
+   ├── Contains spec sections for:
+   │   ├── multiadmin
+   │   ├── multigateway
+   │   ├── multiorch
+   │   └── shardPool
+   │
+   └── Watched by MultigresCluster controller ONLY when referenced
+       └── Resolved into child CRs (children are unaware of templates)
+
 ```
 
 ## Multigres Cluster
@@ -63,7 +79,6 @@ spec:
     # external:
     #   address: "my-external-etcd-client.etcd.svc:2379"
 
-  # MultiAdmin now refers to a template.
   multiadmin:
     # This tells the controller to fetch the 'multiAdmin' section
     # from the 'standard-ha' MultigresDeploymentTemplate resource.
@@ -87,7 +102,7 @@ spec:
     templates:
       - name: "us-east-1"
         spec:
-          # MultiGateway now refers to a template
+          # If no toposerver config is specified, it uses global by default
           multigateway:
             # This tells the controller to fetch the 'multiGateway' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
@@ -108,15 +123,30 @@ spec:
           #     limits:
           #       cpu: "1"
           #       memory: "1Gi"
-          # You can specify external per cell as well or it takes global by default
-          #   topoServer:
-          #     external:
-          #       address: "etcd-us-east-1.my-domain.com:2379"
-          #       rootPath: "/multigres/us-east-1"
+          multiorch:
+            # This tells the controller to fetch the 'multiorch' section
+            # from the 'standard-ha' MultigresDeploymentTemplate resource.
+            multigresDeploymentTemplate: "standard-ha"
+            # Optional overrides can be added here
+            # overrides: { ... }
+          # --- ALTERNATIVE: Inline Definition ---
+          # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
+          # spec:
+          #   replicas: 1
+          #   resources:
+          #     requests:
+          #       cpu: "100m"
+          #       memory: "128Mi"
+          #     limits:
+          #       cpu: "200m"
+          #       memory: "256Mi"
+
       - name: "us-west-2"
         spec:
           multigateway:
             # Using the template for this cell as well
+            multigresDeploymentTemplate: "standard-ha"
+          multiorch:
             multigresDeploymentTemplate: "standard-ha"
           # --- ALTERNATIVE: Inline Definition ---
           # spec:
@@ -138,6 +168,10 @@ spec:
                 resources:
                   requests:
                     storage: "5Gi"
+          # You can specify external per cell as well or it takes global by default
+          # external:
+          #   address: "etcd-us-east-1.my-domain.com:2379"
+          #   rootPath: "/multigres/us-east-1"
   # ----------------------------------------------------------------
   # Database Definitions
   # ----------------------------------------------------------------
@@ -145,25 +179,6 @@ spec:
     templates:
       - name: "production_db"
         spec:
-          # Should multiorch belong to a cell or a shard?
-          multiorch:
-            # This tells the controller to fetch the 'multiOrch' section
-            # from the 'standard-ha' MultigresDeploymentTemplate resource.
-            multigresDeploymentTemplate: "standard-ha"
-            # Optional overrides can be added here
-            # overrides: { ... }
-          # --- ALTERNATIVE: Inline Definition ---
-          # If 'multigresDeploymentTemplate' is omitted, the controller uses this spec directly.
-          # spec:
-          #   replicas: 1
-          #   resources:
-          #     requests:
-          #       cpu: "100m"
-          #       memory: "128Mi"
-          #     limits:
-          #       cpu: "200m"
-          #       memory: "256Mi"
-
           tablegroups:
             # --- TABLEGROUP 1: Uses the 'shardPool' section from an external template ---
             - name: "default"
@@ -262,16 +277,17 @@ status:
   cells:
     us-east-1:
       gatewayAvailable: "True"
+      multiorchAvailable: "True" 
       topoServerAvailable: "True" # Assuming global is available (default)
     us-west-2:
       gatewayAvailable: "True"
+      multiorchAvailable: "True" 
       topoServerAvailable: "True" # Assuming managed becomes available
   databases:
     production_db:
       desiredInstances: 14 
       readyInstances: 14
       servingWrites: "True"
-      multiorchAvailable: "True" 
   multiadmin:
     available: "True"
     serviceName: "example-multigres-cluster-multiadmin"
@@ -466,9 +482,11 @@ spec:
   # images for this controller to use.
   images:
     multigateway: "multigres/multigres:latest"
+    multiorch: "multigres/multigres:latest"
 
-  # The resolved spec for the MultiGateway
-  multiGateway:
+
+  # The multigateway spec is copied from multigrescluster
+  multigateway:
     replicas: 2
     resources:
       requests:
@@ -477,6 +495,18 @@ spec:
       limits:
         cpu: "1"
         memory: "1Gi"
+
+ # The multiorch spec is copied from multigrescluster.
+  multiorch:
+    spec:
+      replicas: 1
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
   
   # A reference to the GLOBAL TopoServer.
   # This is always populated by the parent controller.
@@ -540,6 +570,7 @@ status:
   gatewayReplicas: 2
   gatewayReadyReplicas: 2
   gatewayServiceName: "example-multigres-cluster-us-east-1-gateway"
+  multiorchAvailable: "True"
   ```
 
   ## MultiTablegroup CR - Read-Only Child of MultigresCluster
@@ -550,8 +581,7 @@ status:
 #
 # The MultigresCluster controller does the following:
 # 1. Copies the *relevant* images (postgres, multipooler) into `spec.images`.
-# 2. Resolves and stamps the 'multiorch' spec.
-# 3. The multigresCluster controller watches and resolves the `multigresDeploymentTemplate` entries into the 'shardTemplate'.
+# 2. The multigresCluster controller watches and resolves the `multigresDeploymentTemplate` entries into the 'shardTemplate'.
 #
 apiVersion: multigres.com/v1alpha1
 kind: MultiTableGroup
@@ -580,19 +610,8 @@ spec:
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
-    multiorch: "multigres/multigres:latest"
   
-# The multiorch spec is copied from the parent database definition.
-  multiorch:
-    spec:
-      replicas: 1
-      resources:
-        requests:
-          cpu: "100m"
-          memory: "128Mi"
-        limits:
-          cpu: "200m"
-          memory: "256Mi"
+
 
   partitioning:
     shards: 2
@@ -648,7 +667,6 @@ status:
     message: "All shards are healthy"
   shards: 2
   readyShards: 2
-  multiorchAvailable: "True"
   ```
 
   ## MultiShard CR - Read-Only Child of MultiTableGroup
@@ -689,7 +707,6 @@ spec:
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
-    multiorch: "multigres/multigres:latest"
 
     
   # The 'pools' block is a direct copy of the
