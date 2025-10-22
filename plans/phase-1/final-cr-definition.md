@@ -36,6 +36,8 @@
    │   ├── multigateway
    │   ├── multiorch
    │   └── shardPool
+   │   └── images
+   │   └── managedTopoServer
    │
    └── Watched by MultigresCluster controller ONLY when referenced
        └── Resolved into child CRs (children are unaware of templates)
@@ -113,11 +115,11 @@ spec:
             # This tells the controller to fetch the 'multiGateway' section
             # from the 'standard-ha' MultigresDeploymentTemplate resource.
             deploymentTemplate: "standard-ha"
-            # Optional overrides can be added here
-            # overrides:
-            #   resources:
-            #     limits:
-            #       cpu: "2"
+            # Optional overrides can be added always to template
+            overrides:
+              resources:
+                limits:
+                  cpu: "2"
           # --- ALTERNATIVE: Inline Definition ---
           # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
           # spec:
@@ -130,22 +132,18 @@ spec:
           #       cpu: "1"
           #       memory: "1Gi"
           multiorch:
-            # This tells the controller to fetch the 'multiorch' section
-            # from the 'standard-ha' MultigresDeploymentTemplate resource.
-            deploymentTemplate: "standard-ha"
-            # Optional overrides can be added here
-            # overrides: { ... }
-            # --- ALTERNATIVE: Inline Definition ---
+            # ---  Inline Definition ---
             # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-            # spec:
-            #   replicas: 1
-            #   resources:
-            #     requests:
-            #       cpu: "100m"
-            #       memory: "128Mi"
-            #     limits:
-            #       cpu: "200m"
-            #       memory: "256Mi"
+            spec:
+              replicas: 1
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "256Mi"
+        # No topology config means it uses global by default
 
       - name: "us-west-2"
         spec:
@@ -154,18 +152,9 @@ spec:
             deploymentTemplate: "standard-ha"
           multiorch:
             deploymentTemplate: "standard-ha"
-          # --- ALTERNATIVE: Inline Definition ---
-          # spec:
-          #   replicas: 2
-          #   resources:
-          #     requests:
-          #       cpu: "500m"
-          #       memory: "512Mi"
-          #     limits:
-          #       cpu: "1"
-          #       memory: "1Gi"
           topoServer: # This cell uses a managed local topo server
             deploymentTemplate: "standard-ha"
+            rootPath: "/multigres/us-west-2"
             # --- ALTERNATIVE: Inline Definition ---
             # managedSpec:
             #   rootPath: "/multigres/us-west-2"
@@ -313,6 +302,7 @@ status:
 # The MultigresCluster controller updates only the relevant child resource when the template is changed.
 # A deletion of a template does not trigger the deletion of the underlying configuration, but it will trigger a warning/error.
 # Or we could prevent the deletion of the template altogether while in use --> better perhaps.
+# All fields that use a template in the MultigresCluster can be configured inline without a template and template fields can also be overridden.
 
 apiVersion: multigres.com/v1alpha1
 kind: MultigresDeploymentTemplate
