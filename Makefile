@@ -1,8 +1,22 @@
-# Image URL to use all building/pushing image targets
-# if :latest then Kubernetes defaults imagePullPolicy: Always
-# which fails if the image tag is intended to be used only locally
-# so default to :dev for improved DX and override when needed in pipelines
-IMG ?= controller:dev
+# Multi-module paths
+# Each module must be tagged with its directory path prefix for Go module resolution
+# Example tags: v0.1.0 (root), api/v0.1.0, pkg/cluster-handler/v0.1.0, etc.
+MODULES := . ./api ./pkg/cluster-handler ./pkg/data-handler ./pkg/resource-handler
+
+# Version from git tags (for root module - operator binary)
+# Root module uses tags like v0.1.0 (without prefix)
+VERSION ?= $(shell git describe --tags --match "v*" --always --dirty 2>/dev/null || echo "v0.0.1-dev")
+VERSION_SHORT ?= $(shell echo $(VERSION) | sed 's/^v//')
+
+# Image configuration
+IMG_PREFIX ?= ghcr.io/numtide
+IMG_REPO ?= multigres-operator
+IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
+
+# Build metadata
+BUILD_DATE ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
