@@ -21,70 +21,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// StatefulComponentSpec defines the common spec for a stateful component like MultiOrch, MultiGateway, or MultiAdmin.
-// NOTE: This spec may be better placed somewhere else.
-type StatefulComponentSpec struct {
-	// Replicas is the desired number of pods.
-	// +kubebuilder:validation:Minimum=1
-	// +optional
-	Replicas *int32 `json:"replicas,omitempty"`
-
-	// Affinity defines the pod's scheduling constraints.
-	// +optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// Resources defines the compute resource requirements.
-	// +optional
-	corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// MultiCellImagesSpec defines the images required for a MultiCell.
-type MultiCellImagesSpec struct {
-	// +optional
-	MultiGateway string `json:"multigateway,omitempty"`
-	// +optional
-	MultiOrch string `json:"multiorch,omitempty"`
-}
-
-// CellTopoServerSpec defines the topology server configuration for this cell.
-// This is a one-of field; only one of Global, External, or ManagedSpec should be set.
-type CellTopoServerSpec struct {
-	// Global indicates this cell uses the global topo server.
-	// The reference details are populated by the parent controller.
-	// +optional
-	Global *GlobalTopoServerRefSpec `json:"global,omitempty"`
-
-	// External defines connection details for an unmanaged, external topo server.
-	// +optional
-	External *ExternalTopoServerSpec `json:"external,omitempty"`
-
-	// ManagedSpec defines the spec for a managed, cell-local topo server.
-	// If set, the MultiCell controller will create a child TopoServer CR.
-	// +optional
-	ManagedSpec *TopoServerSpec `json:"managedSpec,omitempty"`
-}
-
-// GlobalTopoServerRefSpec defines a reference to the global topo server.
-type GlobalTopoServerRefSpec struct {
-	// RootPath is the root path being used in the global topo server.
-	// +optional
-	RootPath string `json:"rootPath,omitempty"`
-
-	// ClientServiceName is the name of the etcd client service.
-	// +optional
-	ClientServiceName string `json:"clientServiceName,omitempty"`
-}
-
-// TopologyReconciliationSpec defines flags for the cell controller.
-type TopologyReconciliationSpec struct {
-	// RegisterCell instructs the controller to register this cell in the topology.
-	// +optional
-	RegisterCell bool `json:"registerCell,omitempty"`
-
-	// PruneTablets instructs the controller to prune old tablets from the topology.
-	// +optional
-	PruneTablets bool `json:"pruneTablets,omitempty"`
-}
+// ============================================================================
+// MultiCell Spec (Read-only API)
+// ============================================================================
 
 // MultiCellSpec defines the desired state of MultiCell
 // This spec is populated by the MultigresCluster controller.
@@ -118,6 +57,75 @@ type MultiCellSpec struct {
 	TopologyReconciliation TopologyReconciliationSpec `json:"topologyReconciliation,omitempty"`
 }
 
+// MultiCellImagesSpec defines the images required for a MultiCell.
+type MultiCellImagesSpec struct {
+	// +optional
+	MultiGateway string `json:"multigateway,omitempty"`
+	// +optional
+	MultiOrch string `json:"multiorch,omitempty"`
+}
+
+// StatefulComponentSpec defines the common spec for a stateful component like MultiOrch, MultiGateway, or MultiAdmin.
+// NOTE: This spec may be better placed somewhere else. Need to check its reusability across all controllers.
+type StatefulComponentSpec struct {
+	// Replicas is the desired number of pods.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Affinity defines the pod's scheduling constraints.
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// Resources defines the compute resource requirements.
+	// +optional
+	corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// GlobalTopoServerRefSpec defines a reference to the global topo server.
+type GlobalTopoServerRefSpec struct {
+	// RootPath is the root path being used in the global topo server.
+	// +optional
+	RootPath string `json:"rootPath,omitempty"`
+
+	// ClientServiceName is the name of the etcd client service.
+	// +optional
+	ClientServiceName string `json:"clientServiceName,omitempty"`
+}
+
+// CellTopoServerSpec defines the topology server configuration for this cell.
+// This is a one-of field; only one of Global, External, or ManagedSpec should be set.
+type CellTopoServerSpec struct {
+	// Global indicates this cell uses the global topo server.
+	// The reference details are populated by the parent controller.
+	// +optional
+	Global *GlobalTopoServerRefSpec `json:"global,omitempty"`
+
+	// External defines connection details for an unmanaged, external topo server.
+	// +optional
+	External *ExternalTopoServerSpec `json:"external,omitempty"`
+
+	// ManagedSpec defines the spec for a managed, cell-local topo server.
+	// If set, the MultiCell controller will create a child TopoServer CR.
+	// +optional
+	ManagedSpec *TopoServerSpec `json:"managedSpec,omitempty"`
+}
+
+// TopologyReconciliationSpec defines flags for the cell controller.
+type TopologyReconciliationSpec struct {
+	// RegisterCell instructs the controller to register this cell in the topology.
+	// +optional
+	RegisterCell bool `json:"registerCell,omitempty"`
+
+	// PruneTablets instructs the controller to prune old tablets from the topology.
+	// +optional
+	PruneTablets bool `json:"pruneTablets,omitempty"`
+}
+
+// ============================================================================
+// CR Controller Status Specs
+// ============================================================================
+
 // MultiCellStatus defines the observed state of MultiCell
 type MultiCellStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller.
@@ -148,6 +156,10 @@ type MultiCellStatus struct {
 	// +optional
 	TopoServerAvailable metav1.ConditionStatus `json:"topoServerAvailable,omitempty"`
 }
+
+// ============================================================================
+// Kind Definition and registration
+// ============================================================================
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

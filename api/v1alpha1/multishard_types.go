@@ -21,6 +21,67 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ============================================================================
+// MultiShard Spec (Read-only API)
+// ============================================================================
+
+// MultiShardSpec defines the desired state of MultiShard
+// This spec is populated by the MultiTableGroup controller.
+
+type MultiShardSpec struct {
+	// Images required for this shard's pods.
+	// +optional
+	Images ShardImagesSpec `json:"images,omitempty"`
+
+	// Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
+	// This is a direct copy from the parent MultiTableGroup's shardTemplate.
+	// +optional
+	Pools []ShardPoolSpec `json:"pools,omitempty"`
+}
+
+// ShardImagesSpec defines the images required for a MultiShard.
+type ShardImagesSpec struct {
+	// +optional
+	MultiPooler string `json:"multipooler,omitempty"`
+	// +optional
+	Postgres string `json:"postgres,omitempty"`
+}
+
+// ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
+// This is the core reusable spec for a shard's pod.
+type ShardPoolSpec struct {
+	// Type of the pool (e.g., "replica", "readOnly").
+	// +kubebuilder:validation:Enum=replica;readOnly
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Cell is the name of the MultiCell this pool should run in.
+	// +optional
+	Cell string `json:"cell,omitempty"`
+
+	// Replicas is the desired number of pods in this pool.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Affinity defines the pod's scheduling constraints.
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// DataVolumeClaimTemplate provides a spec for the PersistentVolumeClaim
+	// that will be created for each replica.
+	// +optional
+	DataVolumeClaimTemplate corev1.PersistentVolumeClaimSpec `json:"dataVolumeClaimTemplate,omitempty"`
+
+	// Postgres defines the configuration for the Postgres container.
+	// +optional
+	Postgres PostgresSpec `json:"postgres,omitempty"`
+
+	// MultiPooler defines the configuration for the MultiPooler container.
+	// +optional
+	MultiPooler MultiPoolerSpec `json:"multipooler,omitempty"`
+}
+
 // PostgresSpec defines the configuration for the Postgres container.
 type PostgresSpec struct {
 	// Resources defines the compute resource requirements for the Postgres container.
@@ -35,26 +96,9 @@ type MultiPoolerSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// ShardImagesSpec defines the images required for a MultiShard.
-type ShardImagesSpec struct {
-	// +optional
-	MultiPooler string `json:"multipooler,omitempty"`
-	// +optional
-	Postgres string `json:"postgres,omitempty"`
-}
-
-// MultiShardSpec defines the desired state of MultiShard
-// This spec is populated by the MultiTableGroup controller.
-type MultiShardSpec struct {
-	// Images required for this shard's pods.
-	// +optional
-	Images ShardImagesSpec `json:"images,omitempty"`
-
-	// Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
-	// This is a direct copy from the parent MultiTableGroup's shardTemplate.
-	// +optional
-	Pools []ShardPoolSpec `json:"pools,omitempty"`
-}
+// ============================================================================
+// CR Controller Status Specs
+// ============================================================================
 
 // MultiShardStatus defines the observed state of MultiShard
 type MultiShardStatus struct {
@@ -78,6 +122,10 @@ type MultiShardStatus struct {
 	// +optional
 	ReadyPods int32 `json:"readyPods,omitempty"`
 }
+
+// ============================================================================
+// Kind Definition and registration
+// ============================================================================
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

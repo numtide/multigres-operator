@@ -21,8 +21,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ============================================================================
+// TopoServerSpec Spec (Read-only API)
+// ============================================================================
+
+// TopoServerChildSpec defines the desired state of TopoServer
+// This spec is populated by the MultigresCluster (or MultiCell) controller.
+
+type TopoServerChildSpec struct {
+	// RootPath is the root path to use within the etcd cluster.
+	RootPath string `json:"rootPath"`
+
+	// TopoServerSpec contains the reusable spec for deploying an etcd cluster.
+	TopoServerSpec `json:",inline"`
+}
+
 // TopoServerSpec defines the desired state of a managed etcd cluster.
 // This is reusable for both Global and Local TopoServers.
+
 type TopoServerSpec struct {
 	// Image is the etcd container image to use.
 	// +optional
@@ -43,15 +59,9 @@ type TopoServerSpec struct {
 	DataVolumeClaimTemplate corev1.PersistentVolumeClaimSpec `json:"dataVolumeClaimTemplate,omitempty"`
 }
 
-// TopoServerChildSpec defines the desired state of TopoServer
-// This spec is populated by the MultigresCluster controller.
-type TopoServerChildSpec struct {
-	// RootPath is the root path to use within the etcd cluster.
-	RootPath string `json:"rootPath"`
-
-	// TopoServerSpec contains the reusable spec for deploying an etcd cluster.
-	TopoServerSpec `json:",inline"`
-}
+// ============================================================================
+// CR Controller Status Specs
+// ============================================================================
 
 // TopoServerStatus defines the observed state of TopoServer
 type TopoServerStatus struct {
@@ -79,6 +89,10 @@ type TopoServerStatus struct {
 	// +optional
 	PeerServiceName string `json:"peerServiceName,omitempty"`
 }
+
+// ============================================================================
+// Kind Definition and registration
+// ============================================================================
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

@@ -20,7 +20,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ============================================================================
+// MultigresDeploymentTemplateSpec Spec (User-editable API)
+// ============================================================================
+
 // MultigresDeploymentTemplateSpec defines the desired state of MultigresDeploymentTemplate
+// These are user editable and watched by MultigresCluster controller ONLY when referenced.
 type MultigresDeploymentTemplateSpec struct {
 	// ShardPool is the template for a MultiShard pool.
 	// +optional
@@ -47,13 +52,10 @@ type MultigresDeploymentTemplateSpec struct {
 	ManagedTopoServer *TopoServerSpec `json:"managedTopoServer,omitempty"`
 }
 
-// ConsumerRef holds a reference to a MultigresCluster CR that is using this template.
-type ConsumerRef struct {
-	// Name of the consuming cluster.
-	Name string `json:"name"`
-	// Namespace of the consuming cluster.
-	Namespace string `json:"namespace"`
-}
+// ============================================================================
+// CR Controller Status Specs
+// ============================================================================
+// A MultigresCluster controller updates this status when a reference to this template is created or removed.
 
 // MultigresDeploymentTemplateStatus defines the observed state of MultigresDeploymentTemplate
 type MultigresDeploymentTemplateStatus struct {
@@ -63,6 +65,18 @@ type MultigresDeploymentTemplateStatus struct {
 	// +optional
 	Consumers []ConsumerRef `json:"consumers,omitempty"`
 }
+
+// ConsumerRef holds a reference to a MultigresCluster CR that is using this template.
+type ConsumerRef struct {
+	// Name of the consuming cluster.
+	Name string `json:"name"`
+	// Namespace of the consuming cluster.
+	Namespace string `json:"namespace"`
+}
+
+// ============================================================================
+// Kind Definition and registration
+// ============================================================================
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

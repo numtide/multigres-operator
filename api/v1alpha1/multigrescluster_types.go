@@ -22,7 +22,7 @@ import (
 )
 
 // ============================================================================
-// MultigresClusterSpec Spec (User-facing API)
+// MultigresClusterSpec Spec (User-editable API)
 // ============================================================================
 //
 // Defines the fields users interact with directly to declare their intent.
