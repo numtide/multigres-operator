@@ -21,6 +21,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ============================================================================
+// MultigresClusterSpec Spec (User-facing API)
+// ============================================================================
+//
+// Defines the fields users interact with directly to declare their intent.
+//
+
 // MultigresClusterSpec defines the desired state of MultigresCluster
 type MultigresClusterSpec struct {
 	// Images defines the container images for all components in the cluster.
@@ -43,6 +50,10 @@ type MultigresClusterSpec struct {
 	// +optional
 	Databases *DatabasesConfig `json:"databases,omitempty"`
 }
+
+// ============================================================================
+// Images Config Section Specs
+// ============================================================================
 
 // ImagesTemplateSpec defines all images for the cluster.
 type ImagesTemplateSpec struct {
@@ -89,6 +100,10 @@ type ClusterImagesSpec struct {
 	// Inline image definitions. These are used if DeploymentTemplate is not specified,
 	ImagesTemplateSpec `json:",inline"`
 }
+
+// ============================================================================
+// TopoServer Config Section Specs
+// ============================================================================
 
 // GlobalTopoServerConfig defines the configuration for the global topo server.
 // Either deploymentTemplate or managedSpec is allowed. Not both.
@@ -143,6 +158,10 @@ type ExternalTopoServerSpec struct {
 	RootPath string `json:"rootPath,omitempty"`
 }
 
+// ============================================================================
+// MultiAdmin Config Section Specs
+// ============================================================================
+
 // MultiAdminConfig defines the configuration for the MultiAdmin component.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
@@ -158,6 +177,20 @@ type MultiAdminConfig struct {
 
 	// Inline spec, used if DeploymentTemplate is not specified.
 	StatefulComponentSpec `json:",inline"`
+}
+
+// ============================================================================
+// Cell Config Section Specs
+// ============================================================================
+
+// CellSpecConfig defines the configuration for a cell.
+type CellSpecConfig struct {
+	// +optional
+	MultiGateway *MultiGatewayConfig `json:"multigateway,omitempty"`
+	// +optional
+	MultiOrch *MultiOrchConfig `json:"multiorch,omitempty"`
+	// +optional
+	TopoServer *CellTopoServerConfig `json:"topoServer,omitempty"`
 }
 
 // CellTopoServerConfig defines the topo server config for a cell.
@@ -184,16 +217,6 @@ type CellTopoServerConfig struct {
 	// +optional
 	External *ExternalTopoServerSpec `json:"external,omitempty"`
 	// Note: If all fields are nil, the cell defaults to using the GlobalTopoServer.
-}
-
-// CellSpecConfig defines the configuration for a cell.
-type CellSpecConfig struct {
-	// +optional
-	MultiGateway *MultiGatewayConfig `json:"multigateway,omitempty"`
-	// +optional
-	MultiOrch *MultiOrchConfig `json:"multiorch,omitempty"`
-	// +optional
-	TopoServer *CellTopoServerConfig `json:"topoServer,omitempty"`
 }
 
 // CellTemplate defines a named cell configuration.
@@ -244,6 +267,10 @@ type MultiOrchConfig struct {
 	// Inline spec, used if DeploymentTemplate is not specified.
 	StatefulComponentSpec `json:",inline"`
 }
+
+// ============================================================================
+// Databases (tablepools and shards) Config Section Specs
+// ============================================================================
 
 // ShardPoolConfig defines the configuration for a shard pool,
 // supporting templates, overrides, and inline definitions.
@@ -303,6 +330,10 @@ type DatabasesConfig struct {
 	// +optional
 	Templates []DatabaseTemplate `json:"templates,omitempty"`
 }
+
+// ============================================================================
+// CR Controller Status Specs
+// ============================================================================
 
 // Condition constants
 
@@ -371,6 +402,10 @@ type MultigresClusterStatus struct {
 	// +optional
 	Databases map[string]DatabaseStatusSummary `json:"databases,omitempty"`
 }
+
+// ============================================================================
+// Kind Definition and registration
+// ============================================================================
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
