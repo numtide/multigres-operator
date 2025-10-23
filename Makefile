@@ -62,6 +62,29 @@ all: build
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+##@ Multi-Module Operations
+
+.PHONY: modules-tidy
+modules-tidy: ## Run go mod tidy on all modules
+	@for mod in $(MODULES); do \
+		echo "==> Tidying $$mod..."; \
+		(cd $$mod && go mod tidy) || exit 1; \
+	done
+
+.PHONY: modules-download
+modules-download: ## Download dependencies for all modules
+	@for mod in $(MODULES); do \
+		echo "==> Downloading dependencies for $$mod..."; \
+		(cd $$mod && go mod download) || exit 1; \
+	done
+
+.PHONY: modules-verify
+modules-verify: ## Verify dependencies for all modules
+	@for mod in $(MODULES); do \
+		echo "==> Verifying $$mod..."; \
+		(cd $$mod && go mod verify) || exit 1; \
+	done
+
 ##@ Development
 
 .PHONY: manifests
@@ -74,16 +97,58 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 # $(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 .PHONY: fmt
-fmt: ## Run go fmt against code.
-	go fmt ./...
+fmt: ## Run go fmt against code in all modules
+	@for mod in $(MODULES); do \
+		echo "==> Formatting $$mod..."; \
+		(cd $$mod && go fmt ./...) || exit 1; \
+	done
 
 .PHONY: vet
-vet: ## Run go vet against code.
-	go vet ./...
+vet: ## Run go vet against code in all modules
+	@for mod in $(MODULES); do \
+		echo "==> Vetting $$mod..."; \
+		(cd $$mod && go vet ./...) || exit 1; \
+	done
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+test: manifests generate fmt vet setup-envtest ## Run tests for all modules
+	@echo "==> Running tests across all modules"
+	@for mod in $(MODULES); do \
+		echo "==> Testing $$mod..."; \
+		(cd $$mod && \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+			go test $$(go list ./... | grep -v /e2e) -coverprofile=cover.out) || exit 1; \
+	done
+
+.PHONY: test-unit
+test-unit: manifests generate fmt vet setup-envtest ## Run unit tests for all modules (fast, no e2e)
+	@echo "==> Running unit tests across all modules"
+	@for mod in $(MODULES); do \
+		echo "==> Unit testing $$mod..."; \
+		(cd $$mod && \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+			go test $$(go list ./... | grep -v /e2e) -short -v) || exit 1; \
+	done
+
+.PHONY: test-coverage
+test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage report with HTML
+	@mkdir -p coverage
+	@echo "==> Generating coverage across all modules"
+	@for mod in $(MODULES); do \
+		modname=$$(basename $$mod); \
+		[ "$$modname" = "." ] && modname="root"; \
+		echo "==> Coverage for $$mod..."; \
+		(cd $$mod && \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+			go test ./... -coverprofile=../coverage/$$modname.out -covermode=atomic -coverpkg=./...) || exit 1; \
+	done
+	@echo "==> Generating HTML reports"
+	@for out in coverage/*.out; do \
+		html=$${out%.out}.html; \
+		go tool cover -html=$$out -o=$$html; \
+		echo "Generated: $$html"; \
+	done
+	@echo "Coverage reports in coverage/"
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -115,16 +180,42 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
-	$(GOLANGCI_LINT) run
+lint: golangci-lint ## Run golangci-lint linter across all modules
+	@for mod in $(MODULES); do \
+		echo "==> Linting $$mod..."; \
+		(cd $$mod && $(GOLANGCI_LINT) run) || exit 1; \
+	done
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
-	$(GOLANGCI_LINT) run --fix
+	@for mod in $(MODULES); do \
+		echo "==> Fixing lint issues in $$mod..."; \
+		(cd $$mod && $(GOLANGCI_LINT) run --fix) || exit 1; \
+	done
 
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
+
+##@ Code Quality
+
+.PHONY: check
+check: lint test ## Run all checks before committing (lint + test)
+	@echo "==> All checks passed!"
+
+.PHONY: verify
+verify: manifests generate ## Verify generated files are up to date
+	@echo "==> Verifying generated files are committed"
+	@git diff --exit-code config/crd api/ || { \
+		echo "ERROR: Generated files are out of date."; \
+		echo "Run 'make manifests generate' and commit the changes."; \
+		exit 1; \
+	}
+	@echo "==> Verification passed!"
+
+.PHONY: pre-commit
+pre-commit: modules-tidy fmt vet lint test ## Run full pre-commit checks (tidy, fmt, vet, lint, test)
+	@echo "==> Pre-commit checks passed!"
 
 ##@ Build
 
