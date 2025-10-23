@@ -42,6 +42,11 @@ import (
 )
 
 var (
+	// Version information - set via ldflags at build time
+	version   = "dev"
+	buildDate = "unknown"
+	gitCommit = "unknown"
+
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -126,6 +131,12 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	setupLog.Info("Starting Multigres Operator",
+		"version", version,
+		"buildDate", buildDate,
+		"gitCommit", gitCommit,
+	)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
