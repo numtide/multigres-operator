@@ -13,6 +13,7 @@ go.work
 go.work.sum
 cover.out
 cover.html
+coverage/
 
 # kubebuilder
 bin/
