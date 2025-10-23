@@ -1,8 +1,29 @@
-# Image URL to use all building/pushing image targets
-# if :latest then Kubernetes defaults imagePullPolicy: Always
-# which fails if the image tag is intended to be used only locally
-# so default to :dev for improved DX and override when needed in pipelines
-IMG ?= controller:dev
+###----------------------------------------
+##   Variables
+#------------------------------------------
+# Multi-module paths
+# Each module must be tagged with its directory path prefix for Go module resolution
+# Example tags: v0.1.0 (root), api/v0.1.0, pkg/cluster-handler/v0.1.0, etc.
+MODULES := . ./api ./pkg/cluster-handler ./pkg/data-handler ./pkg/resource-handler
+
+# Version from git tags (for root module - operator binary)
+# Root module uses tags like v0.1.0 (without prefix)
+VERSION ?= $(shell git describe --tags --match "v*" --always --dirty 2>/dev/null || echo "v0.0.1-dev")
+VERSION_SHORT ?= $(shell echo $(VERSION) | sed 's/^v//')
+
+# Image configuration
+IMG_PREFIX ?= ghcr.io/numtide
+IMG_REPO ?= multigres-operator
+IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
+
+# Build metadata
+BUILD_DATE ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+
+# LDFLAGS for version info
+LDFLAGS := -X main.version=$(VERSION) \
+           -X main.buildDate=$(BUILD_DATE) \
+           -X main.gitCommit=$(GIT_COMMIT)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -17,10 +38,48 @@ endif
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= docker
 
+# Kind cluster name for local development
+KIND_CLUSTER ?= multigres-operator-dev
+
+# Local kubeconfig for kind cluster (doesn't modify user's ~/.kube/config)
+KIND_KUBECONFIG ?= $(shell pwd)/kubeconfig.yaml
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
+
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+## Tool Binaries
+KUBECTL ?= kubectl
+KIND ?= kind
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+
+## Tool Versions
+# renovate: datasource=github-releases depName=kubernetes-sigs/kustomize
+KUSTOMIZE_VERSION ?= v5.6.0
+# renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
+CONTROLLER_TOOLS_VERSION ?= v0.18.0
+# renovate: datasource=github-releases depName=golangci/golangci-lint
+GOLANGCI_LINT_VERSION ?= v2.3.0
+
+## Envtest
+#ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
+ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+#ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
+# NOTE: This version should match the version defined in devshell.nix
+ENVTEST_K8S_VERSION ?= 1.33
+
+###----------------------------------------
+##   Comamnds
+#------------------------------------------
 
 .PHONY: all
 all: build
@@ -42,11 +101,34 @@ all: build
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+##@ Multi-Module Operations
+
+.PHONY: modules-tidy
+modules-tidy: ## Run go mod tidy on all modules
+	@for mod in $(MODULES); do \
+		echo "==> Tidying $$mod..."; \
+		(cd $$mod && go mod tidy) || exit 1; \
+	done
+
+.PHONY: modules-download
+modules-download: ## Download dependencies for all modules
+	@for mod in $(MODULES); do \
+		echo "==> Downloading dependencies for $$mod..."; \
+		(cd $$mod && go mod download) || exit 1; \
+	done
+
+.PHONY: modules-verify
+modules-verify: ## Verify dependencies for all modules
+	@for mod in $(MODULES); do \
+		echo "==> Verifying $$mod..."; \
+		(cd $$mod && go mod verify) || exit 1; \
+	done
+
 ##@ Development
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./api/..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -54,16 +136,58 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 # $(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 .PHONY: fmt
-fmt: ## Run go fmt against code.
-	go fmt ./...
+fmt: ## Run go fmt against code in all modules
+	@for mod in $(MODULES); do \
+		echo "==> Formatting $$mod..."; \
+		(cd $$mod && go fmt ./...) || exit 1; \
+	done
 
 .PHONY: vet
-vet: ## Run go vet against code.
-	go vet ./...
+vet: ## Run go vet against code in all modules
+	@for mod in $(MODULES); do \
+		echo "==> Vetting $$mod..."; \
+		(cd $$mod && go vet ./...) || exit 1; \
+	done
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+test: manifests generate fmt vet setup-envtest ## Run tests for all modules
+	@echo "==> Running tests across all modules"
+	@for mod in $(MODULES); do \
+		echo "==> Testing $$mod..."; \
+		(cd $$mod && \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+			go test $$(go list ./... | grep -v /e2e) -coverprofile=cover.out) || exit 1; \
+	done
+
+.PHONY: test-unit
+test-unit: manifests generate fmt vet setup-envtest ## Run unit tests for all modules (fast, no e2e)
+	@echo "==> Running unit tests across all modules"
+	@for mod in $(MODULES); do \
+		echo "==> Unit testing $$mod..."; \
+		(cd $$mod && \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+			go test $$(go list ./... | grep -v /e2e) -short -v) || exit 1; \
+	done
+
+.PHONY: test-coverage
+test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage report with HTML
+	@mkdir -p coverage
+	@echo "==> Generating coverage across all modules"
+	@for mod in $(MODULES); do \
+		modname=$$(basename $$mod); \
+		[ "$$modname" = "." ] && modname="root"; \
+		echo "==> Coverage for $$mod..."; \
+		(cd $$mod && \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+			go test ./... -coverprofile=../coverage/$$modname.out -covermode=atomic -coverpkg=./...) || exit 1; \
+	done
+	@echo "==> Generating HTML reports"
+	@for out in coverage/*.out; do \
+		html=$${out%.out}.html; \
+		go tool cover -html=$$out -o=$$html; \
+		echo "Generated: $$html"; \
+	done
+	@echo "Coverage reports in coverage/"
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -95,22 +219,49 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
-	$(GOLANGCI_LINT) run
+lint: golangci-lint ## Run golangci-lint linter across all modules
+	@for mod in $(MODULES); do \
+		echo "==> Linting $$mod..."; \
+		(cd $$mod && $(GOLANGCI_LINT) run) || exit 1; \
+	done
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
-	$(GOLANGCI_LINT) run --fix
+	@for mod in $(MODULES); do \
+		echo "==> Fixing lint issues in $$mod..."; \
+		(cd $$mod && $(GOLANGCI_LINT) run --fix) || exit 1; \
+	done
 
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+##@ Code Quality
+
+.PHONY: check
+check: lint test ## Run all checks before committing (lint + test)
+	@echo "==> All checks passed!"
+
+.PHONY: verify
+verify: manifests generate ## Verify generated files are up to date
+	@echo "==> Verifying generated files are committed"
+	@git diff --exit-code config/crd api/ || { \
+		echo "ERROR: Generated files are out of date."; \
+		echo "Run 'make manifests generate' and commit the changes."; \
+		exit 1; \
+	}
+	@echo "==> Verification passed!"
+
+.PHONY: pre-commit
+pre-commit: modules-tidy fmt vet lint test ## Run full pre-commit checks (tidy, fmt, vet, lint, test)
+	@echo "==> Pre-commit checks passed!"
+
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/multigres-operator/main.go
+build: manifests generate fmt vet ## Build manager binary with version metadata
+	@echo "==> Building operator binary (version: $(VERSION))"
+	go build -ldflags="$(LDFLAGS)" -o bin/multigres-operator cmd/multigres-operator/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -119,16 +270,16 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-.PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+.PHONY: container
+container: ## Build container image
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
 .PHONY: minikube-load
 minikube-load:
 	minikube image load ${IMG}
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
+.PHONY: container-push
+container-push: ## Push container image
 	$(CONTAINER_TOOL) push ${IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
@@ -177,29 +328,53 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+##@ Kind Cluster (Local Development)
+
+.PHONY: kind-up
+kind-up: ## Create a kind cluster for local development
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "ERROR: kind is not installed."; \
+		echo "Install it from: https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+		exit 1; \
+	}
+	@if $(KIND) get clusters | grep -q "^$(KIND_CLUSTER)$$"; then \
+		echo "Kind cluster '$(KIND_CLUSTER)' already exists."; \
+	else \
+		echo "Creating kind cluster '$(KIND_CLUSTER)'..."; \
+		$(KIND) create cluster --name $(KIND_CLUSTER); \
+	fi
+	@echo "==> Exporting kubeconfig to $(KIND_KUBECONFIG)"
+	@$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $(KIND_KUBECONFIG)
+	@echo "==> Cluster ready. Use: export KUBECONFIG=$(KIND_KUBECONFIG)"
+
+.PHONY: kind-load
+kind-load: container ## Build and load image into kind cluster
+	@echo "==> Loading image $(IMG) into kind cluster..."
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER)
+
+.PHONY: kind-deploy
+kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cluster
+	@echo "==> Installing CRDs..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply -f -
+	@echo "==> Deploying operator..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply -f -
+	@echo "==> Deployment complete!"
+	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator-system"
+
+.PHONY: kind-redeploy
+kind-redeploy: kind-load ## Rebuild image, reload to kind, and restart pods
+	@echo "==> Restarting operator pods..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) rollout restart deployment -n multigres-operator-system
+
+.PHONY: kind-down
+kind-down: ## Delete the kind cluster
+	@echo "==> Deleting kind cluster '$(KIND_CLUSTER)'..."
+	$(KIND) delete cluster --name $(KIND_CLUSTER)
+	@rm -f $(KIND_KUBECONFIG)
+	@echo "==> Cluster and kubeconfig deleted"
+
 ##@ Dependencies
-
-## Location to install dependencies to
-LOCALBIN ?= $(shell pwd)/bin
-$(LOCALBIN):
-	mkdir -p $(LOCALBIN)
-
-## Tool Binaries
-KUBECTL ?= kubectl
-KIND ?= kind
-KUSTOMIZE ?= $(LOCALBIN)/kustomize
-CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
-ENVTEST ?= $(LOCALBIN)/setup-envtest
-GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
-
-## Tool Versions
-KUSTOMIZE_VERSION ?= v5.6.0
-CONTROLLER_TOOLS_VERSION ?= v0.18.0
-#ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
-ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
-#ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
-ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.3.0
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -252,3 +427,11 @@ check-coverage:
 	go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
 	go tool cover -html=cover.out -o=cover.html
 	echo now open cover.html
+
+##@ Backward Compatibility Aliases
+
+.PHONY: docker-build
+docker-build: container ## Alias for container (backward compatibility)
+
+.PHONY: docker-push
+docker-push: container-push ## Alias for container-push (backward compatibility)

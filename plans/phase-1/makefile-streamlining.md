@@ -1,6 +1,6 @@
 ---
 title: Streamline Makefile for Multi-Module Architecture and Developer Experience
-state: ready
+state: work-in-progress
 tags:
 - cicd
 - tooling

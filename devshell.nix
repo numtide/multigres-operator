@@ -8,6 +8,7 @@ pkgs.mkShell rec {
     docker-buildx
     kubectl
     kind
+    kustomize
     golangci-lint
     minikube
 
@@ -17,6 +18,7 @@ pkgs.mkShell rec {
 
   # Add environment variables
   env = {
+    # NOTE: This is used with `make setup-envtest`
     "ENVTEST_K8S_VERSION"= "1.33";  # Default version for Nix users
   };
 
