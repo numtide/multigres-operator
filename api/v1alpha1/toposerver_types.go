@@ -27,7 +27,7 @@ import (
 
 // TopoServerChildSpec defines the desired state of TopoServer
 // This spec is populated by the MultigresCluster (or MultiCell) controller.
-
+// NOTE: Maybe the RootPath can be included with TopoServerSpec
 type TopoServerChildSpec struct {
 	// RootPath is the root path to use within the etcd cluster.
 	RootPath string `json:"rootPath"`
@@ -38,7 +38,6 @@ type TopoServerChildSpec struct {
 
 // TopoServerSpec defines the desired state of a managed etcd cluster.
 // This is reusable for both Global and Local TopoServers.
-
 type TopoServerSpec struct {
 	// Image is the etcd container image to use.
 	// +optional

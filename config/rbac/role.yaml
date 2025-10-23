@@ -58,3 +58,41 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - multigres.multigres.com
+  resources:
+  - multicells
+  - multigresclusters
+  - multishards
+  - multitablegroups
+  - toposervers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - multigres.multigres.com
+  resources:
+  - multicells/finalizers
+  - multigresclusters/finalizers
+  - multishards/finalizers
+  - multitablegroups/finalizers
+  - toposervers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - multigres.multigres.com
+  resources:
+  - multicells/status
+  - multigresclusters/status
+  - multishards/status
+  - multitablegroups/status
+  - toposervers/status
+  verbs:
+  - get
+  - patch
+  - update
