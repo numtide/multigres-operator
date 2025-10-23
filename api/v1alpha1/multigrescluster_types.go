@@ -21,37 +21,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ExternalTopoServerSpec defines the connection details for an unmanaged, external topo server.
-type ExternalTopoServerSpec struct {
-	// Address is the client URL of the external etcd cluster (e.g., "my-etcd.svc:2379").
-	Address string `json:"address"`
-
-	// RootPath is the etcd root path for this topo server.
+// MultigresClusterSpec defines the desired state of MultigresCluster
+type MultigresClusterSpec struct {
+	// Images defines the container images for all components in the cluster.
 	// +optional
-	RootPath string `json:"rootPath,omitempty"`
-}
+	Images *ClusterImagesSpec `json:"images,omitempty"`
 
-// GlobalTopoServerRefSpec defines a reference to the global topo server.
-type GlobalTopoServerRefSpec struct {
-	// RootPath is the root path being used in the global topo server.
+	// GlobalTopoServer defines the cluster-wide global topology server.
 	// +optional
-	RootPath string `json:"rootPath,omitempty"`
+	GlobalTopoServer *GlobalTopoServerConfig `json:"globalTopoServer,omitempty"`
 
-	// ClientServiceName is the name of the etcd client service.
+	// MultiAdmin defines the deployment for the cluster-wide admin component.
 	// +optional
-	ClientServiceName string `json:"clientServiceName,omitempty"`
-}
+	MultiAdmin *MultiAdminConfig `json:"multiadmin,omitempty"`
 
-// CommonImagesSpec holds container image pull policy and secrets.
-type CommonImagesSpec struct {
-	// ImagePullPolicy overrides the default image pull policy.
+	// Cells defines the different failure domains or regions for the cluster.
 	// +optional
-	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	Cells *CellsConfig `json:"cells,omitempty"`
 
-	// ImagePullSecrets is an optional list of references to secrets in the same namespace
-	// to use for pulling images.
+	// Databases defines the logical databases, table groups, and sharding.
 	// +optional
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Databases *DatabasesConfig `json:"databases,omitempty"`
 }
 
 // ImagesTemplateSpec defines all images for the cluster.
@@ -68,6 +58,18 @@ type ImagesTemplateSpec struct {
 	MultiAdmin string `json:"multiadmin,omitempty"`
 	// +optional
 	Postgres string `json:"postgres,omitempty"`
+}
+
+// CommonImagesSpec holds container image pull policy and secrets.
+type CommonImagesSpec struct {
+	// ImagePullPolicy overrides the default image pull policy.
+	// +optional
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// ImagePullSecrets is an optional list of references to secrets in the same namespace
+	// to use for pulling images.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // ClusterImagesSpec defines the image configuration for the cluster,
@@ -120,46 +122,33 @@ type GlobalTopoServerConfig struct {
 	External *ExternalTopoServerSpec `json:"external,omitempty"`
 }
 
+// GlobalTopoServerRefSpec defines a reference to the global topo server.
+type GlobalTopoServerRefSpec struct {
+	// RootPath is the root path being used in the global topo server.
+	// +optional
+	RootPath string `json:"rootPath,omitempty"`
+
+	// ClientServiceName is the name of the etcd client service.
+	// +optional
+	ClientServiceName string `json:"clientServiceName,omitempty"`
+}
+
+// ExternalTopoServerSpec defines the connection details for an unmanaged, external topo server.
+type ExternalTopoServerSpec struct {
+	// Address is the client URL of the external etcd cluster (e.g., "my-etcd.svc:2379").
+	Address string `json:"address"`
+
+	// RootPath is the etcd root path for this topo server.
+	// +optional
+	RootPath string `json:"rootPath,omitempty"`
+}
+
 // MultiAdminConfig defines the configuration for the MultiAdmin component.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 type MultiAdminConfig struct {
 	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
 	// to load the `multiadmin` spec from.
-	// +optional
-	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
-
-	// Overrides are applied on top of the loaded template spec.
-	// +optional
-	Overrides *StatefulComponentSpec `json:"overrides,omitempty"`
-
-	// Inline spec, used if DeploymentTemplate is not specified.
-	StatefulComponentSpec `json:",inline"`
-}
-
-// MultiGatewayConfig defines the configuration for a cell's MultiGateway.
-// Either DeploymentTemplate or inline fields is allowed. Not both.
-// Overrides is only allowed when DeploymentTemplate is provided.
-type MultiGatewayConfig struct {
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
-	// to load the `multigateway` spec from.
-	// +optional
-	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
-
-	// Overrides are applied on top of the loaded template spec.
-	// +optional
-	Overrides *StatefulComponentSpec `json:"overrides,omitempty"`
-
-	// Inline spec, used if DeploymentTemplate is not specified.
-	StatefulComponentSpec `json:",inline"`
-}
-
-// MultiOrchConfig defines the configuration for a cell's MultiOrch.
-// Either DeploymentTemplate or inline fields is allowed. Not both.
-// Overrides is only allowed when DeploymentTemplate is provided.
-type MultiOrchConfig struct {
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
-	// to load the `multiorch` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
 
@@ -222,6 +211,40 @@ type CellsConfig struct {
 	Templates []CellTemplate `json:"templates,omitempty"`
 }
 
+// MultiGatewayConfig defines the configuration for a cell's MultiGateway.
+// Either DeploymentTemplate or inline fields is allowed. Not both.
+// Overrides is only allowed when DeploymentTemplate is provided.
+type MultiGatewayConfig struct {
+	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// to load the `multigateway` spec from.
+	// +optional
+	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
+
+	// Overrides are applied on top of the loaded template spec.
+	// +optional
+	Overrides *StatefulComponentSpec `json:"overrides,omitempty"`
+
+	// Inline spec, used if DeploymentTemplate is not specified.
+	StatefulComponentSpec `json:",inline"`
+}
+
+// MultiOrchConfig defines the configuration for a cell's MultiOrch.
+// Either DeploymentTemplate or inline fields is allowed. Not both.
+// Overrides is only allowed when DeploymentTemplate is provided.
+type MultiOrchConfig struct {
+	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// to load the `multiorch` spec from.
+	// +optional
+	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
+
+	// Overrides are applied on top of the loaded template spec.
+	// +optional
+	Overrides *StatefulComponentSpec `json:"overrides,omitempty"`
+
+	// Inline spec, used if DeploymentTemplate is not specified.
+	StatefulComponentSpec `json:",inline"`
+}
+
 // ShardPoolConfig defines the configuration for a shard pool,
 // supporting templates, overrides, and inline definitions.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
@@ -279,29 +302,6 @@ type DatabasesConfig struct {
 	// Templates is a list of database definitions.
 	// +optional
 	Templates []DatabaseTemplate `json:"templates,omitempty"`
-}
-
-// MultigresClusterSpec defines the desired state of MultigresCluster
-type MultigresClusterSpec struct {
-	// Images defines the container images for all components in the cluster.
-	// +optional
-	Images *ClusterImagesSpec `json:"images,omitempty"`
-
-	// GlobalTopoServer defines the cluster-wide global topology server.
-	// +optional
-	GlobalTopoServer *GlobalTopoServerConfig `json:"globalTopoServer,omitempty"`
-
-	// MultiAdmin defines the deployment for the cluster-wide admin component.
-	// +optional
-	MultiAdmin *MultiAdminConfig `json:"multiadmin,omitempty"`
-
-	// Cells defines the different failure domains or regions for the cluster.
-	// +optional
-	Cells *CellsConfig `json:"cells,omitempty"`
-
-	// Databases defines the logical databases, table groups, and sharding.
-	// +optional
-	Databases *DatabasesConfig `json:"databases,omitempty"`
 }
 
 // Condition constants
