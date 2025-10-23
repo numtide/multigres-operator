@@ -26,7 +26,10 @@ import (
 // ============================================================================
 //
 // Defines the fields users interact with directly to declare their intent.
-//
+// Each section in this file corresponds to a block of configuration
+// Specs are fetched from their respective child CRs where feasible.
+// The Spec order in this file matches the order in the following sample:
+// https://github.com/numtide/multigres-operator/blob/multigres-cluster-cr-design/plans/phase-1/final-cr-definition.md
 
 // MultigresClusterSpec defines the desired state of MultigresCluster
 type MultigresClusterSpec struct {
@@ -137,17 +140,6 @@ type GlobalTopoServerConfig struct {
 	External *ExternalTopoServerSpec `json:"external,omitempty"`
 }
 
-// GlobalTopoServerRefSpec defines a reference to the global topo server.
-type GlobalTopoServerRefSpec struct {
-	// RootPath is the root path being used in the global topo server.
-	// +optional
-	RootPath string `json:"rootPath,omitempty"`
-
-	// ClientServiceName is the name of the etcd client service.
-	// +optional
-	ClientServiceName string `json:"clientServiceName,omitempty"`
-}
-
 // ExternalTopoServerSpec defines the connection details for an unmanaged, external topo server.
 type ExternalTopoServerSpec struct {
 	// Address is the client URL of the external etcd cluster (e.g., "my-etcd.svc:2379").
@@ -183,40 +175,11 @@ type MultiAdminConfig struct {
 // Cell Config Section Specs
 // ============================================================================
 
-// CellSpecConfig defines the configuration for a cell.
-type CellSpecConfig struct {
+// CellsConfig holds the list of cell templates.
+type CellsConfig struct {
+	// Templates is a list of cell definitions.
 	// +optional
-	MultiGateway *MultiGatewayConfig `json:"multigateway,omitempty"`
-	// +optional
-	MultiOrch *MultiOrchConfig `json:"multiorch,omitempty"`
-	// +optional
-	TopoServer *CellTopoServerConfig `json:"topoServer,omitempty"`
-}
-
-// CellTopoServerConfig defines the topo server config for a cell.
-// Either deploymentTemplate or managedSpec is allowed. Not both.
-// Overrides is only allowed when DeploymentTemplate is provided.
-// external and deploymentSpec (or deploymentTemplate) cannot be used at the same time.
-// NOTE: the above logic may result in convoluted code, another option could be to nest these fields down.
-// Nesting would make the API definition more verbose but it may help reduce code complexity with the controller.
-type CellTopoServerConfig struct {
-	// RootPath is the root path to use within the etcd cluster.
-	// +optional
-	RootPath string `json:"rootPath,omitempty"`
-
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
-	// to load the `managedTopoServer` spec from.
-	// +optional
-	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
-
-	// ManagedSpec defines an inline spec for a managed local topo server.
-	// +optional
-	ManagedSpec *TopoServerSpec `json:"managedSpec,omitempty"`
-
-	// External defines connection details for an unmanaged, external topo server.
-	// +optional
-	External *ExternalTopoServerSpec `json:"external,omitempty"`
-	// Note: If all fields are nil, the cell defaults to using the GlobalTopoServer.
+	Templates []CellTemplate `json:"templates,omitempty"`
 }
 
 // CellTemplate defines a named cell configuration.
@@ -227,11 +190,14 @@ type CellTemplate struct {
 	Spec CellSpecConfig `json:"spec"`
 }
 
-// CellsConfig holds the list of cell templates.
-type CellsConfig struct {
-	// Templates is a list of cell definitions.
+// CellSpecConfig defines the configuration for a cell.
+type CellSpecConfig struct {
 	// +optional
-	Templates []CellTemplate `json:"templates,omitempty"`
+	MultiGateway *MultiGatewayConfig `json:"multigateway,omitempty"`
+	// +optional
+	MultiOrch *MultiOrchConfig `json:"multiorch,omitempty"`
+	// +optional
+	TopoServer *CellTopoServerConfig `json:"topoServer,omitempty"`
 }
 
 // MultiGatewayConfig defines the configuration for a cell's MultiGateway.
@@ -268,9 +234,76 @@ type MultiOrchConfig struct {
 	StatefulComponentSpec `json:",inline"`
 }
 
+// CellTopoServerConfig defines the topo server config for a cell.
+// Either deploymentTemplate or managedSpec is allowed. Not both.
+// Overrides is only allowed when DeploymentTemplate is provided.
+// external and deploymentSpec (or deploymentTemplate) cannot be used at the same time.
+// NOTE: the above logic may result in convoluted code, another option could be to nest these fields down.
+// Nesting would make the API definition more verbose but it may help reduce code complexity with the controller.
+type CellTopoServerConfig struct {
+	// RootPath is the root path to use within the etcd cluster.
+	// +optional
+	RootPath string `json:"rootPath,omitempty"`
+
+	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// to load the `managedTopoServer` spec from.
+	// +optional
+	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
+
+	// ManagedSpec defines an inline spec for a managed local topo server.
+	// +optional
+	ManagedSpec *TopoServerSpec `json:"managedSpec,omitempty"`
+
+	// External defines connection details for an unmanaged, external topo server.
+	// +optional
+	External *ExternalTopoServerSpec `json:"external,omitempty"`
+	// Note: If all fields are nil, the cell defaults to using the GlobalTopoServer.
+}
+
 // ============================================================================
 // Databases (tablepools and shards) Config Section Specs
 // ============================================================================
+
+// DatabasesConfig holds the list of database templates.
+type DatabasesConfig struct {
+	// Templates is a list of database definitions.
+	// +optional
+	Templates []DatabaseTemplate `json:"templates,omitempty"`
+}
+
+// DatabaseTemplate defines a named database configuration.
+type DatabaseTemplate struct {
+	// Name is the logical name of the database (e.g., "production_db").
+	Name string `json:"name"`
+	// Spec is the configuration for this database.
+	Spec DatabaseSpecConfig `json:"spec"`
+}
+
+// DatabaseSpecConfig defines the configuration for a logical database.
+type DatabaseSpecConfig struct {
+	// TableGroups is a list of table group definitions for this database.
+	// +optional
+	TableGroups []TableGroupConfig `json:"tablegroups,omitempty"`
+}
+
+// TableGroupConfig defines the configuration for a table group.
+type TableGroupConfig struct {
+	// Name is the logical name of the table group (e.g., "default", "orders_tg").
+	Name string `json:"name"`
+
+	// Partitioning defines how this table group is sharded.
+	Partitioning PartitioningSpec `json:"partitioning"`
+
+	// ShardTemplate defines the configuration for the shards in this group.
+	ShardTemplate ShardTemplateConfig `json:"shardTemplate"`
+}
+
+// ShardTemplateConfig defines the template for shards in a table group.
+type ShardTemplateConfig struct {
+	// Pools is a list of pool configurations for each shard.
+	// +optional
+	Pools []ShardPoolConfig `json:"pools,omitempty"`
+}
 
 // ShardPoolConfig defines the configuration for a shard pool,
 // supporting templates, overrides, and inline definitions.
@@ -290,58 +323,44 @@ type ShardPoolConfig struct {
 	ShardPoolSpec `json:",inline"`
 }
 
-// ShardTemplateConfig defines the template for shards in a table group.
-type ShardTemplateConfig struct {
-	// Pools is a list of pool configurations for each shard.
-	// +optional
-	Pools []ShardPoolConfig `json:"pools,omitempty"`
-}
-
-// TableGroupConfig defines the configuration for a table group.
-type TableGroupConfig struct {
-	// Name is the logical name of the table group (e.g., "default", "orders_tg").
-	Name string `json:"name"`
-
-	// Partitioning defines how this table group is sharded.
-	Partitioning PartitioningSpec `json:"partitioning"`
-
-	// ShardTemplate defines the configuration for the shards in this group.
-	ShardTemplate ShardTemplateConfig `json:"shardTemplate"`
-}
-
-// DatabaseSpecConfig defines the configuration for a logical database.
-type DatabaseSpecConfig struct {
-	// TableGroups is a list of table group definitions for this database.
-	// +optional
-	TableGroups []TableGroupConfig `json:"tablegroups,omitempty"`
-}
-
-// DatabaseTemplate defines a named database configuration.
-type DatabaseTemplate struct {
-	// Name is the logical name of the database (e.g., "production_db").
-	Name string `json:"name"`
-	// Spec is the configuration for this database.
-	Spec DatabaseSpecConfig `json:"spec"`
-}
-
-// DatabasesConfig holds the list of database templates.
-type DatabasesConfig struct {
-	// Templates is a list of database definitions.
-	// +optional
-	Templates []DatabaseTemplate `json:"templates,omitempty"`
-}
-
 // ============================================================================
 // CR Controller Status Specs
 // ============================================================================
 
-// Condition constants
+// Condition constants. NOTE: these may go somewhere else
 
 const (
 	ConditionAvailable = "Available"
 
 	ConditionProgressing = "Progressing"
 )
+
+// MultigresClusterStatus defines the observed state of MultigresCluster
+type MultigresClusterStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions represent the latest available observations of the cluster's state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// GlobalTopoServer provides a high-level status of the global topo server.
+	// +optional
+	GlobalTopoServer ComponentStatus `json:"globalTopoServer,omitempty"`
+
+	// MultiAdmin provides a high-level status of the MultiAdmin component.
+	// +optional
+	MultiAdmin ComponentStatus `json:"multiadmin,omitempty"`
+
+	// Cells provides a map of cell names to their high-level status.
+	// +optional
+	Cells map[string]CellStatusSummary `json:"cells,omitempty"`
+
+	// Databases provides a map of database names to their high-level status.
+	// +optional
+	Databases map[string]DatabaseStatusSummary `json:"databases,omitempty"`
+}
 
 // ComponentStatus indicates the simple availability of a component.
 type ComponentStatus struct {
@@ -374,33 +393,6 @@ type DatabaseStatusSummary struct {
 	// ServingWrites indicates whether the database is capable of serving write traffic.
 	// +optional
 	ServingWrites metav1.ConditionStatus `json:"servingWrites,omitempty"`
-}
-
-// MultigresClusterStatus defines the observed state of MultigresCluster
-type MultigresClusterStatus struct {
-	// ObservedGeneration is the most recent generation observed by the controller.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Conditions represent the latest available observations of the cluster's state.
-	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// GlobalTopoServer provides a high-level status of the global topo server.
-	// +optional
-	GlobalTopoServer ComponentStatus `json:"globalTopoServer,omitempty"`
-
-	// MultiAdmin provides a high-level status of the MultiAdmin component.
-	// +optional
-	MultiAdmin ComponentStatus `json:"multiadmin,omitempty"`
-
-	// Cells provides a map of cell names to their high-level status.
-	// +optional
-	Cells map[string]CellStatusSummary `json:"cells,omitempty"`
-
-	// Databases provides a map of database names to their high-level status.
-	// +optional
-	Databases map[string]DatabaseStatusSummary `json:"databases,omitempty"`
 }
 
 // ============================================================================

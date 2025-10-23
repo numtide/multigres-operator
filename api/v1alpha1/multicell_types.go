@@ -22,6 +22,7 @@ import (
 )
 
 // StatefulComponentSpec defines the common spec for a stateful component like MultiOrch, MultiGateway, or MultiAdmin.
+// NOTE: This spec may be better placed somewhere else.
 type StatefulComponentSpec struct {
 	// Replicas is the desired number of pods.
 	// +kubebuilder:validation:Minimum=1
@@ -61,6 +62,17 @@ type CellTopoServerSpec struct {
 	// If set, the MultiCell controller will create a child TopoServer CR.
 	// +optional
 	ManagedSpec *TopoServerSpec `json:"managedSpec,omitempty"`
+}
+
+// GlobalTopoServerRefSpec defines a reference to the global topo server.
+type GlobalTopoServerRefSpec struct {
+	// RootPath is the root path being used in the global topo server.
+	// +optional
+	RootPath string `json:"rootPath,omitempty"`
+
+	// ClientServiceName is the name of the etcd client service.
+	// +optional
+	ClientServiceName string `json:"clientServiceName,omitempty"`
 }
 
 // TopologyReconciliationSpec defines flags for the cell controller.
