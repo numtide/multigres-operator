@@ -230,16 +230,16 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-.PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+.PHONY: container
+container: ## Build container image
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
 .PHONY: minikube-load
 minikube-load:
 	minikube image load ${IMG}
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
+.PHONY: container-push
+container-push: ## Push container image
 	$(CONTAINER_TOOL) push ${IMG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
@@ -363,3 +363,11 @@ check-coverage:
 	go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
 	go tool cover -html=cover.out -o=cover.html
 	echo now open cover.html
+
+##@ Backward Compatibility Aliases
+
+.PHONY: docker-build
+docker-build: container ## Alias for container (backward compatibility)
+
+.PHONY: docker-push
+docker-push: container-push ## Alias for container-push (backward compatibility)
