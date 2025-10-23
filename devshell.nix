@@ -8,6 +8,7 @@ pkgs.mkShell rec {
     docker-buildx
     kubectl
     kind
+    kustomize
     golangci-lint
     minikube
 
