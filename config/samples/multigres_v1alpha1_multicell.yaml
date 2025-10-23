@@ -1,0 +1,9 @@
+apiVersion: multigres.multigres.com/v1alpha1
+kind: MultiCell
+metadata:
+  labels:
+    app.kubernetes.io/name: multigres-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: multicell-sample
+spec:
+  # TODO(user): Add fields here

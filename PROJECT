@@ -42,4 +42,58 @@ resources:
   kind: MultiOrch
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: multigres.com
+  group: multigres
+  kind: MultigresCluster
+  path: github.com/numtide/multigres-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: false
+  domain: multigres.com
+  group: multigres
+  kind: MultigresDeploymentTemplate
+  path: github.com/numtide/multigres-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: multigres.com
+  group: multigres
+  kind: TopoServer
+  path: github.com/numtide/multigres-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: multigres.com
+  group: multigres
+  kind: MultiCell
+  path: github.com/numtide/multigres-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: multigres.com
+  group: multigres
+  kind: MultiTableGroup
+  path: github.com/numtide/multigres-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: multigres.com
+  group: multigres
+  kind: MultiShard
+  path: github.com/numtide/multigres-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

@@ -1,0 +1,134 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1alpha1
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// PartitioningSpec defines how a table group is sharded.
+type PartitioningSpec struct {
+	// Shards is the number of shards in this table group.
+	// +kubebuilder:validation:Minimum=1
+	Shards int32 `json:"shards"`
+}
+
+// ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
+// This is the core reusable spec for a shard's pod.
+type ShardPoolSpec struct {
+	// Type of the pool (e.g., "replica", "readOnly").
+	// +kubebuilder:validation:Enum=replica;readOnly
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Cell is the name of the MultiCell this pool should run in.
+	// +optional
+	Cell string `json:"cell,omitempty"`
+
+	// Replicas is the desired number of pods in this pool.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Affinity defines the pod's scheduling constraints.
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// DataVolumeClaimTemplate provides a spec for the PersistentVolumeClaim
+	// that will be created for each replica.
+	// +optional
+	DataVolumeClaimTemplate corev1.PersistentVolumeClaimSpec `json:"dataVolumeClaimTemplate,omitempty"`
+
+	// Postgres defines the configuration for the Postgres container.
+	// +optional
+	Postgres PostgresSpec `json:"postgres,omitempty"`
+
+	// MultiPooler defines the configuration for the MultiPooler container.
+	// +optional
+	MultiPooler MultiPoolerSpec `json:"multipooler,omitempty"`
+}
+
+// ShardTemplateSpec holds the template for creating MultiShard CRs.
+type ShardTemplateSpec struct {
+	// Pools defines the pod templates for the shards.
+	// This will be copied into each child MultiShard's spec.
+	// +optional
+	Pools []ShardPoolSpec `json:"pools,omitempty"`
+}
+
+// MultiTableGroupSpec defines the desired state of MultiTableGroup
+// This spec is populated by the MultigresCluster controller.
+type MultiTableGroupSpec struct {
+	// Images required for this table group's child shards.
+	// +optional
+	Images ShardImagesSpec `json:"images,omitempty"`
+
+	// Partitioning defines how this table group is sharded.
+	Partitioning PartitioningSpec `json:"partitioning"`
+
+	// ShardTemplate is the template used to create MultiShard CRs.
+	ShardTemplate ShardTemplateSpec `json:"shardTemplate"`
+}
+
+// MultiTableGroupStatus defines the observed state of MultiTableGroup
+type MultiTableGroupStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions represent the latest available observations of the MultiTableGroup's state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Shards is the desired number of shards.
+	// +optional
+	Shards int32 `json:"shards,omitempty"`
+
+	// ReadyShards is the number of child MultiShard CRs that are ready.
+	// +optional
+	ReadyShards int32 `json:"readyShards,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status",description="Current availability status"
+// +kubebuilder:printcolumn:name="Ready Shards",type="string",JSONPath=".status.readyShards",description="Ready shards"
+// +kubebuilder:printcolumn:name="Total Shards",type="string",JSONPath=".status.shards",description="Total shards"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+
+// MultiTableGroup is the Schema for the multitablegroups API
+type MultiTableGroup struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   MultiTableGroupSpec   `json:"spec,omitempty"`
+	Status MultiTableGroupStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// MultiTableGroupList contains a list of MultiTableGroup
+type MultiTableGroupList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []MultiTableGroup `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&MultiTableGroup{}, &MultiTableGroupList{})
+}

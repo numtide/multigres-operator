@@ -1,0 +1,110 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1alpha1
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// PostgresSpec defines the configuration for the Postgres container.
+type PostgresSpec struct {
+	// Resources defines the compute resource requirements for the Postgres container.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// MultiPoolerSpec defines the configuration for the MultiPooler container.
+type MultiPoolerSpec struct {
+	// Resources defines the compute resource requirements for the MultiPooler container.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// ShardImagesSpec defines the images required for a MultiShard.
+type ShardImagesSpec struct {
+	// +optional
+	MultiPooler string `json:"multipooler,omitempty"`
+	// +optional
+	Postgres string `json:"postgres,omitempty"`
+}
+
+// MultiShardSpec defines the desired state of MultiShard
+// This spec is populated by the MultiTableGroup controller.
+type MultiShardSpec struct {
+	// Images required for this shard's pods.
+	// +optional
+	Images ShardImagesSpec `json:"images,omitempty"`
+
+	// Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
+	// This is a direct copy from the parent MultiTableGroup's shardTemplate.
+	// +optional
+	Pools []ShardPoolSpec `json:"pools,omitempty"`
+}
+
+// MultiShardStatus defines the observed state of MultiShard
+type MultiShardStatus struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions represent the latest available observations of the MultiShard's state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// PrimaryCell is the cell currently holding the primary replica for this shard.
+	// +optional
+	PrimaryCell string `json:"primaryCell,omitempty"`
+
+	// TotalPods is the total number of pods managed by this shard across all pools.
+	// +optional
+	TotalPods int32 `json:"totalPods,omitempty"`
+
+	// ReadyPods is the number of pods for this shard that are ready.
+	// +optional
+	ReadyPods int32 `json:"readyPods,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status",description="Current availability status"
+// +kubebuilder:printcolumn:name="Primary Cell",type="string",JSONPath=".status.primaryCell",description="Cell of the primary replica"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyPods",description="Ready pods"
+// +kubebuilder:printcolumn:name="Total",type="string",JSONPath=".status.totalPods",description="Total pods"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+
+// MultiShard is the Schema for the multishards API
+type MultiShard struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   MultiShardSpec   `json:"spec,omitempty"`
+	Status MultiShardStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// MultiShardList contains a list of MultiShard
+type MultiShardList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []MultiShard `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&MultiShard{}, &MultiShardList{})
+}

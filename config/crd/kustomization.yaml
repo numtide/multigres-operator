@@ -6,6 +6,12 @@ resources:
 - bases/multigres.com_multigateways.yaml
 - bases/multigres.com_multiorches.yaml
 - bases/multigres.com_multipoolers.yaml
+- bases/multigres.multigres.com_multigresclusters.yaml
+- bases/multigres.multigres.com_multigresdeploymenttemplates.yaml
+- bases/multigres.multigres.com_toposervers.yaml
+- bases/multigres.multigres.com_multicells.yaml
+- bases/multigres.multigres.com_multitablegroups.yaml
+- bases/multigres.multigres.com_multishards.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
