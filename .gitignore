@@ -16,3 +16,6 @@ cover.html
 
 # kubebuilder
 bin/
+
+# kind local development
+kubeconfig.yaml
