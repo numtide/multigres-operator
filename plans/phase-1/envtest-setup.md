@@ -1,6 +1,6 @@
 ---
 title: Full envtest integration and validation for integration test spec
-state: draft
+state: work-in-progress
 tags:
 - testing
 - envtest
