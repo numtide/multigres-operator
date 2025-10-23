@@ -31,7 +31,9 @@ func SetupEnvtest(t testing.TB) *rest.Config {
 		t.Fatalf("Setting up with envtest failed, %v", err)
 	}
 	t.Cleanup(func() {
-		testEnv.Stop()
+		if err := testEnv.Stop(); err != nil {
+			t.Fatalf("Failed to stop envtest, %v", err)
+		}
 	})
 
 	return cfg
@@ -71,7 +73,7 @@ func SetupEnvtestWithKubeconfig(t testing.TB) *rest.Config {
 	}
 
 	kubeconfigPath := filepath.Join(os.TempDir(), "envtest-kubeconfig")
-	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0644); err != nil {
+	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0o644); err != nil {
 		t.Fatalf("Failed to write kubeconfig to file, %v", err)
 	}
 
