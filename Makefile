@@ -17,6 +17,10 @@ IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
 BUILD_DATE ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 
+# LDFLAGS for version info
+LDFLAGS := -X main.version=$(VERSION) \
+           -X main.buildDate=$(BUILD_DATE) \
+           -X main.gitCommit=$(GIT_COMMIT)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -220,8 +224,9 @@ pre-commit: modules-tidy fmt vet lint test ## Run full pre-commit checks (tidy, 
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/multigres-operator/main.go
+build: manifests generate fmt vet ## Build manager binary with version metadata
+	@echo "==> Building operator binary (version: $(VERSION))"
+	go build -ldflags="$(LDFLAGS)" -o bin/multigres-operator cmd/multigres-operator/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
