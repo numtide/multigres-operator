@@ -38,7 +38,7 @@ jobs:
         run: MODULES="$(make changed-modules)" make test-integration
 
       - name: Save build cache
-        # if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         uses: actions/cache/save@v4
         with:
           path: |
