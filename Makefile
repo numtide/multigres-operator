@@ -9,18 +9,21 @@
 #                or: MODULES="$(make changed-modules)" make test
 MODULES ?= . ./api ./pkg/cluster-handler ./pkg/data-handler ./pkg/resource-handler
 
-# Detect changed modules based on git diff
+# Detect changed modules compared to origin/main
 # Usage: make test MODULES="$(shell make changed-modules)"
 .PHONY: changed-modules
 changed-modules:
-	@git diff --name-only HEAD 2>/dev/null | \
-		awk -F/ '{ \
-			if ($$1 == "api") print "./api"; \
-			else if ($$1 == "pkg" && $$2 == "cluster-handler") print "./pkg/cluster-handler"; \
-			else if ($$1 == "pkg" && $$2 == "data-handler") print "./pkg/data-handler"; \
-			else if ($$1 == "pkg" && $$2 == "resource-handler") print "./pkg/resource-handler"; \
-			else if ($$1 == "cmd" || $$1 == "main.go") print "."; \
-		}' | sort -u | tr '\n' ' ' || echo "$(MODULES)"
+	@if git rev-parse --verify origin/main >/dev/null 2>&1; then \
+		git diff --name-only origin/main...HEAD 2>/dev/null; \
+	else \
+		git diff --name-only HEAD 2>/dev/null; \
+	fi | awk -F/ '{ \
+		if ($$1 == "api") print "./api"; \
+		else if ($$1 == "pkg" && $$2 == "cluster-handler") print "./pkg/cluster-handler"; \
+		else if ($$1 == "pkg" && $$2 == "data-handler") print "./pkg/data-handler"; \
+		else if ($$1 == "pkg" && $$2 == "resource-handler") print "./pkg/resource-handler"; \
+		else if ($$1 == "cmd" || $$1 == "main.go" || $$1 == "Dockerfile") print "."; \
+	}' | sort -u | tr '\n' ' ' || echo "$(MODULES)"
 
 # Version from git tags (for root module - operator binary)
 # Root module uses tags like v0.1.0 (without prefix)
