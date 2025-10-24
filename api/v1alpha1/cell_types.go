@@ -71,14 +71,11 @@ type StatelessSpec struct {
 	// Replicas is the desired number of pods.
 	// +kubebuilder:validation:Minimum=0
 	// +optional
-	Replicas *int32 `json:"replicas,omitempty"`
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
-	// Template is the PodTemplateSpec for the component.
-	// This allows users to set resources, affinity, tolerations,
-	// node selectors, and any other pod-level spec.
-	// The operator will inject the required container into this template.
+	// Resources defines the compute resource requirements.
 	// +optional
-	PodTemplate *corev1.PodTemplateSpec `json:"podTemplate,omitempty"`
+	corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // GlobalTopoServerRefSpec defines a reference to the global topo server.
