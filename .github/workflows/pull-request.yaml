@@ -1,10 +1,10 @@
-name: Run checks
+name: CI
 
 on:
   pull_request:
     paths-ignore:
-      - '**/*.md'
-      - '**/*.txt'
+      - "**/*.md"
+      - "**/*.txt"
 
 permissions:
   contents: write
@@ -12,7 +12,9 @@ permissions:
   security-events: write
 
 jobs:
-  run:
-    uses: ./.github/workflows/build-and-release.yaml
-    with:
-      architectures: '["amd64"]'
+  build:
+    name: Build
+    uses: ./.github/workflows/_reusable-build-changed.yaml
+  manifests:
+    name: Manifests
+    uses: ./.github/workflows/_reusable-manifests.yaml
