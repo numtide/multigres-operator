@@ -21,8 +21,9 @@ func TestSetupWithManager(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	cfg := testutil.SetupEnvtestWithKubeconfig(t)
-	mgr := testutil.StartManager(t, cfg, scheme)
+	cfg := testutil.SetUpEnvtest(t)
+	mgr := testutil.SetUpManager(t, cfg, scheme)
+	testutil.StartManager(t, mgr)
 
 	if err := (&etcdcontroller.EtcdReconciler{
 		Client: mgr.GetClient(),

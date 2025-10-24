@@ -16,7 +16,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
-func SetupEnvtest(t testing.TB) *rest.Config {
+func SetUpEnvtest(t testing.TB) *rest.Config {
 	t.Helper()
 
 	testEnv := &envtest.Environment{
@@ -39,9 +39,9 @@ func SetupEnvtest(t testing.TB) *rest.Config {
 	return cfg
 }
 
-// SetupEnvtestWithKubeconfig starts Kubernetes API server for testing, and
+// SetUpEnvtestWithKubeconfig starts Kubernetes API server for testing, and
 // keeps it running for further debugging.
-func SetupEnvtestWithKubeconfig(t testing.TB) *rest.Config {
+func SetUpEnvtestWithKubeconfig(t testing.TB) (*rest.Config, func()) {
 	t.Helper()
 
 	testEnv := &envtest.Environment{
@@ -82,7 +82,11 @@ func SetupEnvtestWithKubeconfig(t testing.TB) *rest.Config {
 		fmt.Printf("Connect with: export KUBECONFIG=%s\n", kubeconfigPath)
 	})
 
-	return cfg
+	return cfg, func() {
+		if err := testEnv.Stop(); err != nil {
+			t.Fatalf("Failed to stop envtest, %v", err)
+		}
+	}
 }
 
 func SetUpClient(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) client.Client {
@@ -102,7 +106,7 @@ func SetUpClientSet(t testing.TB, cfg *rest.Config) *kubernetes.Clientset {
 	return clientset
 }
 
-func StartManager(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) manager.Manager {
+func SetUpManager(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) manager.Manager {
 	t.Helper()
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
@@ -122,6 +126,12 @@ func StartManager(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) manage
 		t.Fatalf("Failed to start manager: %v", err)
 	}
 
+	return mgr
+}
+
+func StartManager(t testing.TB, mgr manager.Manager) {
+	t.Helper()
+
 	// t.Context gets cancelled before the test cleanup function runs.
 	ctx := t.Context()
 	go func() {
@@ -134,6 +144,4 @@ func StartManager(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) manage
 	if !mgr.GetCache().WaitForCacheSync(ctx) {
 		t.Fatal("Cache failed to sync")
 	}
-
-	return mgr
 }
