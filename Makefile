@@ -57,6 +57,12 @@ CONTAINER_TOOL ?= docker
 # Kind cluster name for local development
 KIND_CLUSTER ?= multigres-operator-dev
 
+# TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
+# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
+# CertManager is installed by default; skip with:
+# - CERT_MANAGER_INSTALL_SKIP=true
+KIND_CLUSTER_E2E ?= multigres-operator-test-e2e
+
 # Local kubeconfig for kind cluster (doesn't modify user's ~/.kube/config)
 KIND_KUBECONFIG ?= $(shell pwd)/kubeconfig.yaml
 
@@ -255,26 +261,6 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 
 ##@ Test
 
-# TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
-# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
-# CertManager is installed by default; skip with:
-# - CERT_MANAGER_INSTALL_SKIP=true
-KIND_CLUSTER ?= multigres-operator-test-e2e
-
-.PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
-	@command -v $(KIND) >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@case "$$($(KIND) get clusters)" in \
-		*"$(KIND_CLUSTER)"*) \
-			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
-		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
-	esac
-
 .PHONY: test
 test: manifests generate fmt vet ## Run tests for all modules (no integration testing)
 	@echo "==> Running tests across all modules"
@@ -330,14 +316,30 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 	@echo "  - Individual: coverage/<module>.html"
 	@echo "  - Combined data: coverage/combined.out (for CI/codecov)"
 
+##@ Test End-to-End
+
+.PHONY: setup-test-e2e
+setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "Kind is not installed. Please install Kind manually."; \
+		exit 1; \
+	}
+	@case "$$($(KIND) get clusters)" in \
+		*"$(KIND_CLUSTER_E2E)"*) \
+			echo "Kind cluster '$(KIND_CLUSTER_E2E)' already exists. Skipping creation." ;; \
+		*) \
+			echo "Creating Kind cluster '$(KIND_CLUSTER_E2E)'..."; \
+			$(KIND) create cluster --name $(KIND_CLUSTER_E2E) ;; \
+	esac
+
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
+	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER_E2E) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
-	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+	@$(KIND) delete cluster --name $(KIND_CLUSTER_E2E)
 
 ##@ Deployment
 
