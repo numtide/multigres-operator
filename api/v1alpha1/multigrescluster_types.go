@@ -165,10 +165,10 @@ type MultiAdminConfig struct {
 
 	// Overrides are applied on top of the loaded template spec.
 	// +optional
-	Overrides *StatefulComponentSpec `json:"overrides,omitempty"`
+	Overrides *StatelessSpec `json:"overrides,omitempty"`
 
 	// Inline spec, used if DeploymentTemplate is not specified.
-	StatefulComponentSpec `json:",inline"`
+	StatelessSpec `json:",inline"`
 }
 
 // ============================================================================
@@ -211,10 +211,10 @@ type MultiGatewayConfig struct {
 
 	// Overrides are applied on top of the loaded template spec.
 	// +optional
-	Overrides *StatefulComponentSpec `json:"overrides,omitempty"`
+	Overrides *StatelessSpec `json:"overrides,omitempty"`
 
 	// Inline spec, used if DeploymentTemplate is not specified.
-	StatefulComponentSpec `json:",inline"`
+	StatelessSpec `json:",inline"`
 }
 
 // MultiOrchConfig defines the configuration for a cell's MultiOrch.
@@ -228,10 +228,10 @@ type MultiOrchConfig struct {
 
 	// Overrides are applied on top of the loaded template spec.
 	// +optional
-	Overrides *StatefulComponentSpec `json:"overrides,omitempty"`
+	Overrides *StatelessSpec `json:"overrides,omitempty"`
 
 	// Inline spec, used if DeploymentTemplate is not specified.
-	StatefulComponentSpec `json:",inline"`
+	StatelessSpec `json:",inline"`
 }
 
 // CellTopoServerConfig defines the topo server config for a cell.

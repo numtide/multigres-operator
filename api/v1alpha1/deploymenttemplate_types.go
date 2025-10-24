@@ -33,15 +33,15 @@ type DeploymentTemplateSpec struct {
 
 	// MultiOrch is the template for a MultiOrch deployment.
 	// +optional
-	MultiOrch *StatefulComponentSpec `json:"multiorch,omitempty"`
+	MultiOrch *StatelessSpec `json:"multiorch,omitempty"`
 
 	// MultiGateway is the template for a MultiGateway deployment.
 	// +optional
-	MultiGateway *StatefulComponentSpec `json:"multigateway,omitempty"`
+	MultiGateway *StatelessSpec `json:"multigateway,omitempty"`
 
 	// MultiAdmin is the template for a MultiAdmin deployment.
 	// +optional
-	MultiAdmin *StatefulComponentSpec `json:"multiadmin,omitempty"`
+	MultiAdmin *StatelessSpec `json:"multiadmin,omitempty"`
 
 	// Images is the template for all container images.
 	// +optional

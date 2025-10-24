@@ -79,7 +79,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - multigres.com
+  - multigres.multigres.com
   resources:
   - multigresclusters/finalizers
   - shards/finalizers
@@ -87,7 +87,7 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - multigres.com
+  - multigres.multigres.com
   resources:
   - multigresclusters/status
   - shards/status

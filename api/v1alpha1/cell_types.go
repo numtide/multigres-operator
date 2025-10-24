@@ -36,10 +36,10 @@ type CellSpec struct {
 	Images CellImagesSpec `json:"images,omitempty"`
 
 	// MultiGateway defines the desired state of the MultiGateway deployment.
-	MultiGateway StatefulComponentSpec `json:"multigateway"`
+	MultiGateway StatelessSpec `json:"multigateway"`
 
 	// MultiOrch defines the desired state of the MultiOrch deployment.
-	MultiOrch StatefulComponentSpec `json:"multiorch"`
+	MultiOrch StatelessSpec `json:"multiorch"`
 
 	// GlobalTopoServer is a reference to the cluster-wide global topo server.
 	// This is always populated by the parent controller.
@@ -65,21 +65,20 @@ type CellImagesSpec struct {
 	MultiOrch string `json:"multiorch,omitempty"`
 }
 
-// StatefulComponentSpec defines the common spec for a stateful component like MultiOrch, MultiGateway, or MultiAdmin.
-// NOTE: This spec may be better placed somewhere else. Need to check its reusability across all controllers.
-type StatefulComponentSpec struct {
+// StatelessSpec defines the desired state for a scalable, stateless component
+// like MultiAdmin, MultiOrch, or MultiGateway.
+type StatelessSpec struct {
 	// Replicas is the desired number of pods.
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// Affinity defines the pod's scheduling constraints.
+	// Template is the PodTemplateSpec for the component.
+	// This allows users to set resources, affinity, tolerations,
+	// node selectors, and any other pod-level spec.
+	// The operator will inject the required container into this template.
 	// +optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// Resources defines the compute resource requirements.
-	// +optional
-	corev1.ResourceRequirements `json:"resources,omitempty"`
+	PodTemplate *corev1.PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 
 // GlobalTopoServerRefSpec defines a reference to the global topo server.
