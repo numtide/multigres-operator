@@ -276,23 +276,13 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	esac
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests for all modules
+test: manifests generate fmt vet ## Run tests for all modules (no integration testing)
 	@echo "==> Running tests across all modules"
 	@for mod in $(MODULES); do \
 		echo "==> Testing $$mod..."; \
 		(cd $$mod && \
 			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 			GOWORK=off go test $$(go list ./... | grep -v /e2e) -coverprofile=cover.out) || exit 1; \
-	done
-
-.PHONY: test-unit
-test-unit: manifests generate fmt vet setup-envtest ## Run unit tests for all modules (fast, no e2e)
-	@echo "==> Running unit tests across all modules"
-	@for mod in $(MODULES); do \
-		echo "==> Unit testing $$mod..."; \
-		(cd $$mod && \
-			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-			GOWORK=off go test $$(go list ./... | grep -v /e2e) -short -v) || exit 1; \
 	done
 
 .PHONY: test-integration
@@ -341,7 +331,7 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 	@echo "  - Combined data: coverage/combined.out (for CI/codecov)"
 
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
+test-e2e: manifests generate fmt vet setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
 	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
 	$(MAKE) cleanup-test-e2e
 
