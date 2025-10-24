@@ -1025,7 +1025,7 @@ spec:
                                   type: object
                                 deploymentTemplate:
                                   description: |-
-                                    DeploymentTemplate is the name of a MultigresDeploymentTemplate
+                                    DeploymentTemplate is the name of a DeploymentTemplate
                                     to load the `multigateway` spec from.
                                   type: string
                                 overrides:
@@ -3086,7 +3086,7 @@ spec:
                                   type: object
                                 deploymentTemplate:
                                   description: |-
-                                    DeploymentTemplate is the name of a MultigresDeploymentTemplate
+                                    DeploymentTemplate is the name of a DeploymentTemplate
                                     to load the `multiorch` spec from.
                                   type: string
                                 overrides:
@@ -4200,7 +4200,7 @@ spec:
                               properties:
                                 deploymentTemplate:
                                   description: |-
-                                    DeploymentTemplate is the name of a MultigresDeploymentTemplate
+                                    DeploymentTemplate is the name of a DeploymentTemplate
                                     to load the `managedTopoServer` spec from.
                                   type: string
                                 external:
@@ -6467,7 +6467,7 @@ spec:
                                               type: object
                                             cell:
                                               description: Cell is the name of the
-                                                MultiCell this pool should run in.
+                                                Cell this pool should run in.
                                               type: string
                                             dataVolumeClaimTemplate:
                                               description: |-
@@ -6677,7 +6677,7 @@ spec:
                                               type: object
                                             deploymentTemplate:
                                               description: |-
-                                                DeploymentTemplate is the name of a MultigresDeploymentTemplate
+                                                DeploymentTemplate is the name of a DeploymentTemplate
                                                 to load the `shardPool` spec from.
                                               type: string
                                             multipooler:
@@ -7802,8 +7802,8 @@ spec:
                                                   type: object
                                                 cell:
                                                   description: Cell is the name of
-                                                    the MultiCell this pool should
-                                                    run in.
+                                                    the Cell this pool should run
+                                                    in.
                                                   type: string
                                                 dataVolumeClaimTemplate:
                                                   description: |-
@@ -8271,7 +8271,7 @@ spec:
                 properties:
                   deploymentTemplate:
                     description: |-
-                      DeploymentTemplate is the name of a MultigresDeploymentTemplate
+                      DeploymentTemplate is the name of a DeploymentTemplate
                       to load the `managedTopoServer` spec from.
                     type: string
                   external:
@@ -10570,7 +10570,7 @@ spec:
                 properties:
                   deploymentTemplate:
                     description: |-
-                      DeploymentTemplate is the name of a MultigresDeploymentTemplate
+                      DeploymentTemplate is the name of a DeploymentTemplate
                       to load the `images` spec from.
                     type: string
                   imagePullPolicy:
@@ -11574,7 +11574,7 @@ spec:
                     type: object
                   deploymentTemplate:
                     description: |-
-                      DeploymentTemplate is the name of a MultigresDeploymentTemplate
+                      DeploymentTemplate is the name of a DeploymentTemplate
                       to load the `multiadmin` spec from.
                     type: string
                   overrides:

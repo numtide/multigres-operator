@@ -91,7 +91,7 @@ type CommonImagesSpec struct {
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 type ClusterImagesSpec struct {
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `images` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
@@ -120,7 +120,7 @@ type GlobalTopoServerConfig struct {
 	// +optional
 	RootPath string `json:"rootPath,omitempty"`
 
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `managedTopoServer` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
@@ -158,7 +158,7 @@ type ExternalTopoServerSpec struct {
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 type MultiAdminConfig struct {
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multiadmin` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
@@ -204,7 +204,7 @@ type CellSpecConfig struct {
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 type MultiGatewayConfig struct {
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multigateway` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
@@ -221,7 +221,7 @@ type MultiGatewayConfig struct {
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 type MultiOrchConfig struct {
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multiorch` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
@@ -245,7 +245,7 @@ type CellTopoServerConfig struct {
 	// +optional
 	RootPath string `json:"rootPath,omitempty"`
 
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `managedTopoServer` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
@@ -310,7 +310,7 @@ type ShardTemplateConfig struct {
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 type ShardPoolConfig struct {
-	// DeploymentTemplate is the name of a MultigresDeploymentTemplate
+	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `shardPool` spec from.
 	// +optional
 	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`

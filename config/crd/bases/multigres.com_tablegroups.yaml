@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: multitablegroups.multigres.com
+  name: tablegroups.multigres.com
 spec:
   group: multigres.com
   names:
-    kind: MultiTableGroup
-    listKind: MultiTableGroupList
-    plural: multitablegroups
-    singular: multitablegroup
+    kind: TableGroup
+    listKind: TableGroupList
+    plural: tablegroups
+    singular: tablegroup
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -33,7 +33,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MultiTableGroup is the Schema for the multitablegroups API
+        description: TableGroup is the Schema for the TableGroups API
         properties:
           apiVersion:
             description: |-
@@ -74,13 +74,12 @@ spec:
                 - shards
                 type: object
               shardTemplate:
-                description: ShardTemplate is the template used to create MultiShard
-                  CRs.
+                description: ShardTemplate is the template used to create Shard CRs.
                 properties:
                   pools:
                     description: |-
                       Pools defines the pod templates for the shards.
-                      This will be copied into each child MultiShard's spec.
+                      This will be copied into each child Shard's spec.
                     items:
                       description: |-
                         ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
@@ -1011,8 +1010,8 @@ spec:
                               type: object
                           type: object
                         cell:
-                          description: Cell is the name of the MultiCell this pool
-                            should run in.
+                          description: Cell is the name of the Cell this pool should
+                            run in.
                           type: string
                         dataVolumeClaimTemplate:
                           description: |-
@@ -1367,11 +1366,11 @@ spec:
             - shardTemplate
             type: object
           status:
-            description: MultiTableGroupStatus defines the observed state of MultiTableGroup
+            description: TableGroupStatus defines the observed state of TableGroup
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the MultiTableGroup's state.
+                  of the TableGroup's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -1433,8 +1432,8 @@ spec:
                 format: int64
                 type: integer
               readyShards:
-                description: ReadyShards is the number of child MultiShard CRs that
-                  are ready.
+                description: ReadyShards is the number of child Shard CRs that are
+                  ready.
                 format: int32
                 type: integer
               shards:

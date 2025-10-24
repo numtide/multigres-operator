@@ -14,7 +14,6 @@ resources:
     namespaced: true
   controller: true
   domain: multigres.com
-  group: multigres
   kind: MultiGateway
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
@@ -22,7 +21,6 @@ resources:
     crdVersion: v1
     namespaced: true
   domain: multigres.com
-  group: multigres
   kind: MultiPooler
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
@@ -30,7 +28,6 @@ resources:
     crdVersion: v1
     namespaced: true
   domain: multigres.com
-  group: multigres
   kind: Etcd
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
@@ -38,7 +35,6 @@ resources:
     crdVersion: v1
     namespaced: true
   domain: multigres.com
-  group: multigres
   kind: MultiOrch
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
@@ -47,7 +43,6 @@ resources:
     namespaced: true
   controller: true
   domain: multigres.com
-  group: multigres
   kind: MultigresCluster
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
@@ -56,8 +51,7 @@ resources:
     namespaced: true
   controller: false
   domain: multigres.com
-  group: multigres
-  kind: MultigresDeploymentTemplate
+  kind: DeploymentTemplate
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
 - api:
@@ -65,7 +59,6 @@ resources:
     namespaced: true
   controller: true
   domain: multigres.com
-  group: multigres
   kind: TopoServer
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
@@ -74,8 +67,7 @@ resources:
     namespaced: true
   controller: true
   domain: multigres.com
-  group: multigres
-  kind: MultiCell
+  kind: Cell
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
 - api:
@@ -83,8 +75,7 @@ resources:
     namespaced: true
   controller: true
   domain: multigres.com
-  group: multigres
-  kind: MultiTableGroup
+  kind: TableGroup
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
 - api:
@@ -92,8 +83,7 @@ resources:
     namespaced: true
   controller: true
   domain: multigres.com
-  group: multigres
-  kind: MultiShard
+  kind: Shard
   path: github.com/numtide/multigres-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

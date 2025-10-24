@@ -12,6 +12,9 @@ require (
 	sigs.k8s.io/controller-runtime v0.22.3
 )
 
+replace github.com/numtide/multigres-operator/api => ./api
+replace github.com/numtide/multigres-operator/pkg/resource-handler => ./pkg/resource-handler
+
 require (
 	cel.dev/expr v0.24.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect

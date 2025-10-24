@@ -32,39 +32,9 @@ rules:
 - apiGroups:
   - multigres.com
   resources:
+  - cells
   - etcds
   - multigateways
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - multigres.com
-  resources:
-  - etcds/finalizers
-  - multigateways/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - multigres.com
-  resources:
-  - etcds/status
-  - multigateways/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - multigres.multigres.com
-  resources:
-  - multicells
-  - multigresclusters
-  - multishards
-  - multitablegroups
   - toposervers
   verbs:
   - create
@@ -75,23 +45,53 @@ rules:
   - update
   - watch
 - apiGroups:
-  - multigres.multigres.com
+  - multigres.com
   resources:
-  - multicells/finalizers
-  - multigresclusters/finalizers
-  - multishards/finalizers
-  - multitablegroups/finalizers
+  - cells/finalizers
+  - etcds/finalizers
+  - multigateways/finalizers
   - toposervers/finalizers
   verbs:
   - update
 - apiGroups:
+  - multigres.com
+  resources:
+  - cells/status
+  - etcds/status
+  - multigateways/status
+  - toposervers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - multigres.multigres.com
   resources:
-  - multicells/status
+  - multigresclusters
+  - shards
+  - tablegroups
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - multigres.com
+  resources:
+  - multigresclusters/finalizers
+  - shards/finalizers
+  - tablegroups/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - multigres.com
+  resources:
   - multigresclusters/status
-  - multishards/status
-  - multitablegroups/status
-  - toposervers/status
+  - shards/status
+  - tablegroups/status
   verbs:
   - get
   - patch

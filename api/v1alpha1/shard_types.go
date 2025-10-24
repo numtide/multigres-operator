@@ -22,13 +22,13 @@ import (
 )
 
 // ============================================================================
-// MultiShard Spec (Read-only API)
+// Shard Spec (Read-only API)
 // ============================================================================
 
-// MultiShardSpec defines the desired state of MultiShard
+// ShardSpec defines the desired state of Shard
 // This spec is populated by the MultiTableGroup controller.
 
-type MultiShardSpec struct {
+type ShardSpec struct {
 	// Images required for this shard's pods.
 	// +optional
 	Images ShardImagesSpec `json:"images,omitempty"`
@@ -39,7 +39,7 @@ type MultiShardSpec struct {
 	Pools []ShardPoolSpec `json:"pools,omitempty"`
 }
 
-// ShardImagesSpec defines the images required for a MultiShard.
+// ShardImagesSpec defines the images required for a Shard.
 type ShardImagesSpec struct {
 	// +optional
 	MultiPooler string `json:"multipooler,omitempty"`
@@ -55,7 +55,7 @@ type ShardPoolSpec struct {
 	// +optional
 	Type string `json:"type,omitempty"`
 
-	// Cell is the name of the MultiCell this pool should run in.
+	// Cell is the name of the Cell this pool should run in.
 	// +optional
 	Cell string `json:"cell,omitempty"`
 
@@ -100,13 +100,13 @@ type MultiPoolerSpec struct {
 // CR Controller Status Specs
 // ============================================================================
 
-// MultiShardStatus defines the observed state of MultiShard
-type MultiShardStatus struct {
+// ShardStatus defines the observed state of Shard
+type ShardStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// Conditions represent the latest available observations of the MultiShard's state.
+	// Conditions represent the latest available observations of the Shard's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
@@ -135,24 +135,24 @@ type MultiShardStatus struct {
 // +kubebuilder:printcolumn:name="Total",type="string",JSONPath=".status.totalPods",description="Total pods"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// MultiShard is the Schema for the multishards API
-type MultiShard struct {
+// Shard is the Schema for the Shards API
+type Shard struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MultiShardSpec   `json:"spec,omitempty"`
-	Status MultiShardStatus `json:"status,omitempty"`
+	Spec   ShardSpec   `json:"spec,omitempty"`
+	Status ShardStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// MultiShardList contains a list of MultiShard
-type MultiShardList struct {
+// ShardList contains a list of Shard
+type ShardList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MultiShard `json:"items"`
+	Items           []Shard `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&MultiShard{}, &MultiShardList{})
+	SchemeBuilder.Register(&Shard{}, &ShardList{})
 }

@@ -22,18 +22,18 @@ import (
 )
 
 // ============================================================================
-// MultiCell Spec (Read-only API)
+// Cell Spec (Read-only API)
 // ============================================================================
 
-// MultiCellSpec defines the desired state of MultiCell
+// CellSpec defines the desired state of Cell
 // This spec is populated by the MultigresCluster controller.
-type MultiCellSpec struct {
+type CellSpec struct {
 	// Name is the logical name of the cell.
 	Name string `json:"name"`
 
 	// Images required for this cell's components.
 	// +optional
-	Images MultiCellImagesSpec `json:"images,omitempty"`
+	Images CellImagesSpec `json:"images,omitempty"`
 
 	// MultiGateway defines the desired state of the MultiGateway deployment.
 	MultiGateway StatefulComponentSpec `json:"multigateway"`
@@ -57,8 +57,8 @@ type MultiCellSpec struct {
 	TopologyReconciliation TopologyReconciliationSpec `json:"topologyReconciliation,omitempty"`
 }
 
-// MultiCellImagesSpec defines the images required for a MultiCell.
-type MultiCellImagesSpec struct {
+// CellImagesSpec defines the images required for a Cell.
+type CellImagesSpec struct {
 	// +optional
 	MultiGateway string `json:"multigateway,omitempty"`
 	// +optional
@@ -106,7 +106,7 @@ type CellTopoServerSpec struct {
 	External *ExternalTopoServerSpec `json:"external,omitempty"`
 
 	// ManagedSpec defines the spec for a managed, cell-local topo server.
-	// If set, the MultiCell controller will create a child TopoServer CR.
+	// If set, the Cell controller will create a child TopoServer CR.
 	// +optional
 	ManagedSpec *TopoServerSpec `json:"managedSpec,omitempty"`
 }
@@ -126,13 +126,13 @@ type TopologyReconciliationSpec struct {
 // CR Controller Status Specs
 // ============================================================================
 
-// MultiCellStatus defines the observed state of MultiCell
-type MultiCellStatus struct {
+// CellStatus defines the observed state of Cell
+type CellStatus struct {
 	// ObservedGeneration is the most recent generation observed by the controller.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// Conditions represent the latest available observations of the MultiCell's state.
+	// Conditions represent the latest available observations of the Cell's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
@@ -170,24 +170,24 @@ type MultiCellStatus struct {
 // +kubebuilder:printcolumn:name="Topo Ready",type="string",JSONPath=".status.topoServerAvailable",description="Topo server status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// MultiCell is the Schema for the multicells API
-type MultiCell struct {
+// Cell is the Schema for the Cells API
+type Cell struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MultiCellSpec   `json:"spec,omitempty"`
-	Status MultiCellStatus `json:"status,omitempty"`
+	Spec   CellSpec   `json:"spec,omitempty"`
+	Status CellStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// MultiCellList contains a list of MultiCell
-type MultiCellList struct {
+// CellList contains a list of Cell
+type CellList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MultiCell `json:"items"`
+	Items           []Cell `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&MultiCell{}, &MultiCellList{})
+	SchemeBuilder.Register(&Cell{}, &CellList{})
 }

@@ -14,7 +14,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
-var _ = Describe("MultiTableGroup Controller", func() {
+var _ = Describe("Cell Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -24,13 +24,13 @@ var _ = Describe("MultiTableGroup Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		multitablegroup := &multigresv1alpha1.MultiTableGroup{}
+		cell := &multigresv1alpha1.Cell{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind MultiTableGroup")
-			err := k8sClient.Get(ctx, typeNamespacedName, multitablegroup)
+			By("creating the custom resource for the Kind Cell")
+			err := k8sClient.Get(ctx, typeNamespacedName, cell)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &multigresv1alpha1.MultiTableGroup{
+				resource := &multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -43,16 +43,16 @@ var _ = Describe("MultiTableGroup Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &multigresv1alpha1.MultiTableGroup{}
+			resource := &multigresv1alpha1.Cell{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance MultiTableGroup")
+			By("Cleanup the specific resource instance Cell")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &MultiTableGroupReconciler{
+			controllerReconciler := &CellReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

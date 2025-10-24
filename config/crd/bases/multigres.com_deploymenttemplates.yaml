@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: multigresdeploymenttemplates.multigres.com
+  name: deploymenttemplates.multigres.com
 spec:
   group: multigres.com
   names:
-    kind: MultigresDeploymentTemplate
-    listKind: MultigresDeploymentTemplateList
-    plural: multigresdeploymenttemplates
-    singular: multigresdeploymenttemplate
+    kind: DeploymentTemplate
+    listKind: DeploymentTemplateList
+    plural: deploymenttemplates
+    singular: deploymenttemplate
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -25,7 +25,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MultigresDeploymentTemplate is the Schema for the multigresdeploymenttemplates
+        description: DeploymentTemplate is the Schema for the DeploymentTemplates
           API
         properties:
           apiVersion:
@@ -47,7 +47,7 @@ spec:
             type: object
           spec:
             description: |-
-              MultigresDeploymentTemplateSpec defines the desired state of MultigresDeploymentTemplate
+              DeploymentTemplateSpec defines the desired state of DeploymentTemplate
               These are user editable and watched by MultigresCluster controller ONLY when referenced.
             properties:
               images:
@@ -5101,8 +5101,8 @@ spec:
                         type: object
                     type: object
                   cell:
-                    description: Cell is the name of the MultiCell this pool should
-                      run in.
+                    description: Cell is the name of the Cell this pool should run
+                      in.
                     type: string
                   dataVolumeClaimTemplate:
                     description: |-
@@ -5445,8 +5445,7 @@ spec:
                 type: object
             type: object
           status:
-            description: MultigresDeploymentTemplateStatus defines the observed state
-              of MultigresDeploymentTemplate
+            description: DeploymentTemplateStatus defines the observed state of DeploymentTemplate
             properties:
               consumers:
                 description: |-

@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: multishards.multigres.com
+  name: shards.multigres.com
 spec:
   group: multigres.com
   names:
-    kind: MultiShard
-    listKind: MultiShardList
-    plural: multishards
-    singular: multishard
+    kind: Shard
+    listKind: ShardList
+    plural: shards
+    singular: shard
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -37,7 +37,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MultiShard is the Schema for the multishards API
+        description: Shard is the Schema for the Shards API
         properties:
           apiVersion:
             description: |-
@@ -996,8 +996,8 @@ spec:
                           type: object
                       type: object
                     cell:
-                      description: Cell is the name of the MultiCell this pool should
-                        run in.
+                      description: Cell is the name of the Cell this pool should run
+                        in.
                       type: string
                     dataVolumeClaimTemplate:
                       description: |-
@@ -1344,11 +1344,11 @@ spec:
                 type: array
             type: object
           status:
-            description: MultiShardStatus defines the observed state of MultiShard
+            description: ShardStatus defines the observed state of Shard
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the MultiShard's state.
+                  of the Shard's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

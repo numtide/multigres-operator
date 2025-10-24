@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: multicells.multigres.com
+  name: cells.multigres.com
 spec:
   group: multigres.com
   names:
-    kind: MultiCell
-    listKind: MultiCellList
-    plural: multicells
-    singular: multicell
+    kind: Cell
+    listKind: CellList
+    plural: cells
+    singular: cell
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -41,7 +41,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MultiCell is the Schema for the multicells API
+        description: Cell is the Schema for the Cells API
         properties:
           apiVersion:
             description: |-
@@ -62,7 +62,7 @@ spec:
             type: object
           spec:
             description: |-
-              MultiCellSpec defines the desired state of MultiCell
+              CellSpec defines the desired state of Cell
               This spec is populated by the MultigresCluster controller.
             properties:
               allCells:
@@ -2108,7 +2108,7 @@ spec:
                   managedSpec:
                     description: |-
                       ManagedSpec defines the spec for a managed, cell-local topo server.
-                      If set, the MultiCell controller will create a child TopoServer CR.
+                      If set, the Cell controller will create a child TopoServer CR.
                     properties:
                       affinity:
                         description: Affinity defines the pod's scheduling constraints.
@@ -3262,11 +3262,11 @@ spec:
             - topoServer
             type: object
           status:
-            description: MultiCellStatus defines the observed state of MultiCell
+            description: CellStatus defines the observed state of Cell
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the MultiCell's state.
+                  of the Cell's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

@@ -21,12 +21,12 @@ import (
 )
 
 // ============================================================================
-// MultigresDeploymentTemplateSpec Spec (User-editable API)
+// DeploymentTemplateSpec Spec (User-editable API)
 // ============================================================================
 
-// MultigresDeploymentTemplateSpec defines the desired state of MultigresDeploymentTemplate
+// DeploymentTemplateSpec defines the desired state of DeploymentTemplate
 // These are user editable and watched by MultigresCluster controller ONLY when referenced.
-type MultigresDeploymentTemplateSpec struct {
+type DeploymentTemplateSpec struct {
 	// ShardPool is the template for a MultiShard pool.
 	// +optional
 	ShardPool *ShardPoolSpec `json:"shardPool,omitempty"`
@@ -57,8 +57,8 @@ type MultigresDeploymentTemplateSpec struct {
 // ============================================================================
 // A MultigresCluster controller updates this status when a reference to this template is created or removed.
 
-// MultigresDeploymentTemplateStatus defines the observed state of MultigresDeploymentTemplate
-type MultigresDeploymentTemplateStatus struct {
+// DeploymentTemplateStatus defines the observed state of DeploymentTemplate
+type DeploymentTemplateStatus struct {
 	// Consumers is a list of MultigresCluster resources that are
 	// currently referencing this template.
 	// This can be used by a validating webhook to prevent deletion while in use.
@@ -84,24 +84,24 @@ type ConsumerRef struct {
 // +kubebuilder:printcolumn:name="Consumers",type="integer",JSONPath=".status.consumers.#",description="Number of clusters using this template"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// MultigresDeploymentTemplate is the Schema for the multigresdeploymenttemplates API
-type MultigresDeploymentTemplate struct {
+// DeploymentTemplate is the Schema for the DeploymentTemplates API
+type DeploymentTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   MultigresDeploymentTemplateSpec   `json:"spec,omitempty"`
-	Status MultigresDeploymentTemplateStatus `json:"status,omitempty"`
+	Spec   DeploymentTemplateSpec   `json:"spec,omitempty"`
+	Status DeploymentTemplateStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// MultigresDeploymentTemplateList contains a list of MultigresDeploymentTemplate
-type MultigresDeploymentTemplateList struct {
+// DeploymentTemplateList contains a list of DeploymentTemplate
+type DeploymentTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MultigresDeploymentTemplate `json:"items"`
+	Items           []DeploymentTemplate `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&MultigresDeploymentTemplate{}, &MultigresDeploymentTemplateList{})
+	SchemeBuilder.Register(&DeploymentTemplate{}, &DeploymentTemplateList{})
 }
