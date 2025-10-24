@@ -10,7 +10,7 @@
       ├── 🤖 MultiAdmin Resources - Deployment, Services, Etc
       │    
       │
-      ├── 💠 [MultiCell] (Child CR)
+      ├── 💠 [Cell] (Child CR)
       │    │
       │    ├── 🚪 MultiGate Resources (Deployment, Service, etc.)
       │    │    
@@ -22,15 +22,15 @@
       │         │
       │         └── 🏛️ etcd Resources (if managed)
       │
-      └── 🗃️ [MultiTableGroup] (Child CR)
+      └── 🗃️ [TableGroup] (Child CR)
            │
-           └── 📦 [MultiShard] (Child CR)
+           └── 📦 [Shard] (Child CR)
                 │
                 └── 🏊 MultiPooler and postgres resources (pods or statefulset)
                     
 
 
-📋 [MultigresDeploymentTemplate] (Separate CR - user-editable, NOT a child)
+📋 [DeploymentTemplate] (Separate CR - user-editable, NOT a child)
    ├── Contains spec sections for:
    │   ├── multiadmin
    │   ├── multigateway
@@ -46,7 +46,7 @@
 
 ## Multigres Cluster
 
-This and the MultigresDeploymentTemplate are the only two editable entries for the end-user. All other child CRs are read-only.
+This and the DeploymentTemplate are the only two editable entries for the end-user. All other child CRs are read-only.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -92,7 +92,7 @@ spec:
   # Optional
   multiadmin:
     # This tells the controller to fetch the 'multiadmin' section
-    # from the 'standard-ha' MultigresDeploymentTemplate resource.
+    # from the 'standard-ha' DeploymentTemplate resource.
     deploymentTemplate: "standard-ha"
     # Optional overrides can be added here if needed
     # overrides:
@@ -115,7 +115,7 @@ spec:
           # If no topoServer config is specified, it uses global by default
           multigateway:
             # This tells the controller to fetch the 'multiGateway' section
-            # from the 'standard-ha' MultigresDeploymentTemplate resource.
+            # from the 'standard-ha' DeploymentTemplate resource.
             deploymentTemplate: "standard-ha"
             # Optional overrides can be added always to template
             overrides:
@@ -187,7 +187,7 @@ spec:
                 pools:
                   - type: "replica"
                     cell: "us-east-1"
-                    # This name now refers to a MultigresDeploymentTemplate resource.
+                    # This name now refers to a DeploymentTemplate resource.
                     # The controller will fetch its 'shardPool' section.
                     deploymentTemplate: "default-ha"
 
@@ -227,7 +227,7 @@ spec:
             
             # --- TABLEGROUP 4: Using inline (non-templated) definition ---
             # This demonstrates that inline definitions are still supported if
-            # 'MultigresDeploymentTemplate' is omitted.
+            # 'DeploymentTemplate' is omitted.
             - name: "custom_tg"
               partitioning:
                 shards: 1
@@ -293,7 +293,7 @@ status:
 ```
 
 
-## MultigresDeploymentTemplate CR 
+## DeploymentTemplate CR 
 
 ```yaml
 # This defines a reusable template named "standard-ha".
@@ -308,7 +308,7 @@ status:
 # None of the configuration blocks are required. A template can hold only images for example, but if a user tries to use it for something else, it would error out.
 # Incomplete config blocks will either error out, be completed with defaults, or overrides if present.
 apiVersion: multigres.com/v1alpha1
-kind: MultigresDeploymentTemplate
+kind: DeploymentTemplate
 metadata:
   name: "standard-ha"
   namespace: multigres
@@ -536,20 +536,18 @@ status:
 
 
 
-## Multicell CR - Read-Only Child of MultigresCluster
+## Cell CR - Read-Only Child of MultigresCluster
 
 
 ```yaml
-# FILE: multicell-sample.yaml
-#
-# This 'MultiCell' CR is created from an item in the `spec.cells.templates` list
+# This 'Cell' CR is created from an item in the `spec.cells.templates` list
 # in the parent `MultigresCluster`.
 #
 # This specific example is for 'us-east-1', which had no 'topoServer'
 # block, so it defaults to using the 'global' topoServer.
 #
 apiVersion: multigres.com/v1alpha1
-kind: MultiCell
+kind: Cell
 metadata:
   name: "example-multigres-cluster-us-east-1"
   namespace: multigres
@@ -557,7 +555,7 @@ metadata:
     multigres.com/cluster: "example-multigres-cluster"
     multigres.com/cell: "us-east-1"
   ownerReferences:
-  # The MultiCell CR is owned by the MultigresCluster
+  # The Cell CR is owned by the MultigresCluster
   - apiVersion: multigres.com/v1alpha1
     kind: MultigresCluster
     name: "example-multigres-cluster"
@@ -606,7 +604,7 @@ spec:
   #
   # Because the 'us-east-1' cell in the parent CR had no 'topoServer'
   # block, the MultigresCluster controller sets this to 'global'.
-  # The MultiCell controller will use this to configure its MultiGateway
+  # The Cell controller will use this to configure its MultiGateway
   # to talk to the global topo server.
   topoServer:
     global:
@@ -624,8 +622,8 @@ spec:
   # ALTERNATIVE CONFIG: (Managed Local) ---
   # If this were 'us-west-2', the MultigresCluster controller would
   # have copied the 'managedSpec' block directly, like this.
-  # The MultiCell controller would then be responsible for creating
-  # a NEW 'TopoServer' CR from this spec, with this MultiCell
+  # The Cell controller would then be responsible for creating
+  # a NEW 'TopoServer' CR from this spec, with this Cell
   # as its owner.
   #
   # topoServer:
@@ -645,7 +643,7 @@ spec:
   - "us-west-2"
   - "eu-central-1"
 
-  # Topology flags for the MultiCell controller to act on.
+  # Topology flags for the Cell controller to act on.
   topologyReconciliation:
     registerCell: true
     pruneTablets: true
@@ -661,7 +659,7 @@ status:
   multiorchAvailable: "True"
   ```
 
-  ## MultiTablegroup CR - Read-Only Child of MultigresCluster
+  ## TableGroup CR - Read-Only Child of MultigresCluster
 
 ```yaml
 # This child CR is created from the 'orders_tg' entry
@@ -672,7 +670,7 @@ status:
 # 2. The multigresCluster controller watches and resolves the `deploymentTemplate` entries into the 'shardTemplate'.
 #
 apiVersion: multigres.com/v1alpha1
-kind: MultiTableGroup
+kind: TableGroup
 metadata:
   # Name is derived from database + table group name
   name: "production-db-orders-tg"
@@ -694,7 +692,7 @@ metadata:
     blockOwnerDeletion: true
 spec:
   # The parent MultigresCluster controller passes down the
-  # images relevant to this CR's children (MultiShard).
+  # images relevant to this CR's children (Shard).
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
@@ -755,19 +753,17 @@ status:
   readyShards: 2
   ```
 
-  ## MultiShard CR - Read-Only Child of MultiTableGroup
+  ## Shard CR - Read-Only Child of TableGroup
 
 ```yaml
-# FILE: multishard-sample.yaml
-#
-# This child CR is created by the 'MultiTableGroup' controller
+# This child CR is created by the 'TableGroup' controller
 # for 'production-db-orders-tg'. This is shard "0" of 2.
 #
-# The MultiTableGroup controller copies its own 'spec.images'
+# The TableGroup controller copies its own 'spec.images'
 # and its 'spec.shardTemplate.pools' into this CR's spec.
 #
 apiVersion: multigres.com/v1alpha1
-kind: MultiShard
+kind: Shard
 metadata:
   name: "production-db-orders-tg-0"
   namespace: multigres
@@ -782,21 +778,21 @@ metadata:
     multigres.com/shard: "0"
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
-    kind: MultiTableGroup
+    kind: TableGroup
     name: "production-db-orders-tg"
     uid: "d4e5f6a7-1234-5678-90ab-f0e1d2c3b4a7"
     controller: true
     blockOwnerDeletion: true
 spec:
-  # This images struct is copied from the parent 'MultiTableGroup'.
-  # The MultiShard controller will read these values to build pods.
+  # This images struct is copied from the parent 'TableGroup'.
+  # The Shard controller will read these values to build pods.
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
 
     
   # The 'pools' block is a direct copy of the
-  # 'shardTemplate.pools' from the parent MultiTableGroup.
+  # 'shardTemplate.pools' from the parent TableGroup.
   pools:
     - type: "replica"
       cell: "us-west-2"
