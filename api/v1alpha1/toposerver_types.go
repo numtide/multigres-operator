@@ -39,8 +39,8 @@ type TopoServerChildSpec struct {
 
 // TopoServerSpec defines the desired state of a managed etcd cluster.
 // This is reusable for both Global and Local TopoServers.
-// +kubebuilder:validation:XValidation:Rule="!has(self.replicas) || self.replicas % 2 == 1",Message="etcd cluster replicas should be an odd number (1, 3, 5, etc.)"
-// +kubebuilder:validation:XValidation:Rule="!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources) && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests['storage']))",Message="dataVolumeClaimTemplate must include a 'storage' resource request"
+// +kubebuilder:validation:XValidation:rule="!has(self.replicas) || self.replicas % 2 == 1",message="etcd cluster replicas should be an odd number (1, 3, 5, etc.)"
+// +kubebuilder:validation:XValidation:rule="!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources) && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests['storage']))",message="dataVolumeClaimTemplate must include a 'storage' resource request"
 type TopoServerSpec struct {
 	// Image is the etcd container image to use.
 	// +kubebuilder:validation:MinLength=1

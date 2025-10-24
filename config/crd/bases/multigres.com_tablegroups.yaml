@@ -66,7 +66,9 @@ spec:
                 description: Partitioning defines how this table group is sharded.
                 properties:
                   shards:
-                    description: Shards is the number of shards in this table group.
+                    description: |-
+                      Shards is the number of shards in this table group.
+                      NOTE: We may want to default this to one so this field is not required.
                     format: int32
                     minimum: 1
                     type: integer
@@ -1012,6 +1014,8 @@ spec:
                         cell:
                           description: Cell is the name of the Cell this pool should
                             run in.
+                          maxLength: 63
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                           type: string
                         dataVolumeClaimTemplate:
                           description: |-
@@ -1359,8 +1363,17 @@ spec:
                           - readOnly
                           type: string
                       type: object
+                      x-kubernetes-validations:
+                      - message: dataVolumeClaimTemplate must include a 'storage'
+                          resource request
+                        rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
+                          && has(self.dataVolumeClaimTemplate.resources.requests)
+                          && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                     type: array
                 type: object
+                x-kubernetes-validations:
+                - message: at least one shard pool must be defined
+                  rule: has(self.pools) && size(self.pools) > 0
             required:
             - partitioning
             - shardTemplate

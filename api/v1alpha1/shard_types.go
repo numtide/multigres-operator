@@ -27,7 +27,7 @@ import (
 
 // ShardSpec defines the desired state of Shard
 // This spec is populated by the MultiTableGroup controller.
-// +kubebuilder:validation:XValidation:Rule="has(self.pools) && size(self.pools) > 0",Message="at least one shard pool must be defined"
+// +kubebuilder:validation:XValidation:rule="has(self.pools) && size(self.pools) > 0",message="at least one shard pool must be defined"
 type ShardSpec struct {
 	// Images required for this shard's pods.
 	// +optional
@@ -49,7 +49,7 @@ type ShardImagesSpec struct {
 
 // ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
 // This is the core reusable spec for a shard's pod.
-// +kubebuilder:validation:XValidation:Rule="!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources) && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests['storage']))",Message="dataVolumeClaimTemplate must include a 'storage' resource request"
+// +kubebuilder:validation:XValidation:rule="!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources) && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests['storage']))",message="dataVolumeClaimTemplate must include a 'storage' resource request"
 type ShardPoolSpec struct {
 	// Type of the pool (e.g., "replica", "readOnly").
 	// +kubebuilder:validation:Enum=replica;readOnly

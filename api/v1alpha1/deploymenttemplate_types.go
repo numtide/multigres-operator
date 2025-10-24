@@ -26,7 +26,7 @@ import (
 
 // DeploymentTemplateSpec defines the desired state of DeploymentTemplate
 // These are user editable and watched by MultigresCluster controller ONLY when referenced.
-// +kubebuilder:validation:XValidation:Rule="has(self.shardPool) || has(self.multiOrch) || has(self.multiGateway) || has(self.multiAdmin) || has(self.images) || has(self.managedTopoServer)",Message="a deployment template must define at least one template spec (e.g., shardPool, images, etc.)"
+// +kubebuilder:validation:XValidation:rule="has(self.shardPool) || has(self.multiOrch) || has(self.multiGateway) || has(self.multiAdmin) || has(self.images) || has(self.managedTopoServer)",message="a deployment template must define at least one template spec (e.g., shardPool, images, etc.)"
 type DeploymentTemplateSpec struct {
 	// ShardPool is the template for a MultiShard pool.
 	// +optional

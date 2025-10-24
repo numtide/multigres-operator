@@ -63,6 +63,9 @@ spec:
                         name:
                           description: Name is the logical name of the cell (e.g.,
                             "us-east-1").
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                           type: string
                         spec:
                           description: Spec is the configuration for this cell.
@@ -1997,7 +2000,7 @@ spec:
                                       description: Replicas is the desired number
                                         of pods.
                                       format: int32
-                                      minimum: 1
+                                      minimum: 0
                                       type: integer
                                     resources:
                                       description: Resources defines the compute resource
@@ -2064,7 +2067,7 @@ spec:
                                 replicas:
                                   description: Replicas is the desired number of pods.
                                   format: int32
-                                  minimum: 1
+                                  minimum: 0
                                   type: integer
                                 resources:
                                   description: Resources defines the compute resource
@@ -2128,6 +2131,11 @@ spec:
                                       type: object
                                   type: object
                               type: object
+                              x-kubernetes-validations:
+                              - message: overrides can only be set if deploymentTemplate
+                                  is also set
+                                rule: '!(has(self.overrides) && (!has(self.deploymentTemplate)
+                                  || self.deploymentTemplate == ""))'
                             multiorch:
                               description: |-
                                 MultiOrchConfig defines the configuration for a cell's MultiOrch.
@@ -4058,7 +4066,7 @@ spec:
                                       description: Replicas is the desired number
                                         of pods.
                                       format: int32
-                                      minimum: 1
+                                      minimum: 0
                                       type: integer
                                     resources:
                                       description: Resources defines the compute resource
@@ -4125,7 +4133,7 @@ spec:
                                 replicas:
                                   description: Replicas is the desired number of pods.
                                   format: int32
-                                  minimum: 1
+                                  minimum: 0
                                   type: integer
                                 resources:
                                   description: Resources defines the compute resource
@@ -4189,14 +4197,18 @@ spec:
                                       type: object
                                   type: object
                               type: object
+                              x-kubernetes-validations:
+                              - message: overrides can only be set if deploymentTemplate
+                                  is also set
+                                rule: '!(has(self.overrides) && (!has(self.deploymentTemplate)
+                                  || self.deploymentTemplate == ""))'
                             topoServer:
                               description: |-
                                 CellTopoServerConfig defines the topo server config for a cell.
                                 Either deploymentTemplate or managedSpec is allowed. Not both.
                                 Overrides is only allowed when DeploymentTemplate is provided.
                                 external and deploymentSpec (or deploymentTemplate) cannot be used at the same time.
-                                NOTE: the above logic may result in convoluted code, another option could be to nest these fields down.
-                                Nesting would make the API definition more verbose but it may help reduce code complexity with the controller.
+                                NOTE: the validation code could be simpler if we use field nesting.
                               properties:
                                 deploymentTemplate:
                                   description: |-
@@ -4210,6 +4222,7 @@ spec:
                                     address:
                                       description: Address is the client URL of the
                                         external etcd cluster (e.g., "my-etcd.svc:2379").
+                                      minLength: 1
                                       type: string
                                     rootPath:
                                       description: RootPath is the etcd root path
@@ -5389,6 +5402,7 @@ spec:
                                     image:
                                       description: Image is the etcd container image
                                         to use.
+                                      minLength: 1
                                       type: string
                                     replicas:
                                       description: Replicas is the desired number
@@ -5397,11 +5411,30 @@ spec:
                                       minimum: 1
                                       type: integer
                                   type: object
+                                  x-kubernetes-validations:
+                                  - message: etcd cluster replicas should be an odd
+                                      number (1, 3, 5, etc.)
+                                    rule: '!has(self.replicas) || self.replicas %
+                                      2 == 1'
+                                  - message: dataVolumeClaimTemplate must include
+                                      a 'storage' resource request
+                                    rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
+                                      && has(self.dataVolumeClaimTemplate.resources.requests)
+                                      && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                                 rootPath:
                                   description: RootPath is the root path to use within
                                     the etcd cluster.
                                   type: string
                               type: object
+                              x-kubernetes-validations:
+                              - message: deploymentTemplate and managedSpec are mutually
+                                  exclusive
+                                rule: '!((has(self.deploymentTemplate) && self.deploymentTemplate
+                                  != "") && has(self.managedSpec))'
+                              - message: external and managed topo server (deploymentTemplate
+                                  or managedSpec) are mutually exclusive
+                                rule: '!(has(self.external) && ((has(self.deploymentTemplate)
+                                  && self.deploymentTemplate != "") || has(self.managedSpec)))'
                           type: object
                       required:
                       - name
@@ -5421,6 +5454,8 @@ spec:
                         name:
                           description: Name is the logical name of the database (e.g.,
                             "production_db").
+                          minLength: 1
+                          pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                           type: string
                         spec:
                           description: Spec is the configuration for this database.
@@ -5435,14 +5470,17 @@ spec:
                                   name:
                                     description: Name is the logical name of the table
                                       group (e.g., "default", "orders_tg").
+                                    minLength: 1
+                                    pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                     type: string
                                   partitioning:
                                     description: Partitioning defines how this table
                                       group is sharded.
                                     properties:
                                       shards:
-                                        description: Shards is the number of shards
-                                          in this table group.
+                                        description: |-
+                                          Shards is the number of shards in this table group.
+                                          NOTE: We may want to default this to one so this field is not required.
                                         format: int32
                                         minimum: 1
                                         type: integer
@@ -6468,6 +6506,8 @@ spec:
                                             cell:
                                               description: Cell is the name of the
                                                 Cell this pool should run in.
+                                              maxLength: 63
+                                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                                               type: string
                                             dataVolumeClaimTemplate:
                                               description: |-
@@ -7804,6 +7844,8 @@ spec:
                                                   description: Cell is the name of
                                                     the Cell this pool should run
                                                     in.
+                                                  maxLength: 63
+                                                  pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                                                   type: string
                                                 dataVolumeClaimTemplate:
                                                   description: |-
@@ -8168,6 +8210,13 @@ spec:
                                                   - readOnly
                                                   type: string
                                               type: object
+                                              x-kubernetes-validations:
+                                              - message: dataVolumeClaimTemplate must
+                                                  include a 'storage' resource request
+                                                rule: '!has(self.dataVolumeClaimTemplate)
+                                                  || (has(self.dataVolumeClaimTemplate.resources)
+                                                  && has(self.dataVolumeClaimTemplate.resources.requests)
+                                                  && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                                             postgres:
                                               description: Postgres defines the configuration
                                                 for the Postgres container.
@@ -8250,6 +8299,17 @@ spec:
                                               - readOnly
                                               type: string
                                           type: object
+                                          x-kubernetes-validations:
+                                          - message: overrides can only be set if
+                                              deploymentTemplate is also set
+                                            rule: '!(has(self.overrides) && (!has(self.deploymentTemplate)
+                                              || self.deploymentTemplate == ""))'
+                                          - message: dataVolumeClaimTemplate must
+                                              include a 'storage' resource request
+                                            rule: '!has(self.dataVolumeClaimTemplate)
+                                              || (has(self.dataVolumeClaimTemplate.resources)
+                                              && has(self.dataVolumeClaimTemplate.resources.requests)
+                                              && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                                         type: array
                                     type: object
                                 required:
@@ -8282,6 +8342,7 @@ spec:
                       address:
                         description: Address is the client URL of the external etcd
                           cluster (e.g., "my-etcd.svc:2379").
+                        minLength: 1
                         type: string
                       rootPath:
                         description: RootPath is the etcd root path for this topo
@@ -9418,6 +9479,7 @@ spec:
                         type: object
                       image:
                         description: Image is the etcd container image to use.
+                        minLength: 1
                         type: string
                       replicas:
                         description: Replicas is the desired number of etcd pods.
@@ -9425,6 +9487,15 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
+                    x-kubernetes-validations:
+                    - message: etcd cluster replicas should be an odd number (1, 3,
+                        5, etc.)
+                      rule: '!has(self.replicas) || self.replicas % 2 == 1'
+                    - message: dataVolumeClaimTemplate must include a 'storage' resource
+                        request
+                      rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
+                        && has(self.dataVolumeClaimTemplate.resources.requests) &&
+                        has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                   overrides:
                     description: Overrides are applied on top of the loaded template
                       spec.
@@ -10552,6 +10623,7 @@ spec:
                         type: object
                       image:
                         description: Image is the etcd container image to use.
+                        minLength: 1
                         type: string
                       replicas:
                         description: Replicas is the desired number of etcd pods.
@@ -10559,11 +10631,32 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
+                    x-kubernetes-validations:
+                    - message: etcd cluster replicas should be an odd number (1, 3,
+                        5, etc.)
+                      rule: '!has(self.replicas) || self.replicas % 2 == 1'
+                    - message: dataVolumeClaimTemplate must include a 'storage' resource
+                        request
+                      rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
+                        && has(self.dataVolumeClaimTemplate.resources.requests) &&
+                        has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                   rootPath:
                     description: RootPath is the root path to use within the etcd
                       cluster.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: deploymentTemplate and managedSpec are mutually exclusive
+                  rule: '!((has(self.deploymentTemplate) && self.deploymentTemplate
+                    != "") && has(self.managedSpec))'
+                - message: overrides can only be set if deploymentTemplate is also
+                    set
+                  rule: '!(has(self.overrides) && (!has(self.deploymentTemplate) ||
+                    self.deploymentTemplate == ""))'
+                - message: external and managed topo server (deploymentTemplate or
+                    managedSpec) are mutually exclusive
+                  rule: '!(has(self.external) && ((has(self.deploymentTemplate) &&
+                    self.deploymentTemplate != "") || has(self.managedSpec)))'
               images:
                 description: Images defines the container images for all components
                   in the cluster.
@@ -10576,6 +10669,10 @@ spec:
                   imagePullPolicy:
                     description: ImagePullPolicy overrides the default image pull
                       policy.
+                    enum:
+                    - Always
+                    - Never
+                    - IfNotPresent
                     type: string
                   imagePullSecrets:
                     description: |-
@@ -10613,6 +10710,10 @@ spec:
                       imagePullPolicy:
                         description: ImagePullPolicy overrides the default image pull
                           policy.
+                        enum:
+                        - Always
+                        - Never
+                        - IfNotPresent
                         type: string
                       imagePullSecrets:
                         description: |-
@@ -10649,6 +10750,17 @@ spec:
                   postgres:
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: deploymentTemplate and inline image fields (e.g., multiGateway,
+                    postgres, imagePullPolicy) are mutually exclusive
+                  rule: '!((has(self.deploymentTemplate) && self.deploymentTemplate
+                    != "") && (has(self.imagePullPolicy) || has(self.imagePullSecrets)
+                    || has(self.multiGateway) || has(self.multiOrch) || has(self.multiPooler)
+                    || has(self.multiAdmin) || has(self.postgres)))'
+                - message: overrides can only be set if deploymentTemplate is also
+                    set
+                  rule: '!(has(self.overrides) && (!has(self.deploymentTemplate) ||
+                    self.deploymentTemplate == ""))'
               multiadmin:
                 description: MultiAdmin defines the deployment for the cluster-wide
                   admin component.
@@ -12508,7 +12620,7 @@ spec:
                       replicas:
                         description: Replicas is the desired number of pods.
                         format: int32
-                        minimum: 1
+                        minimum: 0
                         type: integer
                       resources:
                         description: Resources defines the compute resource requirements.
@@ -12573,7 +12685,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   resources:
                     description: Resources defines the compute resource requirements.
@@ -12635,6 +12747,11 @@ spec:
                         type: object
                     type: object
                 type: object
+                x-kubernetes-validations:
+                - message: overrides can only be set if deploymentTemplate is also
+                    set
+                  rule: '!(has(self.overrides) && (!has(self.deploymentTemplate) ||
+                    self.deploymentTemplate == ""))'
             type: object
           status:
             description: MultigresClusterStatus defines the observed state of MultigresCluster

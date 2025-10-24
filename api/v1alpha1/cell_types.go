@@ -101,7 +101,7 @@ type GlobalTopoServerRefSpec struct {
 
 // CellTopoServerSpec defines the topology server configuration for this cell.
 // This is a one-of field; only one of Global, External, or ManagedSpec should be set.
-// +kubebuilder:validation:XValidation:Rule="(has(self.global) ? 1 : 0) + (has(self.external) ? 1 : 0) + (has(self.managedSpec) ? 1 : 0) <= 1",Message="only one of 'global', 'external', or 'managedSpec' can be set for topoServer"
+// +kubebuilder:validation:XValidation:rule="(has(self.global) ? 1 : 0) + (has(self.external) ? 1 : 0) + (has(self.managedSpec) ? 1 : 0) <= 1",message="only one of 'global', 'external', or 'managedSpec' can be set for topoServer"
 type CellTopoServerSpec struct {
 	// Global indicates this cell uses the global topo server.
 	// The reference details are populated by the parent controller.

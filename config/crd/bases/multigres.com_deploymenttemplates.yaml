@@ -56,6 +56,10 @@ spec:
                   imagePullPolicy:
                     description: ImagePullPolicy overrides the default image pull
                       policy.
+                    enum:
+                    - Always
+                    - Never
+                    - IfNotPresent
                     type: string
                   imagePullSecrets:
                     description: |-
@@ -1210,6 +1214,7 @@ spec:
                     type: object
                   image:
                     description: Image is the etcd container image to use.
+                    minLength: 1
                     type: string
                   replicas:
                     description: Replicas is the desired number of etcd pods.
@@ -1217,6 +1222,14 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+                x-kubernetes-validations:
+                - message: etcd cluster replicas should be an odd number (1, 3, 5,
+                    etc.)
+                  rule: '!has(self.replicas) || self.replicas % 2 == 1'
+                - message: dataVolumeClaimTemplate must include a 'storage' resource
+                    request
+                  rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
+                    && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
               multiadmin:
                 description: MultiAdmin is the template for a MultiAdmin deployment.
                 properties:
@@ -2142,7 +2155,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   resources:
                     description: Resources defines the compute resource requirements.
@@ -3129,7 +3142,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   resources:
                     description: Resources defines the compute resource requirements.
@@ -4116,7 +4129,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   resources:
                     description: Resources defines the compute resource requirements.
@@ -5103,6 +5116,8 @@ spec:
                   cell:
                     description: Cell is the name of the Cell this pool should run
                       in.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                   dataVolumeClaimTemplate:
                     description: |-
@@ -5443,7 +5458,17 @@ spec:
                     - readOnly
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: dataVolumeClaimTemplate must include a 'storage' resource
+                    request
+                  rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
+                    && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
             type: object
+            x-kubernetes-validations:
+            - message: a deployment template must define at least one template spec
+                (e.g., shardPool, images, etc.)
+              rule: has(self.shardPool) || has(self.multiOrch) || has(self.multiGateway)
+                || has(self.multiAdmin) || has(self.images) || has(self.managedTopoServer)
           status:
             description: DeploymentTemplateStatus defines the observed state of DeploymentTemplate
             properties:
@@ -5453,7 +5478,7 @@ spec:
                   currently referencing this template.
                   This can be used by a validating webhook to prevent deletion while in use.
                 items:
-                  description: ConsumerRef holds a reference to a MultigresCluster
+                  description: ConsumerRef holds a reference to a MultigDrivesCluster
                     CR that is using this template.
                   properties:
                     name:

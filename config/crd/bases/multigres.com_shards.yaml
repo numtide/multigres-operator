@@ -57,6 +57,9 @@ spec:
           metadata:
             type: object
           spec:
+            description: |-
+              ShardSpec defines the desired state of Shard
+              This spec is populated by the MultiTableGroup controller.
             properties:
               images:
                 description: Images required for this shard's pods.
@@ -998,6 +1001,8 @@ spec:
                     cell:
                       description: Cell is the name of the Cell this pool should run
                         in.
+                      maxLength: 63
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                     dataVolumeClaimTemplate:
                       description: |-
@@ -1341,8 +1346,16 @@ spec:
                       - readOnly
                       type: string
                   type: object
+                  x-kubernetes-validations:
+                  - message: dataVolumeClaimTemplate must include a 'storage' resource
+                      request
+                    rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
+                      && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                 type: array
             type: object
+            x-kubernetes-validations:
+            - message: at least one shard pool must be defined
+              rule: has(self.pools) && size(self.pools) > 0
           status:
             description: ShardStatus defines the observed state of Shard
             properties:

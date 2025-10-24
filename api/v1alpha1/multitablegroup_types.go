@@ -49,7 +49,7 @@ type PartitioningSpec struct {
 }
 
 // ShardTemplateSpec holds the template for creating Shard CRs.
-// +kubebuilder:validation:XValidation:Rule="has(self.pools) && size(self.pools) > 0",Message="at least one shard pool must be defined"
+// +kubebuilder:validation:XValidation:rule="has(self.pools) && size(self.pools) > 0",message="at least one shard pool must be defined"
 type ShardTemplateSpec struct {
 	// Pools defines the pod templates for the shards.
 	// This will be copied into each child Shard's spec.

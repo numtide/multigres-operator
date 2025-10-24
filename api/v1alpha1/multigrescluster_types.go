@@ -91,8 +91,8 @@ type CommonImagesSpec struct {
 // allowing for a template (with overrides) or inline definition.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
-// +kubebuilder:validation:XValidation:Rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && (has(self.imagePullPolicy) || has(self.imagePullSecrets) || has(self.multiGateway) || has(self.multiOrch) || has(self.multiPooler) || has(self.multiAdmin) || has(self.postgres)))",Message="deploymentTemplate and inline image fields (e.g., multiGateway, postgres, imagePullPolicy) are mutually exclusive"
-// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
+// +kubebuilder:validation:XValidation:rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && (has(self.imagePullPolicy) || has(self.imagePullSecrets) || has(self.multiGateway) || has(self.multiOrch) || has(self.multiPooler) || has(self.multiAdmin) || has(self.postgres)))",message="deploymentTemplate and inline image fields (e.g., multiGateway, postgres, imagePullPolicy) are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",message="overrides can only be set if deploymentTemplate is also set"
 type ClusterImagesSpec struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `images` spec from.
@@ -116,9 +116,9 @@ type ClusterImagesSpec struct {
 // Overrides is only allowed when DeploymentTemplate is provided.
 // external and deploymentSpec (or deploymentTemplate) cannot be used at the same time.
 // NOTE: the validation code could be simpler if we use field nesting.
-// +kubebuilder:validation:XValidation:Rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && has(self.managedSpec))",Message="deploymentTemplate and managedSpec are mutually exclusive"
-// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
-// +kubebuilder:validation:XValidation:Rule="!(has(self.external) && ((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") || has(self.managedSpec)))",Message="external and managed topo server (deploymentTemplate or managedSpec) are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && has(self.managedSpec))",message="deploymentTemplate and managedSpec are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",message="overrides can only be set if deploymentTemplate is also set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.external) && ((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") || has(self.managedSpec)))",message="external and managed topo server (deploymentTemplate or managedSpec) are mutually exclusive"
 type GlobalTopoServerConfig struct {
 	// RootPath is the root path to use within the etcd cluster.
 	// +optional
@@ -162,7 +162,7 @@ type ExternalTopoServerSpec struct {
 // MultiAdminConfig defines the configuration for the MultiAdmin component.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
-// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",message="overrides can only be set if deploymentTemplate is also set"
 type MultiAdminConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multiadmin` spec from.
@@ -212,7 +212,7 @@ type CellSpecConfig struct {
 // MultiGatewayConfig defines the configuration for a cell's MultiGateway.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
-// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",message="overrides can only be set if deploymentTemplate is also set"
 type MultiGatewayConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multigateway` spec from.
@@ -230,7 +230,7 @@ type MultiGatewayConfig struct {
 // MultiOrchConfig defines the configuration for a cell's MultiOrch.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
-// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",message="overrides can only be set if deploymentTemplate is also set"
 type MultiOrchConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multiorch` spec from.
@@ -250,8 +250,8 @@ type MultiOrchConfig struct {
 // Overrides is only allowed when DeploymentTemplate is provided.
 // external and deploymentSpec (or deploymentTemplate) cannot be used at the same time.
 // NOTE: the validation code could be simpler if we use field nesting.
-// +kubebuilder:validation:XValidation:Rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && has(self.managedSpec))",Message="deploymentTemplate and managedSpec are mutually exclusive"
-// +kubebuilder:validation:XValidation:Rule="!(has(self.external) && ((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") || has(self.managedSpec)))",Message="external and managed topo server (deploymentTemplate or managedSpec) are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && has(self.managedSpec))",message="deploymentTemplate and managedSpec are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.external) && ((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") || has(self.managedSpec)))",message="external and managed topo server (deploymentTemplate or managedSpec) are mutually exclusive"
 type CellTopoServerConfig struct {
 	// RootPath is the root path to use within the etcd cluster.
 	// +optional
@@ -325,7 +325,7 @@ type ShardTemplateConfig struct {
 // supporting templates, overrides, and inline definitions.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
-// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",message="overrides can only be set if deploymentTemplate is also set"
 type ShardPoolConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `shardPool` spec from.

@@ -35,6 +35,7 @@ rules:
   - cells
   - etcds
   - multigateways
+  - shards
   - toposervers
   verbs:
   - create
@@ -50,6 +51,7 @@ rules:
   - cells/finalizers
   - etcds/finalizers
   - multigateways/finalizers
+  - shards/finalizers
   - toposervers/finalizers
   verbs:
   - update
@@ -59,6 +61,7 @@ rules:
   - cells/status
   - etcds/status
   - multigateways/status
+  - shards/status
   - toposervers/status
   verbs:
   - get
@@ -68,7 +71,6 @@ rules:
   - multigres.multigres.com
   resources:
   - multigresclusters
-  - shards
   - tablegroups
   verbs:
   - create
@@ -82,7 +84,6 @@ rules:
   - multigres.multigres.com
   resources:
   - multigresclusters/finalizers
-  - shards/finalizers
   - tablegroups/finalizers
   verbs:
   - update
@@ -90,7 +91,6 @@ rules:
   - multigres.multigres.com
   resources:
   - multigresclusters/status
-  - shards/status
   - tablegroups/status
   verbs:
   - get
