@@ -1,0 +1,9 @@
+## Append samples of your project ##
+resources:
+- multigres_v1alpha1_multigrescluster.yaml
+- multigres_v1alpha1_multigresdeploymenttemplate.yaml
+- multigres_v1alpha1_toposerver.yaml
+- multigres_v1alpha1_multicell.yaml
+- multigres_v1alpha1_multitablegroup.yaml
+- multigres_v1alpha1_multishard.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
