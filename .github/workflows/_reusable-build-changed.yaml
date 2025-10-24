@@ -1,0 +1,26 @@
+name: Build and test changed module
+
+on:
+  workflow_call: {}
+
+jobs:
+  build-and-test-changed:
+    name: Build and test changed module
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Install Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: ./go.mod
+
+      - name: Lint
+        run: MODULES="$(make changed-modules)" make lint
+
+      - name: Build
+        run: MODULES="$(make changed-modules)" make build
+
+      - name: Test
+        run: MODULES="$(make changed-modules)" make test-integration
