@@ -1,5 +1,5 @@
 { pkgs }:
-pkgs.mkShell {
+pkgs.mkShell rec {
   # Add build dependencies
   packages = with pkgs; [
     go
@@ -8,17 +8,22 @@ pkgs.mkShell {
     docker-buildx
     kubectl
     kind
+    kustomize
     golangci-lint
+    minikube
 
     # For some script use cases
     nodejs
   ];
 
   # Add environment variables
-  env = { };
+  env = {
+    # NOTE: This is used with `make setup-envtest`
+    "ENVTEST_K8S_VERSION"= "1.33";  # Default version for Nix users
+  };
 
   # Load custom bash code
   shellHook = ''
-
+    export KUBEBUILDER_ASSETS="$PWD/bin/k8s/${env.ENVTEST_K8S_VERSION}.0-${pkgs.go.GOOS}-${pkgs.go.GOARCH}"
   '';
 }

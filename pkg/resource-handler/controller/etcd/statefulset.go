@@ -84,7 +84,7 @@ func BuildStatefulSet(
 							Name:      "etcd",
 							Image:     image,
 							Resources: etcd.Spec.Resources,
-							Env: buildEtcdEnv(
+							Env: buildContainerEnv(
 								etcd.Name,
 								etcd.Namespace,
 								replicas,

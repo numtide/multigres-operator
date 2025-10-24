@@ -37,10 +37,16 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	etcdcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/etcd"
+	multigatewaycontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/multigateway"
 	// +kubebuilder:scaffold:imports
 )
 
 var (
+	// Version information - set via ldflags at build time
+	version   = "dev"
+	buildDate = "unknown"
+	gitCommit = "unknown"
+
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -125,6 +131,12 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	setupLog.Info("Starting Multigres Operator",
+		"version", version,
+		"buildDate", buildDate,
+		"gitCommit", gitCommit,
+	)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -236,6 +248,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Etcd")
+		os.Exit(1)
+	}
+	if err := (&multigatewaycontroller.MultiGatewayReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MultiGateway")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
