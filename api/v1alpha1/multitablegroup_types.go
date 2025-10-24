@@ -43,11 +43,13 @@ type TableGroupSpec struct {
 // PartitioningSpec defines how a table group is sharded.
 type PartitioningSpec struct {
 	// Shards is the number of shards in this table group.
+	// NOTE: We may want to default this to one so this field is not required.
 	// +kubebuilder:validation:Minimum=1
 	Shards int32 `json:"shards"`
 }
 
 // ShardTemplateSpec holds the template for creating Shard CRs.
+// +kubebuilder:validation:XValidation:Rule="has(self.pools) && size(self.pools) > 0",Message="at least one shard pool must be defined"
 type ShardTemplateSpec struct {
 	// Pools defines the pod templates for the shards.
 	// This will be copied into each child Shard's spec.

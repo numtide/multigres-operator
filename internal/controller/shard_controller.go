@@ -17,9 +17,9 @@ type ShardReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=multigres.multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=multigres.multigres.com,resources=shards/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=multigres.multigres.com,resources=shards/finalizers,verbs=update
+// +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=shards/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=shards/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

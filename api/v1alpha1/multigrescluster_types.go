@@ -78,6 +78,7 @@ type ImagesTemplateSpec struct {
 type CommonImagesSpec struct {
 	// ImagePullPolicy overrides the default image pull policy.
 	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
 	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
 	// ImagePullSecrets is an optional list of references to secrets in the same namespace
@@ -90,6 +91,8 @@ type CommonImagesSpec struct {
 // allowing for a template (with overrides) or inline definition.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
+// +kubebuilder:validation:XValidation:Rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && (has(self.imagePullPolicy) || has(self.imagePullSecrets) || has(self.multiGateway) || has(self.multiOrch) || has(self.multiPooler) || has(self.multiAdmin) || has(self.postgres)))",Message="deploymentTemplate and inline image fields (e.g., multiGateway, postgres, imagePullPolicy) are mutually exclusive"
+// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
 type ClusterImagesSpec struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `images` spec from.
@@ -112,9 +115,10 @@ type ClusterImagesSpec struct {
 // Either deploymentTemplate or managedSpec is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 // external and deploymentSpec (or deploymentTemplate) cannot be used at the same time.
-// NOTE: the above logic may result in convoluted code, another option could be to nest these fields down.
-// Nesting would make the API definition more verbose but it may help reduce code complexity with the controller.
-
+// NOTE: the validation code could be simpler if we use field nesting.
+// +kubebuilder:validation:XValidation:Rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && has(self.managedSpec))",Message="deploymentTemplate and managedSpec are mutually exclusive"
+// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
+// +kubebuilder:validation:XValidation:Rule="!(has(self.external) && ((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") || has(self.managedSpec)))",Message="external and managed topo server (deploymentTemplate or managedSpec) are mutually exclusive"
 type GlobalTopoServerConfig struct {
 	// RootPath is the root path to use within the etcd cluster.
 	// +optional
@@ -143,6 +147,7 @@ type GlobalTopoServerConfig struct {
 // ExternalTopoServerSpec defines the connection details for an unmanaged, external topo server.
 type ExternalTopoServerSpec struct {
 	// Address is the client URL of the external etcd cluster (e.g., "my-etcd.svc:2379").
+	// +kubebuilder:validation:MinLength:=1
 	Address string `json:"address"`
 
 	// RootPath is the etcd root path for this topo server.
@@ -157,6 +162,7 @@ type ExternalTopoServerSpec struct {
 // MultiAdminConfig defines the configuration for the MultiAdmin component.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
+// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
 type MultiAdminConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multiadmin` spec from.
@@ -185,6 +191,9 @@ type CellsConfig struct {
 // CellTemplate defines a named cell configuration.
 type CellTemplate struct {
 	// Name is the logical name of the cell (e.g., "us-east-1").
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=63
+	// +kubebuilder:validation:Pattern:="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 	Name string `json:"name"`
 	// Spec is the configuration for this cell.
 	Spec CellSpecConfig `json:"spec"`
@@ -203,6 +212,7 @@ type CellSpecConfig struct {
 // MultiGatewayConfig defines the configuration for a cell's MultiGateway.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
+// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
 type MultiGatewayConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multigateway` spec from.
@@ -220,6 +230,7 @@ type MultiGatewayConfig struct {
 // MultiOrchConfig defines the configuration for a cell's MultiOrch.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
+// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
 type MultiOrchConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `multiorch` spec from.
@@ -238,8 +249,9 @@ type MultiOrchConfig struct {
 // Either deploymentTemplate or managedSpec is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
 // external and deploymentSpec (or deploymentTemplate) cannot be used at the same time.
-// NOTE: the above logic may result in convoluted code, another option could be to nest these fields down.
-// Nesting would make the API definition more verbose but it may help reduce code complexity with the controller.
+// NOTE: the validation code could be simpler if we use field nesting.
+// +kubebuilder:validation:XValidation:Rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && has(self.managedSpec))",Message="deploymentTemplate and managedSpec are mutually exclusive"
+// +kubebuilder:validation:XValidation:Rule="!(has(self.external) && ((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") || has(self.managedSpec)))",Message="external and managed topo server (deploymentTemplate or managedSpec) are mutually exclusive"
 type CellTopoServerConfig struct {
 	// RootPath is the root path to use within the etcd cluster.
 	// +optional
@@ -274,6 +286,8 @@ type DatabasesConfig struct {
 // DatabaseTemplate defines a named database configuration.
 type DatabaseTemplate struct {
 	// Name is the logical name of the database (e.g., "production_db").
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	Name string `json:"name"`
 	// Spec is the configuration for this database.
 	Spec DatabaseSpecConfig `json:"spec"`
@@ -289,6 +303,8 @@ type DatabaseSpecConfig struct {
 // TableGroupConfig defines the configuration for a table group.
 type TableGroupConfig struct {
 	// Name is the logical name of the table group (e.g., "default", "orders_tg").
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	Name string `json:"name"`
 
 	// Partitioning defines how this table group is sharded.
@@ -309,6 +325,7 @@ type ShardTemplateConfig struct {
 // supporting templates, overrides, and inline definitions.
 // Either DeploymentTemplate or inline fields is allowed. Not both.
 // Overrides is only allowed when DeploymentTemplate is provided.
+// +kubebuilder:validation:XValidation:Rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",Message="overrides can only be set if deploymentTemplate is also set"
 type ShardPoolConfig struct {
 	// DeploymentTemplate is the name of a DeploymentTemplate
 	// to load the `shardPool` spec from.

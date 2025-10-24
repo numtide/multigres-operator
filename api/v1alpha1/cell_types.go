@@ -29,6 +29,9 @@ import (
 // This spec is populated by the MultigresCluster controller.
 type CellSpec struct {
 	// Name is the logical name of the cell.
+	// +kubebuilder:validation:MinLength:=1
+	// +kubebuilder:validation:MaxLength:=63
+	// +kubebuilder:validation:Pattern:="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 	Name string `json:"name"`
 
 	// Images required for this cell's components.
@@ -60,8 +63,10 @@ type CellSpec struct {
 // CellImagesSpec defines the images required for a Cell.
 type CellImagesSpec struct {
 	// +optional
+	// +kubebuilder:validation:MinLength=1
 	MultiGateway string `json:"multigateway,omitempty"`
 	// +optional
+	// +kubebuilder:validation:MinLength=1
 	MultiOrch string `json:"multiorch,omitempty"`
 }
 
@@ -70,6 +75,10 @@ type CellImagesSpec struct {
 type StatelessSpec struct {
 	// Replicas is the desired number of pods.
 	// +kubebuilder:validation:Minimum=0
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Affinity defines the pod's scheduling constraints.
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
@@ -85,12 +94,14 @@ type GlobalTopoServerRefSpec struct {
 	RootPath string `json:"rootPath,omitempty"`
 
 	// ClientServiceName is the name of the etcd client service.
+	// +kubebuilder:validation:MinLength=1
 	// +optional
 	ClientServiceName string `json:"clientServiceName,omitempty"`
 }
 
 // CellTopoServerSpec defines the topology server configuration for this cell.
 // This is a one-of field; only one of Global, External, or ManagedSpec should be set.
+// +kubebuilder:validation:XValidation:Rule="(has(self.global) ? 1 : 0) + (has(self.external) ? 1 : 0) + (has(self.managedSpec) ? 1 : 0) <= 1",Message="only one of 'global', 'external', or 'managedSpec' can be set for topoServer"
 type CellTopoServerSpec struct {
 	// Global indicates this cell uses the global topo server.
 	// The reference details are populated by the parent controller.

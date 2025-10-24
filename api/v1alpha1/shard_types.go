@@ -27,7 +27,7 @@ import (
 
 // ShardSpec defines the desired state of Shard
 // This spec is populated by the MultiTableGroup controller.
-
+// +kubebuilder:validation:XValidation:Rule="has(self.pools) && size(self.pools) > 0",Message="at least one shard pool must be defined"
 type ShardSpec struct {
 	// Images required for this shard's pods.
 	// +optional
@@ -49,6 +49,7 @@ type ShardImagesSpec struct {
 
 // ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
 // This is the core reusable spec for a shard's pod.
+// +kubebuilder:validation:XValidation:Rule="!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources) && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests['storage']))",Message="dataVolumeClaimTemplate must include a 'storage' resource request"
 type ShardPoolSpec struct {
 	// Type of the pool (e.g., "replica", "readOnly").
 	// +kubebuilder:validation:Enum=replica;readOnly
@@ -57,6 +58,8 @@ type ShardPoolSpec struct {
 
 	// Cell is the name of the Cell this pool should run in.
 	// +optional
+	// +kubebuilder:validation:MaxLength:=63
+	// +kubebuilder:validation:Pattern:="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 	Cell string `json:"cell,omitempty"`
 
 	// Replicas is the desired number of pods in this pool.
