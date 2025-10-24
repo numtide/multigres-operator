@@ -169,6 +169,16 @@ test-unit: manifests generate fmt vet setup-envtest ## Run unit tests for all mo
 			go test $$(go list ./... | grep -v /e2e) -short -v) || exit 1; \
 	done
 
+.PHONY: test-integration
+test-integration: manifests generate fmt vet setup-envtest ## Run integration tests for all modules
+	@echo "==> Running integration tests across all modules"
+	@for mod in $(MODULES); do \
+		echo "==> Integration testing $$mod..."; \
+		(cd $$mod && \
+			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+			go test -tags=integration ./... -v) || exit 1; \
+	done
+
 .PHONY: test-coverage
 test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage report with HTML
 	@mkdir -p coverage
