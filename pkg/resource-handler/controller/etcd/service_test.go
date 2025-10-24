@@ -16,11 +16,11 @@ func TestBuildHeadlessService(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
+	// NOTE: error path is tested as a part of the reconciliation loop.
 	tests := map[string]struct {
-		etcd    *multigresv1alpha1.Etcd
-		scheme  *runtime.Scheme
-		want    *corev1.Service
-		wantErr bool
+		etcd   *multigresv1alpha1.Etcd
+		scheme *runtime.Scheme
+		want   *corev1.Service
 	}{
 		"minimal spec": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -151,14 +151,8 @@ func TestBuildHeadlessService(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := BuildHeadlessService(tc.etcd, tc.scheme)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("BuildHeadlessService() error = %v, wantErr %v", err, tc.wantErr)
-				return
-			}
-
-			if tc.wantErr {
-				return
+			if err != nil {
+				t.Fatalf("BuildHeadlessService() unexpected error: %v", err)
 			}
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
@@ -173,10 +167,9 @@ func TestBuildClientService(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		etcd    *multigresv1alpha1.Etcd
-		scheme  *runtime.Scheme
-		want    *corev1.Service
-		wantErr bool
+		etcd   *multigresv1alpha1.Etcd
+		scheme *runtime.Scheme
+		want   *corev1.Service
 	}{
 		"minimal spec": {
 			etcd: &multigresv1alpha1.Etcd{
@@ -293,14 +286,8 @@ func TestBuildClientService(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := BuildClientService(tc.etcd, tc.scheme)
-
-			if (err != nil) != tc.wantErr {
-				t.Errorf("BuildClientService() error = %v, wantErr %v", err, tc.wantErr)
-				return
-			}
-
-			if tc.wantErr {
-				return
+			if err != nil {
+				t.Fatalf("BuildClientService() unexpected error: %v", err)
 			}
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
