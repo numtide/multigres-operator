@@ -108,6 +108,7 @@ spec:
     #       cpu: "200m"
     #       memory: "256Mi"
 
+
   # Optional 
   cells:
     templates:
