@@ -46,14 +46,14 @@
 
 ## Multigres Cluster
 
-This and the DeploymentTemplate are the only two editable entries for the end-user. All other child CRs are read-only.
+This and the DeploymentTemplate are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted as the operator reconciles based on the top-level CR definition. Every field that uses a `deploymentTemplate` comes with an `override` option
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
   name: example-multigres-cluster
-  namespace: multigres
+  namespace: example
 spec:
   # Images are defined globally to avoid the danger of running multiple incongruent versions at once.
   # The operator will eventually take care of rolling updates in a safe way.
@@ -107,6 +107,7 @@ spec:
     #     limits:
     #       cpu: "200m"
     #       memory: "256Mi"
+
   # Optional 
   cells:
     templates:
@@ -170,6 +171,7 @@ spec:
           # external:
           #   address: "etcd-us-east-1.my-domain.com:2379"
           #   rootPath: "/multigres/us-east-1"
+          
   # ----------------------------------------------------------------
   # Database Definitions
   # ----------------------------------------------------------------
@@ -307,11 +309,13 @@ status:
 # All fields that use a template in the MultigresCluster can be configured inline without a template and template fields can also be overridden.
 # None of the configuration blocks are required. A template can hold only images for example, but if a user tries to use it for something else, it would error out.
 # Incomplete config blocks will either error out, be completed with defaults, or overrides if present.
+# When the MultigresCluster CR uses this template, an override field can also be used.
 apiVersion: multigres.com/v1alpha1
 kind: DeploymentTemplate
 metadata:
   name: "standard-ha"
-  namespace: multigres
+  # Still to be decided whether this should be cluster scoped, or namespaced.
+  namespace: example
 spec:
   # --- Template for Postgres/Multipooler Shard Pods ---
   shardPool:
@@ -460,7 +464,7 @@ spec:
   # of the template while it is in use.
   consumers:
     - name: "example-multigres-cluster"
-      namespace: "multigres"
+      namespace: "example"
     # - name: "other-cluster"
     #   namespace: "default"
 ```
@@ -477,7 +481,7 @@ kind: TopoServer
 metadata:
   # The name is derived from the parent cluster + its role
   name: "example-multigres-cluster-global"
-  namespace: multigres
+  namespace: example
   creationTimestamp: "2025-10-21T10:30:00Z"
   generation: 1
   resourceVersion: "12345"
@@ -550,7 +554,7 @@ apiVersion: multigres.com/v1alpha1
 kind: Cell
 metadata:
   name: "example-multigres-cluster-us-east-1"
-  namespace: multigres
+  namespace: example
   labels:
     multigres.com/cluster: "example-multigres-cluster"
     multigres.com/cell: "us-east-1"
@@ -674,7 +678,7 @@ kind: TableGroup
 metadata:
   # Name is derived from database + table group name
   name: "production-db-orders-tg"
-  namespace: multigres
+  namespace: example
   creationTimestamp: "2025-10-21T10:30:02Z"
   generation: 1
   resourceVersion: "12347"
@@ -766,7 +770,7 @@ apiVersion: multigres.com/v1alpha1
 kind: Shard
 metadata:
   name: "production-db-orders-tg-0"
-  namespace: multigres
+  namespace: example
   creationTimestamp: "2025-10-21T10:35:00Z"
   generation: 1
   resourceVersion: "12399"
