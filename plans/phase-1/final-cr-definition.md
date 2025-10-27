@@ -1,5 +1,19 @@
 # Final Multigres Operator CR Definition
 
+This document provides comprehensive examples of what the custom resources (CRs) will look like for Multigres Operator. This document will be use as a guideline to design the API and write the operator code with all its controllers and resources. This document does not cover how the YAML for the dependent resources (pods, deployments, etc.) will look like.
+
+## CR Topology
+
+* The operator can create a managed global etcd topology server and/or a managed local topology server. The CRD to used to create these CRs will be the same, but the global topology server will belong to the MultiGresCluster CR directly whereas the local topology server belongs to the cell. A user can choose to point the multigres cluster to an external etcd topology server, in which case this resource will not be provisioned. If no local topology server is configured, it will use global by default.
+* The reason why we chose the following model of parent MultigresCluster are as follows:
+    * Splitting logic into child CRs creates simple, specialized controllers that are easier to build and maintain
+    * This enables efficient, cascading reconciliation, as only the specific controller for a changed resource needs to run.
+    * It provides a clean, hierarchical tree for status, making it much easier to debug a specific component's status
+    * The design allows for granular API abstractions and role-based access control (RBAC) for different user types.
+    * Enforcing edits at the top-level parent CR creates a single source of truth, preventing unstable conflicts where user edits and the parent controller's logic would "duel" and overwrite each other.
+
+
+
 ```ascii
 [MultigresCluster] 🚀 (The root CR - user-editable)
       │
@@ -18,7 +32,7 @@
       │    ├── 🧠 MultiOrch Resources (Deployment, etc.)
       │    │    
       │    │
-      │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global) NOTE: The managed toposerver for cell would use the same CRD as global
+      │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global)
       │         │
       │         └── 🏛️ etcd Resources (if managed)
       │
@@ -36,7 +50,6 @@
    │   ├── multigateway
    │   ├── multiorch
    │   ├── shardPool
-   │   ├── images
    │   └── managedTopoServer
    │
    └── Watched by MultigresCluster controller ONLY when referenced
@@ -44,9 +57,16 @@
 
 ```
 
-## Multigres Cluster
 
-This and the DeploymentTemplate are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted as the operator reconciles based on the top-level CR definition. Every field that uses a `deploymentTemplate` comes with an `override` option
+
+## MultigresCluster CR
+
+* This and the DeploymentTemplate are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted as the operator reconciles based on the top-level CR definition. 
+* Every field that uses a `deploymentTemplate` comes with an `override` option
+* Images are defined globally to avoid the danger of running multiple incongruent versions at once. This would mean the operator would handle the upgrades. However we may allow defining versions across the cluster to provide more flexibility in upgrades in future iterations of the provider.
+* Users can configure this CR directly (inline) or by using deployment templates and overrides. 
+* The `DeploymentTemplates` are only used in the MultigresCluster CR, when users view a child read-only CR they will see a resolved version of the `deploymentTemplate`.
+
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -55,6 +75,10 @@ metadata:
   name: example-multigres-cluster
   namespace: example
 spec:
+
+  # ----------------------------------------------------------------
+  # Base Cluster Configuration
+  # ----------------------------------------------------------------
   # Images are defined globally to avoid the danger of running multiple incongruent versions at once.
   # The operator will eventually take care of rolling updates in a safe way.
   # NOTE: We initially had this images as part of the DeploymentTemplate but removed them in the end.
@@ -110,7 +134,6 @@ spec:
     #     limits:
     #       cpu: "200m"
     #       memory: "256Mi"
-
 
   # Optional 
   cells:
@@ -297,7 +320,15 @@ status:
 ```
 
 
-## DeploymentTemplate CR 
+### Outstanding questions
+
+* Verify that configuration structure of the manifest is true to the way would users use and understand multigres.
+* Would the shard/cell/tablegroup structure above work for a first iteration?
+* What fields should be defaulted if the user was not providing templates or inline configuration?
+
+## DeploymentTemplate CR
+
+
 
 ```yaml
 # This defines a reusable template named "standard-ha".
@@ -429,6 +460,9 @@ spec:
 
   managedTopoServer:
     image: quay.io/coreos/etcd:v3.5.17
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
     replicas: 3
     affinity:
       podAntiAffinity:
