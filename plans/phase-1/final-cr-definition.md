@@ -172,7 +172,7 @@ spec:
           # external:
           #   address: "etcd-us-east-1.my-domain.com:2379"
           #   rootPath: "/multigres/us-east-1"
-          
+
   # ----------------------------------------------------------------
   # Database Definitions
   # ----------------------------------------------------------------
@@ -305,8 +305,7 @@ status:
 # These templates are watched and reconciled by the MultigresCluster controller and ONLY when they are referenced.
 # The templates get resolved into the child CRs of MultigresCluster, the child CRs are not aware of the existence of these templates.
 # The MultigresCluster controller updates only the relevant child resource when the template is changed.
-# A deletion of a template does not trigger the deletion of the underlying configuration, but it will trigger a warning/error.
-# Or we could prevent the deletion of the template altogether while in use --> better perhaps.
+# We will prevent the deletion of a template that's being used by a MultigresCluster resource
 # All fields that use a template in the MultigresCluster can be configured inline without a template and template fields can also be overridden.
 # None of the configuration blocks are required. A template can hold only images for example, but if a user tries to use it for something else, it would error out.
 # Incomplete config blocks will either error out, be completed with defaults, or overrides if present.
