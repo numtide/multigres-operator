@@ -18,7 +18,7 @@
       │    ├── 🧠 MultiOrch Resources (Deployment, etc.)
       │    │    
       │    │
-      │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global)
+      │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global) NOTE: The managed toposerver for cell would use the same CRD as global
       │         │
       │         └── 🏛️ etcd Resources (if managed)
       │
@@ -598,12 +598,8 @@ spec:
   # ALTERNATIVE CONFIG: (Using the Global TopoServer)
   #
   # Because the 'us-east-1' cell in the parent CR had no 'topoServer'
-  # block, the MultigresCluster controller sets this to 'global'.
-  # The Cell controller will use this to configure its MultiGateway
-  # to talk to the global topo server.
-  topoServer:
-    global:
-      rootPath: "/multigres/global"
+  # block, the MultigresCluster controller sets this to empty.
+  # topoServer: {}
 
   # ALTERNATIVE CONFIG: Inline Definition (External)
   # If this were 'us-east-1', the MultigresCluster controller would
