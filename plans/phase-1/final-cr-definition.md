@@ -111,155 +111,153 @@ spec:
 
   # Optional 
   cells:
-    templates:
-      - name: "us-east-1"
-        spec:
-          # If no topoServer config is specified, it uses global by default
-          multigateway:
-            # This tells the controller to fetch the 'multiGateway' section
-            # from the 'standard-ha' DeploymentTemplate resource.
-            deploymentTemplate: "standard-ha"
-            # Optional overrides can be added always to template
-            overrides:
-              resources:
-                limits:
-                  cpu: "2"
-          # --- ALTERNATIVE: Inline Definition ---
-          # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-          # spec:
-          #   replicas: 2
-          #   resources:
-          #     requests:
-          #       cpu: "500m"
-          #       memory: "512Mi"
-          #     limits:
-          #       cpu: "1"
-          #       memory: "1Gi"
-          multiorch:
-            # ---  Inline Definition ---
-            # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-            replicas: 1
+    - name: "us-east-1"
+      spec:
+        # If no topoServer config is specified, it uses global by default
+        multigateway:
+          # This tells the controller to fetch the 'multiGateway' section
+          # from the 'standard-ha' DeploymentTemplate resource.
+          deploymentTemplate: "standard-ha"
+          # Optional overrides can be added always to template
+          overrides:
             resources:
-            requests:
-                cpu: "100m"
-                memory: "128Mi"
-            limits:
-                cpu: "200m"
-                memory: "256Mi"
-        # No topology config means it uses global by default
+              limits:
+                cpu: "2"
+        # --- ALTERNATIVE: Inline Definition ---
+        # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
+        # spec:
+        #   replicas: 2
+        #   resources:
+        #     requests:
+        #       cpu: "500m"
+        #       memory: "512Mi"
+        #     limits:
+        #       cpu: "1"
+        #       memory: "1Gi"
+        multiorch:
+          # ---  Inline Definition ---
+          # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
+          replicas: 1
+          resources:
+          requests:
+              cpu: "100m"
+              memory: "128Mi"
+          limits:
+              cpu: "200m"
+              memory: "256Mi"
+      # No topology config means it uses global by default
 
-      - name: "us-west-2"
-        spec:
-          multigateway:
-            # Using the template for this cell as well
-            deploymentTemplate: "standard-ha"
-          multiorch:
-            deploymentTemplate: "standard-ha"
-          topoServer: # This cell uses a managed local topo server
-            deploymentTemplate: "standard-ha"
-            rootPath: "/multigres/us-west-2"
-            # --- ALTERNATIVE: Inline Definition ---
-            # managedSpec:
-            #   rootPath: "/multigres/us-west-2"
-            #   image: quay.io/coreos/etcd:v3.5.17
-            #   replicas: 2
-            #   dataVolumeClaimTemplate:
-            #     accessModes: ["ReadWriteOnce"]
-            #     resources:
-            #       requests:
-            #         storage: "5Gi"
-          # You can specify external per cell as well or it takes global by default
-          # external:
-          #   address: "etcd-us-east-1.my-domain.com:2379"
-          #   rootPath: "/multigres/us-east-1"
+    - name: "us-west-2"
+      spec:
+        multigateway:
+          # Using the template for this cell as well
+          deploymentTemplate: "standard-ha"
+        multiorch:
+          deploymentTemplate: "standard-ha"
+        topoServer: # This cell uses a managed local topo server
+          deploymentTemplate: "standard-ha"
+          rootPath: "/multigres/us-west-2"
+          # --- ALTERNATIVE: Inline Definition ---
+          # managedSpec:
+          #   rootPath: "/multigres/us-west-2"
+          #   image: quay.io/coreos/etcd:v3.5.17
+          #   replicas: 2
+          #   dataVolumeClaimTemplate:
+          #     accessModes: ["ReadWriteOnce"]
+          #     resources:
+          #       requests:
+          #         storage: "5Gi"
+        # You can specify external per cell as well or it takes global by default
+        # external:
+        #   address: "etcd-us-east-1.my-domain.com:2379"
+        #   rootPath: "/multigres/us-east-1"
 
   # ----------------------------------------------------------------
   # Database Definitions
   # ----------------------------------------------------------------
   # Optional
   databases:
-    templates:
-      - name: "production_db"
-        spec:
-          tablegroups:
-            # --- TABLEGROUP 1: Uses the 'shardPool' section from an external template ---
-            - name: "default"
-              partitioning:
-                shards: 1
-              shardTemplate:
-                pools:
-                  - type: "replica"
-                    cell: "us-east-1"
-                    # This name now refers to a DeploymentTemplate resource.
-                    # The controller will fetch its 'shardPool' section.
-                    deploymentTemplate: "default-ha"
+    - name: "production_db"
+      spec:
+        tablegroups:
+          # --- TABLEGROUP 1: Uses the 'shardPool' section from an external template ---
+          - name: "default"
+            partitioning:
+              shards: 1
+            shardTemplate:
+              pools:
+                - type: "replica"
+                  cell: "us-east-1"
+                  # This name now refers to a DeploymentTemplate resource.
+                  # The controller will fetch its 'shardPool' section.
+                  deploymentTemplate: "default-ha"
 
-            # --- TABLEGROUP 2: Uses other external templates ---
-            - name: "orders_tg"
-              partitioning:
-                shards: 2
-              shardTemplate:
-                pools:
-                  - type: "replica"
-                    cell: "us-west-2"
-                    deploymentTemplate: "orders-ha-replica" # Refers to another template CR
+          # --- TABLEGROUP 2: Uses other external templates ---
+          - name: "orders_tg"
+            partitioning:
+              shards: 2
+            shardTemplate:
+              pools:
+                - type: "replica"
+                  cell: "us-west-2"
+                  deploymentTemplate: "orders-ha-replica" # Refers to another template CR
 
-                  - type: "readOnly"
-                    cell: "us-east-1"
-                    deploymentTemplate: "orders-read-only" # Refers to another template CR
+                - type: "readOnly"
+                  cell: "us-east-1"
+                  deploymentTemplate: "orders-read-only" # Refers to another template CR
 
-            # --- TABLEGROUP 3: Uses external template with overrides ---
-            - name: "analytics_tg"
-              partitioning:
-                shards: 1
-              shardTemplate:
-                pools:
-                  - type: "replica"
-                    cell: "us-east-1"
-                    deploymentTemplate: "default-ha" # Use template as base
-                    # Overrides are applied *after* fetching the template spec
-                    overrides:
-                      dataVolumeClaimTemplate:
-                        resources:
-                          requests:
-                            storage: "1000Gi"
-                      postgres:
-                        resources:
-                          requests:
-                            cpu: "4"
-            
-            # --- TABLEGROUP 4: Using inline (non-templated) definition ---
-            # This demonstrates that inline definitions are still supported if
-            # 'DeploymentTemplate' is omitted.
-            - name: "custom_tg"
-              partitioning:
-                shards: 1
-              shardTemplate:
-                pools:
-                  - type: "replica"
-                    cell: "us-west-2"
-                    replicas: 2 
+          # --- TABLEGROUP 3: Uses external template with overrides ---
+          - name: "analytics_tg"
+            partitioning:
+              shards: 1
+            shardTemplate:
+              pools:
+                - type: "replica"
+                  cell: "us-east-1"
+                  deploymentTemplate: "default-ha" # Use template as base
+                  # Overrides are applied *after* fetching the template spec
+                  overrides:
                     dataVolumeClaimTemplate:
-                      accessModes: ["ReadWriteOnce"]
                       resources:
                         requests:
-                          storage: "75Gi"
+                          storage: "1000Gi"
                     postgres:
                       resources:
                         requests:
-                          cpu: "1"
-                          memory: "1Gi"
-                        limits:
-                          cpu: "1"
-                          memory: "2Gi"
-                    multipooler:
-                      resources:
-                        requests:
-                          cpu: "100m"
-                          memory: "128Mi"
-                        limits:
-                          cpu: "200m"
-                          memory: "256Mi"
+                          cpu: "4"
+          
+          # --- TABLEGROUP 4: Using inline (non-templated) definition ---
+          # This demonstrates that inline definitions are still supported if
+          # 'DeploymentTemplate' is omitted.
+          - name: "custom_tg"
+            partitioning:
+              shards: 1
+            shardTemplate:
+              pools:
+                - type: "replica"
+                  cell: "us-west-2"
+                  replicas: 2 
+                  dataVolumeClaimTemplate:
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: "75Gi"
+                  postgres:
+                    resources:
+                      requests:
+                        cpu: "1"
+                        memory: "1Gi"
+                      limits:
+                        cpu: "1"
+                        memory: "2Gi"
+                  multipooler:
+                    resources:
+                      requests:
+                        cpu: "100m"
+                        memory: "128Mi"
+                      limits:
+                        cpu: "200m"
+                        memory: "256Mi"
 
 # --- Status ---
 status:
