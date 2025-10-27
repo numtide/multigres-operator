@@ -638,6 +638,11 @@ spec:
   #           storage: "5Gi"
 
   # List of all cells in the cluster for discovery.
+  # NOTE: The reason why this is here is that the cell CR is the resource managing the creation of MultiGate resources. 
+  # If this information is not there, then either the MultiCell or the MultiGate resource would need to read that from MultiCluster or the topology server.
+  # That being said, if multigate can read from the topology server directly to see the cells, this may not be needed.
+  # We will keep for now.
+
   allCells:
   - "us-east-1"
   - "us-west-2"
