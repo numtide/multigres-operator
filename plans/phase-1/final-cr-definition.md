@@ -57,16 +57,19 @@ metadata:
 spec:
   # Images are defined globally to avoid the danger of running multiple incongruent versions at once.
   # The operator will eventually take care of rolling updates in a safe way.
+  # NOTE: We initially had this images as part of the DeploymentTemplate but removed them in the end.
+  # We did this to avoid confusion that multiple templates could mean multi image sets.
+  # Currently we will only support images globally (except for toposerver which is considered a separate resource)
   # Optional
   images:
-    deploymentTemplate: "standard-ha"
-    # --- ALTERNATIVE: Inline Definition ---
-    # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-    # multigateway: "multigres/multigres:latest"
-    # multiorch: "multigres/multigres:latest"
-    # multipooler: "multigres/multigres:latest"
-    # multiadmin: "multigres/multigres:latest"
-    # postgres: "postgres:15.3"
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
+    multigateway: "multigres/multigres:latest"
+    multiorch: "multigres/multigres:latest"
+    multipooler: "multigres/multigres:latest"
+    multiadmin: "multigres/multigres:latest"
+    postgres: "postgres:15.3"
 
   # ----------------------------------------------------------------
   # Base Cluster Configuration
@@ -308,6 +311,9 @@ status:
 # None of the configuration blocks are required. A template can hold only images for example, but if a user tries to use it for something else, it would error out.
 # Incomplete config blocks will either error out, be completed with defaults, or overrides if present.
 # When the MultigresCluster CR uses this template, an override field can also be used.
+# NOTE: We initially had  images as part of the DeploymentTemplate but removed them in the end.
+# We did this to avoid confusion that multiple templates could mean multi image sets.
+# Currently we will only support images globally (except for toposerver which is considered a separate resource)
 apiVersion: multigres.com/v1alpha1
 kind: DeploymentTemplate
 metadata:
@@ -420,17 +426,6 @@ spec:
       limits:
         cpu: "200m"
         memory: "256Mi"
-  
-  # --- Template for all multigres images ---    
-  images:
-    imagePullPolicy: "IfNotPresent"
-    imagePullSecrets:
-      - name: "my-registry-secret"
-    multigateway: "multigres/multigres:latest"
-    multiorch: "multigres/multigres:latest"
-    multipooler: "multigres/multigres:latest"
-    multiadmin: "multigres/multigres:latest"
-    postgres: "postgres:15.3"
 
   managedTopoServer:
     image: quay.io/coreos/etcd:v3.5.17
@@ -794,7 +789,6 @@ spec:
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
-
     
   # The 'pools' block is a direct copy of the
   # 'shardTemplate.pools' from the parent TableGroup.
