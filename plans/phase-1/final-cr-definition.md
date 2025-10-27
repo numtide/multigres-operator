@@ -686,7 +686,7 @@ metadata:
   labels:
     multigres.com/cluster: "example-multigres-cluster"
     multigres.com/database: "production_db"
-    multigres.com/table-group: "orders_tg"
+    multigres.com/tablegroup: "orders_tg"
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
     kind: MultigresCluster
@@ -778,7 +778,7 @@ metadata:
   labels:
     multigres.com/cluster: "example-multigres-cluster"
     multigres.com/database: "production_db"
-    multigres.com/table-group: "orders_tg"
+    multigres.com/tablegroup: "orders_tg"
     multigres.com/shard: "0"
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
