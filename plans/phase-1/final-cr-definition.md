@@ -458,8 +458,6 @@ spec:
  status:
   # This list is populated by the MultigresCluster controllers using it.
   # It shows which clusters are actively referencing this template.
-  # This can be used by a validating webhook to block deletion
-  # of the template while it is in use.
   consumers:
     - name: "example-multigres-cluster"
       namespace: "example"
