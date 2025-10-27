@@ -650,6 +650,7 @@ status:
     lastTransitionTime: "2025-10-21T10:36:00Z"
     message: "MultiGateway is healthy"
   gatewayReplicas: 2
+  topoServer: {} # This would get populated with rootPath and address if configuring the local topoServer
   gatewayReadyReplicas: 2
   gatewayServiceName: "example-multigres-cluster-us-east-1-gateway"
   multiorchAvailable: "True"
