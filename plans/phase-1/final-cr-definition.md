@@ -762,7 +762,7 @@ status:
 
 ```yaml
 # This child CR is created by the 'TableGroup' controller
-# for 'production-db-orders-tg'. This is shard "0" of 2.
+# for 'production-db-orders-tg'. This is shard index "0".
 #
 # The TableGroup controller copies its own 'spec.images'
 # and its 'spec.shardTemplate.pools' into this CR's spec.
