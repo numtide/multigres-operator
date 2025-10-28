@@ -393,7 +393,7 @@ status:
   * All fields are optional, although at least one field is required for the creation of this resource.
   * When created, these templates are not watched or reconciled by any controller; they must first be referenced by at least one `MultigresCluster` CR to be reconciled.
   * They cannot be deleted if they are referenced by at least one `MultigresCluster` CR (enforced by a webhook).
-  * The content of these templates is resolved by the `MultigresCluster` controller and used to configure its children CRs. A user can only see references to these templates on the `MultigresCluster`; they are not referenced by its children CRs.
+  * The content of these templates is resolved by the `MultigresCluster` controller and used to configure its children CRs. A user can only see references to these templates on the `MultigresCluster`; they are not referenced by its children CRs. NOTE: A proposed idea here would be to add a status field in the children showing what template/s are using.
   * This resource is namespaced to support RBAC scoping for different teams (e.g., DBAs vs. application developers).
   * We initially had images as part of the DeploymentTemplate but we removed it to prevent users from thinking that multiple templates meant multiple image sets since this is not possible at the moment as images are a global resource (except for toposerver which is considered a separate resource)
 
