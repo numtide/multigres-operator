@@ -632,7 +632,7 @@ status:
 
 * The `Cell` CR is owned by the `MultigresCluster`.
 * The `Cell` CR owns the `MultiOrch` and `MultiGateway` resources (Deployments, Services, etc.) and the `LocalTopoServer` CR if configured.
-* The `allCells` field is here to manage the creation of `multigate` and `multiorch` resources. We are assuming that this information is needed for now so it is passed down by the `MultigresCluster` CR
+* The `allCells` field is here to manage the creation of `multiGateway` and `multiOrch` resources. We are assuming that this information is needed for now so it is passed down by the `MultigresCluster` CR
 
 ```yaml
 # This 'Cell' CR is created from an item in the `spec.cells.templates` list
@@ -677,8 +677,8 @@ spec:
         cpu: "2"
         memory: "1Gi"
 
- # The multiorch spec is copied from multigrescluster.
-  multiorch:
+ # The multiOrch spec is copied from MultigresCluster.
+  multiOrch:
     replicas: 1
     resources:
       requests:
