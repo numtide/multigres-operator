@@ -72,7 +72,7 @@ This proposal advocates for a parent/child CRD model to address these challenges
       │
       ├── 💠 [Cell] (Child CR)
       │    │
-      │    ├── 🚪 MultiGate Resources (Deployment, Service, etc.)
+      │    ├── 🚪 MultiGateway Resources (Deployment, Service, etc.)
       │    │    
       │    │
       │    ├── 🧠 MultiOrch Resources (Deployment, etc.)
@@ -562,22 +562,17 @@ status:
 
 
 ```yaml
-# This child CR is created from the `spec.globalTopoServer` block 
-# in the parent `MultigresCluster`.
 apiVersion: multigres.com/v1alpha1
 kind: TopoServer
 metadata:
-  # The name is derived from the parent cluster + its role
   name: "example-multigres-cluster-global"
   namespace: example
   creationTimestamp: "2025-10-21T10:30:00Z"
   generation: 1
   resourceVersion: "12345"
   uid: "b2c3d4e5-1234-5678-90ab-f0e1d2c3b4a5"
-  # Labels link it to the parent cluster
   labels:
     multigres.com/cluster: "example-multigres-cluster"
-  # OwnerReference makes it a child of MultigresCluster for garbage collection
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
     kind: MultigresCluster
@@ -586,8 +581,6 @@ metadata:
     controller: true
     blockOwnerDeletion: true
 spec:
-  # The spec is inherited from MultigresCluster
-  # in the parent CR.
   rootPath: "/multigres/global"
   image: "quay.io/coreos/etcd:v3.5.17"
   replicas: 3
@@ -635,9 +628,6 @@ status:
 * The `allCells` field is here to manage the creation of `multiGateway` and `multiOrch` resources. We are assuming that this information is needed for now so it is passed down by the `MultigresCluster` CR
 
 ```yaml
-# This 'Cell' CR is created from an item in the `spec.cells.templates` list
-# in the parent `MultigresCluster`.
-#
 # This specific example is for 'us-east-1a', which had no 'topoServer'
 # block, so it defaults to using the 'global' topoServer.
 #
@@ -650,23 +640,17 @@ metadata:
     multigres.com/cluster: "example-multigres-cluster"
     multigres.com/cell: "us-east-1a"
   ownerReferences:
-  # The Cell CR is owned by the MultigresCluster
   - apiVersion: multigres.com/v1alpha1
     kind: MultigresCluster
     name: "example-multigres-cluster"
     uid: "a1b2c3d4-1234-5678-90ab-f0e1d2c3b4a5"
     controller: true
 spec:
-  # The logical name of the cell, copied from the template.
   name: "us-east-1a"
-
-  # The parent MultigresCluster passes down the relevant
-  # images for this controller to use.
   images:
     multigateway: "multigres/multigres:latest"
     multiorch: "multigres/multigres:latest"
 
-  # The multiGateway spec is copied from MultigresCluster
   multiGateway:
     replicas: 2
     resources:
@@ -677,7 +661,6 @@ spec:
         cpu: "2"
         memory: "1Gi"
 
- # The multiOrch spec is copied from MultigresCluster.
   multiOrch:
     replicas: 1
     resources:
@@ -758,7 +741,6 @@ status:
 apiVersion: multigres.com/v1alpha1
 kind: TableGroup
 metadata:
-  # Name is derived from database + table group name
   name: "production-db-orders-tg"
   namespace: example
   creationTimestamp: "2025-10-21T10:30:02Z"
