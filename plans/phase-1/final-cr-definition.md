@@ -666,8 +666,8 @@ spec:
     multigateway: "multigres/multigres:latest"
     multiorch: "multigres/multigres:latest"
 
-  # The multigateway spec is copied from multigrescluster
-  multigateway:
+  # The multiGateway spec is copied from MultigresCluster
+  multiGateway:
     replicas: 2
     resources:
       requests:
