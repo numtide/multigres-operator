@@ -1,19 +1,49 @@
-# Final Multigres Operator CR Definition
+# Multigres Operator API Design
 
-This document provides comprehensive examples of what the custom resources (CRs) will look like for Multigres Operator. This document will be use as a guideline to design the API and write the operator code with all its controllers and resources. This document does not cover how the YAML for the dependent resources (pods, deployments, etc.) will look like.
+* **Status:** Provisional
+* **Creation Date:** 2025-10-28
 
-The CRs contain a working definition with alternatives presented in comments to show the various configuration options.
+## Summary
 
-## CR Topology
+This proposal defines the `v1alpha1` API for the Multigres Operator.
 
-* The operator can create a managed global etcd topology server and/or a managed local topology server. The CRD to used to create these CRs will be the same, but the global topology server will belong to the MultiGresCluster CR directly whereas the local topology server belongs to the cell. A user can choose to point the multigres cluster to an external etcd topology server, in which case this resource will not be provisioned. If no local topology server is configured, it will use global by default.
-* The reason why we chose the following model of parent MultigresCluster are as follows:
-    * Splitting logic into child CRs creates simple, specialized controllers that are easier to build and maintain
-    * This enables efficient, cascading reconciliation, as only the specific controller for a changed resource needs to run.
-    * It provides a clean, hierarchical tree for status, making it much easier to debug a specific component's status
-    * The design allows for granular API abstractions and role-based access control (RBAC) for different user types.
-    * Enforcing edits at the top-level parent CR creates a single source of truth, preventing unstable conflicts where user edits and the parent controller's logic would "duel" and overwrite each other.
+The design is centered on two user-editable Custom Resources (CRs):
 
+1.  **`MultigresCluster`**: The root resource that defines the desired state (intent) of the entire cluster.
+2.  **`DeploymentTemplate`**: A reusable, namespaced resource for defining common component configurations (e.g., "standard-ha", "analytics-workload").
+
+All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) are implemented as read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers. This enables a clean, hierarchical, and observable architecture.
+
+## Motivation
+
+Managing a distributed, sharded database system across multiple failure domains (cells) is inherently complex. A single, monolithic CRD for this task would be unmanageable, difficult to debug, and lead to a complex, monolithic controller.
+
+This proposal advocates for a parent/child CRD model to address these challenges. The primary motivations for this design are:
+
+  * **Separation of Concerns:** Splitting logic into child CRs (`Cell`, `TableGroup`, `Shard`) results in simple, specialized controllers that are easier to build, test, and maintain.
+  * **Hierarchical Observability:** This model provides a clean, hierarchical tree for status aggregation. A failure in a specific `Shard` can be clearly observed on the `Shard` CR, its `TableGroup` parent, and finally aggregated up to the root `MultigresCluster` status.
+  * **Efficient, Event-Driven Reconciliation:** This architecture enables cascading reconciliation. A change to the `MultigresCluster` only triggers its controller, which may then update a `Cell` child CR. This, in turn, triggers the `Cell` controller, and so on. Only the specific controller for a changed resource needs to run.
+  * **Idempotency and Single Source of Intent:** By making the `MultigresCluster` the single editable source of truth, we prevent unstable conflicts. Any manual edits to read-only child CRs are automatically reverted by their controller, ensuring the cluster's *realized state* always converges with the parent CR's *desired state*.
+
+## Goals
+
+  * Provide a declarative, Kubernetes-native API for deploying a multi-cell, sharded Multigres cluster.
+  * Separate user-facing *intent* (`MultigresCluster`) from operator-managed *realized state* (child CRs).
+  * Enable configuration reuse across components and clusters via a `DeploymentTemplate` resource.
+  * Establish a clear, hierarchical ownership model using `OwnerReferences` for clean garbage collection and status aggregation.
+  * Define a clear API contract for managing both global and cell-local topology servers (etcd), including external, unmanaged instances.
+
+## Non-Goals
+
+  * This document does not define the specific implementation details of each controller's reconciliation logic.
+  * This document does not cover Day 2 operations such as database backup, restore, monitoring, or alerting. These will be addressed in future proposals.
+  * This document does not cover automated, in-place version upgrades, though the global `images` spec provides a foundation for this.
+
+## Proposal: API Architecture and Resource Topology
+
+  * The operator can create a managed global etcd topology server and/or a managed local topology server. The same `TopoServer` CRD is used for both. The global `TopoServer` will belong to the `MultigresCluster` CR directly, whereas the local `TopoServer` belongs to the `Cell` CR.
+  * A user can choose to point the cluster to an external etcd topology server, in which case the `TopoServer` resource will not be provisioned.
+  * If no local topology server is configured for a cell, it will use the global topo server by default.
 
 
 ```ascii
@@ -56,19 +86,22 @@ The CRs contain a working definition with alternatives presented in comments to 
    │
    └── Watched by MultigresCluster controller ONLY when referenced
        └── Resolved into child CRs (children are unaware of templates)
-
 ```
 
+## API Specification
 
+This section provides the comprehensive definitions and examples for each Custom Resource.
 
-## MultigresCluster CR
+### MultigresCluster CR
 
-* This and the DeploymentTemplate are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted as the operator reconciles based on the top-level CR definition. 
-* Every field that uses a `deploymentTemplate` comes with an `override` option
-* Images are defined globally to avoid the danger of running multiple incongruent versions at once. This would mean the operator would handle the upgrades. However we may allow defining versions across the cluster to provide more flexibility in upgrades in future iterations of the provider.
-* Users can configure this CR directly (inline) or by using deployment templates and overrides. 
-* The `DeploymentTemplates` are only used in the MultigresCluster CR, when users view a child read-only CR they will see a resolved version of the `deploymentTemplate`.
-* This CR is essentially a combination of its child CRs. So the configuration blocks you see below will be split into its own children read-only CRs with their own controllers managing them and each with their own resources. The MultigresCluster also manages its own resources (non-CRs), in particular `MultiAdmin` but for the most part all resources are managed by the children CRs. We will separate the config sections with comment headings to make it easy for the reader to differentiate the various child resources and other config blocks. It's worth pointing out here that the MultigresCluster does not created its granchildren, so the shard configuration below is passed on to the tablegroup CR and it creates its own children shards from it.
+  * This and the `DeploymentTemplate` are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted as the operator reconciles based on the top-level CR definition.
+  * Every field that uses a `deploymentTemplate` comes with an `override` option.
+  * Images are defined globally to avoid the danger of running multiple incongruent versions at once. This implies the operator will handle upgrades. Future iterations may allow defining versions across the cluster to provide more flexibility.
+  * Users can configure this CR directly (inline) or by using deployment templates and overrides.
+  * The `DeploymentTemplates` are only used in the `MultigresCluster` CR. When users view a child read-only CR, they will see a resolved version of the `deploymentTemplate`.
+  * This CR is essentially a composition of its child CRs. The configuration blocks seen below will be split into their own children read-only CRs with their own controllers.
+  * The `MultigresCluster` also manages its own resources (non-CRs), in particular `MultiAdmin`.
+  * The `MultigresCluster` does not create its grandchildren; for example, the shard configuration is passed on to the `TableGroup` CR, which then creates its own children `Shard` CRs.
 
 
 ```yaml
@@ -145,7 +178,7 @@ spec:
   
   # Optional 
   cells:
-    - name: "us-east-1"
+    - name: "us-east-1a"
       spec:
         # If no topoServer config is specified, it uses global by default
         multigateway:
@@ -173,15 +206,14 @@ spec:
           # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
           replicas: 1
           resources:
-          requests:
+            requests:
               cpu: "100m"
               memory: "128Mi"
-          limits:
+            limits:
               cpu: "200m"
               memory: "256Mi"
-      # No topology config means it uses global by default
 
-    - name: "us-west-2"
+    - name: "us-east-1b"
       spec:
         multigateway:
           # Using the template for this cell as well
@@ -190,10 +222,10 @@ spec:
           deploymentTemplate: "standard-ha"
         topoServer: # This cell uses a managed local topo server
           deploymentTemplate: "standard-ha"
-          rootPath: "/multigres/us-west-2"
+          rootPath: "/multigres/us-east-1b"
           # --- ALTERNATIVE: Inline Definition ---
           # managedSpec:
-          #   rootPath: "/multigres/us-west-2"
+          #   rootPath: "/multigres/us-east-1b"
           #   image: quay.io/coreos/etcd:v3.5.17
           #   replicas: 2
           #   dataVolumeClaimTemplate:
@@ -203,8 +235,8 @@ spec:
           #         storage: "5Gi"
         # You can specify external per cell as well or it takes global by default
         # external:
-        #   address: "etcd-us-east-1.my-domain.com:2379"
-        #   rootPath: "/multigres/us-east-1"
+        #   address: "etcd-us-east-1a.my-domain.com:2379"
+        #   rootPath: "/multigres/us-east-1a"
 
   # ----------------------------------------------------------------
   # TableGroup Configuration
@@ -225,7 +257,7 @@ spec:
             shardTemplate:
               pools:
                 - type: "replica"
-                  cell: "us-east-1"
+                  cell: "us-east-1a"
                   # This name now refers to a DeploymentTemplate resource.
                   # The controller will fetch its 'shardPool' section.
                   deploymentTemplate: "default-ha"
@@ -240,11 +272,11 @@ spec:
             shardTemplate:
               pools:
                 - type: "replica"
-                  cell: "us-west-2"
+                  cell: "us-east-1b"
                   deploymentTemplate: "orders-ha-replica" # Refers to another template CR
 
                 - type: "readOnly"
-                  cell: "us-east-1"
+                  cell: "us-east-1a"
                   deploymentTemplate: "orders-read-only" # Refers to another template CR
 
           # --- TABLEGROUP 3: Uses external template with overrides ---
@@ -257,7 +289,7 @@ spec:
             # ----------------------------------------------------------------
               pools:
                 - type: "replica"
-                  cell: "us-east-1"
+                  cell: "us-east-1a"
                   deploymentTemplate: "default-ha" # Use template as base
                   # Overrides are applied *after* fetching the template spec
                   overrides:
@@ -282,7 +314,7 @@ spec:
             # ----------------------------------------------------------------
               pools:
                 - type: "replica"
-                  cell: "us-west-2"
+                  cell: "us-east-1b"
                   replicas: 2 
                   dataVolumeClaimTemplate:
                     accessModes: ["ReadWriteOnce"]
@@ -322,11 +354,11 @@ status:
       lastTransitionTime: "2025-10-08T12:00:00Z"
       message: "Cluster reconciliation complete."
   cells:
-    us-east-1:
+    us-east-1a:
       gatewayAvailable: "True"
       multiorchAvailable: "True" 
       topoServerAvailable: "True" # Assuming global is available (default)
-    us-west-2:
+    us-east-1b:
       gatewayAvailable: "True"
       multiorchAvailable: "True" 
       topoServerAvailable: "True" # Assuming managed becomes available
@@ -347,16 +379,17 @@ status:
 * Would the shard/cell/tablegroup structure above work for a first iteration?
 * What fields should be defaulted if the user was not providing templates or inline configuration?
 
-## DeploymentTemplate CR
 
-* This CR is not a child of any other resource. It's purely a configuration CR for MultigresCluster
-* All fields are optional, although at least one field is required for the creation of this resource.
-* When created, these templates are not watched or reconciled by any controller, they must first be referenced by at least one `MultigresCluster` CR, then they will be watched and reconciled by that controller.
-* They cannot be deleted if they are referenced by at least one MultigresCluster CR.
-* The content of these templates is resolved by the MultigresCluster and used to configure its children CRs. A user can only see references to these templates on the `MultigresCluster`, they are not referenced by its children CRs. This means if a user views a child resource, they will be able to see the configuration complete.
-* Incomplete config blocks will either error out or be completed with defaults or overrides if present.
-* We initially had images as part of the DeploymentTemplate but we removed it to prevent users from thinking that multiple templates meant multiple image sets since this is not possible at the moment as images are a global resource (except for toposerver which is considered a separate resource)
-* This resource is namespaced scope to prevent granting too many permissions to DBAs or maintainers of these templates.
+### DeploymentTemplate CR
+
+  * This CR is not a child of any other resource. It's purely a configuration CR for `MultigresCluster`.
+  * Incomplete config blocks will either error out or be completed with defaults or overrides if present.
+  * All fields are optional, although at least one field is required for the creation of this resource.
+  * When created, these templates are not watched or reconciled by any controller; they must first be referenced by at least one `MultigresCluster` CR to be reconciled.
+  * They cannot be deleted if they are referenced by at least one `MultigresCluster` CR (enforced by a webhook).
+  * The content of these templates is resolved by the `MultigresCluster` controller and used to configure its children CRs. A user can only see references to these templates on the `MultigresCluster`; they are not referenced by its children CRs.
+  * This resource is namespaced to support RBAC scoping for different teams (e.g., DBAs vs. application developers).
+  * We initially had images as part of the DeploymentTemplate but we removed it to prevent users from thinking that multiple templates meant multiple image sets since this is not possible at the moment as images are a global resource (except for toposerver which is considered a separate resource)
 
 
 ```yaml
@@ -500,7 +533,7 @@ spec:
       resources:
         requests:
           storage: "10Gi"
- status:
+status:
   # This list is populated by the MultigresCluster controllers using it.
   # It shows which clusters are actively referencing this template.
   consumers:
@@ -514,13 +547,13 @@ spec:
 
 ## TopoServer CR - Read-Only Child of MultigresCluster (or cell if localtopology) 
 
-* This CR is applies to both the global topology and the local topology server. It uses the same CRD for both.
-    * If global, it's directly owned by the `MultigresCluster`
-    * If local, it's owned by the cell.
-* This CR does not exist at all if the user configures an external etcd server in the `MultigresCluster` and does not configure a managed etcd for the local cell.
-* The cell uses global topoServer by default if not configured locally.
-* Because this is considered a separate resource, the image is declared locally within it, not globally.
-* This CR owns its own etcd resources (i.e. pods, deployments, services etc.) 
+ * This CR applies to both the global topology and the local topology server. It uses the same CRD for both.
+      * If global, it's directly owned by the `MultigresCluster`.
+      * If local, it's owned by the `Cell`.
+  * This CR does not exist if the user configures an external etcd server.
+  * The `Cell` uses the global `TopoServer` by default if a local one is not configured.
+  * Because this is considered a separate resource, the image is declared locally within it, not globally.
+  * This CR owns its own etcd resources (e.g., StatefulSet, Services).
 
 
 ```yaml
@@ -535,7 +568,7 @@ metadata:
   creationTimestamp: "2025-10-21T10:30:00Z"
   generation: 1
   resourceVersion: "12345"
-  uid: "b2c3d4e5-...-..."
+  uid: "b2c3d4e5-1234-5678-90ab-f0e1d2c3b4a5"
   # Labels link it to the parent cluster
   labels:
     multigres.com/cluster: "example-multigres-cluster"
@@ -559,17 +592,17 @@ spec:
       requests:
         storage: "10Gi"
   # --- ALTERNATIVE CONFIG (for a Local TopoServer) ---
-  # If this CR were created for a cell (like 'us-west-2' from our
+  # If this CR were created for a cell (like 'us-east-1b' from our
   # example), its metadata and spec would look like this:
   #
   # metadata:
-  #   name: "example-multigres-cluster-us-west-2"
+  #   name: "example-multigres-cluster-us-east-1b"
   #   labels:
   #     multigres.com/cluster: "example-multigres-cluster"
   #     multigres.com/topo-scope: "cell"
-  #     multigres.com/cell: "us-west-2"
+  #     multigres.com/cell: "us-east-1b"
   # spec:
-  #   rootPath: "/multigres/us-west-2"
+  #   rootPath: "/multigres/us-east-1b"
   #   image: "quay.io/coreos/etcd:v3.5.17"
   #   replicas: 3
   #   dataVolumeClaimTemplate:
@@ -592,25 +625,25 @@ status:
 
 ## Cell CR - Read-Only Child of MultigresCluster
 
-* The `Cell` CR owns the `multiorch` and `multigateway` resources and the `localTopoServer` CR if configured.
-* The cells are currently referenced on the `TableGroup` and `Shard` CRs.
-* The `allcells` field is here to manage the creation of `multigate` and `multiorch` resources. We are assuming that this information is needed for now so it is passed down by the `MultigresCluster` CR
+* The `Cell` CR is owned by the `MultigresCluster`.
+* The `Cell` CR owns the `MultiOrch` and `MultiGateway` resources (Deployments, Services, etc.) and the `LocalTopoServer` CR if configured.
+* The `allCells` field is here to manage the creation of `multigate` and `multiorch` resources. We are assuming that this information is needed for now so it is passed down by the `MultigresCluster` CR
 
 ```yaml
 # This 'Cell' CR is created from an item in the `spec.cells.templates` list
 # in the parent `MultigresCluster`.
 #
-# This specific example is for 'us-east-1', which had no 'topoServer'
+# This specific example is for 'us-east-1a', which had no 'topoServer'
 # block, so it defaults to using the 'global' topoServer.
 #
 apiVersion: multigres.com/v1alpha1
 kind: Cell
 metadata:
-  name: "example-multigres-cluster-us-east-1"
+  name: "example-multigres-cluster-us-east-1a"
   namespace: example
   labels:
     multigres.com/cluster: "example-multigres-cluster"
-    multigres.com/cell: "us-east-1"
+    multigres.com/cell: "us-east-1a"
   ownerReferences:
   # The Cell CR is owned by the MultigresCluster
   - apiVersion: multigres.com/v1alpha1
@@ -620,14 +653,13 @@ metadata:
     controller: true
 spec:
   # The logical name of the cell, copied from the template.
-  name: "us-east-1"
+  name: "us-east-1a"
 
   # The parent MultigresCluster passes down the relevant
   # images for this controller to use.
   images:
     multigateway: "multigres/multigres:latest"
     multiorch: "multigres/multigres:latest"
-
 
   # The multigateway spec is copied from multigrescluster
   multigateway:
@@ -637,7 +669,7 @@ spec:
         cpu: "500m"
         memory: "512Mi"
       limits:
-        cpu: "1"
+        cpu: "2"
         memory: "1Gi"
 
  # The multiorch spec is copied from multigrescluster.
@@ -659,21 +691,21 @@ spec:
 
   # ALTERNATIVE CONFIG: (Using the Global TopoServer)
   #
-  # Because the 'us-east-1' cell in the parent CR had no 'topoServer'
+  # Because the 'us-east-1a' cell in the parent CR had no 'topoServer'
   # block, the MultigresCluster controller sets this to empty.
   # topoServer: {}
 
   # ALTERNATIVE CONFIG: Inline Definition (External)
-  # If this were 'us-east-1', the MultigresCluster controller would
+  # If this were 'us-east-1a', the MultigresCluster controller would
   # have copied the 'external' block directly, like this:
   #
   # topoServer:
   #   external:
-  #     address: "etcd-us-east-1.my-domain.com:2379"
-  #     rootPath: "/multigres/us-east-1"
+  #     address: "etcd-us-east-1a.my-domain.com:2379"
+  #     rootPath: "/multigres/us-east-1a"
 
   # ALTERNATIVE CONFIG: (Managed Local) ---
-  # If this were 'us-west-2', the MultigresCluster controller would
+  # If this were 'us-east-1b', the MultigresCluster controller would
   # have copied the 'managedSpec' block directly, like this.
   # The Cell controller would then be responsible for creating
   # a NEW 'TopoServer' CR from this spec, with this Cell
@@ -681,7 +713,7 @@ spec:
   #
   # topoServer:
   #   managedSpec:
-  #     rootPath: "/multigres/us-west-2"
+  #     rootPath: "/multigres/us-east-1b"
   #     image: "quay.io/coreos/etcd:v3.5.17"
   #     replicas: 1
   #     dataVolumeClaimTemplate:
@@ -692,9 +724,9 @@ spec:
 
   # List of all cells in the cluster for discovery.
   allCells:
-  - "us-east-1"
-  - "us-west-2"
-  - "eu-central-1"
+  - "us-east-1a"
+  - "us-east-1b"
+  - "us-east-1c"
 
   # Topology flags for the Cell controller to act on.
   topologyReconciliation:
@@ -709,12 +741,13 @@ status:
   gatewayReplicas: 2
   topoServer: {} # This would get populated with rootPath and address if configuring the local topoServer
   gatewayReadyReplicas: 2
-  gatewayServiceName: "example-multigres-cluster-us-east-1-gateway"
+  gatewayServiceName: "example-multigres-cluster-us-east-1a-gateway"
   multiorchAvailable: "True"
   ```
 
   ## TableGroup CR - Read-Only Child of MultigresCluster
-  * This CR defines and manages the pools where shards reside. It owns the child `Shard` CRs
+  * This CR is owned by the `MultigresCluster`.
+  * This CR defines and manages the pools where shards reside. It owns the child `Shard` CRs.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -739,8 +772,6 @@ metadata:
     controller: true
     blockOwnerDeletion: true
 spec:
-  # The parent MultigresCluster controller passes down the
-  # images relevant to this CR's children (Shard).
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
@@ -751,7 +782,7 @@ spec:
   shardTemplate:
     pools:
       - type: "replica"
-        cell: "us-west-2"
+        cell: "us-east-1b"
         replicas: 2
         dataVolumeClaimTemplate:
           accessModes: ["ReadWriteOnce"]
@@ -770,7 +801,7 @@ spec:
               memory: "512Mi"
 
       - type: "readOnly"
-        cell: "us-east-1"
+        cell: "us-east-1a"
         replicas: 1
         dataVolumeClaimTemplate:
           accessModes: ["ReadWriteOnce"]
@@ -802,7 +833,8 @@ status:
 
   ## Shard CR - Read-Only Child of TableGroup
 
-  * The Shard CR owns the resources for the shard. At this point most likely a multipooler replicateSet and dependent resources. 
+* This CR is owned by the `TableGroup`.
+* The `Shard` CR owns the resources for the shard (e.g., `MultiPooler` `StatefulSet` and `Postgres` resources).
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -827,14 +859,12 @@ metadata:
     controller: true
     blockOwnerDeletion: true
 spec:
-  # This images struct is copied from the parent 'TableGroup'.
-  # The Shard controller will read these values to build pods.
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
   pools:
     - type: "replica"
-      cell: "us-west-2"
+      cell: "us-east-1b"
       replicas: 2
       dataVolumeClaimTemplate:
         accessModes: ["ReadWriteOnce"]
@@ -852,7 +882,7 @@ spec:
             cpu: "1"
             memory: "512Mi"
     - type: "readOnly"
-      cell: "us-east-1"
+      cell: "us-east-1a"
       replicas: 1
       dataVolumeClaimTemplate:
         accessModes: ["ReadWriteOnce"]
@@ -878,7 +908,15 @@ status:
     status: "True"
     lastTransitionTime: "2025-10-21T10:38:00Z"
     message: "Shard is healthy and serving"
-  primaryCell: "us-west-2"
+  primaryCell: "us-east-1b"
   totalPods: 3
   readyPods: 3
   ```
+
+## Open Issues / Design Questions
+
+This section captures outstanding questions from the initial design phase.
+
+  * Verify that configuration structure of the manifest is true to the way users would use and understand Multigres.
+  * What fields should be defaulted if the user was not providing templates or inline configuration?
+  * Is the proposed `shard`/`cell`/`tablegroup` structure sufficient for a first iteration, or is it overly complex?
