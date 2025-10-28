@@ -557,7 +557,7 @@ status:
       * If local, it's owned by the `Cell`.
   * This CR does not exist if the user configures an external etcd server.
   * The `Cell` uses the global `TopoServer` by default if a local one is not configured.
-  * Because this is considered a separate resource, the image is declared locally within it, not globally.
+  * Because this is considered a separate resource, the image can be declared per template or per cell, every CR can have its own separate image declaration.
   * This CR owns its own etcd resources (e.g., StatefulSet, Services).
 
 
