@@ -907,3 +907,59 @@ This section captures outstanding questions from the initial design phase.
   * Verify that configuration structure of the manifest is true to the way users would use and understand Multigres.
   * What fields should be defaulted if the user was not providing templates or inline configuration?
   * Is the proposed `shard`/`cell`/`tablegroup` structure sufficient for a first iteration, or is it overly complex?
+
+
+# Apendix
+
+## Implementation History
+
+* **2025-10-08:** Initial proposal to create individual, user-managed CRDs for each component (`MultiGateway`, `MultiOrch`, etc.).
+* **2025-10-14:** A second proposal introduced a top-level `MultigresCluster` CR as the primary user-facing API. This design explored a `managed: true/false` flag to allow detaching child resources.
+* **2025-10-15:** Discussions from the initial designs led to concerns about the complexity of the `managed: true/false` flag and the potential for cluster misconfiguration. The "Operator as a Platform-Agnostic Delegator" model was also proposed as a long-term architectural alternative.
+* **2025-10-28:** The current "parent/child" model was formalized. This model designates `MultigresCluster` as the single source of truth and makes all child CRs (`Cell`, `TableGroup`, etc.) read-only, resolving the ambiguity of the `managed` flag by explicitly disallowing independent child management. The `DeploymentTemplate` CR was introduced to add configuration reusability.
+
+## Drawbacks
+
+While the proposed parent/child model with read-only children provides significant benefits for simplicity and stability, it has several trade-offs:
+
+* **Reduced Flexibility:** This model is intentionally rigid. Users cannot provision or manage child resources independently, which was a possibility in alternative designs. For example, a user cannot manually create a single `MultiCell` CR; they *must* define it within the `MultigresCluster` parent.
+* **Potential User Confusion:** Users accustomed to editing any Kubernetes resource might be confused when their manual edits to a child `Cell` or `Shard` CR are immediately reverted by the operator. This "read-only" nature of child CRs must be very clearly documented.
+* **Abstraction of `DeploymentTemplate`:** The `DeploymentTemplate` CR adds a layer of indirection. A user must look in two places (`MultigresCluster` and `DeploymentTemplate`) to fully understand the configuration of a component. This might add a slight learning curve compared to a fully inline model.
+* **Increased Number of CRDs:** This model introduces more CRDs (`Cell`, `TableGroup`, `Shard`, etc.) than a single monolithic approach. While this enables separation of concerns, it increases the total number of API resource types managed by the operator.
+
+## Alternatives
+
+Several alternative designs were considered and rejected in favor of the current parent/child model.
+
+### Alternative 1: Single Monolithic CRD
+
+This approach would involve creating only a single `MultigresCluster` CRD that has all component specs embedded within it.
+
+* **Pros:** Simpler API surface (only one CRD) and easier for basic use cases.
+* **Cons:** No component reuse between clusters. Cannot deploy components independently. Leads to a massive, complex, and unmanageable monolithic controller. Debugging becomes very difficult as a failure in one small component could put the entire `MultigresCluster` CR into a failed state, with poor observability.
+* **Rejected Because:** Lacks the flexibility, observability, and separation of concerns required for a complex, distributed system.
+
+### Alternative 2: Component CRDs Only (No Parent)
+
+This model, proposed in `create-child-resource-crds.md`, would provide individual, user-managed CRDs for `MultiGateway`, `MultiOrch`, `MultiPooler`, and `Etcd`. Users would be responsible for "composing" a cluster by creating these resources themselves.
+
+* **Pros:** Maximum flexibility and composability. Allows users to share a single `Etcd` component across multiple clusters or deploy only `MultiPooler`.
+* **Cons:** Extremely verbose and complex for a standard deployment. Users must manually create all components and wire them together correctly. There is no convenience wrapper or single source of truth for an entire "cluster".
+* **Rejected Because:** Makes the common case (deploying a full cluster) unnecessarily complex and error-prone.
+
+### Alternative 3: Hybrid Model with `managed: true/false` Flag
+
+This model was proposed in the initial `multigrescluster-cr-definition.md`. It would feature a top-level `MultigresCluster` CR, but each component section would have a `managed: true/false` flag. If `true`, the operator manages the child resource. If `false`, the operator ignores it, and the user can manage it themselves.
+
+* **Pros:** Offers a "best-of-both-worlds" approach, combining the convenience of a top-level CR with the flexibility of independent management.
+* **Cons:** Introduces significant complexity around resource ownership and lifecycle. What happens when a user switches from `true` to `false`? Does the operator orphan the resource? What if they switch back? This creates a high risk of cluster misconfiguration and an unstable, "split-brain" source of truth.
+* **Rejected Because:** The lifecycle and ownership transitions were deemed too complex and risky for a production-grade operator.
+
+### Alternative 4: Operator as a Platform-Agnostic Delegator
+
+This architectural model, proposed in `multigrescluster-cr-definition.md`, suggests that the operator should not contain the core Multigres provisioning logic. Instead, the operator would act as a "thin adapter" that provisions a central `MultiAdmin`-like service. This central service would expose its own API (e.g., gRPC) for all cluster operations, and the operator would simply delegate to this API.
+
+* **Pros:** Core Multigres logic remains platform-agnostic and can be managed by tools other than Kubernetes (Terraform, Ansible, etc.). The operator itself becomes simpler, focusing only on Kubernetes resource lifecycles.
+* **Cons:** Represents a significant increase in architectural complexity. It requires building and maintaining a highly-available management service *in addition* to the operator.
+* **Rejected Because:** This is a strategic, long-term architectural decision that can be adopted later. It is not mutually exclusive with the proposed CRD structure but adds too much scope for the initial v1alpha1.
+
