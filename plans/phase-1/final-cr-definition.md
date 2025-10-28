@@ -3,11 +3,25 @@
 * **Status:** Provisional
 * **Creation Date:** 2025-10-28
 
+## Index
+
+* [Summary](#summary)
+* [Motivation](#motivation)
+* [Goals](#goals)
+* [Non-Goals](#non-goals)
+* [Proposal: API Architecture and Resource Topology](#proposal-api-architecture-and-resource-topology)
+* [API Specification](#api-specification)
+    * [MultigresCluster CR](#multigrescluster-cr)
+    * [DeploymentTemplate CR](#deploymenttemplate-cr)
+    * [TopoServer CR](#toposerver-cr---read-only-child-of-multigrescluster-or-cell-if-localtopology)
+    * [Cell CR](#cell-cr---read-only-child-of-multigrescluster)
+    * [TableGroup CR](#tablegroup-cr---read-only-child-of-multigrescluster)
+    * [Shard CR](#shard-cr---read-only-child-of-tablegroup)
+* [Open Issues / Design Questions](#open-issues--design-questions)
+
 ## Summary
 
-This proposal defines the `v1alpha1` API for the Multigres Operator.
-
-The design is centered on two user-editable Custom Resources (CRs):
+This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on two user-editable Custom Resources (CRs):
 
 1.  **`MultigresCluster`**: The root resource that defines the desired state (intent) of the entire cluster.
 2.  **`DeploymentTemplate`**: A reusable, namespaced resource for defining common component configurations (e.g., "standard-ha", "analytics-workload").
@@ -43,7 +57,7 @@ This proposal advocates for a parent/child CRD model to address these challenges
 
   * The operator can create a managed global etcd topology server and/or a managed local topology server. The same `TopoServer` CRD is used for both. The global `TopoServer` will belong to the `MultigresCluster` CR directly, whereas the local `TopoServer` belongs to the `Cell` CR.
   * A user can choose to point the cluster to an external etcd topology server, in which case the `TopoServer` resource will not be provisioned.
-  * If no local topology server is configured for a cell, it will use the global topo server by default.
+  * If no local topology server is configured for a cell, it will use the global topology server by default.
 
 
 ```ascii
@@ -372,14 +386,6 @@ status:
     serviceName: "example-multigres-cluster-multiadmin"
 ```
 
-
-### Outstanding questions
-
-* Verify that configuration structure of the manifest is true to the way would users use and understand multigres.
-* Would the shard/cell/tablegroup structure above work for a first iteration?
-* What fields should be defaulted if the user was not providing templates or inline configuration?
-
-
 ### DeploymentTemplate CR
 
   * This CR is not a child of any other resource. It's purely a configuration CR for `MultigresCluster`.
@@ -544,8 +550,7 @@ status:
 ```
 
 
-
-## TopoServer CR - Read-Only Child of MultigresCluster (or cell if localtopology) 
+### TopoServer CR - Read-Only Child of MultigresCluster (or cell if localtopology) 
 
  * This CR applies to both the global topology and the local topology server. It uses the same CRD for both.
       * If global, it's directly owned by the `MultigresCluster`.
@@ -623,7 +628,7 @@ status:
 
 
 
-## Cell CR - Read-Only Child of MultigresCluster
+### Cell CR - Read-Only Child of MultigresCluster
 
 * The `Cell` CR is owned by the `MultigresCluster`.
 * The `Cell` CR owns the `MultiOrch` and `MultiGateway` resources (Deployments, Services, etc.) and the `LocalTopoServer` CR if configured.
@@ -745,7 +750,7 @@ status:
   multiorchAvailable: "True"
   ```
 
-  ## TableGroup CR - Read-Only Child of MultigresCluster
+  ### TableGroup CR - Read-Only Child of MultigresCluster
   * This CR is owned by the `MultigresCluster`.
   * This CR defines and manages the pools where shards reside. It owns the child `Shard` CRs.
 
@@ -831,7 +836,7 @@ status:
   readyShards: 2
   ```
 
-  ## Shard CR - Read-Only Child of TableGroup
+  ### Shard CR - Read-Only Child of TableGroup
 
 * This CR is owned by the `TableGroup`.
 * The `Shard` CR owns the resources for the shard (e.g., `MultiPooler` `StatefulSet` and `Postgres` resources).
