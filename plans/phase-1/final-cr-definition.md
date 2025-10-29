@@ -523,14 +523,14 @@ spec:
       resources:
         requests:
           storage: "10Gi"
-status:
-  # This list is populated by the MultigresCluster controllers using it.
-  # It shows which clusters are actively referencing this template.
-  consumers:
-    - name: "example-multigres-cluster"
-      namespace: "example"
-    - name: "other-cluster"
-      namespace: "default"
+# status:
+  # No status is currently defined for this resource.
+  # An initial idea was to have the list of consumer MultigresClusters that use this template listed here
+  # However the current design is to have only single top-level controller, which manages "MultigresController", and only watches "DeploymentTemplate".
+  # With that controller setup, we cannot update "DeploymentTemplate" from the controller because it's not managed.
+  # One way is to have a separate controller to list all the template usages within the cluster, probably by having a label.
+  # Another way is for controller to manage both MultigresCluster and DeploymentTemplate, but that would make the code much more complex.
+  # We will consider this or other status fields as we work on the implementation
 ```
 
 
