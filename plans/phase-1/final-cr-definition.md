@@ -1,23 +1,7 @@
-# Multigres Operator API Design
-
-* **Status:** Provisional
-* **Creation Date:** 2025-10-28
-
-## Index
-
-* [Summary](#summary)
-* [Motivation](#motivation)
-* [Goals](#goals)
-* [Non-Goals](#non-goals)
-* [Proposal: API Architecture and Resource Topology](#proposal-api-architecture-and-resource-topology)
-* [API Specification](#api-specification)
-    * [MultigresCluster CR](#multigrescluster-cr)
-    * [DeploymentTemplate CR](#deploymenttemplate-cr)
-    * [TopoServer CR](#toposerver-cr---read-only-child-of-multigrescluster-or-cell-if-localtopology)
-    * [Cell CR](#cell-cr---read-only-child-of-multigrescluster)
-    * [TableGroup CR](#tablegroup-cr---read-only-child-of-multigrescluster)
-    * [Shard CR](#shard-cr---read-only-child-of-tablegroup)
-* [Open Issues / Design Questions](#open-issues--design-questions)
+---
+title: MultigresCluster API with Child Resources based on Multigres Architecture
+state: ready
+---
 
 ## Summary
 
@@ -920,7 +904,7 @@ This section captures outstanding questions from the initial design phase.
 
 While the proposed parent/child model with read-only children provides significant benefits for simplicity and stability, it has several trade-offs:
 
-* **Reduced Flexibility:** This model is intentionally rigid. Users cannot provision or manage child resources independently, which was a possibility in alternative designs. For example, a user cannot manually create a single `MultiCell` CR; they *must* define it within the `MultigresCluster` parent.
+* **Difficult Cluster Management with Child CRs:** Users can freely provision each of Multigres component independently, and make up the Multigres cluster by providing relevant references to other components. However, this management is error prone and we do not intend to add validation controls at this level, as the child CRs are mainly used as a part of the `MultigresCluster` resource.
 * **Potential User Confusion:** Users accustomed to editing any Kubernetes resource might be confused when their manual edits to a child `Cell` or `Shard` CR are immediately reverted by the operator.
 * **Abstraction of `DeploymentTemplate`:** The `DeploymentTemplate` CR adds a layer of indirection. A user must look in two places (`MultigresCluster` and `DeploymentTemplate`) to fully understand the configuration of a component. This might add a slight learning curve compared to a fully inline model.
 * **Increased Number of CRDs:** This model introduces more CRDs (`Cell`, `TableGroup`, `Shard`, etc.) than a single monolithic approach. While this enables separation of concerns, it increases the total number of API resource types managed by the operator.
