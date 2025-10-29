@@ -1,11 +1,7 @@
-# MultigresCluster CR Initial Design Proposal
-
-  - **Authors**: Fernando Villalba
-  - **Status**: Provisional
-  - **Creation Date**: 2025-10-14
-  - **Last Updated**: 2025-10-15
-
------
+---
+title: MultigresCluster CR Initial Design Proposal
+state: dropped
+---
 
 ## Summary
 

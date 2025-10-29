@@ -909,8 +909,6 @@ This section captures outstanding questions from the initial design phase.
   * Is the proposed `shard`/`cell`/`tablegroup` structure sufficient for a first iteration, or is it overly complex?
 
 
-# Apendix
-
 ## Implementation History
 
 * **2025-10-08:** Initial proposal to create individual, user-managed CRDs for each component (`MultiGateway`, `MultiOrch`, etc.).
@@ -923,7 +921,7 @@ This section captures outstanding questions from the initial design phase.
 While the proposed parent/child model with read-only children provides significant benefits for simplicity and stability, it has several trade-offs:
 
 * **Reduced Flexibility:** This model is intentionally rigid. Users cannot provision or manage child resources independently, which was a possibility in alternative designs. For example, a user cannot manually create a single `MultiCell` CR; they *must* define it within the `MultigresCluster` parent.
-* **Potential User Confusion:** Users accustomed to editing any Kubernetes resource might be confused when their manual edits to a child `Cell` or `Shard` CR are immediately reverted by the operator. This "read-only" nature of child CRs must be very clearly documented.
+* **Potential User Confusion:** Users accustomed to editing any Kubernetes resource might be confused when their manual edits to a child `Cell` or `Shard` CR are immediately reverted by the operator.
 * **Abstraction of `DeploymentTemplate`:** The `DeploymentTemplate` CR adds a layer of indirection. A user must look in two places (`MultigresCluster` and `DeploymentTemplate`) to fully understand the configuration of a component. This might add a slight learning curve compared to a fully inline model.
 * **Increased Number of CRDs:** This model introduces more CRDs (`Cell`, `TableGroup`, `Shard`, etc.) than a single monolithic approach. While this enables separation of concerns, it increases the total number of API resource types managed by the operator.
 
