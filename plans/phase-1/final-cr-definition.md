@@ -178,7 +178,8 @@ spec:
   cells:
     - name: "us-east-1a"
       spec:
-        # If no topoServer config is specified, it uses global by default
+        # Note how this cell does not have topoServer definition. This uses the global topoServer instead.
+        # topoServer: {}
         multigateway:
           # This tells the controller to fetch the 'multiGateway' section
           # from the 'standard-ha' DeploymentTemplate resource.
@@ -280,10 +281,10 @@ spec:
           - name: "analytics_tg"
             partitioning:
               shards: 1
-            shardTemplate:
             # ----------------------------------------------------------------
             # Shard Configuration
             # ----------------------------------------------------------------
+            shardTemplate:
               pools:
                 - type: "replica"
                   cell: "us-east-1a"
@@ -305,10 +306,10 @@ spec:
           - name: "custom_tg"
             partitioning:
               shards: 1
-            shardTemplate:
             # ----------------------------------------------------------------
             # Shard Configuration
             # ----------------------------------------------------------------
+            shardTemplate:
               pools:
                 - type: "replica"
                   cell: "us-east-1b"
