@@ -908,6 +908,7 @@ This section captures outstanding questions from the initial design phase.
   * Verify that configuration structure of the manifest is true to the way users would use and understand Multigres.
   * What fields should be defaulted if the user was not providing templates or inline configuration?
   * Is the proposed `shard`/`cell`/`tablegroup` structure sufficient for a first iteration, or is it overly complex?
+  * [Decide](https://github.com/numtide/multigres-operator/pull/33#discussion_r2472393853) whether the operator should reconcile labels and use them to keep track of its resources or we should add spec fields that do this.
 
 
 ## Implementation History
