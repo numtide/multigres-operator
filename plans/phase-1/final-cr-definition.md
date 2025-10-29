@@ -672,38 +672,42 @@ spec:
     rootPath: "/multigres/global"
     clientServiceName: "example-multigres-cluster-global-client"
 
-  # ALTERNATIVE CONFIG: (Using the Global TopoServer)
-  #
-  # Because the 'us-east-1a' cell in the parent CR had no 'topoServer'
-  # block, the MultigresCluster controller sets this to empty.
-  # topoServer: {}
+  topoServer:
+    # Option 1: Using the Global TopoServer
+    #
+    # Because the 'us-east-1a' cell in the parent CR had no 'topoServer'
+    # block, the MultigresCluster controller sets this to empty. You can
+    # have explicit empty brace like below, or remove `topoServer`
+    # stanza entirely.
+    #
+    # {}
 
-  # ALTERNATIVE CONFIG: Inline Definition (External)
-  # If this were 'us-east-1a', the MultigresCluster controller would
-  # have copied the 'external' block directly, like this:
-  #
-  # topoServer:
-  #   external:
-  #     address: "etcd-us-east-1a.my-domain.com:2379"
-  #     rootPath: "/multigres/us-east-1a"
+    # Option 2: Inline Definition (External)
+    #
+    # If this were 'us-east-1a', the MultigresCluster controller would
+    # have copied the 'external' block directly, like this:
+    #
+    # external:
+    #   address: "etcd-us-east-1a.my-domain.com:2379"
+    #   rootPath: "/multigres/us-east-1a"
 
-  # ALTERNATIVE CONFIG: (Managed Local) ---
-  # If this were 'us-east-1b', the MultigresCluster controller would
-  # have copied the 'managedSpec' block directly, like this.
-  # The Cell controller would then be responsible for creating
-  # a NEW 'TopoServer' CR from this spec, with this Cell
-  # as its owner.
-  #
-  # topoServer:
-  #   managedSpec:
-  #     rootPath: "/multigres/us-east-1b"
-  #     image: "quay.io/coreos/etcd:v3.5.17"
-  #     replicas: 1
-  #     dataVolumeClaimTemplate:
-  #       accessModes: ["ReadWriteOnce"]
-  #       resources:
-  #         requests:
-  #           storage: "5Gi"
+    # Option 3: Managed Local
+    #
+    # If this were 'us-east-1b', the MultigresCluster controller would
+    # have copied the 'managedSpec' block directly, like this.
+    # The Cell controller would then be responsible for creating
+    # a NEW 'TopoServer' CR from this spec, with this Cell
+    # as its owner.
+    #
+    # managedSpec:
+    #   rootPath: "/multigres/us-east-1b"
+    #   image: "quay.io/coreos/etcd:v3.5.17"
+    #   replicas: 1
+    #   dataVolumeClaimTemplate:
+    #     accessModes: ["ReadWriteOnce"]
+    #     resources:
+    #       requests:
+    #         storage: "5Gi"
 
   # List of all cells in the cluster for discovery.
   allCells:
