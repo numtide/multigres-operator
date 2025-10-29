@@ -931,7 +931,7 @@ This model, proposed in `create-child-resource-crds.md`, would provide individua
 
 ### Alternative 3: Hybrid Model with `managed: true/false` Flag
 
-This model was proposed in the initial `multigrescluster-cr-definition.md`. It would feature a top-level `MultigresCluster` CR, but each component section would have a `managed: true/false` flag. If `true`, the operator manages the child resource. If `false`, the operator ignores it, and the user can manage it themselves.
+This model would feature a top-level `MultigresCluster` CR, but each component section would have a `managed: true/false` flag. If `true`, the operator manages the child resource. If `false`, the operator ignores it, and the user can manage it themselves.
 
 * **Pros:** Offers a "best-of-both-worlds" approach, combining the convenience of a top-level CR with the flexibility of independent management.
 * **Cons:** Introduces significant complexity around resource ownership and lifecycle. What happens when a user switches from `true` to `false`? Does the operator orphan the resource? What if they switch back? This creates a high risk of cluster misconfiguration and an unstable, "split-brain" source of truth.
@@ -939,7 +939,7 @@ This model was proposed in the initial `multigrescluster-cr-definition.md`. It w
 
 ### Alternative 4: Operator as a Platform-Agnostic Delegator
 
-This architectural model, proposed in `multigrescluster-cr-definition.md`, suggests that the operator should not contain the core Multigres provisioning logic. Instead, the operator would act as a "thin adapter" that provisions a central `MultiAdmin`-like service. This central service would expose its own API (e.g., gRPC) for all cluster operations, and the operator would simply delegate to this API.
+This architectural model suggests that the operator should not contain the core Multigres provisioning logic. Instead, the operator would act as a "thin adapter" that provisions a central `MultiAdmin`-like service. This central service would expose its own API (e.g., gRPC) for all cluster operations, and the operator would simply delegate to this API.
 
 * **Pros:** Core Multigres logic remains platform-agnostic and can be managed by tools other than Kubernetes (Terraform, Ansible, etc.). The operator itself becomes simpler, focusing only on Kubernetes resource lifecycles.
 * **Cons:** Represents a significant increase in architectural complexity. It requires building and maintaining a highly-available management service *in addition* to the operator.
