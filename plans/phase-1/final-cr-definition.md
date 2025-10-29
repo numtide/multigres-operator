@@ -945,3 +945,10 @@ This architectural model, proposed in `multigrescluster-cr-definition.md`, sugge
 * **Cons:** Represents a significant increase in architectural complexity. It requires building and maintaining a highly-available management service *in addition* to the operator.
 * **Rejected Because:** This is a strategic, long-term architectural decision that can be adopted later. It is not mutually exclusive with the proposed CRD structure but adds too much scope for the initial v1alpha1.
 
+### Alternative 5: Helm Charts Instead of CRDs
+
+This approach would use Helm charts to deploy Multigres components without an operator.
+
+* **Pros:** Familiar deployment model for many Kubernetes users.
+* **Cons:** Provides no automatic reconciliation, no custom status reporting, and no active lifecycle management. Helm cannot react to cluster changes, manage failovers, or handle complex Day 2 operations. Helm templating logic for a system this complex is difficult to maintain and test. Finally, it is another tool and spec that would need to be managed by the end-user.
+* **Rejected Because:** The operator pattern provides superior lifecycle management, observability, and automation, which are critical for a stateful database system.
