@@ -231,10 +231,10 @@ spec:
           #     resources:
           #       requests:
           #         storage: "5Gi"
-        # You can specify external per cell as well or it takes global by default
-        # external:
-        #   address: "etcd-us-east-1a.my-domain.com:2379"
-        #   rootPath: "/multigres/us-east-1a"
+          # You can specify external per cell as well or it takes global by default
+          # external:
+          #   address: "etcd-us-east-1a.my-domain.com:2379"
+          #   rootPath: "/multigres/us-east-1a"
 
   # ----------------------------------------------------------------
   # TableGroup Configuration
