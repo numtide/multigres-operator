@@ -909,6 +909,7 @@ This section captures outstanding questions from the initial design phase.
   * What fields should be defaulted if the user was not providing templates or inline configuration?
   * Is the proposed `shard`/`cell`/`tablegroup` structure sufficient for a first iteration, or is it overly complex?
   * [Decide](https://github.com/numtide/multigres-operator/pull/33#discussion_r2472393853) whether the operator should reconcile labels and use them to keep track of its resources or we should add spec fields that do this.
+  * Potentially split TopoServer definition and its template usage as its deployment model as well as image definitions are quite different from other Multigres components; this may be something we can tackle together with canary friendly deployment control. ([Ref](https://github.com/numtide/multigres-operator/pull/33#discussion_r2471380356))
 
 
 ## Implementation History
