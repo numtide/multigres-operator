@@ -33,7 +33,7 @@ This proposal advocates for a parent/child CRD model to address these challenges
 
 ## Non-Goals
 
-  * This document does not define the specific implementation details of each controller's reconciliation logic.
+  * This document does not define the specific implementation details of each controller's reconciliation logic, or admission webhook.
   * This document does not cover Day 2 operations such as database backup, restore, monitoring, or alerting. These will be addressed in future proposals.
   * This document does not cover automated, in-place version upgrades, though the global `images` spec provides a foundation for this.
 
@@ -376,7 +376,7 @@ status:
   * Incomplete config blocks will either error out or be completed with defaults or overrides if present.
   * All fields are optional, although at least one field is required for the creation of this resource.
   * When created, these templates are not watched or reconciled by any controller; they must first be referenced by at least one `MultigresCluster` CR to be reconciled.
-  * They cannot be deleted if they are referenced by at least one `MultigresCluster` CR (enforced by a webhook).
+  * The CRs that are referenced by at least one `MultigresCluster` CR will need webhook integration to reject deletion (the actual design of this is out of scope).
   * The content of these templates is resolved by the `MultigresCluster` controller and used to configure its children CRs. A user can only see references to these templates on the `MultigresCluster`; they are not referenced by its children CRs. NOTE: A proposed idea here would be to add a status field in the children showing what template/s are using.
   * This resource is namespaced to support RBAC scoping for different teams (e.g., DBAs vs. application developers).
   * We initially had images as part of the DeploymentTemplate but we removed it to prevent users from thinking that multiple templates meant multiple image sets since this is not possible at the moment as images are a global resource (except for toposerver which is considered a separate resource)
@@ -577,24 +577,31 @@ spec:
     resources:
       requests:
         storage: "10Gi"
-  # --- ALTERNATIVE CONFIG (for a Local TopoServer) ---
-  # If this CR were created for a cell (like 'us-east-1b' from our
-  # example), its metadata and spec would look like this:
-  #
-  # metadata:
-  #   name: "example-multigres-cluster-us-east-1b"
-  #   labels:
-  #     multigres.com/cluster: "example-multigres-cluster"
-  #     multigres.com/topo-scope: "cell"
-  #     multigres.com/cell: "us-east-1b"
-  # spec:
-  #   rootPath: "/multigres/us-east-1b"
-  #   image: "quay.io/coreos/etcd:v3.5.17"
-  #   replicas: 3
-  #   dataVolumeClaimTemplate:
-  #     resources:
-  #       requests:
-  #         storage: "5Gi"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+# --- ALTERNATIVE CONFIG (for a Local TopoServer) ---
+# If this CR were created for a cell (like 'us-east-1b' from our
+# example), its metadata and spec would look like this:
+#
+# metadata:
+#   name: "example-multigres-cluster-us-east-1b"
+#   labels:
+#     multigres.com/cluster: "example-multigres-cluster"
+#     multigres.com/topo-scope: "cell"
+#     multigres.com/cell: "us-east-1b"
+# spec:
+#   rootPath: "/multigres/us-east-1b"
+#   image: "quay.io/coreos/etcd:v3.5.17"
+#   replicas: 3
+#   dataVolumeClaimTemplate:
+#     resources:
+#       requests:
+#         storage: "5Gi"
 status:
   conditions:
   - type: Available
