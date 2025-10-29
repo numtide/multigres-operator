@@ -86,11 +86,11 @@ This proposal advocates for a parent/child CRD model to address these challenges
        └── Resolved into child CRs (children are unaware of templates)
 ```
 
-## API Specification
+## Design Details: API Specification
 
 This section provides the comprehensive definitions and examples for each Custom Resource.
 
-### MultigresCluster CR
+### User Managed CR: MultigresCluster
 
   * This and the `DeploymentTemplate` are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted as the operator reconciles based on the top-level CR definition.
   * Every field that uses a `deploymentTemplate` comes with an `override` option.
@@ -161,14 +161,14 @@ spec:
     #   replicas: 2
     # --- ALTERNATIVE: Inline Definition ---
     # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-    #   replicas: 1
-    #   resources:
-    #     requests:
-    #       cpu: "100m"
-    #       memory: "128Mi"
-    #     limits:
-    #       cpu: "200m"
-    #       memory: "256Mi"
+    # replicas: 1
+    # resources:
+    #   requests:
+    #     cpu: "100m"
+    #     memory: "128Mi"
+    #   limits:
+    #     cpu: "200m"
+    #     memory: "256Mi"
 
   # ----------------------------------------------------------------
   # Cells Configuration
@@ -190,15 +190,14 @@ spec:
                 cpu: "2"
         # --- ALTERNATIVE: Inline Definition ---
         # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
-        # spec:
-        #   replicas: 2
-        #   resources:
-        #     requests:
-        #       cpu: "500m"
-        #       memory: "512Mi"
-        #     limits:
-        #       cpu: "1"
-        #       memory: "1Gi"
+        # replicas: 2
+        # resources:
+        #   requests:
+        #     cpu: "500m"
+        #     memory: "512Mi"
+        #   limits:
+        #     cpu: "1"
+        #     memory: "1Gi"
         multiorch:
           # ---  Inline Definition ---
           # If 'deploymentTemplate' is omitted, the controller uses this spec directly.
@@ -370,7 +369,7 @@ status:
     serviceName: "example-multigres-cluster-multiadmin"
 ```
 
-### DeploymentTemplate CR
+### User Managed CR: DeploymentTemplate
 
   * This CR is not a child of any other resource. It's purely a configuration CR for `MultigresCluster`.
   * Incomplete config blocks will either error out or be completed with defaults or overrides if present.
@@ -534,7 +533,11 @@ status:
 ```
 
 
-### TopoServer CR - Read-Only Child of MultigresCluster (or cell if localtopology) 
+### Child CRs of MultigresCluster
+
+There are number of child CRs created from MultigresCluster.
+
+#### Child CR of MultigresCluster OR Cell: TopoServer
 
  * This CR applies to both the global topology and the local topology server. It uses the same CRD for both.
       * If global, it's directly owned by the `MultigresCluster`.
@@ -605,7 +608,7 @@ status:
 
 
 
-### Cell CR - Read-Only Child of MultigresCluster
+#### Child CR of MultigresCluster: Cell
 
 * The `Cell` CR is owned by the `MultigresCluster`.
 * The `Cell` CR owns the `MultiOrch` and `MultiGateway` resources (Deployments, Services, etc.) and the `LocalTopoServer` CR if configured.
@@ -717,7 +720,7 @@ status:
   multiorchAvailable: "True"
   ```
 
-  ### TableGroup CR - Read-Only Child of MultigresCluster
+#### Child CR of MultigresCluster: TableGroup
   * This CR is owned by the `MultigresCluster`.
   * This CR defines and manages the pools where shards reside. It owns the child `Shard` CRs.
 
@@ -802,7 +805,7 @@ status:
   readyShards: 2
   ```
 
-  ### Shard CR - Read-Only Child of TableGroup
+#### Child of MultigresCluster: Shard
 
 * This CR is owned by the `TableGroup`.
 * The `Shard` CR owns the resources for the shard (e.g., `MultiPooler` `StatefulSet` and `Postgres` resources).
