@@ -29,13 +29,13 @@ import (
 // Each section in this file corresponds to a block of configuration
 // Specs are fetched from their respective child CRs where feasible.
 // The Spec order in this file matches the order in the following sample:
-// https://github.com/numtide/multigres-operator/blob/multigres-cluster-cr-design/plans/phase-1/final-cr-definition.md
+// plans/phase-1/multigres-operator-api-v1alpha1-design.md
 
 // MultigresClusterSpec defines the desired state of MultigresCluster
 type MultigresClusterSpec struct {
 	// Images defines the container images for all components in the cluster.
 	// +optional
-	Images *ClusterImagesSpec `json:"images,omitempty"`
+	Images *ImagesTemplateSpec `json:"images,omitempty"`
 
 	// GlobalTopoServer defines the cluster-wide global topology server.
 	// +optional
@@ -85,26 +85,6 @@ type CommonImagesSpec struct {
 	// to use for pulling images.
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-}
-
-// ClusterImagesSpec defines the image configuration for the cluster,
-// allowing for a template (with overrides) or inline definition.
-// Either DeploymentTemplate or inline fields is allowed. Not both.
-// Overrides is only allowed when DeploymentTemplate is provided.
-// +kubebuilder:validation:XValidation:rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && (has(self.imagePullPolicy) || has(self.imagePullSecrets) || has(self.multiGateway) || has(self.multiOrch) || has(self.multiPooler) || has(self.multiAdmin) || has(self.postgres)))",message="deploymentTemplate and inline image fields (e.g., multiGateway, postgres, imagePullPolicy) are mutually exclusive"
-// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))",message="overrides can only be set if deploymentTemplate is also set"
-type ClusterImagesSpec struct {
-	// DeploymentTemplate is the name of a DeploymentTemplate
-	// to load the `images` spec from.
-	// +optional
-	DeploymentTemplate string `json:"deploymentTemplate,omitempty"`
-
-	// Overrides are applied on top of the loaded template spec.
-	// +optional
-	Overrides *ImagesTemplateSpec `json:"overrides,omitempty"`
-
-	// Inline image definitions. These are used if DeploymentTemplate is not specified,
-	ImagesTemplateSpec `json:",inline"`
 }
 
 // ============================================================================

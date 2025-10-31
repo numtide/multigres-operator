@@ -49,6 +49,7 @@ type CellSpec struct {
 	GlobalTopoServer GlobalTopoServerRefSpec `json:"globalTopoServer"`
 
 	// TopoServer defines the topology server configuration for this cell.
+	// If this is empty, the cell defaults to using the GlobalTopoServer.
 	TopoServer CellTopoServerSpec `json:"topoServer"`
 
 	// AllCells is a list of all cell names in the cluster for discovery.
@@ -100,14 +101,10 @@ type GlobalTopoServerRefSpec struct {
 }
 
 // CellTopoServerSpec defines the topology server configuration for this cell.
-// This is a one-of field; only one of Global, External, or ManagedSpec should be set.
-// +kubebuilder:validation:XValidation:rule="(has(self.global) ? 1 : 0) + (has(self.external) ? 1 : 0) + (has(self.managedSpec) ? 1 : 0) <= 1",message="only one of 'global', 'external', or 'managedSpec' can be set for topoServer"
+// Only one of External or ManagedSpec should be set.
+// If neither is set, the cell uses the top-level GlobalTopoServer.
+// +kubebuilder:validation:XValidation:rule="(has(self.external) ? 1 : 0) + (has(self.managedSpec) ? 1 : 0) <= 1",message="only one of 'external' or 'managedSpec' can be set for topoServer"
 type CellTopoServerSpec struct {
-	// Global indicates this cell uses the global topo server.
-	// The reference details are populated by the parent controller.
-	// +optional
-	Global *GlobalTopoServerRefSpec `json:"global,omitempty"`
-
 	// External defines connection details for an unmanaged, external topo server.
 	// +optional
 	External *ExternalTopoServerSpec `json:"external,omitempty"`

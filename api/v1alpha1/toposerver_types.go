@@ -60,6 +60,10 @@ type TopoServerSpec struct {
 	// that will be created for each etcd replica.
 	// +optional
 	DataVolumeClaimTemplate corev1.PersistentVolumeClaimSpec `json:"dataVolumeClaimTemplate,omitempty"`
+
+	// Resources defines the compute resource requirements for the etcd container.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // ============================================================================
