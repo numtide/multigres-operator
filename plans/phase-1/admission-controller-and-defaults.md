@@ -24,7 +24,7 @@ This layered approach uses the most efficient tool for each task, from basic fie
 A review of classic operators like `vitess-operator` highlights a major user-facing weakness: applying complex defaults *in-memory* during reconciliation.
 
   * **The "Classic" Problem:** The `vitess-operator` avoids webhooks entirely. It uses simple OpenAPI v3 CRD defaults (Level 1) for static values but applies all complex, dynamic defaults (like images and resource requests) via Go code *after* fetching the object (Level 2).
-  * **The User-Facing Confusion:** Because these Level 2 defaults are not persisted back to `etcd`, a user running `kubectl get` sees a spec that does **not** match the functional state the operator is enforcing. This is confirmed by a 6-year-old `TODO` in their code explicitly mentioning the lack of mutating webhook support in Operator SDK as a blocker.
+  * **The User-Facing Confusion:** Because these Level 2 defaults are not persisted back to `etcd`, a user running `kubectl get` on a CR sees a spec that does **not** match the functional state the operator is enforcing. This is confirmed by a 6-year-old `TODO` in their code explicitly mentioning the lack of mutating webhook support in Operator SDK as a blocker.
   * **Our Motivation:** This "invisible" default pattern is unacceptable for `multigres-operator`. We *must* make sure our manifests are fully declarative and the user sees the complete CR with `kubectl get`. A **mutating webhook** is the correct solution, as it applies all defaults and persists them to `etcd` *before* the reconciler ever sees the object.
 
 ### Motivation 2: The Need for Powerful, Multi-Layered Validation
@@ -177,7 +177,6 @@ Therefore, the "usual process" for including these policies is manual:
 2.  **Store in `/config`:** These YAMLs will be stored in a new directory, e.g., `config/policies/`.
 3.  **Bundle with Kustomize:** We will "tag on" these manifests by editing the `config/default/kustomization.yaml` to include this new directory.
 
-<!-- end list -->
 
 ```yaml
 # config/default/kustomization.yaml
@@ -233,7 +232,6 @@ This configuration intercepts events for two different resources:
 1.  `multigresclusters` (`CREATE`/`UPDATE`): To check if a referenced `DeploymentTemplate` exists.
 2.  `deploymenttemplates` (`DELETE`): To prevent deletion if it's in use by a `MultigresCluster`.
 
-<!-- end list -->
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1
@@ -400,6 +398,18 @@ Since we **must** run a webhook server (Layer 4), we must manage TLS certificate
       * **Poor User Experience:** This is a "batteries not included" approach. It would force the general open-source community to install, learn, and manage a complex, cluster-wide policy engine *just to run our operator*. This is an unacceptably high barrier to entry.
       * **Outsources Responsibility:** It raises the question: "What guidance do we provide?" We would be forced to maintain a separate, hard-to-test repository of policies, creating a versioning nightmare and a poor support model.
   * **Decision:** **Rejected.** This approach fails to meet our core goals for mutation and stateful validation, and it provides a hostile user experience for the broader community.
+
+### Alternative 4: Use In-Process `MutatingAdmissionPolicy` (CEL)
+
+* **Approach:** Instead of a mutating webhook server (Layer 4), use the in-process, CEL-based `MutatingAdmissionPolicy` for all defaulting. This is the mutation equivalent of `ValidatingAdmissionPolicy` (Layer 3).
+* **Pros:**
+    * **Performance:** Like its validating counterpart, this runs in-process within the API server, eliminating network latency and the `failurePolicy` problem.
+    * **Simplicity:** It would not require a webhook server, HA, or certificate management for mutation.
+* **Cons:**
+    * **Wrong Tool for the Job:** This is the critical flaw. Our primary "invisible defaults" problem (Motivation 1) requires complex, conditional, Go-based defaulting logic. As seen in the Vitess example, we need to set dynamic image tags (from compile-time variables) and conditionally populate entire `struct`s if a user provides an empty block (e.g., `images: {}`).
+    * **Limited Capability:** CEL is an expression language, not a full, imperative programming language. `MutatingAdmissionPolicy` is designed for simple, declarative mutations (e.g., "add label `foo: bar`" or "set `imagePullPolicy: Always`"). It is **not** powerful enough to handle the complex, conditional logic our operator's defaulting requires.
+    * **Feature Immaturity:** The `MutatingAdmissionPolicy` feature is still in its early stages (e.g., Beta) in recent Kubernetes versions. Relying on it for our entire defaulting strategy would be a significant risk.
+* **Decision:** **Rejected.** It fails to meet our primary motivation. The complex, dynamic, and conditional defaulting logic *must* be implemented in Go, which requires a traditional mutating webhook server. The in-process CEL mutation is not powerful enough for our core use case.
 
 -----
 
