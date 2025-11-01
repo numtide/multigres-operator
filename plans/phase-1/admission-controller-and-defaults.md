@@ -1,101 +1,443 @@
-
-## Recommendations for Admission Control and Defaults in Multigres Operator
-
-Here's an analysis of how the `vitess-operator` handles resource validation and defaulting, and how that compares to the design goals for the `multigres-operator`.
-
-### How the Vitess Operator Currently Does It
-
-Our analysis of the `vitess-operator` code shows it does **not** use any webhook servers for the admission (validation or mutation) of its resources. It uses a "classic" operator pattern that predates the new, easier-to-use admission tools.
-
+---
+title:  Integrate Hybrid Admission Control for Cluster Validation and Defaulting state
+state: draft
+tags:  [validation, mutation, webhook, cel, security, data-handler]
 ---
 
-### Validation of Resources in Vitess
+## Summary
 
-Vitess relies entirely on **OpenAPI v3 schema** validation, which is defined directly within its `CustomResourceDefinition` (CRD) files. It does **not** use the newer `ValidatingAdmissionPolicy` (CEL).
+This proposal outlines a hybrid, four-tiered admission control strategy for the Multigres operator. It combines:
 
-When you `kubectl apply` a `VitessCluster`, the `kube-apiserver` validates the object against the rules in the CRD *before* it's ever written to `etcd` or seen by the operator.
+1.  **Basic CRD Schema** (OpenAPI v3)
+2.  **CRD-Embedded CEL** (`XValidation`)
+3.  **`ValidatingAdmissionPolicy` (CEL)** resources
+4.  A **Validating and Mutating Webhook Server**
 
-**Examples of validation rules from the `VitessCluster` CRD:**
-* **Enums:** `spec.backup.engine` is restricted to `[builtin, xtrabackup, mysqlshell]`.
-* **String Patterns:** `spec.backup.locations.name` must match the regex `^[A-Za-z0-9]([A-Za-z0-9-_.]*[A-Za-z0-9])?$` and have a `maxLength: 63`.
-* **Required Fields:** A backup schedule (`spec.backup.schedules.items`) *must* have `name`, `resources`, `schedule`, and `strategies`.
-* **Numeric Ranges:** `spec.keyspaces.partitionings.equal.parts` must have a `minimum: 1` and `maximum: 65536`.
+This layered approach uses the most efficient tool for each task, from basic field validation to complex, stateful checks and mutation, while solving the "invisible defaults" problem.
 
----
+-----
 
-### Defaulting in Vitess Operator
+## Motivation
 
-The operator uses a robust **two-pronged defaulting strategy** that avoids the complexity of a mutating webhook.
+### Motivation 1: The "Invisible Defaults" Problem
 
-1.  **Level 1: CRD-Based Defaults (Simple & Static)**
-    The first layer of defaulting is done by the `kube-apiserver` using the `default:` keyword in the OpenAPI schema. These are for simple, static values.
+A review of classic operators like `vitess-operator` highlights a major user-facing weakness: applying complex defaults *in-memory* during reconciliation.
 
-    * **Example:** For a backup schedule, `spec.backup.schedules.items.concurrencyPolicy` is set to `default: Forbid`.
+  * **The "Classic" Problem:** The `vitess-operator` avoids webhooks entirely. It uses simple OpenAPI v3 CRD defaults (Level 1) for static values but applies all complex, dynamic defaults (like images and resource requests) via Go code *after* fetching the object (Level 2).
+  * **The User-Facing Confusion:** Because these Level 2 defaults are not persisted back to `etcd`, a user running `kubectl get` sees a spec that does **not** match the functional state the operator is enforcing. This is confirmed by a 6-year-old `TODO` in their code explicitly mentioning the lack of mutating webhook support in Operator SDK as a blocker.
+  * **Our Motivation:** This "invisible" default pattern is unacceptable for `multigres-operator`. We *must* make sure our manifests are fully declarative and the user sees the complete CR with `kubectl get`. A **mutating webhook** is the correct solution, as it applies all defaults and persists them to `etcd` *before* the reconciler ever sees the object.
 
-2.  **Level 2: Go-Based "Scheme" Defaults (Complex & Dynamic)**
-    The operator applies more complex defaults (like setting default Docker images or resource requests) in its own Go code. This logic lives in files like `pkg/apis/planetscale/v2/vitesscluster_defaults.go`.
+### Motivation 2: The Need for Powerful, Multi-Layered Validation
 
-    * **Mechanism:** This is the clever part. A generated file (`zz_generated.defaults.go`) contains an `init()` function that calls `runtime.Scheme.AddTypeDefaultingFunc`. This registers the Go-based defaulting functions with the `controller-runtime`'s client.
-    * **Result:** When the operator's controller fetches a `VitessCluster` object (e.g., `client.Get(...)`), `controller-runtime` automatically runs these registered defaulting functions on the object *in memory*. This ensures the reconciliation logic *always* sees a fully-defaulted object, simplifying the code.
+Our API design requires validation logic that is too complex for a single tool.
 
----
+  * **Simple Cross-Field Logic:** We need to enforce rules like mutual exclusion (e.g., "you can't set both `deploymentTemplate` and `managedSpec`") or logic (e.g., "etcd replicas must be an odd number"). This is best handled *inside* the CRD.
+  * **Context-Aware Logic:** We need to enforce rules that require request-time context, such as `request.userInfo` (to make child CRs read-only) or `oldObject.status` (to prevent an update from breaking quorum). This requires a `ValidatingAdmissionPolicy`.
+  * **Stateful Logic:** We need to enforce rules that query *other objects*. This includes protecting a `DeploymentTemplate` from deletion if a `MultigresCluster` is using it, or checking if a `DeploymentTemplate` exists on `MultigresCluster` creation. This logic can *only* be performed by a webhook.
 
-### Strengths of the Vitess Approach
+-----
 
-* **Operational Simplicity:** The biggest strength is **no webhook server**. This completely sidesteps the single greatest pain point of admission control: **TLS certificate management**. There's no need to provision, rotate, or inject certificates for the webhook, which makes installing and managing the operator *vastly* simpler and more reliable.
-* **No "Deadlock" Risk:** A failing admission webhook (especially one with `failurePolicy: Fail`) can block all creates, updates, and deletes for that resource, effectively "deadlocking" your ability to manage the cluster. This design has zero risk of that.
-* **Fast Feedback (for Schema):** Using the OpenAPI schema for validation gives users immediate, client-side feedback from `kubectl apply` if their manifest is syntactically invalid.
-* **Clean Code:** The Go-based defaulting pattern keeps complex default-setting logic in testable, maintainable Go code and ensures the reconciler always works with a complete, defaulted object.
+## Goals
 
-### Weaknesses (The Conscious Trade-offs)
+  * Implement a **mutating webhook** to persist complex defaults (e.g., image tags, resource blocks) into the `MultigresCluster` spec, solving the "invisible defaults" problem.
+  * Implement a **stateful validating webhook** for rules that require cluster-awareness (querying other objects), such as:
+      * Preventing the deletion of a `DeploymentTemplate` that is in use by any `MultigresCluster`.
+      * Validating that a referenced `DeploymentTemplate` exists upon `MultigresCluster` creation or update.
+  * Utilize **CRD-Embedded CEL (`XValidation`)** for all advanced *stateless, object-only* validation (e.g., mutual exclusion, odd numbers, required sub-fields).
+  * Utilize **`ValidatingAdmissionPolicy` (CEL)** for *stateless, context-aware* validation that needs access to `oldObject.status` or `request.userInfo`.
+  * Provide clear, actionable error messages at admission time.
+  * Support multiple certificate management strategies (cert-manager and self-contained).
+  * Keep webhook logic in the `data-handler` module.
 
-* **Validation is Less Powerful:** The operator **cannot** perform complex, cross-field, or stateful validation.
-    * It **cannot** use CEL for rules like "if `spec.backup.engine` is `xtrabackup`, then `spec.images.vtbackup` must be set."
-    * It **cannot** validate that a referenced `Secret` for backup credentials actually exists when the `VitessCluster` is applied.
-* **Defaults are "Invisible" to Users:** This is the most significant user-facing "weakness." Because the complex Go-based defaults (Level 2) are applied *inside the operator's process*, they are **not** persisted back to `etcd`.
-    * If a user runs `kubectl get vitesscluster my-cluster -o yaml`, they will **not** see the default `resources` or `image` values that the operator is using in memory.
-    * This can be confusing, as the "source of truth" in `etcd` doesn't match the "functional state" the operator is enforcing. A mutating webhook would have solved this.
-* **Confusing Child Resource Edits:** As we noted in our own design, if a user patches or updates a "read-only" child resource, the operator's controller just silently overwrites the change. The user is not told that the update failed or will be reverted. A validating webhook could prevent this.
+-----
 
----
+## Non-Goals
 
-## Implications for Multigres Operator
+  * Using the webhook server for *any* validation that can be handled by CRD-Embedded CEL or a `ValidatingAdmissionPolicy`. The webhook is the most expensive layer and must be reserved for logic that truly requires it.
+  * **Resolving `DeploymentTemplate` references** within the webhook. This is a reconciliation concern, not an admission-control concern. The operator's reconciler will be responsible for reading the `DeploymentTemplate` name from the spec and creating or updating child resources accordingly.
 
-### 1. The New "In-Process" Option: CEL
+-----
 
-The new **in-process admission plugins** (`ValidatingAdmissionPolicy` and `MutatingAdmissionPolicy`) use the Common Expression Language (CEL) to validate and mutate fields more extensively.
+## Proposal: A Hybrid 4-Tier Admission Control Strategy
 
-This approach would allow us to get powerful validation **without the need for a webhook server**.
+We will implement a four-tiered admission control system, where each request passes through these gates in order.
 
-* **Pros:** This would make the operational cost of running and maintaining the Multigres operator much lighter. We wouldn't need to manage certificates or write complex webhook server logic.
-* **Cons (Major):**
-    * **Limited Power:** These policies are **stateless**. They cannot query the API server to check the state of *other* objects.
-    * **Version Lock-in:** `ValidatingAdmissionPolicy` only became stable (GA) in **Kubernetes v1.30**. The `MutatingAdmissionPolicy` is still in **Beta** (v1.34+). This would significantly limit the cluster versions our operator could support.
+### Level 1: CRD OpenAPI Schema (Stateless, Basic)
 
-### 2. Key Differences in Our Design
+This is the baseline, built into all our CRDs. It is the fastest check, enforced by the API server before any other logic.
 
-Our `multigres-operator` design has two key requirements that Vitess does not, which forces our hand.
+  * **Use Case:** Enforcing data types (string, int, object), `required` fields, and simple constraints.
+  * **Implementation:** `kubebuilder` validation markers (e.g., `// +kubebuilder:validation:Minimum=1`, `// +kubebuilder:validation:MaxLength=63`, `// +kubebuilder:validation:Enum=replica;readOnly`).
 
-* **Requirement 1: Protect `DeploymentTemplate` Deletion**
-    * **The Problem:** We must prevent a user from deleting a `DeploymentTemplate` if it's being used by any `MultigresCluster`.
-    * **The Solution:** This is a **stateful** check (it must list other objects). We **cannot** use CEL for this. The *only* way to implement this is with a traditional **`ValidatingWebhookConfiguration`** that calls a webhook server.
+### Level 2: CRD-Embedded CEL (Stateless, Advanced)
 
-* **Requirement 2: Enforce "Read-Only" Child CRs**
-    * **The Problem:** We want to "outright deny" users who try to manually `create` or `update` our child CRs (`Cell`, `Shard`, etc.).
-    * **The Solution:** We have two options here:
-        1.  **Webhook Server:** Use the same webhook server from Requirement 1.
-        2.  **CEL:** This is a **perfect use case for `ValidatingAdmissionPolicy` (CEL)**. A CEL expression can easily inspect the `request.userInfo.username` and reject the request if it's *not* from our operator's ServiceAccount.
+This logic is embedded directly into the CRD's OpenAPI v3.1 schema and is enforced by the API server. It can perform any validation that *only* requires access to the `object` (the new object state, as `self`).
 
-### Recommendation: A Hybrid Approach
+  * **Use Case:** Complex cross-field validation, mutual exclusion, and business logic.
+  * **Implementation:** `// +kubebuilder:validation:XValidation` markers in the Go type definitions.
+  * **Real Examples (from our Go types):**
+      * **Mutual Exclusion** (from `multigrescluster_types.go`): Ensure a user provides either a template or an inline spec, but not both.
+        `rule="!((has(self.deploymentTemplate) && self.deploymentTemplate != \"\") && has(self.managedSpec))", message="deploymentTemplate and managedSpec are mutually exclusive"`
+      * **Conditional Requirement** (from `multigrescluster_types.go`): Ensure `overrides` can only be set if `deploymentTemplate` is also set.
+        `rule="!(has(self.overrides) && (!has(self.deploymentTemplate) || self.deploymentTemplate == \"\"))", message="overrides can only be set if deploymentTemplate is also set"`
+      * **Business Logic** (from `toposerver_types.go`): Enforce etcd quorum rules.
+        `rule="!has(self.replicas) || self.replicas % 2 == 1", message="etcd cluster replicas should be an odd number (1, 3, 5, etc.)"`
+      * **Required Sub-Field** (from `shard_types.go`): Ensure a PVC includes a storage request.
+        `rule="!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources) && ...)", message="dataVolumeClaimTemplate must include a 'storage' resource request"`
+      * **"At Least One Of"** (from `deploymenttemplate_types.go`): Ensure a template isn't empty.
+        `rule="has(self.shardPool) || has(self.multiOrch) || ...", message="a deployment template must define at least one template spec"`
 
-Based on this, the Vitess model (no webhooks at all) is **not** an option for us because we have a firm requirement for stateful validation (Requirement 1).
+### Level 3: `ValidatingAdmissionPolicy` (CEL) (Stateless, Context-Aware)
 
-The best path forward is a **hybrid model**:
+This uses separate, cluster-level resources to apply validation. These policies are also executed by the API server but can access additional request context that CRD-Embedded CEL (Level 2) cannot.
 
-1.  **We MUST run a Webhook Server:** We need a (small, focused) webhook server to handle the **stateful** validation for `DeploymentTemplate` deletion.
-2.  **Use the Webhook Server for Mutation:** Since we're already paying the "cost" of a webhook server (certificates, etc.), we should also use it to implement a **mutating webhook** for our defaults. This will solve the "invisible defaults" problem that Vitess has.
-3.  **Use CEL for Everything Else:** We should use **`ValidatingAdmissionPolicy` (CEL)** for all *stateless* validation, such as:
-    * Enforcing our "read-only" child CRs (by checking the user).
-    * Validating fields in our `MultigresCluster` (e.g., `shards > 0`).
+  * **Use Case 1: Accessing `request.userInfo`:** Enforcing our "read-only child CR" design.
+  * **Use Case 2: Accessing `oldObject` (including `oldObject.status`):** Enforcing safe updates, like preventing quorum loss or storage shrinking.
+  * **Implementation:** `ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding` manifests shipped with the operator.
+  * **Trade-off:** This introduces a dependency on Kubernetes **v1.30+** (where `ValidatingAdmissionPolicy` is GA).
 
-This hybrid approach gives us the best of all worlds, but it *does* mean we must accept the `cert-manager` dependency and the version-lock-in of `ValidatingAdmissionPolicy` (v1.30+).
+### Level 4: Webhook Server (Stateful & Mutating)
+
+This is the final and most powerful layer: an HTTP server run by our operator. It is the only layer that can **mutate objects** and **query other objects** during admission.
+
+  * **Use Case 1: Mutation (MutatingWebhookConfiguration).**
+      * **Goal:** Solve the "invisible defaults" problem.
+      * **Logic:** On `MultigresCluster` `CREATE` or `UPDATE`, the webhook will apply all complex Go-based defaults (e.g., image tags, resource blocks) and return the fully populated object to be persisted in `etcd`.
+  * **Use Case 2: Stateful Validation (ValidatingWebhookConfiguration).**
+      * **Goal:** Enforce rules that require querying the API server.
+      * **Logic:**
+        1.  On `DeploymentTemplate` `DELETE`: **`List`** all `MultigresCluster`s. If any cluster references this template, **reject** the deletion.
+        2.  On `MultigresCluster` `CREATE` or `UPDATE`: **`Get`** the referenced `DeploymentTemplate` to ensure it exists.
+        3.  On `MultigresCluster` `UPDATE`: **`Get`** the child `Cell` CRs to check their `status` before allowing a cell to be removed from the spec.
+
+-----
+
+## Design Details
+
+### 1\. Admission Control Layer Manifests
+
+We will ship manifests for Layers 3 and 4. Layers 1 and 2 are built into the CRD itself (generated from the `+kubebuilder` comments in the Go types).
+
+#### `ValidatingAdmissionPolicy` Manifests (Layer 3)
+
+**Example 1: Read-Only Child Resources (Uses `request.userInfo`)**
+
+```yaml
+apiVersion: admission.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: "multigres-readonly-child-resources"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["multigres.com"]
+      apiVersions: ["v1alpha1"]
+      operations:  ["CREATE", "UPDATE", "DELETE"]
+      resources:   ["cells", "tablegroups", "shards", "toposervers"]
+  validations:
+    - expression: "request.userInfo.username == 'system:serviceaccount:multigres-system:multigres-operator'"
+      message: "This resource is managed by the Multigres operator and cannot be modified manually. Edit the MultigresCluster CR instead"
+```
+
+**Example 2: Safe Updates on Parent Resource (Uses `oldObject.status`)**
+
+```yaml
+apiVersion: admission.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: "multigres-cluster-safe-updates"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["multigres.com"]
+      apiVersions: ["v1alpha1"]
+      operations:  ["UPDATE"]
+      resources:   ["multigresclusters"]
+  validations:
+    # Example 1: Prevent Etcd Quorum Loss (fictional status field)
+    - expression: "!has(object.spec.globalTopoServer.managedSpec) || !has(oldObject.status.globalTopoServer.readyReplicas) || object.spec.globalTopoServer.managedSpec.replicas >= oldObject.status.globalTopoServer.readyReplicas"
+      message: "TopoServer replicas cannot be reduced to a number lower than the current number of ready replicas."
+    # Example 2: Prevent Storage Shrinking (fictional spec field)
+    - expression: "object.spec.storageSize >= oldObject.spec.storageSize"
+      message: "storageSize cannot be decreased."
+```
+
+#### 1.1. Manual Creation of `ValidatingAdmissionPolicy` Manifests
+
+It is critical to understand that **`ValidatingAdmissionPolicy` (Layer 3) manifests cannot be generated from Go code comments.**
+
+  * **Kubebuilder markers** (e.g., `+kubebuilder:validation:XValidation`) *only* generate **CRD-Embedded CEL (Level 2)**. They are part of the API's contract.
+  * **`ValidatingAdmissionPolicy`** resources are designed to be separate, cluster-level policies. They are decoupled from the operator's code and can be managed by cluster administrators.
+
+Therefore, the "usual process" for including these policies is manual:
+
+1.  **Hand-write YAML:** The policies (like the examples above) are written as static YAML files.
+2.  **Store in `/config`:** These YAMLs will be stored in a new directory, e.g., `config/policies/`.
+3.  **Bundle with Kustomize:** We will "tag on" these manifests by editing the `config/default/kustomization.yaml` to include this new directory.
+
+<!-- end list -->
+
+```yaml
+# config/default/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../crd
+  - ../rbac
+  - ../webhook
+  - ../policies  # <-- This new line bundles the hand-written policy manifests
+  - manager.yaml
+```
+
+This process treats our default policies as configuration we ship, not as code we generate.
+
+
+#### Webhook Configuration Manifests (Layer 4)
+
+These *are* generated from the `+kubebuilder:webhook` comments in our Go code. The `${CA_BUNDLE}` placeholder would be populated by the certificate management strategy (e.g., cert-manager or the in-process generator).
+
+**Mutating Webhook (For Defaulting)**
+
+This configuration intercepts `CREATE` and `UPDATE` events for `multigresclusters` to apply defaults.
+
+```yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: multigres-mutating-webhook
+webhooks:
+  - name: mmultigrescluster.kb.io
+    rules:
+      - apiGroups: ["multigres.com"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["multigresclusters"]
+    clientConfig:
+      service:
+        name: multigres-operator-webhook
+        namespace: multigres-system
+        path: /mutate-multigres-com-v1alpha1-multigrescluster
+      caBundle: ${CA_BUNDLE}
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    timeoutSeconds: 10
+    failurePolicy: Fail
+```
+
+**Validating Webhook (For Stateful Checks)**
+
+This configuration intercepts events for two different resources:
+
+1.  `multigresclusters` (`CREATE`/`UPDATE`): To check if a referenced `DeploymentTemplate` exists.
+2.  `deploymenttemplates` (`DELETE`): To prevent deletion if it's in use by a `MultigresCluster`.
+
+<!-- end list -->
+
+```yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: multigres-validating-webhook
+webhooks:
+  - name: vmultigrescluster.kb.io
+    rules:
+      - apiGroups: ["multigres.com"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["multigresclusters"]
+    clientConfig:
+      service:
+        name: multigres-operator-webhook
+        namespace: multigres-system
+        path: /validate-multigres-com-v1alpha1-multigrescluster
+      caBundle: ${CA_BUNDLE}
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    timeoutSeconds: 10
+    failurePolicy: Fail
+  - name: vdeploymenttemplate.kb.io
+    rules:
+      - apiGroups: ["multigres.com"]
+        apiVersions: ["v1alpha1"]
+        operations: ["DELETE"]
+        resources: ["deploymenttemplates"]
+    clientConfig:
+      service:
+        name: multigres-operator-webhook
+        namespace: multigres-system
+        path: /validate-multigres-com-v1alpha1-deploymenttemplate
+      caBundle: ${CA_BUNDLE}
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    timeoutSeconds: 10
+    failurePolicy: Fail
+```
+
+### 2\. Implementation Components
+
+Located in `pkg/data-handler/webhook/`:
+
+```go
+// +kubebuilder:webhook:path=/mutate-multigres-com-v1alpha1-multigrescluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=multigresclusters,verbs=create;update,versions=v1alpha1,name=mmultigrescluster.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-multigrescluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=multigresclusters,verbs=create;update,versions=v1alpha1,name=vmultigrescluster.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-deploymenttemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=deploymenttemplates,verbs=delete,versions=v1alpha1,name=vdeploymenttemplate.kb.io,admissionReviewVersions=v1
+
+// AdmissionHandler implements admission.Handler
+type AdmissionHandler struct {
+    Client client.Client
+    // decoder, etc.
+}
+
+// Implement the admission.Handler interface
+func (h *AdmissionHandler) Handle(ctx context.Context, req admission.Request) admission.Response
+
+// Separate methods for logic
+func (h *AdmissionHandler) mutateMultigresCluster(ctx context.Context, cluster *v1alpha1.MultigresCluster) admission.Response
+func (h *AdmissionHandler) validateMultigresCluster(ctx context.Context, req admission.Request) admission.Response
+func (h *AdmissionHandler) validateDeploymentTemplateDelete(ctx context.Context, req admission.Request) admission.Response
+```
+
+The `main.go` will be modified to register the webhook server with the `controller-runtime` manager.
+
+### 3\. Certificate Management
+
+Since we **must** run a webhook server (Layer 4), we must manage TLS certificates. We will support three strategies.
+
+#### Strategy A: cert-manager (Recommended for Production)
+
+  * **Pros:** Automatic certificate generation, renewal, and CA bundle injection. Industry standard.
+  * **Cons:** Adds a runtime dependency on `cert-manager`.
+  * **Implementation:** Ship `Certificate` and `Issuer` manifests in `config/webhook/cert-manager`.
+
+#### Strategy B: Init Container (Recommended for Simplicity)
+
+  * **Pros:** No external dependencies; self-contained installation.
+  * **Cons:** Certificates are typically long-lived and require a manual rotation process (e.g., re-running a Job).
+  * **Implementation:** Use a `batch/v1.Job` with an image like `kube-webhook-certgen` to create the secret, and a patching job to inject the `caBundle`.
+
+#### Strategy C: In-Process Operator Generation (Self-Bootstrapping)
+
+  * **Pros:** **Zero dependencies.** The operator is fully self-contained and manages its own certificate lifecycle, including rotation. Solves startup race conditions.
+  * **Cons:** **High implementation complexity.** The operator must contain all the logic for crypto generation, `Secret` management, and `ValidatingWebhookConfiguration` patching. It also requires **higher RBAC permissions**.
+  * **Implementation:** The operator's `main.go` would include logic on startup to manage the certificate lifecycle.
+
+#### Recommendation
+
+**Strategy A (cert-manager)** is the recommended approach for production environments.
+
+**Strategy C (In-Process)** is a strong runner-up and superior to Strategy B. We should support **both A and C** to allow users to choose between a "zero-dependency" installation (C) and an "industry-standard" installation (A).
+
+-----
+
+## Test Plan
+
+### Unit Tests
+
+  * Test all pure validation functions in `validation.go` in isolation.
+
+### Integration Tests (envtest)
+
+  * **Mutation (Layer 4):**
+    1.  Create a `MultigresCluster` CR with minimal spec.
+    2.  `Get` the `MultigresCluster` and assert that its spec has been fully populated with the default values.
+  * **Stateful Validation (Layer 4):**
+    1.  Create a `DeploymentTemplate` and a referencing `MultigresCluster`.
+    2.  Attempt to `DELETE` the `DeploymentTemplate`.
+    3.  Assert that the deletion is **rejected**.
+    4.  Attempt to `CREATE` a `MultigresCluster` that references a non-existent `DeploymentTemplate`.
+    5.  Assert that the creation is **rejected**.
+  * **CRD-Embedded CEL (Layer 2):**
+    1.  Attempt to `CREATE` a `TopoServer` with `replicas: 2` (an even number).
+    2.  Assert that the request is **rejected** by the CRD's schema.
+    3.  Attempt to `CREATE` a `MultigresCluster` with *both* `deploymentTemplate` and `managedSpec` defined.
+    4.  Assert that the request is **rejected**.
+  * **`ValidatingAdmissionPolicy` (Layer 3):**
+    1.  Start `envtest` with the `ValidatingAdmissionPolicy` CRD installed.
+    2.  As a non-operator user, attempt to `CREATE` or `UPDATE` a `Cell` CR.
+    3.  Assert that the request is **rejected** by the read-only CEL policy.
+    4.  Create a `MultigresCluster` and then attempt an unsafe `UPDATE` (e.g., shrinking storage).
+    5.  Assert that the update is **rejected**.
+
+-----
+
+## Drawbacks
+
+1.  **Webhook Complexity**: We accept the complexity of running a webhook server (certificates, networking) because our stateful validation requirements make it unavoidable.
+2.  **Version Lock-in**: Using `ValidatingAdmissionPolicy` (Layer 3) requires Kubernetes v1.30+ for GA stability, limiting the cluster versions our operator can support.
+3.  **Performance Impact**: Every `MultigresCluster` create/update now takes a small network hop to the webhook server. This is a standard trade-off, which we mitigate by moving all stateless logic (Layers 1, 2, and 3) into the API server itself.
+
+-----
+
+## Alternatives Considered
+
+### Alternative 1: No Webhooks (Vitess-Style)
+
+  * **Approach:** Use only Layers 1, 2, 3 and in-memory Go-based defaulting.
+  * **Pros:** Operational simplicity, no certificate management.
+  * **Cons:**
+      * Cannot perform stateful validation (a hard requirement for us).
+      * Suffers from "invisible defaults," which is a poor user experience.
+  * **Decision:** **Rejected.** Fails to meet core design goals.
+
+### Alternative 2: Webhook-Only
+
+  * **Approach:** Use the webhook server for *all* validation (Layers 2, 3, and 4) and mutation.
+  * **Pros:** Single implementation pattern; works on older Kubernetes versions.
+  * **Cons:** Less efficient. Puts unnecessary load on the webhook server for simple checks (like odd numbers or `request.userInfo`) that CEL can handle in-process.
+  * **Decision:** **Rejected.** The hybrid approach is more modern and efficient.
+
+### Alternative 3: Use a Policy Engine (e.g., Kyverno) for all Validation
+
+  * **Approach:** Do not ship *any* validating webhooks or `ValidatingAdmissionPolicy` resources. Instead, ship the operator with a library of Kyverno/OPA policies that users must install and manage themselves.
+  * **Pros:**
+      * Reduces the operator's footprint; no need to manage webhook HA or certificates.
+      * Appeals to users who *already* have a policy engine (e.g., an internal Supabase platform). They can just import our policies into their existing framework.
+  * **Cons:**
+      * **Fails to solve Mutation:** This is the critical flaw. Policy engines are for validation. They cannot solve our primary "invisible defaults" (mutation) problem, which requires a custom Go-based mutating webhook.
+      * **Fails to solve Stateful Validation:** A generic policy engine cannot easily perform the custom logic of "list all `MultigresCluster`s to see if this `DeploymentTemplate` is in use." This logic is bespoke to our operator and belongs in our webhook.
+      * **Poor User Experience:** This is a "batteries not included" approach. It would force the general open-source community to install, learn, and manage a complex, cluster-wide policy engine *just to run our operator*. This is an unacceptably high barrier to entry.
+      * **Outsources Responsibility:** It raises the question: "What guidance do we provide?" We would be forced to maintain a separate, hard-to-test repository of policies, creating a versioning nightmare and a poor support model.
+  * **Decision:** **Rejected.** This approach fails to meet our core goals for mutation and stateful validation, and it provides a hostile user experience for the broader community.
+
+-----
+
+## Appendix: Vitess Defaulting Analysis
+
+This is for information, showing Vitess defaults.
+
+### Dynamic Defaults (The "Invisible" Go Defaults)
+
+These defaults are applied **in-memory** by the operator *after* it reads the CR from `etcd`. They couldn't be static for three primary reasons:
+
+1.  **Dynamic Value:** The default value is set at compile time (like the operator's version).
+2.  **Conditional Block Logic:** The defaults are only applied if a user provides an empty block (e.g., `vtadmin: {}`).
+3.  **Conditional Field Logic:** One default depends on the value of another field.
+
+| Defaulted Field(s) | Default Value | Why It Couldn't Be Static |
+| :--- | :--- | :--- |
+| `spec.images.*` (all images) | The `DefaultImages` struct | **(1) Dynamic Value.** Image tags are set at compile time. |
+| `spec.globalLockserver.etcd` | An empty `&EtcdLockserverTemplate{}` object. | **(3) Conditional Field Logic.** Only applied if `spec.globalLockserver.external` is `nil`. |
+| `spec.vitessDashboard.replicas` | `defaultVtctldReplicas` (a Go constant). | **(2) Conditional Block Logic.** Only defaulted if the user provides `spec.vitessDashboard: {}`. |
+| `spec.vitessDashboard.resources` | `requests` (CPU/mem) and `limits` (mem). | **(2) Conditional Block Logic.** Same reason. |
+| `spec.vtadmin.replicas` | `defaultVtadminReplicas` (a Go constant). | **(2) Conditional Block Logic.** Skipped if `spec.vtadmin` is `nil`. |
+| `spec.vtadmin.webResources` | `requests` (CPU/mem) and `limits` (mem). | **(2) Conditional Block Logic.** Same reason. |
+| `spec.vtadmin.apiResources` | `requests` (CPU/mem) and `limits` (mem). | **(2) Conditional Block Logic.** Same reason. |
+| `spec.vtadmin.fetchCredentials` | `defaultVtadminFetchCredentials` (a Go constant). | **(2) Conditional Block Logic.** Same reason. |
+| `spec.keyspaces[].turndownPolicy` | `VitessKeyspaceTurndownPolicyRequireIdle`. | **Maintainability.** Kept in Go to have all default logic in one place. |
+| `spec.backup.engine` | `defaultBackupEngine` (a Go constant). | **Maintainability.** Same reason. |
+| `spec.topologyReconciliation` | The *entire object* is initialized. | **(2) Conditional Block Logic.** Populates a struct if the user provides `nil`. |
+| `spec.updateStrategy.type` | `ExternalVitessClusterUpdateStrategyType`. | **(3) Conditional Field Logic.** Part of a larger conditional block. |
+| `spec.gatewayService` / `spec.tabletService` | An empty `&ServiceOverrides{}` object. | **Code Stability.** Nil-guards to prevent reconciler crashes. |
+
+### Static Defaults (The OpenAPI v3 CRD Defaults)
+
+These are the simple, "Level 1" defaults that *are* visible with `kubectl get` because they are defined in the CRD file. This list is tiny, proving the method was insufficient for their main needs.
+
+| Defaulted Field | Default Value |
+| :--- | :--- |
+| `spec.backup.schedules.items.concurrencyPolicy` | `"Forbid"` |
+| `spec.backup.schedules.items.jobTimeoutMinute` | `10` |
+| `spec.keyspaces.partitionings.equal.hexWidth` | `0` |
+| `spec.keyspaces.partitionings.*.shardTemplate.tabletPools.name` | `""` (empty string) |
