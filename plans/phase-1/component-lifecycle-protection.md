@@ -1,14 +1,27 @@
 ---
-title: Handle graceful deletion of part of Multigres cluster
+title: Component Lifecycle and Dependency Protection
 state: draft
-tags: [etcd, multigateway, multiorch, multipooler, lifecycle, reliability]
+tags:
+- etcd
+- multigateway
+- multiorch
+- multipooler
+- deploymenttemplate
+- lifecycle
+- reliability
+- dependencies
 ---
 
 # Summary
-Enable safe, graceful deletion or scaling-down of individual Multigres components while ensuring dependent components continue to operate correctly. Special focus on protecting etcd as the critical coordination infrastructure.
+Implement dependency-aware lifecycle management for Multigres components, preventing deletion of resources that are actively referenced by other components. This includes protection for critical infrastructure (etcd), shared templates (DeploymentTemplate), and persistent storage, while enabling safe, graceful deletion or scaling-down of individual components.
 
 # Motivation
-Users need flexibility to scale individual components independently without disrupting the entire Multigres cluster. Current implementation treats all components equally during deletion, but components have asymmetric dependencies - particularly etcd, which provides critical coordination services.
+Components in a Multigres cluster have complex dependency relationships. Deleting a resource that other components depend on causes failures and service disruption. The operator must track these dependencies and prevent unsafe deletions while still allowing flexible operational patterns.
+
+**Critical Dependencies:**
+1. **Etcd** - Coordination infrastructure used by Gateway, Orch, and Pooler
+2. **DeploymentTemplate** - Shared configuration referenced by multiple component deployments
+3. **Storage (PVCs)** - Persistent data required by MultiPooler and Postgres instances
 
 **Use Cases:**
 1. Scale down MultiGateway replicas to zero for maintenance without affecting data plane (MultiPooler)
@@ -16,12 +29,18 @@ Users need flexibility to scale individual components independently without disr
 3. Scale individual components based on load patterns (e.g., more gateways during peak, fewer during off-hours)
 4. Perform rolling component upgrades without full cluster downtime
 5. Delete non-critical components while preserving etcd for remaining services
+6. Update DeploymentTemplate without disrupting running components
+7. Safely remove unused templates after migrating components to new ones
+8. Prevent accidental PVC deletion while databases are active
 
 **Problems Solved:**
 - Prevent accidental deletion of etcd while other components depend on it
+- Block deletion of DeploymentTemplates actively used by components
+- Protect storage resources (PVCs) from deletion while databases are running
 - Enable partial cluster degradation instead of full outage
 - Support flexible operational patterns (maintenance windows, cost optimization)
 - Avoid cascading failures when removing individual components
+- Provide clear feedback about dependency relationships
 
 ## Goals
 1. **Dependency-Aware Deletion**: Prevent deletion of etcd when other components still reference it
