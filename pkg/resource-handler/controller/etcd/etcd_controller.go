@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -276,11 +277,16 @@ func (r *EtcdReconciler) buildConditions(
 }
 
 // SetupWithManager sets up the controller with the Manager.
-// TODO: This is missing test coverage, and will need to use envtest setup.
-func (r *EtcdReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *EtcdReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.Options) error {
+	controllerOpts := controller.Options{}
+	if len(opts) > 0 {
+		controllerOpts = opts[0]
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.Etcd{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		WithOptions(controllerOpts).
 		Complete(r)
 }
