@@ -224,9 +224,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 			_ = appsv1.AddToScheme(scheme)
 
 			ctx := context.Background()
-			cfg := testutil.SetUpEnvtest(t)
-			mgr := testutil.SetUpManager(t, cfg, scheme)
-			testutil.StartManager(t, mgr)
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
 
 			watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 			c := mgr.GetClient()
@@ -365,10 +363,7 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 			_ = appsv1.AddToScheme(scheme)
 
 			ctx := context.Background()
-			cfg := testutil.SetUpEnvtest(t)
-			mgr := testutil.SetUpManager(t, cfg, scheme)
-			testutil.StartManager(t, mgr)
-
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
 			c := mgr.GetClient()
 
 			// Create resources FIRST
