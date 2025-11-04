@@ -89,9 +89,10 @@ func NewResourceWatcher(t testing.TB, ctx context.Context, mgr manager.Manager, 
 	return watcher
 }
 
-// EventChan returns the channel for receiving events directly.
+// EventCh returns the channel for receiving events directly.
 // Useful for custom event processing logic.
-func (rw *ResourceWatcher) EventChan() <-chan ResourceEvent {
+func (rw *ResourceWatcher) EventCh() <-chan ResourceEvent {
+	rw.t.Helper()
 	return rw.eventCh
 }
 
@@ -184,13 +185,14 @@ func (rw *ResourceWatcher) collectEvents(ctx context.Context) {
 // First checks existing events for early return, then subscribes to new events.
 //
 // Example:
-//   expectedSts := &appsv1.StatefulSet{
-//       Spec: appsv1.StatefulSetSpec{Replicas: ptr.To(int32(3))},
-//   }
-//   err := watcher.WaitForMatch("StatefulSet", expectedSts, 10*time.Second, testutil.CompareSpecOnly()...)
-//   if err != nil {
-//       t.Errorf("StatefulSet never reached expected state: %v", err)
-//   }
+//
+//	expectedSts := &appsv1.StatefulSet{
+//	    Spec: appsv1.StatefulSetSpec{Replicas: ptr.To(int32(3))},
+//	}
+//	err := watcher.WaitForMatch("StatefulSet", expectedSts, 10*time.Second, testutil.CompareSpecOnly()...)
+//	if err != nil {
+//	    t.Errorf("StatefulSet never reached expected state: %v", err)
+//	}
 func (rw *ResourceWatcher) WaitForMatch(kind string, expected client.Object, timeout time.Duration, cmpOpts ...cmp.Option) error {
 	rw.t.Helper()
 
@@ -324,6 +326,65 @@ func (rw *ResourceWatcher) WaitForKind(kind string, timeout time.Duration) (*Res
 		case <-time.After(time.Until(deadline)):
 			if !time.Now().Before(deadline) {
 				return nil, fmt.Errorf("timeout waiting for %s event", kind)
+			}
+		}
+	}
+}
+
+// WaitForEventType waits for an event with specific kind and type (ADDED, UPDATED, DELETED).
+// Returns the first matching event, or error on timeout.
+func (rw *ResourceWatcher) WaitForEventType(kind, eventType string, timeout time.Duration) (*ResourceEvent, error) {
+	rw.t.Helper()
+
+	// Step 1: Check existing events first
+	rw.mu.RLock()
+	for _, evt := range rw.events {
+		if evt.Kind == kind && evt.Type == eventType {
+			result := evt
+			rw.mu.RUnlock()
+			rw.t.Logf("✓ Found existing %s %s: %s/%s", eventType, kind, evt.Namespace, evt.Name)
+			return &result, nil
+		}
+	}
+	rw.mu.RUnlock()
+
+	// Step 2: Subscribe to new events
+	subCh := make(chan ResourceEvent, 100)
+
+	rw.mu.Lock()
+	rw.subscribers = append(rw.subscribers, subCh)
+	rw.mu.Unlock()
+
+	defer func() {
+		rw.mu.Lock()
+		for i, ch := range rw.subscribers {
+			if ch == subCh {
+				rw.subscribers = append(rw.subscribers[:i], rw.subscribers[i+1:]...)
+				break
+			}
+		}
+		rw.mu.Unlock()
+		close(subCh)
+	}()
+
+	// Step 3: Wait for matching event
+	deadline := time.Now().Add(timeout)
+
+	for {
+		select {
+		case evt, ok := <-subCh:
+			if !ok {
+				return nil, fmt.Errorf("watcher stopped")
+			}
+
+			if evt.Kind == kind && evt.Type == eventType {
+				rw.t.Logf("✓ Found %s %s: %s/%s", eventType, kind, evt.Namespace, evt.Name)
+				return &evt, nil
+			}
+
+		case <-time.After(time.Until(deadline)):
+			if !time.Now().Before(deadline) {
+				return nil, fmt.Errorf("timeout waiting for %s %s event", eventType, kind)
 			}
 		}
 	}
