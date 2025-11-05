@@ -5,7 +5,7 @@ state: ready
 
 # This is a WIP
 
-## Summary 
+## Summary
 
 This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on two user-editable Custom Resources (CRs):
 
@@ -52,6 +52,7 @@ This proposal advocates for a parent/child CRD model to address these challenges
       * `MultiPooler` and `Postgres` are shard-level components, managed by their parent `Shard` CR.
   * **V1 Sharding:** The user defines a "database." The operator implicitly creates one `TableGroup` and one `Shard` child CR for that database. This abstraction simplifies the v1 API while preserving the sharding-ready architecture.
 
+<!-- end list -->
 
 ```ascii
 [MultigresCluster] 🚀 (The root CR - user-editable)
@@ -97,10 +98,10 @@ This section provides the comprehensive definitions and examples for each Custom
 ### User Managed CR: MultigresCluster
 
   * This and the `ShardTemplate` are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted.
-  * Images are defined globally to ensure version consistency (Req 1).
-  * `MultiOrch` is now a global component defined at this level (Req 5).
-  * `Cell` definitions now include `zone`/`region` and a `MultiGateway` config with `static` or `dynamic` options (Req 6, 7).
-  * The `databases` spec is simplified. The `tablegroups` block is removed. Users now define shard configuration directly under the database using either an inline `pools` list or a `shardTemplateRef` (Req 2, 3).
+  * Images are defined globally to ensure version consistency.
+  * `MultiOrch` is now a global component defined at this level.
+  * `Cell` definitions now include `zone`/`region` and a `MultiGateway` config with `static` or `dynamic` options.
+  * The `databases` spec is simplified. The `tablegroups` block is removed. Users now define shard configuration directly under the database using either an inline `pools` list or a `shardTemplateRef`.
 
 <!-- end list -->
 
@@ -160,7 +161,7 @@ spec:
   # MultiOrch Configuration (Global)
   # ----------------------------------------------------------------
   multiorch:
-    # Moved from Cell to global (Req 5). Define inline.
+    # Moved from Cell to global. Define inline.
     replicas: 1
     resources:
       requests:
@@ -176,13 +177,13 @@ spec:
   cells:
     - name: "us-east-1a"
       spec:
-        # (Req 6) Define topology. Set ONLY one of zone or region.
+        # Define topology. Set ONLY one of zone or region.
         # Controller maps this to node labels
         # (e.g., topology.kubernetes.io/zone)
         zone: "us-east-1a"
         # region: "us-east-1"
         
-        # (Req 7) MultiGateway config is per-cell.
+        # MultiGateway config is per-cell.
         # Choose one: static or dynamic.
         multiGateway:
           # --- Option 1: Static (Original Model) ---
@@ -229,7 +230,7 @@ spec:
   databases:
     - name: "production_db"
       spec:
-        # (Req 2, 3) Simplified spec. 'tablegroups' is removed.
+        # Simplified spec. 'tablegroups' is removed.
         # Define the DB's single shard using ONE of the following options.
         # An admission webhook MUST reject if both are set.
 
@@ -241,7 +242,7 @@ spec:
         # --- OPTION 1 (with Overrides): Use a ShardTemplate + Overrides ---
         shardTemplateRef: "standard-ha-shard"
         
-        # (Req 3) Overrides are deep-merged onto the template's pools
+        # Overrides are deep-merged onto the template's pools
         # using (type, cell) as the unique key.
         overrides:
           # This item MATCHES (replica, us-east-1a) in the template
@@ -279,7 +280,7 @@ spec:
     - name: "custom_db"
       spec:
         # --- OPTION 2: Inline Definition (mutually exclusive) ---
-        # (Req 3) This defines the *entire* shard spec.
+        # This defines the *entire* shard spec.
         pools:
           - type: "replica"
             cell: "us-east-1b"
@@ -341,15 +342,15 @@ status:
 
 ### User Managed CR: ShardTemplate
 
-  * This CR is renamed from `DeploymentTemplate` (Req 3).
+  * This CR is renamed from `DeploymentTemplate`.
   * It is **not** a child of any other resource.
-  * Its scope is **reduced** to *only* defining shard pools (Req 3). Templating for other components (`MultiAdmin`, `MultiOrch`, etc.) is removed for v1 simplicity.
-  * The `spec` now contains a `pools` key, which holds a list of pool definitions (Req 3). This structure is identical to the inline `pools` block in the `MultigresCluster` CR.
+  * Its scope is **reduced** to *only* defining shard pools. Templating for other components (`MultiAdmin`, `MultiOrch`, etc.) is removed for v1 simplicity.
+  * The `spec` now contains a `pools` key, which holds a list of pool definitions. This structure is identical to the inline `pools` block in the `MultigresCluster` CR.
 
 <!-- end list -->
 
 ```yaml
-# (Req 3) This defines a reusable template named "standard-ha-shard".
+# This defines a reusable template named "standard-ha-shard".
 # It is renamed from DeploymentTemplate and now ONLY contains pool specs.
 apiVersion: multigres.com/v1alpha1
 kind: ShardTemplate
@@ -357,8 +358,8 @@ metadata:
   name: "standard-ha-shard"
   namespace: example
 spec:
-  # (Req 3) The spec now consists of a list of pools.
-  # This structure (Req 4) is required for the (type, cell)
+  # The spec now consists of a list of pools.
+  # This structure is required for the (type, cell)
   # override logic to function.
   pools:
     # --- Pool 1: Replicas in us-east-1a ---
@@ -463,7 +464,7 @@ status:
 #### Child CR of MultigresCluster: Cell
 
   * This CR is owned by the `MultigresCluster`.
-  * It no longer manages `MultiOrch` (Req 5).
+  * It no longer manages `MultiOrch`.
   * It still owns `MultiGateway` resources and the `LocalTopoServer` CR (if configured).
 
 <!-- end list -->
@@ -485,13 +486,13 @@ metadata:
 spec:
   name: "us-east-1a"
   
-  # (Req 6) The controller populates the resolved topology info
+  # The controller populates the resolved topology info
   zone: "us-east-1a" 
 
   images:
     multigateway: "multigres/multigres:latest"
 
-  # (Req 7) The controller resolves the static or dynamic config
+  # The controller resolves the static or dynamic config
   # into a concrete spec for the Cell controller to act on.
   multiGateway:
     replicas: 2
@@ -503,7 +504,7 @@ spec:
         cpu: "1"
         memory: "1Gi"
 
-  # (Req 5) 'multiOrch' spec is REMOVED from Cell.
+  # 'multiOrch' spec is REMOVED from Cell.
   
   # This cell uses the global topo server
   globalTopoServer:
@@ -521,16 +522,16 @@ status:
   gatewayReplicas: 2
   gatewayReadyReplicas: 2
   gatewayServiceName: "example-multigres-cluster-us-east-1a-gateway"
-  # (Req 5) 'multiorchAvailable' is REMOVED from Cell status.
+  # 'multiorchAvailable' is REMOVED from Cell status.
 ```
 
 #### Child CR of MultigresCluster: TableGroup
 
   * **No change to CRD definition.**
-  * This CR is still owned by the `MultigresCluster` (Req 2).
+  * This CR is still owned by the `MultigresCluster`.
   * The `MultigresCluster` controller will create **one** of these for each entry in the `spec.databases` list.
   * The controller will resolve the user's `pools` or `shardTemplateRef`+`overrides` from the database spec and populate the `spec.shardTemplate` block below.
-  * For v1, `spec.partitioning.shards` will always be set to `1` by the controller (Req 2).
+  * For v1, `spec.partitioning.shards` will always be set to `1` by the controller.
 
 <!-- end list -->
 
@@ -550,7 +551,7 @@ spec:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
 
-  # (Req 2) Controller will set this to 1 for v1
+  # Controller will set this to 1 for v1
   partitioning:
     shards: 1
 
@@ -574,7 +575,7 @@ status:
   conditions:
   - type: Available
     status: "True"
-  # (Req 2) This will be 1 for v1
+  # This will be 1 for v1
   shards: 1
   readyShards: 1
 ```
@@ -582,7 +583,7 @@ status:
 #### Child of TableGroup: Shard
 
   * **No change to CRD definition.**
-  * This CR is owned by the `TableGroup` (Req 2).
+  * This CR is owned by the `TableGroup`.
   * The `TableGroup` controller will create **one** of these (since `partitioning.shards: 1`).
   * The `spec.pools` here is the final, resolved, read-only spec that drives the creation of `Postgres` and `MultiPooler` resources.
 
@@ -657,7 +658,3 @@ status:
   * **Alternative 3: Hybrid Model with `managed: true/false` Flag:** Rejected. Lifecycle complexity and "split-brain" source of truth are too risky.
   * **Alternative 4: Operator as a Platform-Agnostic Delegator:** Rejected. Too much scope for v1alpha1; can be considered later.
   * **Alternative 5: Helm Charts Instead of CRDs:** Rejected. Lacks active reconciliation and Day 2 operations critical for a stateful database.
-
------
-
-Would you like me to draft the formal `v1alpha1` Go type definitions for these CRDs based on this consolidated design?
