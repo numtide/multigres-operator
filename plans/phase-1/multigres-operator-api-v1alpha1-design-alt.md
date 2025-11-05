@@ -340,6 +340,8 @@ status:
     serviceName: "example-multigres-cluster-multiorch"
 ```
 
+-----
+
 ### User Managed CR: ShardTemplate
 
   * This CR is renamed from `DeploymentTemplate`.
@@ -426,6 +428,8 @@ spec:
   # is still valid and will be considered for future implementation.
 ```
 
+-----
+
 ### Child CRs of MultigresCluster
 
 These CRs are **read-only** and managed by their respective controllers.
@@ -460,6 +464,8 @@ status:
   readyReplicas: 3
   clientServiceName: "example-multigres-cluster-global-client"
 ```
+
+-----
 
 #### Child CR of MultigresCluster: Cell
 
@@ -525,13 +531,14 @@ status:
   # 'multiorchAvailable' is REMOVED from Cell status.
 ```
 
+-----
+
 #### Child CR of MultigresCluster: TableGroup
 
-  * **No change to CRD definition.**
-  * This CR is still owned by the `MultigresCluster`.
+  * This CR is owned by the `MultigresCluster`.
   * The `MultigresCluster` controller will create **one** of these for each entry in the `spec.databases` list.
-  * The controller will resolve the user's `pools` or `shardTemplateRef`+`overrides` from the database spec and populate the `spec.shardTemplate` block below.
-  * For v1, `spec.partitioning.shards` will always be set to `1` by the controller.
+  * The controller resolves the user's `pools` or `shardTemplateRef`+`overrides` from the database spec and populates the `spec.shards[0].pools` block below.
+  * For v1, the `shards` list will contain only one item named `default`. The `TableGroup` controller will then create a child `Shard` CR for each item in this list.
 
 <!-- end list -->
 
@@ -551,41 +558,42 @@ spec:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
 
-  # Controller will set this to 1 for v1
-  partitioning:
-    shards: 1
-
   # This block is populated by the MultigresCluster controller
   # after resolving the database-level spec (template or inline).
-  shardTemplate:
-    pools:
-      - type: "replica"
-        cell: "us-east-1a"
-        replicas: 3
-        dataVolumeClaimTemplate: { ... }
-        postgres: { ... }
-        multipooler: { ... }
-      - type: "replica"
-        cell: "us-east-1b"
-        replicas: 3
-        dataVolumeClaimTemplate: { ... }
-        postgres: { ... }
-        multipooler: { ... }
+  # For v1, this list will only contain one shard named "default".
+  shards:
+    - name: "default"
+      pools:
+        - type: "replica"
+          cell: "us-east-1a"
+          replicas: 3
+          dataVolumeClaimTemplate: { ... }
+          postgres: { ... }
+          multipooler: { ... }
+        - type: "replica"
+          cell: "us-east-1b"
+          replicas: 3
+          dataVolumeClaimTemplate: { ... }
+          postgres: { ... }
+          multipooler: { ... }
 status:
   conditions:
   - type: Available
     status: "True"
+    message: "All shards are healthy"
   # This will be 1 for v1
   shards: 1
   readyShards: 1
 ```
 
+-----
+
 #### Child of TableGroup: Shard
 
-  * **No change to CRD definition.**
   * This CR is owned by the `TableGroup`.
-  * The `TableGroup` controller will create **one** of these (since `partitioning.shards: 1`).
+  * The `TableGroup` controller will create **one** of these (since `spec.shards` on the `TableGroup` has one item).
   * The `spec.pools` here is the final, resolved, read-only spec that drives the creation of `Postgres` and `MultiPooler` resources.
+  * The name is derived from its parent `TableGroup` and the `name` from the `shards` list (e.g., `<tablegroup-name>-<shard-name>`).
 
 <!-- end list -->
 
@@ -593,8 +601,13 @@ status:
 apiVersion: multigres.com/v1alpha1
 kind: Shard
 metadata:
-  name: "production-db-default-0"
+  name: "production-db-default-default"
   namespace: example
+  labels:
+    multigres.com/cluster: "example-multigres-cluster"
+    multigres.com/database: "production_db"
+    multigres.com/tablegroup: "default"
+    multigres.com/shard: "default"
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
     kind: TableGroup
@@ -618,10 +631,13 @@ status:
   conditions:
   - type: Available
     status: "True"
+    message: "Shard is healthy and serving"
   primaryCell: "us-east-1a"
   totalPods: 6
   readyPods: 6
 ```
+
+-----
 
 ## Open Issues / Design Questions
 
@@ -642,6 +658,7 @@ status:
       * Moved `MultiOrch` to be a global component.
       * Updated `MultiGateway` to be cell-local with `static` and `dynamic` config options.
       * Added `zone`/`region` topology keys to the `Cell` spec.
+  * **2025-11-05 (Revision 2):** Modified the child `TableGroup` CR to remove `partitioning` and use a `shards` list, preparing for future named-shard expansion.
 
 ## Drawbacks
 
