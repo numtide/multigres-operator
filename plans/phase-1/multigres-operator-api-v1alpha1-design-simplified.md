@@ -60,7 +60,6 @@ spec:
     imagePullPolicy: "IfNotPresent"
     multigateway: "multigres/multigres:latest"
     multiadmin: "multigres/multigres:latest"
-    etcd: "quay.io/coreos/etcd:v3.5.17"
 
   globalTopoServer:
     rootPath: "/multigres/global"
@@ -145,6 +144,7 @@ spec:
   # 1. Point to ONE global CLUSTER template.
   # This provides defaults for images, globalTopoServer,
   # multiadmin, and cells.
+  # This template can be overridden by either inline definitions or individual deployment templates
   deploymentTemplateRef: "standard-ha-cluster"
 
   # 2. Define databases and point to SHARD templates

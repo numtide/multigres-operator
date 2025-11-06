@@ -100,7 +100,6 @@ Managing a distributed, sharded database system is inherently complex. This API 
   * The `databases.tablegroups.shards` structure is now fully exposed to the user.
   * `MultiOrch`, `MultiGateway`, and `LocalTopoServer` configs are **removed** from the cell/cluster level and now live *inside* the `shards[]` definition (or the `ShardTemplate` it references).
 
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -278,7 +277,6 @@ status:
       * `multiOrch` & `pools` -\> Go to the `Shard` child CR.
       * `multiGateway` & `localTopoServer` -\> Go to the `Cell` child CRs (after conflict resolution).
 
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -528,7 +526,7 @@ status:
 
 ## WARNING
 
-We consider this design to be flawed, please read below why before committing to go forward with this.
+We consider this design to be flawed, please read below why before committing to go forward with this design.
 
 
 ## Core Design & Architectural Flaws
@@ -554,7 +552,7 @@ We consider this design to be flawed, please read below why before committing to
 
 ## Implementation & Controller Complexity
 
-* **1. Complex "At-a-Distance" Reconciliation:** The `MultigresCluster` controller (the parent) becomes incredibly complex. Instead of just copying a user's `cell.multiGateway` spec into the `Cell` CR, it must now:
+* **1. Complex "At-a-Distance" Reconciliation:** The `MultigresCluster` controller (the parent) becomes unnecessarily complex. Instead of just copying a user's `cell.multiGateway` spec into the `Cell` CR, it must now:
     1.  Discover all shards being deployed to a given cell.
     2.  Read all of their (potentially different) `ShardTemplate`s or inline specs.
     3.  Implement the conflict-resolution logic ("pick a winner").
@@ -569,7 +567,7 @@ We consider this design to be flawed, please read below why before committing to
 
 ## User Experience (UX) & Operational Downsides
 
-* **1. Extreme User Confusion:** This design is not discoverable.
+* **1. User Confusion:** This design is not discoverable.
     * **Question:** "I want to change the `MultiGateway` replicas in `us-east-1a`."
     * **Answer:** "You have to find which of the 10 shards in that cell was the 'first' one created, find its `ShardTemplate`, and edit the `multiGateway` block in that one file."
     * This is an unusable and confusing user experience.
@@ -591,10 +589,11 @@ This approach, while seeming like a solution, **fails to solve the core architec
 
 ---
 
-## What if we disallow the creation of more than one shard per MultigresCluster?
+## What if we disallow the creation of more than one shard per MultigresCluster (Only one DB allowed)?
 
 This is a much more extreme limitation that technically solves the "N:1 Conflict," but aside from the obvious limitation of having a single database multigres cluster we will still have the following issue: 
 
 * **It Still Doesn't Fix the Confusing API:** The user must *still* use the flawed, "lying" API. To configure the cell's gateway, they have to find and edit the *one and only shard*. This is still non-intuitive for users who get familiar with Multigres architecture. It fixes the conflict by sacrificing features and flexibility, while still leaving the user with a confusing and architecturally-incorrect API.
+* **It still makes future API changes more challenging** - if we want to revert to a more faithful API representation of the Multigres architecture in the future, this approach wouldn't be a simple extension, but a reshuffling of the API. 
 
-If we were to commit to this spec, this would be the only way we would recommend using it.
+However, ff we were to commit to this spec, this would be the only way we would recommend using it.
