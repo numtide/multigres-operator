@@ -1,5 +1,5 @@
 ---
-title: MultigresCluster API with Child Resources based on Multigres Architecture Alternative
+title: MultigresCluster API All Config in Shard Alternative 
 state: ready
 ---
 
@@ -7,50 +7,47 @@ state: ready
 
 ## Summary
 
-This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on two user-editable Custom Resources (CRs):
+This proposal defines the `v1alpha1` API for the Multigres Operator. This design is centered on two user-editable Custom Resources (CRs):
 
-1.  **`MultigresCluster`**: The root resource that defines the desired state (intent) of the entire cluster.
-2.  **`ShardTemplate`**: A reusable, namespaced resource for defining common shard pool configurations (e.g., "standard-ha-shard", "analytics-shard").
+1.  **`MultigresCluster`**: The root resource that defines the desired state (intent) of the entire cluster, including the full `database.tablegroup.shard` hierarchy.
+2.  **`ShardTemplate`**: A reusable, namespaced resource for defining the complete configuration for a shard, including its pools (`MultiPooler`/`Postgres`), `MultiOrch`, `MultiGateway`, and `LocalTopoServer` components.
 
-All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) are implemented as read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers. This enables a clean, hierarchical, and observable architecture.
+This design relies on the top-level `MultigresCluster` controller to resolve all shard-level configurations and populate the specs of the read-only child CRs (`Cell`, `TableGroup`, `Shard`). This creates a significant implementation challenge, as the controller must resolve N:1 conflicts (e.g., multiple shards defining different `MultiGateway` configs for the same cell).
 
 ## Motivation
 
-Managing a distributed, sharded database system across multiple failure domains (cells) is inherently complex. A single, monolithic CRD for this task would be unmanageable, difficult to debug, and lead to a complex, monolithic controller.
+Managing a distributed, sharded database system is inherently complex. This API attempts to provide a declarative, Kubernetes-native interface for this task. The primary motivations for this specific parent/child design are:
 
-This proposal advocates for a parent/child CRD model to address these challenges. The primary motivations for this design are:
-
-  * **Separation of Concerns:** Splitting logic into child CRs (`Cell`, `TableGroup`, `Shard`) results in simple, specialized controllers that are easier to build, test, and maintain.
-  * **Hierarchical Observability:** This model provides a clean, hierarchical tree for status aggregation. A failure in a specific `Shard` can be clearly observed on the `Shard` CR, its `TableGroup` parent, and finally aggregated up to the root `MultigresCluster` status.
-  * **Efficient, Event-Driven Reconciliation:** This architecture enables cascading reconciliation. A change to the `MultigresCluster` only triggers its controller, which may then update a `Cell` child CR. This, in turn, triggers the `Cell` controller, and so on.
-  * **Idempotency and Single Source of Intent:** By making the `MultigresCluster` the single editable source of truth, we prevent unstable conflicts. Any manual edits to read-only child CRs are automatically reverted by their controller, ensuring the cluster's *realized state* always converges with the parent CR's *desired state*.
+  * **Hierarchical Observability:** A parent/child model provides a clean tree for status aggregation. A failure in a `Shard` can be observed on the `Shard` CR, its `TableGroup` parent, and aggregated up to the `MultigresCluster`.
+  * **Separation of Concerns (Child CRs):** Splitting logic into child CRs (`Cell`, `TableGroup`, `Shard`) allows for specialized controllers, though the logic for populating their specs is now heavily concentrated in the `MultigresCluster` controller.
+  * **Single Source of Intent:** The `MultigresCluster` is the single editable source of truth. Any manual edits to read-only child CRs are automatically reverted by their controller.
 
 ## Goals
 
   * Provide a declarative, Kubernetes-native API for deploying a multi-cell, sharded Multigres cluster.
+  * Allow users to define the full sharding hierarchy, including `TableGroups` and `Shards`.
+  * Co-locate all component configurations (`MultiGateway`, `MultiOrch`, `LocalTopoServer`, `Pools`) within a single, reusable `ShardTemplate`.
   * Separate user-facing *intent* (`MultigresCluster`) from operator-managed *realized state* (child CRs).
-  * Enable configuration reuse for shard definitions via a `ShardTemplate` resource.
-  * Establish a clear, hierarchical ownership model using `OwnerReferences` for clean garbage collection and status aggregation.
-  * Define a clear API contract for managing global and cell-local topology servers (etcd), as well as global and cell-local components (`MultiOrch`, `MultiGateway`).
-  * **V1 Simplification:** Simplify the database-level API to assume **one shard per database**, while retaining the underlying `TableGroup` and `Shard` child CRs to allow for easy expansion to multi-shard support in a future API version.
 
 ## Non-Goals
 
-  * This document does not define the specific implementation details of each controller's reconciliation logic or admission webhooks.
-  * This document does not cover Day 2 operations such as database backup, restore, monitoring, or alerting.
-  * This document does not cover automated, in-place version upgrades.
-  * This document does **not** support multi-shard or explicit `TableGroup` management in the `v1alpha1` user-facing API. This is deferred to a future version.
+  * This document does not define the conflict-resolution strategy (e.g., "first-one-wins," "merge," etc.) that the `MultigresCluster` controller must use to resolve contradictory configs for cell-level components. This is a major open issue.
+  * This document does not cover Day 2 operations (backup, restore, monitoring, alerting).
 
 ## Proposal: API Architecture and Resource Topology
 
-  * The operator can create a managed global etcd topology server and/or a managed local topology server. The same `TopoServer` CRD is used for both. The global `TopoServer` will belong to the `MultigresCluster` CR directly, whereas the local `TopoServer` belongs to the `Cell` CR.
-  * A user can choose to point the cluster to an external etcd topology server, in which case the `TopoServer` resource will not be provisioned.
-  * If no local topology server is configured for a cell, it will use the global topology server by default.
-  * **Component Placement:**
-      * `MultiAdmin` and `MultiOrch` are global components, managed as direct children of `MultigresCluster`.
-      * `MultiGateway` is a cell-local component, managed by its parent `Cell` CR.
-      * `MultiPooler` and `Postgres` are shard-level components, managed by their parent `Shard` CR.
-  * **V1 Sharding:** The user defines a "database." The operator implicitly creates one `TableGroup` and one `Shard` child CR for that database. This abstraction simplifies the v1 API while preserving the sharding-ready architecture.
+  * The user defines the full `databases.tablegroups.shards` hierarchy in the `MultigresCluster` CR.
+  * All component configurations (`MultiGateway`, `MultiOrch`, `LocalTopoServer`, `Pools`) are defined at the shard level, either inline or via a `ShardTemplate`.
+  * **Controller Logic:**
+      * The `MultigresCluster` controller reads this spec.
+      * It creates the `Cell` child CRs. It must then **resolve** the N:1 `MultiGateway` and `LocalTopoServer` configs from all shards in that cell and populate the `Cell.spec`.
+      * It creates the `TableGroup` child CRs, populating their `spec.shards` list.
+      * The `TableGroup` controller creates the `Shard` child CRs.
+      * The `Shard.spec` is populated with the `MultiOrch` and `Pools` config.
+  * **Component Ownership:**
+      * `MultiGateway` & `LocalTopoServer` are **owned by the `Cell` CR** (which gets its config from the `MultigresCluster` controller).
+      * `MultiOrch` is **owned by the `Shard` CR**.
+      * `MultiPooler`/`Postgres` are **owned by the `Shard` CR** (as part of its `Pools`).
 
 <!-- end list -->
 
@@ -62,46 +59,46 @@ This proposal advocates for a parent/child CRD model to address these challenges
       │    └── 🏛️ etcd Resources (if managed)
       │
       ├── 🤖 MultiAdmin Resources - Deployment, Services, Etc
-      │
-      ├── 🧠 MultiOrch Resources (Global) - Deployment, Etc
       │    
       │
       ├── 💠 [Cell] (Child CR)
+      │    │ 
+      │    │  (Spec is populated by MultigresCluster controller
+      │    │   after resolving conflicts from shard definitions)
       │    │
       │    ├── 🚪 MultiGateway Resources (Deployment, Service, etc.)
       │    │    
       │    │
-      │    └── 📡 [LocalTopoServer] (Child CR if managed and not using global)
+      │    └── 📡 [LocalTopoServer] (Child CR if managed)
       │         │
       │         └── 🏛️ etcd Resources (if managed)
       │
-      └── 🗃️ [TableGroup] (Child CR - *implicitly created*)
+      └── 🗃️ [TableGroup] (Child CR)
            │
-           └── 📦 [Shard] (Child CR - *implicitly created*)
+           └── 📦 [Shard] (Child CR)
+                │
+                ├── 🧠 MultiOrch Resources (Deployment, etc.)
                 │
                 └── 🏊 MultiPooler and postgres resources (pods or statefulset)
                     
 
 
-📋 [ShardTemplate] (Separate CR - user-editable, NOT a child)
+📋 [ShardTemplate] (Separate CR - user-editable)
    ├── Contains spec sections for:
-   │   └── pools: [...]
+   │   ├── pools: [...]
+   │   ├── multiOrch: {...}
+   │   ├── multiGateway: {...}
+   │   └── localTopoServer: {...}
    │
-   └── Watched by MultigresCluster controller ONLY when referenced
-       └── Resolved into child CRs (children are unaware of templates)
+   └── Watched by MultigresCluster controller when referenced
 ```
 
 ## Design Details: API Specification
 
-This section provides the comprehensive definitions and examples for each Custom Resource.
-
 ### User Managed CR: MultigresCluster
 
-  * This and the `ShardTemplate` are the only two editable entries for the end-user. All other child CRs will be owned by this top-level CR, and any manual changes to those child CRs will be reverted.
-  * Images are defined globally to ensure version consistency.
-  * `MultiOrch` is now a global component defined at this level.
-  * `Cell` definitions now include `zone`/`region` and a `MultiGateway` config with `static` or `dynamic` options.
-  * The `databases` spec is simplified. The `tablegroups` block is removed. Users now define shard configuration directly under the database using either an inline `pools` list or a `shardTemplateRef`.
+  * The `databases.tablegroups.shards` structure is now fully exposed to the user.
+  * `MultiOrch`, `MultiGateway`, and `LocalTopoServer` configs are **removed** from the cell/cluster level and now live *inside* the `shards[]` definition (or the `ShardTemplate` it references).
 
 <!-- end list -->
 
@@ -125,15 +122,14 @@ spec:
     multipooler: "multigres/multigres:latest"
     multiadmin: "multigres/multigres:latest"
     postgres: "postgres:15.3"
+    etcd: "quay.io/coreos/etcd:v3.5.17"
 
   # ----------------------------------------------------------------
   # globalTopoServer Configuration
   # ----------------------------------------------------------------
   globalTopoServer:
     rootPath: "/multigres/global"
-    # Templating removed for simplicity. Define inline or use external.
     managedSpec:
-      image: quay.io/coreos/etcd:v3.5.17
       replicas: 3
       dataVolumeClaimTemplate:
         accessModes: ["ReadWriteOnce"]
@@ -147,29 +143,11 @@ spec:
   # MultiAdmin Configuration (Global)
   # ----------------------------------------------------------------
   multiadmin:
-    # Templating removed for simplicity. Define inline.
     replicas: 1
     resources:
       requests:
         cpu: "100m"
         memory: "128Mi"
-      limits:
-        cpu: "200m"
-        memory: "256Mi"
-
-  # ----------------------------------------------------------------
-  # MultiOrch Configuration (Global)
-  # ----------------------------------------------------------------
-  multiorch:
-    # Moved from Cell to global. Define inline.
-    replicas: 1
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "200m"
-        memory: "256Mi"
 
   # ----------------------------------------------------------------
   # Cells Configuration
@@ -177,129 +155,100 @@ spec:
   cells:
     - name: "us-east-1a"
       spec:
-        # Define topology. Set ONLY one of zone or region.
-        # Controller maps this to node labels
-        # (e.g., topology.kubernetes.io/zone)
         zone: "us-east-1a"
-        # region: "us-east-1"
-        
-        # MultiGateway config is per-cell.
-        # Choose one: static or dynamic.
-        multiGateway:
-          # --- Option 1: Static (Original Model) ---
-          static:
-            replicas: 2
-            resources:
-              requests:
-                cpu: "500m"
-                memory: "512Mi"
-              limits:
-                cpu: "1"
-                memory: "1Gi"
-          # --- Option 2: Dynamic (Client Model) ---
-          # dynamic:
-          #   replicasPerCell: 1
-          #   resourceMultiplier: 1.0
-
-        # Note: This cell uses the global topoServer by default.
-        # topoServer: {}
+        # Note: All 'multiGateway' and 'topoServer' configs
+        # are REMOVED from the cell spec. The controller must
+        # resolve these from this cell's shard definitions.
 
     - name: "us-east-1b"
       spec:
         zone: "us-east-1b"
 
-        multiGateway:
-          dynamic:
-            replicasPerCell: 1
-            resourceMultiplier: 1.0
-        
-        topoServer: # This cell uses a managed local topo server
-          rootPath: "/multigres/us-east-1b"
-          managedSpec:
-            image: quay.io/coreos/etcd:v3.5.17
-            replicas: 1
-            dataVolumeClaimTemplate:
-              accessModes: ["ReadWriteOnce"]
-              resources:
-                requests:
-                  storage: "5Gi"
-
   # ----------------------------------------------------------------
-  # Database Configuration (V1 - One Shard per DB)
+  # Database Configuration (Full Sharding)
   # ----------------------------------------------------------------
   databases:
     - name: "production_db"
-      spec:
-        # Simplified spec. 'tablegroups' is removed.
-        # Define the DB's single shard using ONE of the following options.
-        # An admission webhook MUST reject if both are set.
+      tablegroups:
+        - name: "default"
+          shards:
+            # --- SHARD 1: Uses a Template ---
+            - name: "0" # Future: name could be key range
+              shardTemplateRef: "standard-ha-shard"
 
-        # --- OPTION 1: Use a ShardTemplate ---
-        shardTemplateRef: "standard-ha-shard"
+        - name: "orders_tg"
+          shards:
+            # --- SHARD 2: Uses Template + Overrides ---
+            - name: "0"
+              shardTemplateRef: "standard-ha-shard"
+              overrides:
+                # Override for a pool
+                pools:
+                  - type: "replica"
+                    cell: "us-east-1a"
+                    dataVolumeClaimTemplate:
+                      resources:
+                        requests:
+                          storage: "1000Gi"
+                # Override for MultiOrch
+                multiOrch:
+                  resources:
+                    requests:
+                      cpu: "500m"
 
-    - name: "analytics_db"
-      spec:
-        # --- OPTION 1 (with Overrides): Use a ShardTemplate + Overrides ---
-        shardTemplateRef: "standard-ha-shard"
-        
-        # Overrides are deep-merged onto the template's pools
-        # using (type, cell) as the unique key.
-        overrides:
-          # This item MATCHES (replica, us-east-1a) in the template
-          # and will be deep-merged.
-          - type: "replica"
-            cell: "us-east-1a"
-            dataVolumeClaimTemplate:
-              resources:
-                requests:
-                  storage: "1000Gi" # Patches the storage size
-            postgres:
-              resources:
-                requests:
-                  cpu: "4" # Patches the CPU request
+            # --- SHARD 3: Uses Inline Definition ---
+            - name: "1"
+              # --- Inline Definition (mutually exclusive with template) ---
+              spec:
+                # 1. Shard-Level Component: MultiOrch
+                multiOrch:
+                  replicas: 1
+                  resources:
+                    requests:
+                      cpu: "100m"
+                      memory: "128Mi"
+                
+                # 2. Cell-Level Component: MultiGateway
+                # This config will be used by the controller to
+                # configure the 'us-east-1a' and 'us-east-1b' Cell CRs.
+                # This will conflict with other shards in the same cell.
+                multiGateway:
+                  static:
+                    replicas: 2
+                    resources:
+                      requests:
+                        cpu: "500m"
+                        memory: "512Mi"
 
-          # This item does NOT MATCH any pool in the template
-          # and will be ADDED as a new pool.
-          - type: "readOnly"
-            cell: "us-east-1a"
-            replicas: 1
-            dataVolumeClaimTemplate:
-              accessModes: ["ReadWriteOnce"]
-              resources:
-                requests:
-                  storage: "500Gi"
-            postgres:
-              resources:
-                requests:
-                  cpu: "1"
-            multipooler:
-              resources:
-                requests:
-                  cpu: "100m"
-
-    - name: "custom_db"
-      spec:
-        # --- OPTION 2: Inline Definition (mutually exclusive) ---
-        # This defines the *entire* shard spec.
-        pools:
-          - type: "replica"
-            cell: "us-east-1b"
-            replicas: 2 
-            dataVolumeClaimTemplate:
-              accessModes: ["ReadWriteOnce"]
-              resources:
-                requests:
-                  storage: "75Gi"
-            postgres:
-              resources:
-                requests:
-                  cpu: "1"
-                  memory: "1Gi"
-            multipooler:
-              resources:
-                requests:
-                  cpu: "100m"
-                  memory: "128Mi"
+                # 3. Cell-Level Component: LocalTopoServer
+                # This will be used to configure the 'us-east-1a' Cell CR.
+                localTopoServer:
+                  cell: "us-east-1a"
+                  rootPath: "/multigres/us-east-1a"
+                  managedSpec:
+                    replicas: 1
+                    dataVolumeClaimTemplate:
+                      resources:
+                        requests:
+                          storage: "5Gi"
+                
+                # 4. Pool-Level Components: Pools
+                pools:
+                  - type: "replica"
+                    cell: "us-east-1a"
+                    replicas: 2 
+                    dataVolumeClaimTemplate:
+                      resources:
+                        requests:
+                          storage: "75Gi"
+                    postgres:
+                      resources:
+                        requests:
+                          cpu: "1"
+                    multipooler:
+                      resources:
+                        requests:
+                          cpu: "100m"
 
 # --- Status ---
 status:
@@ -310,73 +259,89 @@ status:
   conditions:
     - type: Available
       status: "True"
-    - type: Progressing
-      status: "False"
   cells:
     us-east-1a:
       gatewayAvailable: "True"
-      topoServerAvailable: "True" # Using global
+      topoServerAvailable: "True" 
     us-east-1b:
       gatewayAvailable: "True"
-      topoServerAvailable: "True" # Using local managed
-  databases:
-    production_db:
-      desiredInstances: 6 # 2 cells * 3 replicas/cell
-      readyInstances: 6
-      servingWrites: "True"
-    analytics_db:
-      desiredInstances: 7 # (3 from us-east-1a) + (3 from us-east-1b) + (1 readOnly)
-      readyInstances: 7
-      servingWrites: "True"
-    custom_db:
-      desiredInstances: 2
-      readyInstances: 2
-      servingWrites: "True"
+      topoServerAvailable: "True" # Using global
   multiadmin:
     available: "True"
-    serviceName: "example-multigres-cluster-multiadmin"
-  multiorch:
-    available: "True"
-    serviceName: "example-multigres-cluster-multiorch"
+  # Note: MultiOrch status is no longer global
 ```
-
------
 
 ### User Managed CR: ShardTemplate
 
-  * This CR is renamed from `DeploymentTemplate`.
-  * It is **not** a child of any other resource.
-  * Its scope is **reduced** to *only* defining shard pools. Templating for other components (`MultiAdmin`, `MultiOrch`, etc.) is removed for v1 simplicity.
-  * The `spec` now contains a `pools` key, which holds a list of pool definitions. This structure is identical to the inline `pools` block in the `MultigresCluster` CR.
+  * This CR is now the template for a *complete* shard, including components that are logically cell-level.
+  * The controller must read this template and "split" the configs:
+      * `multiOrch` & `pools` -\> Go to the `Shard` child CR.
+      * `multiGateway` & `localTopoServer` -\> Go to the `Cell` child CRs (after conflict resolution).
 
 <!-- end list -->
 
 ```yaml
-# This defines a reusable template named "standard-ha-shard".
-# It is renamed from DeploymentTemplate and now ONLY contains pool specs.
 apiVersion: multigres.com/v1alpha1
 kind: ShardTemplate
 metadata:
   name: "standard-ha-shard"
   namespace: example
 spec:
-  # The spec now consists of a list of pools.
-  # This structure is required for the (type, cell)
-  # override logic to function.
+  # ----------------------------------------------------------------
+  # 1. Shard-Level Component: MultiOrch
+  # ----------------------------------------------------------------
+  multiOrch:
+    replicas: 1 # Deployed per cell, but configured per shard
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+
+  # ----------------------------------------------------------------
+  # 2. Cell-Level Component: MultiGateway
+  # ----------------------------------------------------------------
+  multiGateway:
+    # This config will be used for ANY cell a shard pool
+    # is deployed to, unless overridden.
+    static:
+      replicas: 2
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+    # dynamic:
+    #   replicasPerCell: 1
+    #   resourceMultiplier: 1.0
+
+  # ----------------------------------------------------------------
+  # 3. Cell-Level Component: LocalTopoServer
+  # ----------------------------------------------------------------
+  # Defines a template for a local topo server.
+  # This config is applied to a cell IF a shard's pool
+  # is deployed to that cell. Conflicts are not defined.
+  localTopoServer:
+    # rootPath will be set by controller (e.g., /multigres/<cell-name>)
+    managedSpec:
+      replicas: 1
+      dataVolumeClaimTemplate:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: "5Gi"
+  
+  # ----------------------------------------------------------------
+  # 4. Pool-Level Components: Pools
+  # ----------------------------------------------------------------
   pools:
-    # --- Pool 1: Replicas in us-east-1a ---
     - type: "replica"
       cell: "us-east-1a"
       replicas: 3
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app.kubernetes.io/component: shard-pool
-              topologyKey: "kubernetes.io/hostname"
       dataVolumeClaimTemplate:
         accessModes: ["ReadWriteOnce"]
         resources:
@@ -393,85 +358,20 @@ spec:
             cpu: "500m"
             memory: "256Mi"
 
-    # --- Pool 2: Replicas in us-east-1b ---
     - type: "replica"
       cell: "us-east-1b"
       replicas: 3
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app.kubernetes.io/component: shard-pool
-              topologyKey: "kubernetes.io/hostname"
-      dataVolumeClaimTemplate:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: "250Gi"
-      postgres:
-        resources:
-          requests:
-            cpu: "2"
-            memory: "4Gi"
-      multipooler:
-        resources:
-          requests:
-            cpu: "500m"
-            memory: "256Mi"
-
-# status:
-  # No status is currently defined for this resource.
-  # The original discussion about status (e.g., listing consumers)
-  # is still valid and will be considered for future implementation.
+      # ... (similar config)
 ```
 
------
+### Child CRs (Read-Only)
 
-### Child CRs of MultigresCluster
+These specs are now populated by the `MultigresCluster` controller based on the complex, shard-level user configs.
 
-These CRs are **read-only** and managed by their respective controllers.
+#### Child CR: Cell
 
-#### Child CR of MultigresCluster OR Cell: TopoServer
-
-  * **No change.** This CRD is still sound. It is owned by `MultigresCluster` (if global) or `Cell` (if local). It is not created if `external` config is used.
-
-<!-- end list -->
-
-```yaml
-apiVersion: multigres.com/v1alpha1
-kind: TopoServer
-metadata:
-  name: "example-multigres-cluster-global"
-  namespace: example
-  ownerReferences:
-  - apiVersion: multigres.com/v1alpha1
-    kind: MultigresCluster
-    name: "example-multigres-cluster"
-    uid: "a1b2c3d4-1234-5678-90ab-f0e1d2c3b4a5"
-spec:
-  rootPath: "/multigres/global"
-  image: "quay.io/coreos/etcd:v3.5.17"
-  replicas: 3
-  # ... other resolved spec fields ...
-status:
-  conditions:
-  - type: Available
-    status: "True"
-  replicas: 3
-  readyReplicas: 3
-  clientServiceName: "example-multigres-cluster-global-client"
-```
-
------
-
-#### Child CR of MultigresCluster: Cell
-
-  * This CR is owned by the `MultigresCluster`.
-  * It no longer manages `MultiOrch`.
-  * It still owns `MultiGateway` resources and the `LocalTopoServer` CR (if configured).
+  * This CR's `spec` is no longer defined by the user. It is **fully resolved** by the `MultigresCluster` controller, which must pick a winning config from all shards deploying to this cell.
+  * This CR is still the owner of the `MultiGateway` and `LocalTopoServer` deployments.
 
 <!-- end list -->
 
@@ -480,65 +380,52 @@ apiVersion: multigres.com/v1alpha1
 kind: Cell
 metadata:
   name: "example-multigres-cluster-us-east-1a"
-  namespace: example
-  labels:
-    multigres.com/cluster: "example-multigres-cluster"
-    multigres.com/cell: "us-east-1a"
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
     kind: MultigresCluster
     name: "example-multigres-cluster"
-    uid: "a1b2c3d4-1234-5678-90ab-f0e1d2c3b4a5"
 spec:
   name: "us-east-1a"
-  
-  # The controller populates the resolved topology info
   zone: "us-east-1a" 
-
   images:
     multigateway: "multigres/multigres:latest"
 
-  # The controller resolves the static or dynamic config
-  # into a concrete spec for the Cell controller to act on.
+  # This spec is RESOLVED by the parent controller
+  # from a ShardTemplate or inline shard definition.
   multiGateway:
-    replicas: 2
-    resources:
-      requests:
-        cpu: "500m"
-        memory: "512Mi"
-      limits:
-        cpu: "1"
-        memory: "1Gi"
+    static:
+      replicas: 2
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
 
-  # 'multiOrch' spec is REMOVED from Cell.
+  # This spec is also RESOLVED by the parent.
+  topoServer:
+    local:
+      rootPath: "/multigres/us-east-1a"
+      managedSpec:
+        replicas: 1
+        dataVolumeClaimTemplate:
+          resources:
+            requests:
+              storage: "5Gi"
+    global:
+      rootPath: "/multigres/global"
+      clientServiceName: "example-multigres-cluster-global-client"
   
-  # This cell uses the global topo server
-  globalTopoServer:
-    rootPath: "/multigres/global"
-    clientServiceName: "example-multigres-cluster-global-client"
-  topoServer: {}
-
   allCells:
   - "us-east-1a"
   - "us-east-1b"
 status:
-  conditions:
-  - type: Available
-    status: "True"
-  gatewayReplicas: 2
-  gatewayReadyReplicas: 2
-  gatewayServiceName: "example-multigres-cluster-us-east-1a-gateway"
-  # 'multiorchAvailable' is REMOVED from Cell status.
+  gatewayAvailable: "True"
+  topoServerAvailable: "True"
 ```
 
------
+#### Child CR: TableGroup
 
-#### Child CR of MultigresCluster: TableGroup
-
-  * This CR is owned by the `MultigresCluster`.
-  * The `MultigresCluster` controller will create **one** of these for each entry in the `spec.databases` list.
-  * The controller resolves the user's `pools` or `shardTemplateRef`+`overrides` from the database spec and populates the `spec.shards[0].pools` block below.
-  * For v1, the `shards` list will contain only one item named `default`. The `TableGroup` controller will then create a child `Shard` CR for each item in this list.
+  * The spec for this CR is now just a list of `shards`, copied/resolved from the `MultigresCluster` spec.
+  * Its controller is responsible for creating the child `Shard` CRs.
 
 <!-- end list -->
 
@@ -546,54 +433,49 @@ status:
 apiVersion: multigres.com/v1alpha1
 kind: TableGroup
 metadata:
-  name: "production-db-default" # e.g., <db-name>-<default-tg>
-  namespace: example
+  name: "production-db-orders-tg"
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
     kind: MultigresCluster
     name: "example-multigres-cluster"
-    uid: "a1b2c3d4-1234-5678-90ab-f0e1d2c3b4a5"
 spec:
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
+    multiorch: "multigres/multigres:latest"
 
-  # This block is populated by the MultigresCluster controller
-  # after resolving the database-level spec (template or inline).
-  # For v1, this list will only contain one shard named "default".
+  # This list is populated by the MultigresCluster controller
+  # from the user's 'tablegroups.shards' spec.
   shards:
-    - name: "default"
+    - name: "0"
+      multiOrch:
+        replicas: 1
+        resources: { ... }
       pools:
         - type: "replica"
           cell: "us-east-1a"
           replicas: 3
-          dataVolumeClaimTemplate: { ... }
-          postgres: { ... }
-          multipooler: { ... }
+          # ...
+    - name: "1"
+      multiOrch:
+        replicas: 1
+        resources: { ... }
+      pools:
         - type: "replica"
-          cell: "us-east-1b"
-          replicas: 3
-          dataVolumeClaimTemplate: { ... }
-          postgres: { ... }
-          multipooler: { ... }
+          cell: "us-east-1a"
+          replicas: 2
+          # ...
 status:
-  conditions:
-  - type: Available
-    status: "True"
-    message: "All shards are healthy"
-  # This will be 1 for v1
-  shards: 1
-  readyShards: 1
+  shards: 2
+  readyShards: 2
 ```
 
------
+#### Child CR: Shard
 
-#### Child of TableGroup: Shard
-
-  * This CR is owned by the `TableGroup`.
-  * The `TableGroup` controller will create **one** of these (since `spec.shards` on the `TableGroup` has one item).
-  * The `spec.pools` here is the final, resolved, read-only spec that drives the creation of `Postgres` and `MultiPooler` resources.
-  * The name is derived from its parent `TableGroup` and the `name` from the `shards` list (e.g., `<tablegroup-name>-<shard-name>`).
+  * This CR is owned by `TableGroup`.
+  * Its spec is populated by the `TableGroup` controller.
+  * It is now the owner of the `MultiOrch` deployments for this shard (which it must deploy into each cell specified in `pools`).
+  * It is also the owner of the `MultiPooler`/`Postgres` resources.
 
 <!-- end list -->
 
@@ -601,77 +483,118 @@ status:
 apiVersion: multigres.com/v1alpha1
 kind: Shard
 metadata:
-  name: "production-db-default-default"
-  namespace: example
-  labels:
-    multigres.com/cluster: "example-multigres-cluster"
-    multigres.com/database: "production_db"
-    multigres.com/tablegroup: "default"
-    multigres.com/shard: "default"
+  name: "production-db-orders-tg-0"
   ownerReferences:
   - apiVersion: multigres.com/v1alpha1
     kind: TableGroup
-    name: "production-db-default"
-    uid: "d4e5f6a7-1234-5678-90ab-f0e1d2c3b4a7"
+    name: "production-db-orders-tg"
 spec:
   images:
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
-  # This is the fully resolved spec from the TableGroup parent
+    multiorch: "multigres/multigres:latest"
+
+  # Spec copied from parent TableGroup.shards[]
+  multiOrch:
+    replicas: 1
+    resources: { ... }
+  
   pools:
     - type: "replica"
       cell: "us-east-1a"
       replicas: 3
-      # ... full resolved spec ...
-    - type: "replica"
-      cell: "us-east-1b"
-      replicas: 3
-      # ... full resolved spec ...
+      # ...
 status:
-  conditions:
-  - type: Available
-    status: "True"
-    message: "Shard is healthy and serving"
+  multiorchAvailable: "True"
   primaryCell: "us-east-1a"
-  totalPods: 6
-  readyPods: 6
+  totalPods: 3
+  readyPods: 3
 ```
-
------
 
 ## Open Issues / Design Questions
 
-  * **V1 Upgrade Path:** Is the v1 simplification (hiding `TableGroup` from the user) clear, and is the upgrade path to re-introducing the `tablegroups` block in `v1alpha2` or `v1beta1` well-defined?
-  * **Gateway Config Validation:** Should the `static` and `dynamic` `MultiGateway` configs be enforced as a formal `oneOf` in the CRD validation webhook? (Strongly recommended).
-  * **Override Logic:** Verify the `(type, cell)` deep-merge logic for `overrides` is intuitive for users. Does it need to be a strategic merge patch instead? (Deep-merge is simpler to implement).
-  * What fields should be defaulted if the user provides minimal inline configuration?
-  * [Decide](https://github.com/numtide/multigres-operator/pull/33#discussion_r2472393853) whether the operator should reconcile labels and use them to keep track of its resources or we should add spec fields that do this.
+  * **N:1 Conflict Resolution:** This is the most significant new issue. The design **must** define how the `MultigresCluster` controller resolves conflicts when multiple shards in the same cell provide different configs for `MultiGateway` or `LocalTopoServer`. (e.g., "first shard wins," "merge," "error," "default shard only").
+  * **API Complexity:** The API is now significantly more complex. Placing cell-level component configs inside a shard-level template creates a "leaky abstraction" that is likely to confuse users, as it does not match the realized architecture.
+  * **Component Lifecycle:** The lifecycle of a `MultiGateway` is now tied to the shards within its cell. What happens to the `MultiGateway` when the *last* shard is removed from a cell?
 
 ## Implementation History
 
-  * **2025-10-08:** Initial proposal to create individual, user-managed CRDs for each component.
-  * **2025-10-14:** Second proposal introduced a top-level `MultigresCluster` CR as the primary user-facing API.
-  * **2025-10-28:** "Parent/child" model formalized. `MultigresCluster` becomes the single source of truth, and `DeploymentTemplate` was introduced.
-  * **2025-11-05 (Consolidated):** This design was created based on client feedback.
-      * Renamed `DeploymentTemplate` to `ShardTemplate` and scoped it *only* to shard definitions.
-      * Simplified the `databases` spec to one-shard-per-database (hiding `TableGroup` from the v1 user-facing API).
-      * Moved `MultiOrch` to be a global component.
-      * Updated `MultiGateway` to be cell-local with `static` and `dynamic` config options.
-      * Added `zone`/`region` topology keys to the `Cell` spec.
-  * **2025-11-05 (Revision 2):** Modified the child `TableGroup` CR to remove `partitioning` and use a `shards` list, preparing for future named-shard expansion.
+  * **2025-10-08:** Initial proposal (individual, user-managed CRDs).
+  * **2025-10-14:** Second proposal (top-level `MultigresCluster` CR).
+  * **2025-10-28:** "Parent/child" model formalized with `DeploymentTemplate`.
+  * **2025-11-05 (Consolidated):** Simplified v1 API (one-shard-per-db), `ShardTemplate`, `MultiOrch` global.
+  * **2025-11-05 (Revision 2):** `TableGroup` CR updated to use a `shards:[]` list.
+  * **2025-11-06 (Revision 3):** Reverted to full `databases.tablegroups.shards` user-facing API. Moved `MultiOrch`, `MultiGateway`, and `LocalTopoServer` configs into the `ShardTemplate` / inline shard definition per client feedback. This introduces a major N:1 conflict resolution problem.
 
-## Drawbacks
+## WARNING
 
-  * **Potential User Confusion:** Users accustomed to editing any Kubernetes resource might be confused when their manual edits to a child `Cell` or `Shard` CR are immediately reverted by the operator.
-  * **Abstraction of `ShardTemplate`:** The `ShardTemplate` CR adds a layer of indirection. A user must look in two places (`MultigresCluster` and `ShardTemplate`) to fully understand a shard's configuration.
-  * **Increased Number of CRDs:** This model introduces more CRDs (`Cell`, `TableGroup`, `Shard`, etc.) than a single monolithic approach.
+We consider this design to be flawed, please read below why before committing to go forward with this.
 
-## Alternatives
 
-(All original alternatives remain considered and rejected for the same reasons.)
+## Core Design & Architectural Flaws
 
-  * **Alternative 1: Single Monolithic CRD:** Rejected. Lacks observability and separation of concerns.
-  * **Alternative 2: Component CRDs Only (No Parent):** Rejected. Makes the common case (a full cluster) too complex.
-  * **Alternative 3: Hybrid Model with `managed: true/false` Flag:** Rejected. Lifecycle complexity and "split-brain" source of truth are too risky.
-  * **Alternative 4: Operator as a Platform-Agnostic Delegator:** Rejected. Too much scope for v1alpha1; can be considered later.
-  * **Alternative 5: Helm Charts Instead of CRDs:** Rejected. Lacks active reconciliation and Day 2 operations critical for a stateful database.
+* **1. The "N:1" Conflict Problem:** This is the most significant issue. A single Cell (like `us-east-1a`) will contain **many** Shards (N) but only **one** `MultiGateway` and **one** `LocalTopoServer` (1). This design allows every shard to provide a *different* configuration for those single components. The operator has no way to logically resolve this:
+    * If `Shard-A`'s template specifies 2 replicas for `MultiGateway` and `Shard-B`'s template specifies 4, which one wins?
+    * What if `Shard-A` defines a `LocalTopoServer` but `Shard-B` in the same cell does not?
+    * This forces you to implement a complex and arbitrary conflict-resolution strategy (e.g., "first shard to be created in the cell wins"), which is brittle and non-obvious.
+
+* **2. Violation of Separation of Concerns:** The `ShardTemplate` is now a "god object." It's being forced to define the configuration for components that have completely different lifecycles and scopes:
+    * **Pools** (Shard x Cell scope)
+    * **`MultiOrch`** (Shard scope)
+    * **`MultiGateway`** (Cell scope)
+    * **`LocalTopoServer`** (Cell scope)
+    This creates a "leaky abstraction" and is a classic API design anti-pattern.
+
+* **3. Mismatched Lifecycles & Brittleness:** This design dangerously ties the lifecycle of a **Cell-level** component to a **Shard-level** component.
+    * **Example:** Imagine `Shard-A` is the "winner" whose `MultiGateway` config is used for `us-east-1a`. What happens when a user **deletes `Shard-A`**?
+    * The controller must now re-evaluate all other shards in that cell and "promote" a different shard's config (e.g., `Shard-B`'s) to be the new source of truth for the `MultiGateway`.
+    * This means **deleting a database shard could unexpectedly reconfigure the entire cell's gateway**, causing an outage or performance change. This is a massive, non-obvious side effect.
+
+---
+
+## Implementation & Controller Complexity
+
+* **1. Complex "At-a-Distance" Reconciliation:** The `MultigresCluster` controller (the parent) becomes incredibly complex. Instead of just copying a user's `cell.multiGateway` spec into the `Cell` CR, it must now:
+    1.  Discover all shards being deployed to a given cell.
+    2.  Read all of their (potentially different) `ShardTemplate`s or inline specs.
+    3.  Implement the conflict-resolution logic ("pick a winner").
+    4.  Inject the "winning" config into the `Cell` CR's spec.
+    This is a huge, stateful, and difficult-to-test piece of logic.
+
+* **2. Ambiguous Source of Truth:** The realized `Cell` child CR is no longer a simple reflection of the user's intent. Its spec is the *result* of a complex, hidden calculation.
+    * This makes debugging impossible. A developer running `kubectl get cell us-east-1a -o yaml` will see a `multiGateway` spec but have **no idea where that configuration came from**.
+    * They can't trace it back to the `MultigresCluster` CR because the config isn't there; it's hidden in one of many `ShardTemplate`s.
+
+---
+
+## User Experience (UX) & Operational Downsides
+
+* **1. Extreme User Confusion:** This design is not discoverable.
+    * **Question:** "I want to change the `MultiGateway` replicas in `us-east-1a`."
+    * **Answer:** "You have to find which of the 10 shards in that cell was the 'first' one created, find its `ShardTemplate`, and edit the `multiGateway` block in that one file."
+    * This is an unusable and confusing user experience.
+
+* **2. Misleading and "Lying" API:** The `ShardTemplate` *implies* it is configuring a `MultiGateway` **for that shard**, which is false. The `MultiGateway` is a shared, cell-level component. This "lie" makes the API's behavior difficult to predict.
+
+* **3. Useless Reusability:** The entire point of a `ShardTemplate` is to be reusable. This design makes reuse a minefield.
+    * A user can't safely re-use a "standard-ha-shard" template because it *also* carries cell-level configs that may conflict with another shard's template.
+    * Users will be forced to create highly specific, non-reusable templates just to avoid config conflicts, defeating the purpose of having templates at all.
+
+
+## What if we disallow the creation of more than one shard per database with the controller?
+
+This approach, while seeming like a solution, **fails to solve the core architectural problems** and only introduces new, arbitrary limitations.
+
+* **It Does Not Solve the "N:1 Conflict":** The fundamental conflict still exists. A cell (e.g., `us-east-1a`) can (and will) still contain multiple shards, but they will be from *different databases* (`Database-A` and `Database-B`). The controller would still face the same impossible choice: *which shard's template* should define the `MultiGateway` config for the shared cell? This rule only moves the conflict, it does not resolve it.
+* **It Makes the Operator Less Useful:** It places an artificial constraint on the user that isn't present in Multigres itself. The user is now prevented from using a core sharding feature for no logical reason, but the API *still* forces them to use the confusing, architecturally-incorrect "god object" `ShardTemplate`.
+* **It Fails to Fix the "Lying API":** The API remains confusing. The user must still edit a shard-level object to configure a cell-level component, violating the "separation of concerns" principle.
+
+---
+
+## What if we disallow the creation of more than one shard per MultigresCluster?
+
+This is a much more extreme limitation that technically solves the "N:1 Conflict," but aside from the obvious limitation of having a single database multigres cluster we will still have the following issue: 
+
+* **It Still Doesn't Fix the Confusing API:** The user must *still* use the flawed, "lying" API. To configure the cell's gateway, they have to find and edit the *one and only shard*. This is still non-intuitive for users who get familiar with Multigres architecture. It fixes the conflict by sacrificing features and flexibility, while still leaving the user with a confusing and architecturally-incorrect API.
+
+If we were to commit to this spec, this would be the only way we would recommend using it.
