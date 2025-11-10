@@ -65,6 +65,7 @@ The formalized parent/child model addresses these by ensuring:
   * This CR and the two scoped templates (`CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
   * All other child CRs will be owned by this top-level CR. Any manual changes to those child CRs will be automatically reverted by their respective controllers to match the `MultigresCluster` definition.
   * Every field that uses a `template` also comes with an `overrides` option, allowing specific deviations from the standard configuration.
+  * **Atomic Overrides:** To ensure safety, highly interdependent fields are grouped into **Atomic Blocks** (e.g., `resources`, `storage`). When using `overrides`, you must replace the *entire* block, not just individual sub-fields (e.g., you cannot override just `cpu limit` without also providing `cpu request`).
   * Images are defined globally to avoid the danger of running multiple incongruent versions at once. This implies the operator handles upgrades.
   * The `MultigresCluster` does not create its grandchildren directly; for example, shard configuration is passed to the `TableGroup` CR, which then creates its own children `Shard` CRs.
 
@@ -102,7 +103,9 @@ spec:
     # --- OPTION 1: Managed by Operator ---
     managedSpec:
       replicas: 3
-      storage: "10Gi"
+      storage:
+        size: "10Gi"
+        class: "standard-gp3"
       resources:
         requests:
           cpu: "500m"
@@ -171,7 +174,9 @@ spec:
          # localTopoServer:
          #   managedSpec:
          #      replicas: 3
-         #      storage: "5Gi"
+         #      storage:
+         #        size: "5Gi"
+         #        class: "standard-gp3"
 
   # ----------------------------------------------------------------
   # Database Topology (Database -> TableGroup -> Shard)
@@ -190,10 +195,11 @@ spec:
               # Overrides are crucial here to pin pools to specific cells
               # if the template uses generic cell names.
               overrides:
+                 # MAP STRUCTURE: Keyed by pool name for safe targeting.
                  pools:
                    # Overriding the pool named 'primary' from the template
                    # to ensure it lives in a specific cell for this shard.
-                   - name: "primary"
+                   primary:
                      cell: "us-east-1a"
             
             # --- SHARD 1: Using Inline Spec (No Template) ---
@@ -210,26 +216,27 @@ spec:
                        cpu: "200m"
                        memory: "256Mi"
                 pools:
-                  - name: "primary"
+                  primary:
                     type: "readWrite"
                     cell: "us-east-1b"
                     replicas: 2
-                    storage: "100Gi"
-                    resources:
-                       postgres:
-                         requests:
-                           cpu: "2"
-                           memory: "4Gi"
-                         limits:
-                           cpu: "4"
-                           memory: "8Gi"
-                       multipooler:
-                         requests:
-                           cpu: "500m"
-                           memory: "1Gi"
-                         limits:
-                           cpu: "1"
-                           memory: "2Gi"
+                    storage:
+                       size: "100Gi"
+                       class: "standard-gp3"
+                    postgres:
+                       requests:
+                         cpu: "2"
+                         memory: "4Gi"
+                       limits:
+                         cpu: "4"
+                         memory: "8Gi"
+                    multipooler:
+                       requests:
+                         cpu: "500m"
+                         memory: "1Gi"
+                       limits:
+                         cpu: "1"
+                         memory: "2Gi"
 
 status:
   observedGeneration: 1
@@ -294,7 +301,9 @@ spec:
   # localTopoServer:
   #   managedSpec:
   #     replicas: 3
-  #     storage: "5Gi"
+  #     storage:
+  #       class: "standard-gp3"
+  #       size: "5Gi"
   #     resources:
   #       requests:
   #         cpu: "500m"
@@ -308,6 +317,7 @@ spec:
 
   * Similar to `CellTemplate`, this is a pure configuration object.
   * It defines the "shape" of a shard: its orchestration and its data pools.
+  * **Important:** `pools` is a **MAP**, keyed by the pool name. This ensures that overrides can safely target a specific pool without relying on brittle list array indices.
 
 <!-- end list -->
 
@@ -331,9 +341,9 @@ spec:
         cpu: "200m"
         memory: "256Mi"
 
-  # Pools define the actual data nodes for this shard.
+  # MAP STRUCTURE: Keyed by pool name for safe targeting.
   pools:
-    - name: "primary"
+    primary:
       type: "readWrite"
       # 'cell' can be left empty here. It MUST be overridden in the 
       # MultigresCluster CR if left empty.
@@ -341,43 +351,45 @@ spec:
       # is specific to a region (e.g., "us-east-template").
       cell: "" 
       replicas: 2
-      storage: "100Gi"
-      resources:
-        postgres:
-          requests:
-            cpu: "2"
-            memory: "4Gi"
-          limits:
-            cpu: "4"
-            memory: "8Gi"
-        multipooler:
-          requests:
-            cpu: "1"
-            memory: "512Mi"
-          limits:
-            cpu: "2"
-            memory: "1Gi"
+      storage:
+        class: "standard-gp3"
+        size: "100Gi"
+      postgres:
+        requests:
+          cpu: "2"
+          memory: "4Gi"
+        limits:
+          cpu: "4"
+          memory: "8Gi"
+      multipooler:
+        requests:
+          cpu: "1"
+          memory: "512Mi"
+        limits:
+          cpu: "2"
+          memory: "1Gi"
 
-    - name: "dr-replica"
+    dr-replica:
       type: "readOnly"
       cell: "us-west-2a" # Hardcoded cell example in template
       replicas: 1
-      storage: "100Gi"
-      resources:
-         postgres:
-           requests:
-             cpu: "1"
-             memory: "2Gi"
-           limits:
-             cpu: "2"
-             memory: "4Gi"
-         multipooler:
-           requests:
-             cpu: "500m"
-             memory: "512Mi"
-           limits:
-             cpu: "1"
-             memory: "1Gi"
+      storage:
+         class: "standard-gp3"
+         size: "100Gi"
+      postgres:
+         requests:
+           cpu: "1"
+           memory: "2Gi"
+         limits:
+           cpu: "2"
+           memory: "4Gi"
+      multipooler:
+         requests:
+           cpu: "500m"
+           memory: "512Mi"
+         limits:
+           cpu: "1"
+           memory: "1Gi"
 ```
 
 ### Child Resources (Read-Only)
@@ -405,7 +417,9 @@ metadata:
 spec:
   # Fully resolved 'managedSpec' from MultigresCluster inline definition
   replicas: 3
-  storage: "10Gi"
+  storage:
+    size: "10Gi"
+    class: "standard-gp3"
   image: "quay.io/coreos/etcd:v3.5"
   resources:
     requests:
@@ -489,7 +503,9 @@ spec:
   #     rootPath: "/multigres/us-east-1a"
   #     image: "quay.io/coreos/etcd:v3.5"
   #     replicas: 3
-  #     storage: "5Gi"
+  #     storage:
+  #       size: "5Gi"
+  #       class: "standard-gp3"
 
   # List of all cells in the cluster for discovery.
   allCells:
@@ -551,20 +567,21 @@ spec:
             cpu: "200m"
             memory: "256Mi"
       pools:
-        - name: "primary"
+        primary:
           cell: "us-east-1a"
           type: "readWrite"
           replicas: 2
-          storage: "100Gi"
-          resources:
-            postgres:
+          storage:
+             size: "100Gi"
+             class: "standard-gp3"
+          postgres:
               requests:
                 cpu: "2"
                 memory: "4Gi"
               limits:
                 cpu: "4"
                 memory: "8Gi"
-            multipooler:
+          multipooler:
               requests:
                 cpu: "1"
                 memory: "512Mi"
@@ -584,20 +601,21 @@ spec:
             cpu: "200m"
             memory: "256Mi"
       pools:
-        - name: "primary"
+        primary:
           cell: "us-east-1b"
           type: "readWrite"
           replicas: 2
-          storage: "100Gi"
-          resources:
-            postgres:
+          storage:
+             size: "100Gi"
+             class: "standard-gp3"
+          postgres:
               requests:
                 cpu: "2"
                 memory: "4Gi"
               limits:
                 cpu: "4"
                 memory: "8Gi"
-            multipooler:
+          multipooler:
               requests:
                 cpu: "1"
                 memory: "512Mi"
@@ -649,20 +667,21 @@ spec:
         memory: "256Mi"
 
   pools:
-    - name: "primary"
+    primary:
       cell: "us-east-1a" 
       type: "readWrite"
       replicas: 2
-      storage: "100Gi"
-      resources:
-        postgres:
+      storage:
+         size: "100Gi"
+         class: "standard-gp3"
+      postgres:
            requests:
              cpu: "2"
              memory: "4Gi"
            limits:
              cpu: "4"
              memory: "8Gi"
-        multipooler:
+      multipooler:
            requests:
              cpu: "1"
              memory: "512Mi"
@@ -708,8 +727,8 @@ This creates Multigres cluster with one cell and one database, one tablegroup an
 
 The defaults for this ultra-minimalistic example can be fetched in two ways:
 
-1. All components are defaulted by the operator's webhook. 
-2. If a `CellTemplate` and `ShardTemplate` named `default` exists within the same namespace it will take these as its default values. 
+1.  All components are defaulted by the operator's webhook.
+2.  If a `CellTemplate` and `ShardTemplate` named `default` exists within the same namespace it will take these as its default values.
 
 > Notice that the `cells` field is still necessary but we are not naming the cell, this is because we are not sure yet if we should take a default zone or region at random from the cluster to define this, but if we can do this safely this field also won't be needed
 
@@ -722,11 +741,12 @@ spec:
   cells:
     - zone: "us-east-1a"
 ```
+
 When the user does a `kubectl get multigrescluster minimal-cluster -o yaml` after apply this they would see all the values materialized, the default will be applied via webhook.
 
-### 2\. The Power User (Explicit Templates & Overrides)
+### 2\. The Power User (Explicit Templates & Atomic Overrides)
 
-This example shows full control without relying on implicit defaults, mixing templates and inline overrides.
+This example shows full control, demonstrating safe targeting via maps and atomic resource replacement.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -762,14 +782,15 @@ spec:
       cellTemplate: "high-throughput-gateway"
     - name: "us-west-2a"
       zone: "us-west-2a"
-      # Using standard template but overriding specific resource
       cellTemplate: "standard-gateway"
       overrides:
         multiGateway:
           resources:
              requests:
+               cpu: "500m"
                memory: "2Gi"
              limits:
+               cpu: "1"
                memory: "4Gi"
 
   databases:
@@ -780,16 +801,24 @@ spec:
             - name: "0"
               shardTemplate: "geo-distributed-shard"
               overrides:
-                # Pinning primary pool for this specific shard to East
+                # MAP-BASED OVERRIDE: Safely targeting 'primary' pool
                 pools:
-                  - name: "primary"
+                  primary:
+                    # Partial override of a simple field
                     cell: "us-east-1a"
+                    # ATOMIC OVERRIDE of Postgres compute for this specific shard
+                    postgres:
+                       requests:
+                         cpu: "8"
+                         memory: "16Gi"
+                       limits:
+                         cpu: "8"
+                         memory: "16Gi"
             - name: "1"
               shardTemplate: "geo-distributed-shard"
               overrides:
-                # Pinning primary pool for this specific shard to West
                 pools:
-                  - name: "primary"
+                  primary:
                     cell: "us-west-2a"
 ```
 
@@ -801,3 +830,4 @@ spec:
   * **2025-11-05:** Explored a simplified V1 API limited to a single shard. Rejected to ensure the API is ready for multi-shard from day one.
   * **2025-11-06:** Explored a single "all-in-one" `DeploymentTemplate`. Rejected due to N:1 conflicts when trying to apply one template to both singular Cell components and multiplied Shard components.
   * **2025-11-07:** Finalized the "Scoped Template" model (`CellTemplate` & `ShardTemplate`) and restored full explicit `database` -\> `tablegroup` -\> `shard` hierarchy.
+  * **2025-11-10:** Refactored `pools` to use Maps instead of Lists and introduced "Atomic Blocks" for `resources` and `storage` to ensure safer template overrides.
