@@ -2,11 +2,12 @@
 
 ## Summary
 
-This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on a root `MultigresCluster` resource that acts as the single source of truth, supported by two specifically scoped template resources:
+This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on a root `MultigresCluster` resource that acts as the single source of truth, supported by three specifically scoped template resources:
 
 1.  **`MultigresCluster`**: The root resource defining the desired state (intent) of the entire cluster.
-2.  **`CellTemplate`**: A reusable, namespaced resource for defining standard configurations for Cell-level components (`MultiGateway` and optionally `LocalTopoServer`).
-3.  **`ShardTemplate`**: A reusable, namespaced resource for defining standard configurations for Shard-level components (`MultiOrch` and `Pools`).
+2.  **`CoreTemplate`**: A reusable, namespaced resource for defining standard configurations for core control plane components (`GlobalTopoServer` and `MultiAdmin`).
+3.  **`CellTemplate`**: A reusable, namespaced resource for defining standard configurations for Cell-level components (`MultiGateway` and optionally `LocalTopoServer`).
+4.  **`ShardTemplate`**: A reusable, namespaced resource for defining standard configurations for Shard-level components (`MultiOrch` and `Pools`).
 
 All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) are implemented as read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers.
 
@@ -18,24 +19,26 @@ The formalized parent/child model addresses these by ensuring:
 
   * **Separation of Concerns:** Splitting logic into child CRs results in simple, specialized controllers.
   * **Single Source of Truth:** The `MultigresCluster` is the only editable entry point for cluster topology, preventing conflicting states.
-  * **Scoped Reusability:** By splitting templates into `CellTemplate` and `ShardTemplate`, we avoid N:1 mapping conflicts.
+  * **Scoped Reusability:** By splitting templates into `CoreTemplate`, `CellTemplate`, and `ShardTemplate`, we provide clear, reusable configurations.
   * **Explicit Topology:** Removing "shard count" partitioning in favor of explicit shard list definitions provides deterministic control over where exactly data lives.
+  * **Consistent Override Chain:** All components follow a predictable 4-level override chain, providing maximum flexibility while maintaining a clear and consistent API pattern.
 
 ## Proposal: API Architecture and Resource Topology
 
-  * **Globals (Inline Only):** `MultiAdmin` and `GlobalTopoServer` are critical singletons and must be defined inline within the `MultigresCluster` to prevent template ambiguity.
-  * **Cells:** Explicitly defined in the root CR; must be associated mutually exclusively with a `zone` OR a `region`.
+  * **Core Components:** `MultiAdmin` and `GlobalTopoServer` are defined as top-level fields in the `MultigresCluster`. Each can be configured inline or by referencing a `CoreTemplate`.
+  * **Cells:** Explicitly defined in the root CR; can be specified inline or via a `CellTemplate`.
   * **Databases:** Follows a strict physical hierarchy: `Database` -\> `TableGroup` -\> `Shard`.
+  * **Shards:** Can be specified inline or via a `ShardTemplate`.
   * **MultiOrch:** Located at the **Shard** level to provide dedicated orchestration per Raft group.
-
-<!-- end list -->
 
 ```ascii
 [MultigresCluster] 🚀 (Root CR - user-editable)
       │
-      ├── 🌍 [GlobalTopoServer] (Child CR, defined INLINE only)
+      ├── 📍 Defines [TemplateDefaults] (Cluster-wide default templates)
       │
-      ├── 🤖 MultiAdmin Resources (Deployment, Services, defined INLINE only)
+      ├── 🌍 [GlobalTopoServer] (Child CR) ← 📄 Uses [CoreTemplate] OR inline [spec]
+      │
+      ├── 🤖 MultiAdmin Resources ← 📄 Uses [CoreTemplate] OR inline [spec]
       │
       ├── 💠 [Cell] (Child CR) ← 📄 Uses [CellTemplate] OR inline [spec]
       │    │
@@ -48,6 +51,10 @@ The formalized parent/child model addresses these by ensuring:
                 │
                 ├── 🧠 MultiOrch Resources (Deployment/Pod)
                 └── 🏊 Pools (StatefulSets for Postgres+MultiPooler)
+
+📄 [CoreTemplate] (User-editable, scoped config)
+   ├── globalTopoServer
+   └── multiadmin
 
 📄 [CellTemplate] (User-editable, scoped config)
    ├── multigateway
@@ -62,14 +69,18 @@ The formalized parent/child model addresses these by ensuring:
 
 ### User Managed CR: MultigresCluster
 
-  * This CR and the two scoped templates (`CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
+  * This CR and the three scoped templates (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
   * All other child CRs will be owned by this top-level CR. Any manual changes to those child CRs will be automatically reverted by their respective controllers to match the `MultigresCluster` definition.
-  * Every field that uses a `template` also comes with an `overrides` option, allowing specific deviations from the standard configuration.
-  * **Atomic Overrides:** To ensure safety, highly interdependent fields are grouped into **Atomic Blocks** (e.g., `resources`, `storage`). When using `overrides`, you must replace the *entire* block, not just individual sub-fields (e.g., you cannot override just `cpu limit` without also providing `cpu request`).
+  * All component configurations (`globalTopoServer`, `multiadmin`, `cells`, `shards`) follow a consistent pattern: they can be defined via an inline `spec` (e.g., `managedSpec`) or by referencing a template (`templateRef`). Providing both is a validation error.
+  * **Override Chain:** All components use the following 4-level precedence chain for configuration:
+    1.  **Component-Level Definition:** An inline `spec` (e.g., `managedSpec`) or an explicit `templateRef` on the component itself.
+    2.  **Cluster-Level Default:** The corresponding template defined in `spec.templateDefaults` (e.g., `templateDefaults.coreTemplate` or `templateDefaults.cellTemplate`). 
+    3.  **Namespace-Level Default:** A template of the correct kind (e.g., `CoreTemplate`) named `default` in the same namespace.
+    4.  **Operator Hardcoded Defaults:** A final fallback applied by the operator's admission webhook.
+  * **Atomic Overrides:** To ensure safety, highly interdependent fields are grouped (e.g., `resources`, `storage`). When using `overrides`, you must replace the *entire* group, not just individual sub-fields (e.g., you cannot override just `cpu limit` without also providing `cpu request`).
   * Images are defined globally to avoid the danger of running multiple incongruent versions at once. This implies the operator handles upgrades.
   * The `MultigresCluster` does not create its grandchildren directly; for example, shard configuration is passed to the `TableGroup` CR, which then creates its own children `Shard` CRs.
 
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -83,6 +94,7 @@ spec:
   # ----------------------------------------------------------------
   # Images are defined globally to ensure version consistency across
   # all cells and shards.
+  # NOTE: Perhaps one day we can template these as well.
   images:
     imagePullPolicy: "IfNotPresent"
     imagePullSecrets:
@@ -94,13 +106,23 @@ spec:
     postgres: "postgres:15.3"
 
   # ----------------------------------------------------------------
-  # Global Components (INLINE ONLY - No Templates)
+  # Cluster-Level Template Defaults
+  # ----------------------------------------------------------------
+  # These are the default templates to use for any component that
+  # does not have an inline 'spec' or an explicit 'templateRef'.
+  templateDefaults:
+    coreTemplate: "cluster-wide-core"
+    cellTemplate: "cluster-wide-cell"
+    shardTemplate: "cluster-wide-shard"
+
+  # ----------------------------------------------------------------
+  # Global Components (REVISED)
   # ----------------------------------------------------------------
   
-  # Global TopoServer is a singleton. It MUST be defined inline (or defaulted).
-  # It supports EITHER a 'managedSpec' OR an 'external' configuration.
+  # Global TopoServer is a singleton. It follows the 4-level override chain.
+  # It supports EITHER a 'managedSpec' OR 'external' OR 'templateRef'.
   globalTopoServer:
-    # --- OPTION 1: Managed by Operator ---
+    # --- OPTION 1: Inline Managed Spec ---
     managedSpec:
       replicas: 3
       storage:
@@ -113,10 +135,8 @@ spec:
         limits:
           cpu: "1"
           memory: "2Gi"
-    # --- ALTERNATIVE OPTION 2: External Etcd ---
-    # If you use an external Etcd, the operator will NOT create a 
-    # TopoServer child CR.
-    #
+
+    # --- OPTION 2: Inline External Spec ---
     # external:
     #   endpoints: 
     #     - "https://etcd-1.infra.local:2379"
@@ -124,32 +144,40 @@ spec:
     #   caSecret: "etcd-ca-secret"
     #   clientCertSecret: "etcd-client-cert-secret"
 
-  # MultiAdmin is a singleton and must be defined inline.
+    # --- OPTION 3: Explicit Template Reference ---
+    # templateRef: "my-explicit-core-template"
+
+  # MultiAdmin is a singleton. It follows the 4-level override chain.
+  # It supports EITHER a 'managedSpec' OR a 'templateRef'.
   multiadmin:
-    replicas: 2
-    resources:
-      requests: 
-        cpu: "200m"
-        memory: "256Mi"
-      limits:
-        cpu: "500m"
-        memory: "512Mi"
+    # --- OPTION 1: Inline Managed Spec ---
+    managedSpec:
+      replicas: 2
+      resources:
+        requests: 
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+    # --- OPTION 2: Explicit Template Reference ---
+    # templateRef: "my-explicit-core-template"
 
   # ----------------------------------------------------------------
   # Cells Configuration
   # ----------------------------------------------------------------
   cells:
-    # --- CELL 1: Using a Template ---
+    # --- CELL 1: Using an Explicit Template ---
     - name: "us-east-1a"
       # Location must be strictly one of: 'zone' OR 'region'
       zone: "us-east-1a" 
       # region: "us-east-1"
       
-      # Refers to a 'CellTemplate' CR in the same namespace.
+      # Precedence 1: Explicit template reference
       cellTemplate: "standard-cell-ha"
       
       # Optional overrides applied ON TOP of the template.
-      # Useful for slight deviations like hardware differences in one zone.
       overrides:
         multiGateway:
            replicas: 3
@@ -157,8 +185,7 @@ spec:
     # --- CELL 2: Using Inline Spec (No Template) ---
     - name: "us-east-1b"
       zone: "us-east-1b"
-      # If 'cellTemplate' is omitted, you MUST provide the 'spec' inline.
-      # This is functionally equivalent to what a CellTemplate contains.
+      # Precedence 1: Inline spec
       spec:
          multiGateway:
            replicas: 2
@@ -177,6 +204,14 @@ spec:
          #      storage:
          #        size: "5Gi"
          #        class: "standard-gp3"
+    
+    # --- CELL 3: Using Cluster Default Template ---
+    - name: "us-east-1c"
+      zone: "us-east-1c"
+      # 'spec' and 'cellTemplate' are omitted.
+      # This will use 'spec.templateDefaults.cellTemplate' ("cluster-wide-cell")
+      # (if that is not set, it will look for 'CellTemplate' named 'default',
+      # and if that is not found, it will use the webhook default).
 
   # ----------------------------------------------------------------
   # Database Topology (Database -> TableGroup -> Shard)
@@ -188,9 +223,9 @@ spec:
           # Shards are strictly explicitly defined. 
           # No 'partitioning: { count: 10 }' auto-generation.
           shards:
-            # --- SHARD 0: Using a Template ---
+            # --- SHARD 0: Using an Explicit Template ---
             - name: "0"
-              # Refers to a 'ShardTemplate' CR.
+              # Precedence 1: Explicit template reference
               shardTemplate: "standard-shard-ha"
               # Overrides are crucial here to pin pools to specific cells
               # if the template uses generic cell names.
@@ -204,7 +239,7 @@ spec:
             
             # --- SHARD 1: Using Inline Spec (No Template) ---
             - name: "1"
-              # If 'shardTemplate' is omitted, you MUST provide the 'spec' inline.
+              # Precedence 1: Inline spec
               spec:
                 multiOrch:
                   replicas: 1
@@ -237,6 +272,17 @@ spec:
                        limits:
                          cpu: "1"
                          memory: "2Gi"
+            
+            # --- SHARD 2: Using Cluster Default Template ---
+            - name: "2"
+              # 'spec' and 'shardTemplate' are omitted.
+              # This will use 'spec.templateDefaults.shardTemplate' ("cluster-wide-shard")
+              # (or 'default' template, or webhook default).
+              # We still must provide overrides for required fields.
+              overrides:
+                 pools:
+                   primary:
+                     cell: "us-east-1c"
 
 status:
   observedGeneration: 1
@@ -253,10 +299,62 @@ status:
     us-east-1b: 
       ready: True
       gatewayReplicas: 2
+    us-east-1c:
+      ready: True
+      gatewayReplicas: 2 # (Assuming default is 2)
   databases:
     production_db:
-      readyShards: 2
-      totalShards: 2
+      readyShards: 3
+      totalShards: 3
+```
+
+### User Managed CR: CoreTemplate (NEW)
+
+  * This CR is NOT a child resource. It is purely a configuration object.
+  * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
+  * It defines the shape of the cluster's core control plane. A `CoreTemplate` can contain definitions for *both* components. When a component (e.g., `globalTopoServer`) references this template, the controller will extract the relevant section.
+
+
+```yaml
+apiVersion: multigres.com/v1alpha1
+kind: CoreTemplate
+metadata:
+  name: "standard-core-ha"
+  namespace: example
+spec:
+  # Defines the Global TopoServer component
+  globalTopoServer:
+    # --- OPTION 1: Managed by Operator ---
+    managedSpec:
+      replicas: 3
+      storage:
+        size: "10Gi"
+        class: "standard-gp3"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+    # --- ALTERNATIVE OPTION 2: External Etcd ---
+    # external:
+    #   endpoints: 
+    #     - "https://etcd-1.infra.local:2379"
+    #   caSecret: "etcd-ca-secret"
+    #   clientCertSecret: "etcd-client-cert-secret"
+
+  # Defines the MultiAdmin component
+  multiadmin:
+    managedSpec:
+      replicas: 2
+      resources:
+        requests: 
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
 ```
 
 ### User Managed CR: CellTemplate
@@ -264,8 +362,6 @@ status:
   * This CR is NOT a child resource. It is purely a configuration object.
   * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
   * When created, templates are not reconciled until referenced by a `MultigresCluster`.
-
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -296,7 +392,7 @@ spec:
 
   # --- OPTIONAL: Local TopoServer ---
   # Define if cells using this template should have their own dedicated ETCD.
-  # If omitted, cells use the Global TopoServer by default.
+  # If omitted, cells use the GlobalTopoServer by default.
   #
   # localTopoServer:
   #   managedSpec:
@@ -318,8 +414,6 @@ spec:
   * Similar to `CellTemplate`, this is a pure configuration object.
   * It defines the "shape" of a shard: its orchestration and its data pools.
   * **Important:** `pools` is a **MAP**, keyed by the pool name. This ensures that overrides can safely target a specific pool without relying on brittle list array indices.
-
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -345,7 +439,7 @@ spec:
   pools:
     primary:
       type: "readWrite"
-      # 'cell' can be left empty here. It MUST be overridden in the 
+      # 'cell' can be left empty here or omitted entirely. It MUST be overridden in the 
       # MultigresCluster CR if left empty.
       # Alternatively, it can be set to a generic value if this template 
       # is specific to a region (e.g., "us-east-template").
@@ -396,12 +490,12 @@ spec:
 
 These resources are created and reconciled by the `MultigresCluster` controller.
 
+> NOTE: At some point we may want to consider adding status fields for the children to say what template the config is coming from, for simplicity not defining that now. 
+
 #### Child CR: TopoServer
 
   * Applies to both Global (owned by `MultigresCluster`) and Local (owned by `Cell`) topology servers.
   * This CR does *not* exist if the user configures an `external` etcd connection in the parent.
-
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -442,8 +536,6 @@ status:
   * Owned by `MultigresCluster`.
   * Strictly contains `MultiGateway` and optional `LocalTopoServer`. `MultiOrch` is NO LONGER here (moved to Shard).
   * The `allCells` field is used for discovery by gateways.
-
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -531,8 +623,6 @@ status:
 
   * Owned by `MultigresCluster`.
   * Acts as the middle-manager for Shards. It MUST contain the full resolved specification for all shards it manages, enabling it to be the single source of truth for creating its child `Shard` CRs.
-
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -622,10 +712,46 @@ spec:
               limits:
                 cpu: "2"
                 memory: "1Gi"
-
+    
+    # This shard's spec is resolved from a template
+    # (e.g., "cluster-wide-shard")
+    - name: "2"
+      multiOrch:
+        replicas: 1
+        image: "multigres/orch:latest"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+      pools:
+        primary:
+          cell: "us-east-1c" # Resolved from override
+          type: "readWrite"
+          replicas: 2 # Assuming '2' from template
+          storage:
+             size: "100Gi" # Assuming '100Gi' from template
+             class: "standard-gp3" # Assuming 'standard-gp3' from template
+          postgres:
+              requests: # Assuming values from template
+                cpu: "2"
+                memory: "4Gi"
+              limits:
+                cpu: "4"
+                memory: "8Gi"
+          multipooler:
+              requests: # Assuming values from template
+                cpu: "1"
+                memory: "512Mi"
+              limits:
+                cpu: "2"
+                memory: "1Gi"
+        
 status:
-  readyShards: 2
-  totalShards: 2
+  readyShards: 3
+  totalShards: 3
 ```
 
 #### Child CR: Shard
@@ -633,8 +759,6 @@ status:
   * Owned by `TableGroup`.
   * Now contains `MultiOrch` (Raft leader helper) AND `Pools` (actual data nodes).
   * Represents one entry from the `TableGroup` shards list.
-
-<!-- end list -->
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -694,13 +818,35 @@ status:
   poolsReady: True
 ```
 
-## Defaults & Webhooks
+## Defaults & Webhooks (REVISED)
 
-To simplify user experience and ensure cluster stability, a mutating admission webhook will apply strictly opinionated defaults if fields are omitted.
+To simplify user experience and ensure cluster stability, a mutating admission webhook will resolve the configuration for each component based on a strict 4-level override chain.
 
-### Global Defaults
+### The 4-Level Override Chain
 
-If `multiadmin` or `globalTopoServer` are omitted from the `MultigresCluster` spec, the webhook will inject them with these production-ready defaults:
+This logic is applied consistently for `GlobalTopoServer`, `MultiAdmin`, `Cells`, and `Shards`:
+
+1.  **Component-Level Definition (Highest Precedence):**
+
+      * If an inline `spec` (e.g., `managedSpec`, `external`, or `spec`) is provided for the component, it is used.
+      * *Else*, if an explicit template reference (e.g., `templateRef` or `cellTemplate`) is provided, it is used.
+      * (It is a validation error to provide both an inline `spec` and an explicit template reference).
+
+2.  **Cluster-Level Default Template:**
+
+      * *Else*, if the corresponding field in `spec.templateDefaults` is set (e.g., `templateDefaults.coreTemplate` for globals, `templateDefaults.cellTemplate` for cells), the webhook will inject a reference to that template.
+
+3.  **Namespace-Level Default Template:**
+
+      * *Else*, the webhook will attempt to inject a reference to a template of the correct kind with the reserved name `default` in the cluster's namespace (e.g., `CoreTemplate` named `default`).
+
+4.  **Operator Hardcoded Defaults (Lowest Precedence):**
+
+      * *Else*, if no inline spec or template is found, the webhook will inject a hardcoded, production-ready default specification.
+
+### Operator Hardcoded Defaults
+
+If the override chain is exhausted, the following defaults are injected:
 
   * **GlobalTopoServer:**
       * Replicas: 3
@@ -709,26 +855,18 @@ If `multiadmin` or `globalTopoServer` are omitted from the `MultigresCluster` sp
   * **MultiAdmin:**
       * Replicas: 2
       * Resources: Requests {cpu: 200m, memory: 256Mi}, Limits {cpu: 500m, memory: 512Mi}
-
-### "Default" Named Templates
-
-We propose reserving the name `default` for templates in the same namespace to act as implicit defaults.
-
-  * **Cells:** If a user creates a `Cell` entry without providing `cellTemplate` OR `spec`, the webhook will attempt to patch the CR with `cellTemplate: default`.
-  * **Shards:** If a user creates a `Shard` entry without providing `shardTemplate` OR `spec`, the webhook will attempt to patch the CR with `shardTemplate: default`.
-
-This allows an organization to publish standard "golden" templates once, enabling highly concise user manifests.
+  * **(Default `CellTemplate` and `ShardTemplate` specs would also be defined here)**
 
 ## End-User Examples
 
-### 1\. The Minimalist (Relying on Defaults)
+### 1\. The Ultra-Minimalist (Relying on Namespace/Webhook Defaults)
 
 This creates Multigres cluster with one cell and one database, one tablegroup and one shard.
 
 The defaults for this ultra-minimalistic example can be fetched in two ways:
 
 1.  All components are defaulted by the operator's webhook.
-2.  If a `CellTemplate` and `ShardTemplate` named `default` exists within the same namespace it will take these as its default values.
+2.  If a `CoreTemplate`, `CellTemplate`, and `ShardTemplate` named `default` exists within the same namespace it will take these as its default values.
 
 > Notice that the `cells` field is still necessary but we are not naming the cell, this is because we are not sure yet if we should take a default zone or region at random from the cluster to define this, but if we can do this safely this field also won't be needed
 
@@ -744,9 +882,58 @@ spec:
 
 When the user does a `kubectl get multigrescluster minimal-cluster -o yaml` after apply this they would see all the values materialized, the default will be applied via webhook.
 
-### 2\. The Power User (Explicit Templates & Atomic Overrides)
+### 2\. The Minimalist (Relying on Cluster Defaults)
 
-This example shows full control, demonstrating safe targeting via maps and atomic resource replacement.
+This user relies on the `spec.templateDefaults` field to set cluster-wide defaults.
+
+```yaml
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: minimal-cluster-with-defaults
+spec:
+  # This cluster will use the "dev-defaults" CoreTemplate for its
+  # global components. All cells and shards will use their respective
+  # "dev-defaults" templates.
+  templateDefaults:
+    coreTemplate: "dev-defaults"
+    cellTemplate: "dev-defaults-cell"
+    shardTemplate: "dev-defaults-shard"
+
+  # CoreComponents (globalTopoServer, multiadmin) are omitted,
+  # so they will use "dev-defaults" (from the CoreTemplate)
+
+  cells:
+    - name: "us-east-1a"
+      zone: "us-east-1a"
+      # 'spec' and 'cellTemplate' are omitted, so "dev-defaults-cell" is used.
+    - name: "us-west-2a"
+      zone: "us-west-2a"
+      # 'spec' and 'cellTemplate' are omitted, so "dev-defaults-cell" is used.
+
+  databases:
+    - name: "db1"
+      tablegroups:
+      - name: "tg1"
+        shards:
+          - name: "0"
+            # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
+            # We still need to override the 'cell' for the primary pool.
+            overrides:
+              pools:
+                primary:
+                  cell: "us-east-1a"
+          - name: "1"
+            # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
+            overrides:
+              pools:
+                primary:
+                  cell: "us-west-2a"
+```
+
+### 3\. The Power User (Explicit Overrides)
+
+This user explicitly defines everything, mixing inline specs and templates, and bypassing all defaults.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -754,7 +941,13 @@ kind: MultigresCluster
 metadata:
   name: power-cluster
 spec:
-  # Explicit external ETCD instead of managed default
+  # This user sets cluster defaults, but overrides them everywhere.
+  templateDefaults:
+    coreTemplate: "cluster-default-core"
+    cellTemplate: "cluster-default-cell"
+    shardTemplate: "cluster-default-shard"
+  
+  # Precedence 1: Inline spec for core components
   globalTopoServer:
     external:
       endpoints: 
@@ -763,28 +956,30 @@ spec:
         - "https://my-etcd-3.infra:2379"
       caSecret: "etcd-ca"
       clientCertSecret: "etcd-client-cert"
-
-  # Explicit MultiAdmin sizing for dev environment
+  
   multiadmin:
-    replicas: 1
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "256Mi"
-      limits:
-        cpu: "200m"
-        memory: "512Mi"
+    managedSpec:
+      replicas: 1
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "200m"
+          memory: "512Mi"
 
   cells:
+    # Precedence 1: Explicit template reference
     - name: "us-east-1a"
       zone: "us-east-1a"
-      # Using a specific high-performance template
       cellTemplate: "high-throughput-gateway"
+    # Precedence 1: Explicit template reference with atomic override
     - name: "us-west-2a"
       zone: "us-west-2a"
       cellTemplate: "standard-gateway"
       overrides:
         multiGateway:
+          # Overriding the entire resources block
           resources:
              requests:
                cpu: "500m"
@@ -798,6 +993,7 @@ spec:
       tablegroups:
         - name: "auth"
           shards:
+            # Precedence 1: Explicit template reference
             - name: "0"
               shardTemplate: "geo-distributed-shard"
               overrides:
@@ -806,7 +1002,7 @@ spec:
                   primary:
                     # Partial override of a simple field
                     cell: "us-east-1a"
-                    # ATOMIC OVERRIDE of Postgres compute for this specific shard
+                    # OVERRIDE of Postgres compute for this specific shard
                     postgres:
                        requests:
                          cpu: "8"
@@ -814,6 +1010,7 @@ spec:
                        limits:
                          cpu: "8"
                          memory: "16Gi"
+            # Precedence 1: Explicit template reference
             - name: "1"
               shardTemplate: "geo-distributed-shard"
               overrides:
@@ -830,4 +1027,5 @@ spec:
   * **2025-11-05:** Explored a simplified V1 API limited to a single shard. Rejected to ensure the API is ready for multi-shard from day one.
   * **2025-11-06:** Explored a single "all-in-one" `DeploymentTemplate`. Rejected due to N:1 conflicts when trying to apply one template to both singular Cell components and multiplied Shard components.
   * **2025-11-07:** Finalized the "Scoped Template" model (`CellTemplate` & `ShardTemplate`) and restored full explicit `database` -\> `tablegroup` -\> `shard` hierarchy.
-  * **2025-11-10:** Refactored `pools` to use Maps instead of Lists and introduced "Atomic Blocks" for `resources` and `storage` to ensure safer template overrides.
+  * **2025-11-10:** Refactored `pools` to use Maps instead of Lists and introduced atomic grouping for `resources` and `storage` to ensure safer template overrides.
+  * **2025-11-11:** Introduced a consistent 4-level override chain (inline/explicit-template -\> cluster-default -\> namespace-default -\> webhook) for all components. Added `CoreTemplate` CRD and `spec.templateDefaults` block to support this. Reverted `spec.coreComponents` nesting to top-level `globalTopoServer` and `multiadmin` fields.
