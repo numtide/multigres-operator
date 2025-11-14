@@ -29,10 +29,12 @@ func IgnoreMetaRuntimeFields() cmp.Options {
 		),
 
 		// Ignore TypeMeta fields (often empty in client responses)
-		cmpopts.IgnoreFields(metav1.TypeMeta{},
-			"Kind",
-			"APIVersion",
-		),
+		// NOTE: This is commented out as this has no impact in most cases.
+		// Consider removing this altogether.
+		// cmpopts.IgnoreFields(metav1.TypeMeta{},
+		// 	"Kind",
+		// 	"APIVersion",
+		// ),
 
 		// Ignore Status subresource (tested separately)
 		cmpopts.IgnoreFields(metav1.Condition{},
