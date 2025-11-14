@@ -430,30 +430,15 @@ func (rw *ResourceWatcher) WaitForKind(kind string, timeout time.Duration) (*Res
 		if evt.Kind == kind {
 			result := evt
 			rw.mu.RUnlock()
-			rw.t.Logf("✓ Found existing %s: %s/%s", kind, evt.Namespace, evt.Name)
+			rw.t.Logf("Found \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
 			return &result, nil
 		}
 	}
 	rw.mu.RUnlock()
 
 	// Step 2: Subscribe to new events
-	subCh := make(chan ResourceEvent, 100)
-
-	rw.mu.Lock()
-	rw.subscribers = append(rw.subscribers, subCh)
-	rw.mu.Unlock()
-
-	defer func() {
-		rw.mu.Lock()
-		for i, ch := range rw.subscribers {
-			if ch == subCh {
-				rw.subscribers = append(rw.subscribers[:i], rw.subscribers[i+1:]...)
-				break
-			}
-		}
-		rw.mu.Unlock()
-		close(subCh)
-	}()
+	subCh := rw.subscribe()
+	defer rw.unsubscribe(subCh)
 
 	// Step 3: Wait for matching event
 	deadline := time.Now().Add(timeout)
@@ -466,13 +451,13 @@ func (rw *ResourceWatcher) WaitForKind(kind string, timeout time.Duration) (*Res
 			}
 
 			if evt.Kind == kind {
-				rw.t.Logf("✓ Found %s: %s/%s", kind, evt.Namespace, evt.Name)
+				rw.t.Logf("Found \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
 				return &evt, nil
 			}
 
 		case <-time.After(time.Until(deadline)):
 			if !time.Now().Before(deadline) {
-				return nil, fmt.Errorf("timeout waiting for %s event", kind)
+				return nil, fmt.Errorf("timeout waiting for \"%s\" event", kind)
 			}
 		}
 	}
@@ -489,30 +474,15 @@ func (rw *ResourceWatcher) WaitForEventType(kind, eventType string, timeout time
 		if evt.Kind == kind && evt.Type == eventType {
 			result := evt
 			rw.mu.RUnlock()
-			rw.t.Logf("✓ Found existing %s %s: %s/%s", eventType, kind, evt.Namespace, evt.Name)
+			rw.t.Logf("Found %s \"%s\" %s/%s", eventType, kind, evt.Namespace, evt.Name)
 			return &result, nil
 		}
 	}
 	rw.mu.RUnlock()
 
 	// Step 2: Subscribe to new events
-	subCh := make(chan ResourceEvent, 100)
-
-	rw.mu.Lock()
-	rw.subscribers = append(rw.subscribers, subCh)
-	rw.mu.Unlock()
-
-	defer func() {
-		rw.mu.Lock()
-		for i, ch := range rw.subscribers {
-			if ch == subCh {
-				rw.subscribers = append(rw.subscribers[:i], rw.subscribers[i+1:]...)
-				break
-			}
-		}
-		rw.mu.Unlock()
-		close(subCh)
-	}()
+	subCh := rw.subscribe()
+	defer rw.unsubscribe(subCh)
 
 	// Step 3: Wait for matching event
 	deadline := time.Now().Add(timeout)
@@ -525,13 +495,13 @@ func (rw *ResourceWatcher) WaitForEventType(kind, eventType string, timeout time
 			}
 
 			if evt.Kind == kind && evt.Type == eventType {
-				rw.t.Logf("✓ Found %s %s: %s/%s", eventType, kind, evt.Namespace, evt.Name)
+				rw.t.Logf("Found %s \"%s\" %s/%s", eventType, kind, evt.Namespace, evt.Name)
 				return &evt, nil
 			}
 
 		case <-time.After(time.Until(deadline)):
 			if !time.Now().Before(deadline) {
-				return nil, fmt.Errorf("timeout waiting for %s %s event", eventType, kind)
+				return nil, fmt.Errorf("timeout waiting for %s \"%s\" event", eventType, kind)
 			}
 		}
 	}
@@ -562,8 +532,14 @@ func (rw *ResourceWatcher) watchResource(ctx context.Context, mgr manager.Manage
 			rw.sendEvent("DELETED", kind, cObj)
 		},
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	// Track this kind as watched
+	rw.watchedKinds[kind] = nil
+
+	return nil
 }
 
 // sendEvent sends an event to the channel (internal helper).
@@ -581,7 +557,7 @@ func (rw *ResourceWatcher) sendEvent(eventType, kind string, obj client.Object) 
 
 	select {
 	case rw.eventCh <- event:
-		rw.t.Logf("[%s] %s %s/%s", eventType, kind, obj.GetNamespace(), obj.GetName())
+		rw.t.Logf("(%s) \"%s\" %s/%s", strings.ToLower(eventType), kind, obj.GetNamespace(), obj.GetName())
 	default:
 		rw.t.Logf("Warning: event channel full, dropping event")
 	}
