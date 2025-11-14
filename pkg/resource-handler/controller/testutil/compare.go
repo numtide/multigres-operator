@@ -89,6 +89,9 @@ func IgnoreServiceRuntimeFields() cmp.Option {
 
 		// Default policy set based on cluster configuration
 		"InternalTrafficPolicy",
+
+		// Defaults to "None"
+		"SessionAffinity",
 	)
 }
 
@@ -189,8 +192,8 @@ func IgnoreStatefulSetSpecDefaults() cmp.Option {
 func IgnoreDeploymentSpecDefaults() cmp.Option {
 	return cmpopts.IgnoreFields(appsv1.DeploymentSpec{},
 		// Deployment-specific defaults
-		"Strategy",                 // Defaults to RollingUpdate with MaxSurge=25%, MaxUnavailable=25%
-		"RevisionHistoryLimit",     // Defaults to 10
-		"ProgressDeadlineSeconds",  // Defaults to 600 seconds (10 minutes)
+		"Strategy",                // Defaults to RollingUpdate with MaxSurge=25%, MaxUnavailable=25%
+		"RevisionHistoryLimit",    // Defaults to 10
+		"ProgressDeadlineSeconds", // Defaults to 600 seconds (10 minutes)
 	)
 }
