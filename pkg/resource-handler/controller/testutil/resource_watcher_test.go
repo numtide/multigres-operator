@@ -65,7 +65,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 
 				// Configure watcher with comparison options
 				opts := append(
-					testutil.IgnoreKubernetesMetadata(),
+					testutil.IgnoreMetaRuntimeFields(),
 					testutil.IgnoreStatus(),
 					testutil.IgnoreServiceRuntimeFields(),
 				)
@@ -134,7 +134,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				}
 
 				opts := append(
-					testutil.IgnoreKubernetesMetadata(),
+					testutil.IgnoreMetaRuntimeFields(),
 					testutil.IgnoreStatefulSetRuntimeFields(),
 					testutil.IgnorePodSpecDefaults(),
 					testutil.IgnoreStatefulSetSpecDefaults(),
@@ -205,7 +205,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				}
 
 				opts := append(
-					testutil.IgnoreKubernetesMetadata(),
+					testutil.IgnoreMetaRuntimeFields(),
 					testutil.IgnoreDeploymentRuntimeFields(),
 					testutil.IgnorePodSpecDefaultsExceptPullPolicy(), // Keep ImagePullPolicy for verification
 					testutil.IgnoreDeploymentSpecDefaults(),
@@ -334,7 +334,7 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 				}
 
 				opts := append(
-					testutil.IgnoreKubernetesMetadata(),
+					testutil.IgnoreMetaRuntimeFields(),
 					testutil.IgnoreStatus(),
 					testutil.IgnoreServiceRuntimeFields(),
 				)

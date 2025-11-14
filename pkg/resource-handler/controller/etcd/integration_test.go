@@ -276,7 +276,7 @@ func TestEtcdReconciliation(t *testing.T) {
 
 			watcher := testutil.NewResourceWatcher(t, ctx, mgr,
 				testutil.WithCmpOpts(
-					testutil.IgnoreKubernetesMetadata(),
+					testutil.IgnoreMetaRuntimeFields(),
 					testutil.IgnoreServiceRuntimeFields(),
 					testutil.IgnoreStatefulSetRuntimeFields(),
 					testutil.IgnorePodSpecDefaults(),

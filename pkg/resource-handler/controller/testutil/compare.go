@@ -11,9 +11,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// IgnoreKubernetesMetadata returns cmp.Options that ignore runtime-generated Kubernetes fields.
-// Use this when comparing expected vs actual Kubernetes resources in tests.
-func IgnoreKubernetesMetadata() cmp.Options {
+// IgnoreMetaRuntimeFields returns cmp.Options that ignore runtime-generated
+// Kubernetes fields. Use this when comparing expected vs actual Kubernetes
+// resources in tests.
+func IgnoreMetaRuntimeFields() cmp.Options {
 	return cmp.Options{
 		// Ignore ObjectMeta fields that are set by the API server
 		cmpopts.IgnoreFields(metav1.ObjectMeta{},
@@ -44,34 +45,6 @@ func IgnoreKubernetesMetadata() cmp.Options {
 
 		// Ignore UID type
 		cmpopts.IgnoreTypes(types.UID("")),
-	}
-}
-
-// IgnoreObjectMetaCompletely ignores the entire ObjectMeta (use when you only care about Spec).
-func IgnoreObjectMetaCompletely() cmp.Option {
-	return cmpopts.IgnoreFields(metav1.ObjectMeta{})
-}
-
-// IgnoreStatus ignores the Status subresource completely.
-func IgnoreStatus() cmp.Option {
-	return cmpopts.IgnoreFields(struct{ Status interface{} }{}, "Status")
-}
-
-// CompareOptions returns common options for comparing Kubernetes objects.
-// By default, ignores metadata and status.
-func CompareOptions() cmp.Options {
-	return cmp.Options{
-		IgnoreKubernetesMetadata(),
-		IgnoreStatus(),
-	}
-}
-
-// CompareSpecOnly returns options for comparing only Spec fields.
-// Ignores all metadata and status.
-func CompareSpecOnly() cmp.Options {
-	return cmp.Options{
-		IgnoreObjectMetaCompletely(),
-		IgnoreStatus(),
 	}
 }
 
@@ -135,8 +108,9 @@ func IgnoreDeploymentRuntimeFields() cmp.Option {
 	)
 }
 
-// IgnorePodSpecDefaults ignores all PodSpec and Container defaults applied by Kubernetes,
-// including ImagePullPolicy. Use when you only care about explicitly set fields.
+// IgnorePodSpecDefaults ignores all PodSpec and Container defaults applied by
+// Kubernetes, including ImagePullPolicy. Use when you only care about
+// explicitly set fields.
 func IgnorePodSpecDefaults() cmp.Option {
 	return cmp.Options{
 		cmpopts.IgnoreFields(corev1.PodSpec{},
@@ -157,7 +131,8 @@ func IgnorePodSpecDefaults() cmp.Option {
 }
 
 // IgnorePodSpecDefaultsExceptPullPolicy ignores PodSpec defaults but preserves
-// ImagePullPolicy for verification. Use when you want to assert ImagePullPolicy is correct.
+// ImagePullPolicy for verification. Use when you want to assert ImagePullPolicy
+// is correct.
 func IgnorePodSpecDefaultsExceptPullPolicy() cmp.Option {
 	return cmp.Options{
 		cmpopts.IgnoreFields(corev1.PodSpec{},
@@ -177,7 +152,8 @@ func IgnorePodSpecDefaultsExceptPullPolicy() cmp.Option {
 	}
 }
 
-// IgnoreStatefulSetSpecDefaults ignores StatefulSetSpec fields that have Kubernetes defaults applied.
+// IgnoreStatefulSetSpecDefaults ignores StatefulSetSpec fields that have
+// Kubernetes defaults applied.
 func IgnoreStatefulSetSpecDefaults() cmp.Option {
 	return cmpopts.IgnoreFields(appsv1.StatefulSetSpec{},
 		// StatefulSet-specific defaults
@@ -188,7 +164,8 @@ func IgnoreStatefulSetSpecDefaults() cmp.Option {
 	)
 }
 
-// IgnoreDeploymentSpecDefaults ignores DeploymentSpec fields that have Kubernetes defaults applied.
+// IgnoreDeploymentSpecDefaults ignores DeploymentSpec fields that have
+// Kubernetes defaults applied.
 func IgnoreDeploymentSpecDefaults() cmp.Option {
 	return cmpopts.IgnoreFields(
 		appsv1.DeploymentSpec{},
@@ -197,4 +174,33 @@ func IgnoreDeploymentSpecDefaults() cmp.Option {
 		"RevisionHistoryLimit",    // Defaults to 10
 		"ProgressDeadlineSeconds", // Defaults to 600 seconds (10 minutes)
 	)
+}
+
+// IgnoreObjectMetaCompletely ignores the entire ObjectMeta (use when you only
+// care about Spec).
+func IgnoreObjectMetaCompletely() cmp.Option {
+	return cmpopts.IgnoreFields(metav1.ObjectMeta{})
+}
+
+// IgnoreStatus ignores the Status subresource completely.
+func IgnoreStatus() cmp.Option {
+	return cmpopts.IgnoreFields(struct{ Status any }{}, "Status")
+}
+
+// CompareOptions returns common options for comparing Kubernetes objects.
+// By default, ignores metadata and status.
+func CompareOptions() cmp.Options {
+	return cmp.Options{
+		IgnoreMetaRuntimeFields(),
+		IgnoreStatus(),
+	}
+}
+
+// CompareSpecOnly returns options for comparing only Spec fields.
+// Ignores all metadata and status.
+func CompareSpecOnly() cmp.Options {
+	return cmp.Options{
+		IgnoreObjectMetaCompletely(),
+		IgnoreStatus(),
+	}
 }
