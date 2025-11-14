@@ -1028,7 +1028,6 @@ This user creates the smallest possible cluster and database. All values are def
 **SRE applies the cluster:**
 
 ```yaml
-# FILE: cluster.yaml
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
@@ -1060,7 +1059,6 @@ spec:
 This could also be auto-generated from a `CREATE DATABASE` DDL command.
 
 ```yaml
-# FILE: db.yaml
 apiVersion: multigres.com/v1alpha1
 kind: MultigresDatabase
 metadata:
@@ -1094,7 +1092,6 @@ This user relies on the `spec.templateDefaults` field to set cluster-wide defaul
 **SRE applies the cluster:**
 
 ```yaml
-# FILE: cluster.yaml
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
@@ -1136,7 +1133,6 @@ spec:
 **DBA applies the database (e.g., in `app-prod` namespace):**
 
 ```yaml
-# FILE: db.yaml
 apiVersion: multigres.com/v1alpha1
 kind: MultigresDatabase
 metadata:
@@ -1169,7 +1165,6 @@ The SRE provides the cluster. The DBA defines their logical DB, and the SRE (or 
 **DBA applies the logical database:**
 
 ```yaml
-# FILE: logical_db.yaml
 apiVersion: multigres.com/v1alpha1
 kind: MultigresDatabase
 metadata:
@@ -1196,7 +1191,6 @@ spec:
 **SRE/DBA applies the physical resources:**
 
 ```yaml
-# FILE: physical_resources.yaml
 apiVersion: multigres.com/v1alpha1
 kind: MultigresDatabaseResources
 metadata:
