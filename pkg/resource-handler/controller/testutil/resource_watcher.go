@@ -52,6 +52,9 @@ type ResourceWatcher struct {
 	subscribers    []chan ResourceEvent // Fan-out channels for WaitForMatch
 	t              testing.TB
 	extraResources []client.Object
+	timeout        time.Duration        // Default timeout for WaitForMatch operations
+	cmpOpts        []cmp.Option         // Default comparison options for WaitForMatch
+	watchedKinds   map[string]interface{} // Tracks which resource kinds are being watched
 }
 
 type Option func(rw *ResourceWatcher) error
@@ -68,15 +71,36 @@ func WithExtraResource(objs ...client.Object) Option {
 	}
 }
 
+// WithTimeout sets the default timeout for WaitForMatch operations.
+// If not set, defaults to 5 seconds.
+func WithTimeout(timeout time.Duration) Option {
+	return func(rw *ResourceWatcher) error {
+		rw.timeout = timeout
+		return nil
+	}
+}
+
+// WithCmpOpts sets the default comparison options for WaitForMatch operations.
+// These options are passed to go-cmp's Diff function.
+func WithCmpOpts(opts ...cmp.Option) Option {
+	return func(rw *ResourceWatcher) error {
+		rw.cmpOpts = opts
+		return nil
+	}
+}
+
 // NewResourceWatcher creates a new ResourceWatcher and automatically watches
 // Service, StatefulSet, and Deployment resources.
 func NewResourceWatcher(t testing.TB, ctx context.Context, mgr manager.Manager, opts ...Option) *ResourceWatcher {
 	t.Helper()
 
 	watcher := &ResourceWatcher{
-		events:  []ResourceEvent{},
-		eventCh: make(chan ResourceEvent, 1000),
-		t:       t,
+		events:       []ResourceEvent{},
+		eventCh:      make(chan ResourceEvent, 1000),
+		t:            t,
+		timeout:      5 * time.Second,         // Default timeout
+		cmpOpts:      nil,                     // Default: no special comparison options
+		watchedKinds: make(map[string]interface{}), // Initialize watched kinds tracker
 	}
 	for _, o := range opts {
 		if err := o(watcher); err != nil {
@@ -113,6 +137,32 @@ func NewResourceWatcher(t testing.TB, ctx context.Context, mgr manager.Manager, 
 func (rw *ResourceWatcher) EventCh() <-chan ResourceEvent {
 	rw.t.Helper()
 	return rw.eventCh
+}
+
+// SetTimeout updates the default timeout for WaitForMatch operations.
+// This can be called at any time to change the timeout for subsequent calls.
+func (rw *ResourceWatcher) SetTimeout(timeout time.Duration) {
+	rw.t.Helper()
+	rw.timeout = timeout
+}
+
+// ResetTimeout resets the timeout to the default value (5 seconds).
+func (rw *ResourceWatcher) ResetTimeout() {
+	rw.t.Helper()
+	rw.timeout = 5 * time.Second
+}
+
+// SetCmpOpts updates the default comparison options for WaitForMatch operations.
+// This can be called at any time to change the options for subsequent calls.
+func (rw *ResourceWatcher) SetCmpOpts(opts ...cmp.Option) {
+	rw.t.Helper()
+	rw.cmpOpts = opts
+}
+
+// ResetCmpOpts resets the comparison options to nil (no special options).
+func (rw *ResourceWatcher) ResetCmpOpts() {
+	rw.t.Helper()
+	rw.cmpOpts = nil
 }
 
 // Events returns a snapshot of all collected events at the current time.
