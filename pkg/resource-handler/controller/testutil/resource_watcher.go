@@ -215,6 +215,51 @@ func (rw *ResourceWatcher) Count() int {
 	return len(rw.events)
 }
 
+// waitForEvent is a helper that waits for an event matching the predicate function.
+// It handles the common select/timeout logic and returns the matching event or an error.
+//
+// The predicate function should return an error indicating the action to take:
+// - nil: match found, stop waiting and return the event successfully
+// - ErrKeepWaiting: continue waiting for more events
+// - any other error: stop waiting and return that error to the caller
+//
+// Returns:
+// - (*ResourceEvent, nil): when predicate returns nil (match found)
+// - (nil, context.Canceled): when the subscription channel is closed (watcher stopped)
+// - (nil, context.DeadlineExceeded): when the deadline is reached
+// - (nil, error): when predicate returns an error other than ErrKeepWaiting
+func waitForEvent(t testing.TB, subCh chan ResourceEvent, deadline time.Time, predicate func(ResourceEvent) error) (*ResourceEvent, error) {
+	t.Helper()
+
+	for {
+		select {
+		case evt, ok := <-subCh:
+			if !ok {
+				// Channel closed (context cancelled)
+				return nil, context.Canceled
+			}
+
+			err := predicate(evt)
+			if err == nil {
+				// Match found
+				return &evt, nil
+			}
+			if errors.Is(err, ErrKeepWaiting) {
+				// Continue waiting for more events
+				continue
+			}
+			// Any other error, stop and return it
+			return nil, err
+
+		case <-time.After(time.Until(deadline)):
+			if !time.Now().Before(deadline) {
+				// Timeout reached
+				return nil, context.DeadlineExceeded
+			}
+		}
+	}
+}
+
 // collectEvents runs in the background collecting events and fanning out to subscribers.
 func (rw *ResourceWatcher) collectEvents(ctx context.Context) {
 	for {
@@ -248,97 +293,130 @@ func (rw *ResourceWatcher) collectEvents(ctx context.Context) {
 	}
 }
 
-// WaitForMatch waits for a resource of the specified kind to match the expected object
-// using go-cmp comparison. Returns nil when matched, error on timeout.
+// WaitForMatch waits for one or more resources to match the expected objects
+// using go-cmp comparison. Returns nil when all matched, error on timeout.
+//
+// Uses the watcher's configured timeout and comparison options (set via SetTimeout/SetCmpOpts
+// or during initialization with WithTimeout/WithCmpOpts).
+//
+// The timeout applies to the entire operation, not per resource. All resources share
+// the same deadline.
 //
 // First checks existing events for early return, then subscribes to new events.
 //
+// When multiple objects are provided, waits for all of them to match.
+//
 // Example:
 //
+//	watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
 //	expectedSts := &appsv1.StatefulSet{
 //	    Spec: appsv1.StatefulSetSpec{Replicas: ptr.To(int32(3))},
 //	}
-//	err := watcher.WaitForMatch("StatefulSet", expectedSts, 10*time.Second, testutil.CompareSpecOnly()...)
+//	expectedSvc := &corev1.Service{...}
+//	err := watcher.WaitForMatch(expectedSts, expectedSvc)
 //	if err != nil {
-//	    t.Errorf("StatefulSet never reached expected state: %v", err)
+//	    t.Errorf("Resources never reached expected state: %v", err)
 //	}
-func (rw *ResourceWatcher) WaitForMatch(kind string, expected client.Object, timeout time.Duration, cmpOpts ...cmp.Option) error {
+func (rw *ResourceWatcher) WaitForMatch(expected ...client.Object) error {
 	rw.t.Helper()
 
-	// Step 1: Check existing events first (early return optimization)
-	rw.mu.RLock()
-	for _, evt := range rw.events {
-		if evt.Kind != kind {
-			continue
+	if len(expected) == 0 {
+		return nil
+	}
+
+	// Validate all kinds are being watched before waiting
+	var unwatchedKinds []string
+	for _, obj := range expected {
+		kind := extractKind(obj)
+		if _, watched := rw.watchedKinds[kind]; !watched {
+			unwatchedKinds = append(unwatchedKinds, kind)
 		}
-		if diff := cmp.Diff(expected, evt.Object, cmpOpts...); diff == "" {
-			rw.mu.RUnlock()
-			rw.t.Logf("✓ Resource already matched: %s %s/%s", kind, evt.Namespace, evt.Name)
+	}
+	if len(unwatchedKinds) > 0 {
+		return &ErrUnwatchedKinds{Kinds: unwatchedKinds}
+	}
+
+	// Calculate deadline once for all objects
+	deadline := time.Now().Add(rw.timeout)
+	cmpOpts := rw.cmpOpts
+
+	// Wait for each object to match using shared deadline
+	for _, obj := range expected {
+		if err := rw.waitForSingleMatch(obj, deadline, cmpOpts); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// waitForSingleMatch waits for a single resource to match the expected object.
+func (rw *ResourceWatcher) waitForSingleMatch(expected client.Object, deadline time.Time, cmpOpts []cmp.Option) error {
+	rw.t.Helper()
+
+	kind := extractKind(expected)
+
+	// Step 1: Check latest state of resource in existing events
+	matched, diff := rw.checkLatestEventMatches(expected, cmpOpts)
+	if matched {
+		return nil
+	}
+	if diff != "" {
+		if showDiffs {
+			rw.t.Logf("Exists but not matching \"%s\", subscribing for updates...\n%v", kind, diff)
+		} else {
+			rw.t.Logf("Exists but not matching \"%s\", subscribing for updates...", kind)
+		}
+	}
+
+	// Step 2: Subscribe to new events
+	subCh := rw.subscribe()
+	defer rw.unsubscribe(subCh)
+
+	// Step 3: Wait for matching event or timeout (using shared deadline)
+	// Initialize lastDiff with the diff from initial check (if any)
+	lastDiff := diff
+
+	predicate := func(evt ResourceEvent) error {
+		// Only check events of the matching kind
+		if evt.Kind != kind {
+			return ErrKeepWaiting
+		}
+
+		// Compare using go-cmp
+		diff := cmp.Diff(expected, evt.Object, cmpOpts...)
+		if diff == "" {
+			// Match found!
+			rw.t.Logf("Matched \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
 			return nil
 		}
-	}
-	rw.mu.RUnlock()
 
-	// Step 2: Not found in existing events, subscribe to new events
-	subCh := make(chan ResourceEvent, 100)
-
-	// Register subscriber
-	rw.mu.Lock()
-	rw.subscribers = append(rw.subscribers, subCh)
-	rw.mu.Unlock()
-
-	// Cleanup subscriber on exit
-	defer func() {
-		rw.mu.Lock()
-		for i, ch := range rw.subscribers {
-			if ch == subCh {
-				rw.subscribers = append(rw.subscribers[:i], rw.subscribers[i+1:]...)
-				break
-			}
+		// Store last diff for error reporting
+		lastDiff = diff
+		if showDiffs {
+			rw.t.Logf("Waiting for \"%s\" %s/%s:\n%v", kind, evt.Namespace, evt.Name, diff)
+		} else {
+			rw.t.Logf("Waiting for \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
 		}
-		rw.mu.Unlock()
-		close(subCh)
-	}()
-
-	// Step 3: Wait for matching event or timeout
-	deadline := time.Now().Add(timeout)
-	var lastDiff string
-
-	for {
-		select {
-		case evt, ok := <-subCh:
-			if !ok {
-				// Channel closed (context cancelled)
-				return fmt.Errorf("watcher stopped")
-			}
-
-			// Only check events of the matching kind
-			if evt.Kind != kind {
-				continue
-			}
-
-			// Compare using go-cmp
-			diff := cmp.Diff(expected, evt.Object, cmpOpts...)
-			if diff == "" {
-				// Match found!
-				rw.t.Logf("✓ Resource matched: %s %s/%s", kind, evt.Namespace, evt.Name)
-				return nil
-			}
-
-			// Store last diff for error reporting
-			lastDiff = diff
-			rw.t.Logf("Resource %s %s/%s not yet matching (waiting...)", kind, evt.Namespace, evt.Name)
-
-		case <-time.After(time.Until(deadline)):
-			if !time.Now().Before(deadline) {
-				// Timeout
-				if lastDiff != "" {
-					return fmt.Errorf("timeout waiting for %s to match.\nLast diff (-want +got):\n%s", kind, lastDiff)
-				}
-				return fmt.Errorf("timeout waiting for %s (no events of this kind received)", kind)
-			}
-		}
+		return ErrKeepWaiting
 	}
+
+	_, err := waitForEvent(rw.t, subCh, deadline, predicate)
+	if err != nil {
+		// Customize error message for timeout with diff details
+		if errors.Is(err, context.DeadlineExceeded) {
+			if lastDiff != "" {
+				return fmt.Errorf("timeout waiting for %s to match.\nLast diff (-want +got):\n%s", kind, lastDiff)
+			}
+			return fmt.Errorf("timeout waiting for %s (no events of this kind received)", kind)
+		}
+		if errors.Is(err, context.Canceled) {
+			return fmt.Errorf("watcher stopped")
+		}
+		return err
+	}
+
+	return nil
 }
 
 // WaitForKind waits for at least one event of the specified kind.
