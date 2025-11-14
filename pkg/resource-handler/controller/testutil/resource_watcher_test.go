@@ -5,10 +5,11 @@ package testutil_test
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 )
 
 // TestResourceWatcher_BeforeCreation tests that watcher can subscribe to events
@@ -60,14 +63,15 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 					},
 				}
 
-				// Combine standard ignores with Service runtime fields
+				// Configure watcher with comparison options
 				opts := append(
 					testutil.IgnoreKubernetesMetadata(),
 					testutil.IgnoreStatus(),
 					testutil.IgnoreServiceRuntimeFields(),
 				)
+				watcher.SetCmpOpts(opts...)
 
-				err := watcher.WaitForMatch("Service", expected, 5*time.Second, opts...)
+				err := watcher.WaitForMatch(expected)
 				if err != nil {
 					t.Errorf("Failed to wait for Service: %v", err)
 				}
@@ -135,8 +139,9 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 					testutil.IgnorePodSpecDefaults(),
 					testutil.IgnoreStatefulSetSpecDefaults(),
 				)
+				watcher.SetCmpOpts(opts...)
 
-				err := watcher.WaitForMatch("StatefulSet", expected, 5*time.Second, opts...)
+				err := watcher.WaitForMatch(expected)
 				if err != nil {
 					t.Errorf("Failed to wait for StatefulSet: %v", err)
 				}
@@ -205,10 +210,36 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 					testutil.IgnorePodSpecDefaultsExceptPullPolicy(), // Keep ImagePullPolicy for verification
 					testutil.IgnoreDeploymentSpecDefaults(),
 				)
+				watcher.SetCmpOpts(opts...)
 
-				err := watcher.WaitForMatch("Deployment", expected, 5*time.Second, opts...)
+				err := watcher.WaitForMatch(expected)
 				if err != nil {
 					t.Errorf("Failed to wait for Deployment: %v", err)
+				}
+			},
+		},
+		"multiple unwatched kinds fail immediately": {
+			setup: func(ctx context.Context, c client.Client) error {
+				// No setup needed - we're testing validation before waiting
+				return nil
+			},
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
+				// Try to wait for ConfigMap and Secret which are not being watched
+				err := watcher.WaitForMatch(&corev1.ConfigMap{}, &corev1.Secret{})
+				if err == nil {
+					t.Errorf("Expected error for unwatched kinds, but got nil")
+					return
+				}
+
+				want := &testutil.ErrUnwatchedKinds{Kinds: []string{"ConfigMap", "Secret"}}
+				var got *testutil.ErrUnwatchedKinds
+				if !errors.As(err, &got) {
+					t.Errorf("Expected ErrUnwatchedKinds, got: %T - %v", err, err)
+					return
+				}
+
+				if !reflect.DeepEqual(want.Kinds, got.Kinds) {
+					t.Errorf("Expected unwatched kinds = %v, got = %v", want.Kinds, got.Kinds)
 				}
 			},
 		},
@@ -223,7 +254,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 			_ = corev1.AddToScheme(scheme)
 			_ = appsv1.AddToScheme(scheme)
 
-			ctx := context.Background()
+			ctx := t.Context()
 			mgr := testutil.SetUpEnvtestManager(t, scheme)
 
 			watcher := testutil.NewResourceWatcher(t, ctx, mgr)
@@ -307,8 +338,9 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 					testutil.IgnoreStatus(),
 					testutil.IgnoreServiceRuntimeFields(),
 				)
+				watcher.SetCmpOpts(opts...)
 
-				err := watcher.WaitForMatch("Service", expected, 5*time.Second, opts...)
+				err := watcher.WaitForMatch(expected)
 				if err != nil {
 					t.Errorf("Failed to wait for updated Service: %v", err)
 				}
