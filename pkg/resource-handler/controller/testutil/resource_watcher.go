@@ -563,6 +563,89 @@ func (rw *ResourceWatcher) sendEvent(eventType, kind string, obj client.Object) 
 	}
 }
 
+// findLatestEventFor finds the most recent event matching the given object.
+// If the object has empty name and namespace, it matches by kind only.
+// Returns nil if no matching event found.
+func (rw *ResourceWatcher) findLatestEventFor(obj client.Object) *ResourceEvent {
+	rw.t.Helper()
+
+	kind := extractKind(obj)
+	name := obj.GetName()
+	namespace := obj.GetNamespace()
+
+	rw.mu.RLock()
+	defer rw.mu.RUnlock()
+
+	// Iterate backwards to find latest event first
+	for i := len(rw.events) - 1; i >= 0; i-- {
+		evt := rw.events[i]
+
+		// Must match kind
+		if evt.Kind != kind {
+			continue
+		}
+
+		// If name is specified, must match name
+		if name != "" && evt.Name != name {
+			continue
+		}
+
+		// If namespace is specified, must match namespace
+		if namespace != "" && evt.Namespace != namespace {
+			continue
+		}
+
+		// Found a match
+		return &evt
+	}
+
+	return nil
+}
+
+// checkLatestEventMatches finds the latest event for the expected object and compares it.
+// Returns (matched, diff). If no event found, returns (false, "").
+func (rw *ResourceWatcher) checkLatestEventMatches(expected client.Object, cmpOpts []cmp.Option) (bool, string) {
+	rw.t.Helper()
+
+	latestEvt := rw.findLatestEventFor(expected)
+	if latestEvt == nil {
+		return false, ""
+	}
+
+	diff := cmp.Diff(expected, latestEvt.Object, cmpOpts...)
+	if diff == "" {
+		rw.t.Logf("Matched \"%s\" %s/%s (from existing events)", latestEvt.Kind, latestEvt.Namespace, latestEvt.Name)
+		return true, ""
+	}
+
+	return false, diff
+}
+
+// subscribe creates and registers a new subscriber channel for fan-out.
+func (rw *ResourceWatcher) subscribe() chan ResourceEvent {
+	subCh := make(chan ResourceEvent, 100)
+
+	rw.mu.Lock()
+	rw.subscribers = append(rw.subscribers, subCh)
+	rw.mu.Unlock()
+
+	return subCh
+}
+
+// unsubscribe removes and closes a subscriber channel.
+func (rw *ResourceWatcher) unsubscribe(subCh chan ResourceEvent) {
+	rw.mu.Lock()
+	for i, ch := range rw.subscribers {
+		if ch == subCh {
+			rw.subscribers = append(rw.subscribers[:i], rw.subscribers[i+1:]...)
+			break
+		}
+	}
+	rw.mu.Unlock()
+
+	close(subCh)
+}
+
 // extractKind extracts a clean kind name from a client.Object (internal helper).
 func extractKind(obj client.Object) string {
 	kind := fmt.Sprintf("%T", obj)
