@@ -49,15 +49,24 @@ type ResourceEvent struct {
 
 // ResourceWatcher collects events from multiple resource types.
 type ResourceWatcher struct {
-	mu             sync.RWMutex
+	t testing.TB
+
+	// Mutex is used for subscription mechanism, as well as "events" slice for
+	// historical events.
+	mu sync.RWMutex
+
+	timeout time.Duration // Default timeout for WaitForMatch operations
+	cmpOpts []cmp.Option  // Default comparison options for WaitForMatch
+
+	extraResources []client.Object
+	watchedKinds   map[string]any // Tracks which resource kinds are being watched
 	events         []ResourceEvent
 	eventCh        chan ResourceEvent
-	subscribers    []chan ResourceEvent // Fan-out channels for WaitForMatch
-	t              testing.TB
-	extraResources []client.Object
-	timeout        time.Duration          // Default timeout for WaitForMatch operations
-	cmpOpts        []cmp.Option           // Default comparison options for WaitForMatch
-	watchedKinds   map[string]interface{} // Tracks which resource kinds are being watched
+
+	// subscribers set up with a simple slice and loop over the channels. This
+	// may not be the most performant for lookup, but given that there shouldn't
+	// be too many subscribers in action, sticking with this approach.
+	subscribers []chan ResourceEvent // Fan-out channels for WaitForMatch
 }
 
 type Option func(rw *ResourceWatcher) error
@@ -103,12 +112,12 @@ func NewResourceWatcher(
 	t.Helper()
 
 	watcher := &ResourceWatcher{
+		t:            t,
+		timeout:      5 * time.Second,      // Default timeout
+		cmpOpts:      nil,                  // Default: no special comparison options
+		watchedKinds: make(map[string]any), // Initialize watched kinds tracker
 		events:       []ResourceEvent{},
 		eventCh:      make(chan ResourceEvent, 1000),
-		t:            t,
-		timeout:      5 * time.Second,              // Default timeout
-		cmpOpts:      nil,                          // Default: no special comparison options
-		watchedKinds: make(map[string]interface{}), // Initialize watched kinds tracker
 	}
 	for _, o := range opts {
 		if err := o(watcher); err != nil {
@@ -138,6 +147,15 @@ func NewResourceWatcher(
 	}
 
 	return watcher
+}
+
+// Events returns a snapshot of all collected events at the current time.
+func (rw *ResourceWatcher) Events() []ResourceEvent {
+	rw.t.Helper()
+
+	rw.mu.RLock()
+	defer rw.mu.RUnlock()
+	return append([]ResourceEvent{}, rw.events...)
 }
 
 // EventCh returns the channel for receiving events directly.
@@ -171,15 +189,6 @@ func (rw *ResourceWatcher) SetCmpOpts(opts ...cmp.Option) {
 func (rw *ResourceWatcher) ResetCmpOpts() {
 	rw.t.Helper()
 	rw.cmpOpts = nil
-}
-
-// Events returns a snapshot of all collected events at the current time.
-func (rw *ResourceWatcher) Events() []ResourceEvent {
-	rw.t.Helper()
-
-	rw.mu.RLock()
-	defer rw.mu.RUnlock()
-	return append([]ResourceEvent{}, rw.events...)
 }
 
 // ForKind returns events for a specific resource kind.
@@ -223,8 +232,9 @@ func (rw *ResourceWatcher) Count() int {
 	return len(rw.events)
 }
 
-// waitForEvent is a helper that waits for an event matching the predicate function.
-// It handles the common select/timeout logic and returns the matching event or an error.
+// waitForEvent is a helper that waits for an event matching the predicate
+// function. It handles the common select/timeout logic and returns the matching
+// event or an error.
 //
 // The predicate function should return an error indicating the action to take:
 // - nil: match found, stop waiting and return the event successfully
@@ -236,6 +246,9 @@ func (rw *ResourceWatcher) Count() int {
 // - (nil, context.Canceled): when the subscription channel is closed (watcher stopped)
 // - (nil, context.DeadlineExceeded): when the deadline is reached
 // - (nil, error): when predicate returns an error other than ErrKeepWaiting
+//
+// TODO: Currently there is no use of the matched event, maybe it's someting we
+// can drop.
 func waitForEvent(
 	t testing.TB,
 	subCh chan ResourceEvent,
@@ -273,28 +286,32 @@ func waitForEvent(
 	}
 }
 
-// collectEvents runs in the background collecting events and fanning out to subscribers.
+// collectEvents collects events and fanning out to subscribers.
+//
+// This is meant to be run in the background using goroutines.
 func (rw *ResourceWatcher) collectEvents(ctx context.Context) {
+	rw.t.Helper()
+
 	for {
 		select {
 		case evt := <-rw.eventCh:
 			rw.mu.Lock()
-			// Store in main events slice
+			// Store in the events slice for cache.
 			rw.events = append(rw.events, evt)
 
-			// Fan out to all subscribers
+			// Fan out to all subscribers.
 			for _, subCh := range rw.subscribers {
 				select {
 				case subCh <- evt:
-					// Event sent to subscriber
+					// Event sent to subscriber.
 				default:
-					// Subscriber channel full, skip (they'll timeout)
+					// When subscriber channel is full, skip.
 					rw.t.Logf("Warning: subscriber channel full, dropping event")
 				}
 			}
 			rw.mu.Unlock()
 		case <-ctx.Done():
-			// Close all subscriber channels
+			// Close all subscriber channels.
 			rw.mu.Lock()
 			for _, subCh := range rw.subscribers {
 				close(subCh)
@@ -309,13 +326,15 @@ func (rw *ResourceWatcher) collectEvents(ctx context.Context) {
 // WaitForMatch waits for one or more resources to match the expected objects
 // using go-cmp comparison. Returns nil when all matched, error on timeout.
 //
-// Uses the watcher's configured timeout and comparison options (set via SetTimeout/SetCmpOpts
-// or during initialization with WithTimeout/WithCmpOpts).
+// Uses the watcher's configured timeout and comparison options (set via
+// SetTimeout/SetCmpOpts or during initialization with WithTimeout/WithCmpOpts).
 //
-// The timeout applies to the entire operation, not per resource. All resources share
-// the same deadline.
+// The timeout applies to the entire operation, not per resource. All resources
+// share the same deadline.
 //
 // First checks existing events for early return, then subscribes to new events.
+// Note that, when the desired state is found, this terminates prematurely
+// regardless of how the future events change the actual state of the object.
 //
 // When multiple objects are provided, waits for all of them to match.
 //
@@ -337,7 +356,8 @@ func (rw *ResourceWatcher) WaitForMatch(expected ...client.Object) error {
 		return nil
 	}
 
-	// Validate all kinds are being watched before waiting
+	// Validate all provided kinds are being watched before waiting, and if any
+	// is missing, return early with an error.
 	var unwatchedKinds []string
 	for _, obj := range expected {
 		kind := extractKind(obj)
@@ -349,11 +369,18 @@ func (rw *ResourceWatcher) WaitForMatch(expected ...client.Object) error {
 		return &ErrUnwatchedKinds{Kinds: unwatchedKinds}
 	}
 
-	// Calculate deadline once for all objects
+	// Calculate deadline once for all objects.
 	deadline := time.Now().Add(rw.timeout)
+	// Note that this is also copied so that long running subscription won't
+	// refer to other cmpOpts which can be updated while running.
 	cmpOpts := rw.cmpOpts
 
-	// Wait for each object to match using shared deadline
+	// Wait for each object to match using shared deadline.
+	// Note how this does not run checks concurrently for simplicity. All the
+	// events are stored in the events cache slice, and thus starting
+	// sequentially would still result in the match against the latest event.
+	// There could be some potential nuance where object getting updated after
+	// the match is found, and this does not cover such use cases.
 	for _, obj := range expected {
 		if err := rw.waitForSingleMatch(obj, deadline, cmpOpts); err != nil {
 			return err
@@ -373,54 +400,57 @@ func (rw *ResourceWatcher) waitForSingleMatch(
 
 	kind := extractKind(expected)
 
-	// Step 1: Check latest state of resource in existing events
+	// Step 1: Check latest state of resource in existing events.
 	matched, diff := rw.checkLatestEventMatches(expected, cmpOpts)
 	if matched {
 		return nil
 	}
 	if diff != "" {
+		suffix := ""
+		// When the build flag is specified, include the diff as suffix.
 		if showDiffs {
-			rw.t.Logf("Exists but not matching \"%s\", subscribing for updates...\n%v", kind, diff)
-		} else {
-			rw.t.Logf("Exists but not matching \"%s\", subscribing for updates...", kind)
+			suffix = "\n" + diff
 		}
+		rw.t.Logf("Exists but not matching \"%s\", subscribing for updates...%s", kind, suffix)
 	}
 
-	// Step 2: Subscribe to new events
+	// Step 2: Subscribe to new events.
 	subCh := rw.subscribe()
 	defer rw.unsubscribe(subCh)
 
-	// Step 3: Wait for matching event or timeout (using shared deadline)
-	// Initialize lastDiff with the diff from initial check (if any)
+	// Step 3: Wait for matching event or timeout (using shared deadline).
+	// Initialize lastDiff with the diff from initial check (if any).
 	lastDiff := diff
 
 	predicate := func(evt ResourceEvent) error {
-		// Only check events of the matching kind
+		// Only check events of the matching kind.
 		if evt.Kind != kind {
 			return ErrKeepWaiting
 		}
 
-		// Compare using go-cmp
+		// Compare using go-cmp.
 		diff := cmp.Diff(expected, evt.Object, cmpOpts...)
 		if diff == "" {
-			// Match found!
 			rw.t.Logf("Matched \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
 			return nil
 		}
 
-		// Store last diff for error reporting
+		// Store last diff for error reporting.
 		lastDiff = diff
+		// Log verbosity is handled by build flag of "verbose".
+
+		suffix := ""
+		// When the build flag is specified, include the diff as suffix.
 		if showDiffs {
-			rw.t.Logf("Waiting for \"%s\" %s/%s:\n%v", kind, evt.Namespace, evt.Name, diff)
-		} else {
-			rw.t.Logf("Waiting for \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
+			suffix = "\n" + diff
 		}
+		rw.t.Logf("Waiting for \"%s\" %s/%s%s", kind, evt.Namespace, evt.Name, suffix)
+
 		return ErrKeepWaiting
 	}
 
 	_, err := waitForEvent(rw.t, subCh, deadline, predicate)
 	if err != nil {
-		// Customize error message for timeout with diff details
 		if errors.Is(err, context.DeadlineExceeded) {
 			if lastDiff != "" {
 				return fmt.Errorf(
@@ -437,55 +467,15 @@ func (rw *ResourceWatcher) waitForSingleMatch(
 		return err
 	}
 
+	// Match found, return nil.
+	// TODO: We could return the matched object, but not necessary with the
+	// current logic.
 	return nil
 }
 
-// WaitForKind waits for at least one event of the specified kind.
-// Returns the first matching event, or error on timeout.
-func (rw *ResourceWatcher) WaitForKind(kind string, timeout time.Duration) (*ResourceEvent, error) {
-	rw.t.Helper()
-
-	// Step 1: Check existing events first
-	rw.mu.RLock()
-	for _, evt := range rw.events {
-		if evt.Kind == kind {
-			result := evt
-			rw.mu.RUnlock()
-			rw.t.Logf("Found \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
-			return &result, nil
-		}
-	}
-	rw.mu.RUnlock()
-
-	// Step 2: Subscribe to new events
-	subCh := rw.subscribe()
-	defer rw.unsubscribe(subCh)
-
-	// Step 3: Wait for matching event
-	deadline := time.Now().Add(timeout)
-
-	for {
-		select {
-		case evt, ok := <-subCh:
-			if !ok {
-				return nil, fmt.Errorf("watcher stopped")
-			}
-
-			if evt.Kind == kind {
-				rw.t.Logf("Found \"%s\" %s/%s", kind, evt.Namespace, evt.Name)
-				return &evt, nil
-			}
-
-		case <-time.After(time.Until(deadline)):
-			if !time.Now().Before(deadline) {
-				return nil, fmt.Errorf("timeout waiting for \"%s\" event", kind)
-			}
-		}
-	}
-}
-
-// WaitForEventType waits for an event with specific kind and type (ADDED, UPDATED, DELETED).
-// Returns the first matching event, or error on timeout.
+// WaitForEventType waits for an event with specific kind and type
+// (ADDED, UPDATED, DELETED). Returns the first matching event, or error on
+// timeout.
 func (rw *ResourceWatcher) WaitForEventType(
 	kind, eventType string,
 	timeout time.Duration,
@@ -531,7 +521,7 @@ func (rw *ResourceWatcher) WaitForEventType(
 	}
 }
 
-// watchResource sets up an informer for a resource type (internal helper).
+// watchResource sets up an informer for a resource type.
 func (rw *ResourceWatcher) watchResource(
 	ctx context.Context,
 	mgr manager.Manager,
@@ -547,15 +537,15 @@ func (rw *ResourceWatcher) watchResource(
 	kind := extractKind(obj)
 
 	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			cObj := obj.(client.Object)
 			rw.sendEvent("ADDED", kind, cObj)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			cObj := newObj.(client.Object)
 			rw.sendEvent("UPDATED", kind, cObj)
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			cObj := obj.(client.Object)
 			rw.sendEvent("DELETED", kind, cObj)
 		},
@@ -570,7 +560,8 @@ func (rw *ResourceWatcher) watchResource(
 	return nil
 }
 
-// sendEvent sends an event to the channel (internal helper).
+// sendEvent sends an event to the channel, fallback to skip when the channel
+// cannot receive.
 func (rw *ResourceWatcher) sendEvent(eventType, kind string, obj client.Object) {
 	rw.t.Helper()
 
@@ -665,6 +656,9 @@ func (rw *ResourceWatcher) checkLatestEventMatches(
 
 // subscribe creates and registers a new subscriber channel for fan-out.
 func (rw *ResourceWatcher) subscribe() chan ResourceEvent {
+	rw.t.Helper()
+
+	// NOTE: Arbitrary buffer set
 	subCh := make(chan ResourceEvent, 100)
 
 	rw.mu.Lock()
@@ -676,6 +670,8 @@ func (rw *ResourceWatcher) subscribe() chan ResourceEvent {
 
 // unsubscribe removes and closes a subscriber channel.
 func (rw *ResourceWatcher) unsubscribe(subCh chan ResourceEvent) {
+	rw.t.Helper()
+
 	rw.mu.Lock()
 	for i, ch := range rw.subscribers {
 		if ch == subCh {
