@@ -4,7 +4,7 @@
 
 This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on a root `MultigresCluster` resource, which defines the core infrastructure, and a `MultigresDatabase` resource, which defines the logical database topology.
 
-This new design separates the **logical** definition of a database (its tablegroups and sharding) from the **physical** definition (the compute, memory, and storage resources for its shards). This provides a clear separation of concerns between Platform/SREs (managing the cluster) and DBAs/Developers (managing the databases).
+This new design separates the **logical** definition of a database (its tablegroups and sharding) from the **physical** definition (the compute, memory, and storage resources for its shards). This provides a clear separation of concerns between Platform/SREs (managing the cluster) and DBAs/Developers (managing the databases). It also enables us to define an agnostic database and sharding spec that could potentially be utilized in other platforms that are not Kubernetes.
 
 1.  **`MultigresCluster`**: The root resource defining the desired state of the entire cluster's core infrastructure (control plane, cells, and the implicit system catalog database).
 2.  **`CoreTemplate`**: A reusable, namespaced resource for defining standard configurations for core components.
@@ -23,8 +23,8 @@ Managing a distributed, sharded database system is complex. This revised parent/
       * **Platform (SRE):** Manages the `MultigresCluster` (cells, templates, core components) in a central namespace.
       * **Application (DBA):** Manages the `MultigresDatabase` (logical sharding) in their own application namespace.
       * **Infrastructure (SRE/Platform):** Manages the `MultigresDatabaseResources` (assigning physical resources to logical databases), also in the application namespace.
-  * **DDL-driven Workflow:** This model enables a new "happy path" where a `CREATE DATABASE` DDL command can be intercepted to automatically generate the `MultigresDatabase` CR, with a default `MultigresDatabaseResources` CR being created automatically by the operator.
-  * **GitOps vs. DDL:** By separating the CRs, we can safely allow DDL-driven creation while still allowing GitOps to manage the underlying resource templates and cluster configuration, solving potential state conflicts.
+  * **DDL-driven Workflow:** This model enables a new DB creation flow where a `CREATE DATABASE` DDL command can be intercepted to automatically generate the `MultigresDatabase` CR, with a default `MultigresDatabaseResources` CR being created automatically by the operator.
+  * **GitOps vs. DDL:** By generating and applying the CRs based on the imperative DDL, we can safely allow DDL-driven creation while still allowing GitOps to manage the underlying resource templates and cluster configuration, solving potential state conflicts.
   * **Scoped Reusability:** By splitting templates into `CoreTemplate`, `CellTemplate`, and `ShardTemplate`, we provide clear, reusable configurations.
 
 ## Proposal: API Architecture and Resource Topology
@@ -91,7 +91,7 @@ Kubernetes Namespace: "app-team-1"
 
 This API structure is designed to support two primary methods of database creation, which can coexist.
 
-### The DDL "Happy Path" (Platform Agnostic)
+### The DDL DB Creation Flow (Platform Agnostic)
 
 By default, MultigresCluster accepts DDL queries to create databases and the required infrastructure. This enables other users (e.g., DBAs or application developers) to create a database using SQL commands without defining infrastructure. It works like this:
 
