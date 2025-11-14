@@ -31,7 +31,10 @@ type ErrUnwatchedKinds struct {
 }
 
 func (e *ErrUnwatchedKinds) Error() string {
-	return fmt.Sprintf("the following kinds are not being watched by this ResourceWatcher: %v", e.Kinds)
+	return fmt.Sprintf(
+		"the following kinds are not being watched by this ResourceWatcher: %v",
+		e.Kinds,
+	)
 }
 
 // ResourceEvent represents a Kubernetes resource event.
@@ -52,8 +55,8 @@ type ResourceWatcher struct {
 	subscribers    []chan ResourceEvent // Fan-out channels for WaitForMatch
 	t              testing.TB
 	extraResources []client.Object
-	timeout        time.Duration        // Default timeout for WaitForMatch operations
-	cmpOpts        []cmp.Option         // Default comparison options for WaitForMatch
+	timeout        time.Duration          // Default timeout for WaitForMatch operations
+	cmpOpts        []cmp.Option           // Default comparison options for WaitForMatch
 	watchedKinds   map[string]interface{} // Tracks which resource kinds are being watched
 }
 
@@ -91,15 +94,20 @@ func WithCmpOpts(opts ...cmp.Option) Option {
 
 // NewResourceWatcher creates a new ResourceWatcher and automatically watches
 // Service, StatefulSet, and Deployment resources.
-func NewResourceWatcher(t testing.TB, ctx context.Context, mgr manager.Manager, opts ...Option) *ResourceWatcher {
+func NewResourceWatcher(
+	t testing.TB,
+	ctx context.Context,
+	mgr manager.Manager,
+	opts ...Option,
+) *ResourceWatcher {
 	t.Helper()
 
 	watcher := &ResourceWatcher{
 		events:       []ResourceEvent{},
 		eventCh:      make(chan ResourceEvent, 1000),
 		t:            t,
-		timeout:      5 * time.Second,         // Default timeout
-		cmpOpts:      nil,                     // Default: no special comparison options
+		timeout:      5 * time.Second,              // Default timeout
+		cmpOpts:      nil,                          // Default: no special comparison options
 		watchedKinds: make(map[string]interface{}), // Initialize watched kinds tracker
 	}
 	for _, o := range opts {
@@ -228,7 +236,12 @@ func (rw *ResourceWatcher) Count() int {
 // - (nil, context.Canceled): when the subscription channel is closed (watcher stopped)
 // - (nil, context.DeadlineExceeded): when the deadline is reached
 // - (nil, error): when predicate returns an error other than ErrKeepWaiting
-func waitForEvent(t testing.TB, subCh chan ResourceEvent, deadline time.Time, predicate func(ResourceEvent) error) (*ResourceEvent, error) {
+func waitForEvent(
+	t testing.TB,
+	subCh chan ResourceEvent,
+	deadline time.Time,
+	predicate func(ResourceEvent) error,
+) (*ResourceEvent, error) {
 	t.Helper()
 
 	for {
@@ -351,7 +364,11 @@ func (rw *ResourceWatcher) WaitForMatch(expected ...client.Object) error {
 }
 
 // waitForSingleMatch waits for a single resource to match the expected object.
-func (rw *ResourceWatcher) waitForSingleMatch(expected client.Object, deadline time.Time, cmpOpts []cmp.Option) error {
+func (rw *ResourceWatcher) waitForSingleMatch(
+	expected client.Object,
+	deadline time.Time,
+	cmpOpts []cmp.Option,
+) error {
 	rw.t.Helper()
 
 	kind := extractKind(expected)
@@ -406,7 +423,11 @@ func (rw *ResourceWatcher) waitForSingleMatch(expected client.Object, deadline t
 		// Customize error message for timeout with diff details
 		if errors.Is(err, context.DeadlineExceeded) {
 			if lastDiff != "" {
-				return fmt.Errorf("timeout waiting for %s to match.\nLast diff (-want +got):\n%s", kind, lastDiff)
+				return fmt.Errorf(
+					"timeout waiting for %s to match.\nLast diff (-want +got):\n%s",
+					kind,
+					lastDiff,
+				)
 			}
 			return fmt.Errorf("timeout waiting for %s (no events of this kind received)", kind)
 		}
@@ -465,7 +486,10 @@ func (rw *ResourceWatcher) WaitForKind(kind string, timeout time.Duration) (*Res
 
 // WaitForEventType waits for an event with specific kind and type (ADDED, UPDATED, DELETED).
 // Returns the first matching event, or error on timeout.
-func (rw *ResourceWatcher) WaitForEventType(kind, eventType string, timeout time.Duration) (*ResourceEvent, error) {
+func (rw *ResourceWatcher) WaitForEventType(
+	kind, eventType string,
+	timeout time.Duration,
+) (*ResourceEvent, error) {
 	rw.t.Helper()
 
 	// Step 1: Check existing events first
@@ -508,7 +532,11 @@ func (rw *ResourceWatcher) WaitForEventType(kind, eventType string, timeout time
 }
 
 // watchResource sets up an informer for a resource type (internal helper).
-func (rw *ResourceWatcher) watchResource(ctx context.Context, mgr manager.Manager, obj client.Object) error {
+func (rw *ResourceWatcher) watchResource(
+	ctx context.Context,
+	mgr manager.Manager,
+	obj client.Object,
+) error {
 	rw.t.Helper()
 
 	informer, err := mgr.GetCache().GetInformer(ctx, obj)
@@ -557,7 +585,13 @@ func (rw *ResourceWatcher) sendEvent(eventType, kind string, obj client.Object) 
 
 	select {
 	case rw.eventCh <- event:
-		rw.t.Logf("(%s) \"%s\" %s/%s", strings.ToLower(eventType), kind, obj.GetNamespace(), obj.GetName())
+		rw.t.Logf(
+			"(%s) \"%s\" %s/%s",
+			strings.ToLower(eventType),
+			kind,
+			obj.GetNamespace(),
+			obj.GetName(),
+		)
 	default:
 		rw.t.Logf("Warning: event channel full, dropping event")
 	}
@@ -604,7 +638,10 @@ func (rw *ResourceWatcher) findLatestEventFor(obj client.Object) *ResourceEvent 
 
 // checkLatestEventMatches finds the latest event for the expected object and compares it.
 // Returns (matched, diff). If no event found, returns (false, "").
-func (rw *ResourceWatcher) checkLatestEventMatches(expected client.Object, cmpOpts []cmp.Option) (bool, string) {
+func (rw *ResourceWatcher) checkLatestEventMatches(
+	expected client.Object,
+	cmpOpts []cmp.Option,
+) (bool, string) {
 	rw.t.Helper()
 
 	latestEvt := rw.findLatestEventFor(expected)
@@ -614,7 +651,12 @@ func (rw *ResourceWatcher) checkLatestEventMatches(expected client.Object, cmpOp
 
 	diff := cmp.Diff(expected, latestEvt.Object, cmpOpts...)
 	if diff == "" {
-		rw.t.Logf("Matched \"%s\" %s/%s (from existing events)", latestEvt.Kind, latestEvt.Namespace, latestEvt.Name)
+		rw.t.Logf(
+			"Matched \"%s\" %s/%s (from existing events)",
+			latestEvt.Kind,
+			latestEvt.Namespace,
+			latestEvt.Name,
+		)
 		return true, ""
 	}
 

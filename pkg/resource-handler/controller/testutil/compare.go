@@ -190,7 +190,8 @@ func IgnoreStatefulSetSpecDefaults() cmp.Option {
 
 // IgnoreDeploymentSpecDefaults ignores DeploymentSpec fields that have Kubernetes defaults applied.
 func IgnoreDeploymentSpecDefaults() cmp.Option {
-	return cmpopts.IgnoreFields(appsv1.DeploymentSpec{},
+	return cmpopts.IgnoreFields(
+		appsv1.DeploymentSpec{},
 		// Deployment-specific defaults
 		"Strategy",                // Defaults to RollingUpdate with MaxSurge=25%, MaxUnavailable=25%
 		"RevisionHistoryLimit",    // Defaults to 10
