@@ -97,22 +97,24 @@ func SetUpEnvtestWithKubeconfig(t testing.TB) (*rest.Config, func()) {
 // When to use SetUpClient:
 //
 // 1. Testing cache synchronization:
-//    - Verify what's actually in the API server vs what the cache sees
-//    - Useful when debugging "why doesn't my controller see this resource?"
+//   - Verify what's actually in the API server vs what the cache sees
+//   - Useful when debugging "why doesn't my controller see this resource?"
 //
 // 2. Strong consistency requirements:
-//    - Need immediate reads after writes (no cache lag)
-//    - Testing race conditions or timing-sensitive behavior
 //
-// 3. Comparing cached vs direct reads:
-//      directClient := SetUpClient(t, cfg, scheme)
-//      cachedClient := mgr.GetClient()
-//      // Create resource
-//      cachedClient.Create(ctx, obj)
-//      // Direct read (guaranteed to see it)
-//      directClient.Get(ctx, key, &actual)
-//      // Cached read (might lag slightly)
-//      cachedClient.Get(ctx, key, &fromCache)
+//   - Need immediate reads after writes (no cache lag)
+//
+//   - Testing race conditions or timing-sensitive behavior
+//
+//     3. Comparing cached vs direct reads:
+//     directClient := SetUpClient(t, cfg, scheme)
+//     cachedClient := mgr.GetClient()
+//     // Create resource
+//     cachedClient.Create(ctx, obj)
+//     // Direct read (guaranteed to see it)
+//     directClient.Get(ctx, key, &actual)
+//     // Cached read (might lag slightly)
+//     cachedClient.Get(ctx, key, &fromCache)
 //
 // For most tests, use mgr.GetClient() instead - it tests what controllers actually see.
 func SetUpClient(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) client.Client {
@@ -171,12 +173,12 @@ func StartManager(t testing.TB, mgr manager.Manager) {
 //
 // This is the recommended way to set up integration tests:
 //
-//   mgr := testutil.SetUpEnvtestManager(t, scheme)
-//   c := mgr.GetClient()
+//	mgr := testutil.SetUpEnvtestManager(t, scheme)
+//	c := mgr.GetClient()
 //
-//   // Setup your controller
-//   reconciler := &YourReconciler{Client: c, Scheme: scheme}
-//   reconciler.SetupWithManager(mgr)
+//	// Setup your controller
+//	reconciler := &YourReconciler{Client: c, Scheme: scheme}
+//	reconciler.SetupWithManager(mgr)
 //
 // For more control, use the individual functions instead.
 func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme) manager.Manager {
