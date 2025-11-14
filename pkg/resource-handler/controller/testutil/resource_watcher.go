@@ -2,7 +2,9 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +16,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
+
+// Predefined error types for event waiting
+var (
+	// ErrKeepWaiting is a sentinel error that the predicate can return to
+	// indicate it wants to continue waiting for more events.
+	ErrKeepWaiting = errors.New("continue waiting for matching event")
+)
+
+// ErrUnwatchedKinds is returned when trying to wait for resource kinds
+// that aren't being watched by the ResourceWatcher.
+type ErrUnwatchedKinds struct {
+	Kinds []string
+}
+
+func (e *ErrUnwatchedKinds) Error() string {
+	return fmt.Sprintf("the following kinds are not being watched by this ResourceWatcher: %v", e.Kinds)
+}
 
 // ResourceEvent represents a Kubernetes resource event.
 type ResourceEvent struct {
