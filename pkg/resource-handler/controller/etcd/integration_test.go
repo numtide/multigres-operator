@@ -52,14 +52,9 @@ func TestEtcdReconciliation(t *testing.T) {
 		existingObjects []client.Object
 		failureConfig   *testutil.FailureConfig
 		wantResources   []client.Object
-		// TODO: If wantErr is false but failureConfig is set, assertions may fail
-		// due to failure injection. This should be addressed when we need to test
-		// partial failures that don't prevent reconciliation success.
-		wantErr     bool
-		wantRequeue bool
-		assertFunc  func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
+		assertFunc      func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
 	}{
-		"something": {
+		"simple etcd input": {
 			etcd: &multigresv1alpha1.Etcd{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-etcd",
@@ -70,49 +65,20 @@ func TestEtcdReconciliation(t *testing.T) {
 			wantResources: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
-						Namespace: "default",
-						Labels: map[string]string{
-							"app.kubernetes.io/component":  "etcd",
-							"app.kubernetes.io/instance":   "test-etcd",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/part-of":    "multigres",
-							"multigres.com/cell":           "multigres-global-topo",
-						},
-						OwnerReferences: []metav1.OwnerReference{
-							{
-								APIVersion:         "multigres.com/v1alpha1",
-								Kind:               "Etcd",
-								Name:               "test-etcd",
-								Controller:         ptr.To(true),
-								BlockOwnerDeletion: ptr.To(true),
-							},
-						},
+						Name:            "test-etcd",
+						Namespace:       "default",
+						Labels:          etcdLabels(t, "test-etcd"),
+						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
 					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    ptr.To(int32(3)),
 						ServiceName: "test-etcd-headless",
 						Selector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"app.kubernetes.io/component":  "etcd",
-								"app.kubernetes.io/instance":   "test-etcd",
-								"app.kubernetes.io/managed-by": "multigres-operator",
-								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/part-of":    "multigres",
-								"multigres.com/cell":           "multigres-global-topo",
-							},
+							MatchLabels: etcdLabels(t, "test-etcd"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: map[string]string{
-									"app.kubernetes.io/component":  "etcd",
-									"app.kubernetes.io/instance":   "test-etcd",
-									"app.kubernetes.io/managed-by": "multigres-operator",
-									"app.kubernetes.io/name":       "multigres",
-									"app.kubernetes.io/part-of":    "multigres",
-									"multigres.com/cell":           "multigres-global-topo",
-								},
+								Labels: etcdLabels(t, "test-etcd"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -120,8 +86,8 @@ func TestEtcdReconciliation(t *testing.T) {
 										Name:  "etcd",
 										Image: "gcr.io/etcd-development/etcd:v3.5.9",
 										Ports: []corev1.ContainerPort{
-											{Name: "client", ContainerPort: 2379, Protocol: corev1.ProtocolTCP},
-											{Name: "peer", ContainerPort: 2380, Protocol: corev1.ProtocolTCP},
+											tcpPort(t, "client", 2379),
+											tcpPort(t, "peer", 2380),
 										},
 										Env: []corev1.EnvVar{
 											{
@@ -180,78 +146,34 @@ func TestEtcdReconciliation(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
-						Namespace: "default",
-						Labels: map[string]string{
-							"app.kubernetes.io/component":  "etcd",
-							"app.kubernetes.io/instance":   "test-etcd",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/part-of":    "multigres",
-							"multigres.com/cell":           "multigres-global-topo",
-						},
-						OwnerReferences: []metav1.OwnerReference{
-							{
-								APIVersion:         "multigres.com/v1alpha1",
-								Kind:               "Etcd",
-								Name:               "test-etcd",
-								Controller:         ptr.To(true),
-								BlockOwnerDeletion: ptr.To(true),
-							},
-						},
+						Name:            "test-etcd",
+						Namespace:       "default",
+						Labels:          etcdLabels(t, "test-etcd"),
+						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
 					},
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
-							{Name: "client", Port: 2379, TargetPort: intstr.FromString("client"), Protocol: corev1.ProtocolTCP},
+							tcpServicePort(t, "client", 2379),
 						},
-						Selector: map[string]string{
-							"app.kubernetes.io/component":  "etcd",
-							"app.kubernetes.io/instance":   "test-etcd",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/part-of":    "multigres",
-							"multigres.com/cell":           "multigres-global-topo",
-						},
+						Selector: etcdLabels(t, "test-etcd"),
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-headless",
-						Namespace: "default",
-						Labels: map[string]string{
-							"app.kubernetes.io/component":  "etcd",
-							"app.kubernetes.io/instance":   "test-etcd",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/part-of":    "multigres",
-							"multigres.com/cell":           "multigres-global-topo",
-						},
-						OwnerReferences: []metav1.OwnerReference{
-							{
-								APIVersion:         "multigres.com/v1alpha1",
-								Kind:               "Etcd",
-								Name:               "test-etcd",
-								Controller:         ptr.To(true),
-								BlockOwnerDeletion: ptr.To(true),
-							},
-						},
+						Name:            "test-etcd-headless",
+						Namespace:       "default",
+						Labels:          etcdLabels(t, "test-etcd"),
+						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
 					},
 					Spec: corev1.ServiceSpec{
 						Type:      corev1.ServiceTypeClusterIP,
 						ClusterIP: corev1.ClusterIPNone,
 						Ports: []corev1.ServicePort{
-							{Name: "client", Port: 2379, TargetPort: intstr.FromString("client"), Protocol: corev1.ProtocolTCP},
-							{Name: "peer", Port: 2380, TargetPort: intstr.FromString("peer"), Protocol: corev1.ProtocolTCP},
+							tcpServicePort(t, "client", 2379),
+							tcpServicePort(t, "peer", 2380),
 						},
-						Selector: map[string]string{
-							"app.kubernetes.io/component":  "etcd",
-							"app.kubernetes.io/instance":   "test-etcd",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/part-of":    "multigres",
-							"multigres.com/cell":           "multigres-global-topo",
-						},
+						Selector:                 etcdLabels(t, "test-etcd"),
 						PublishNotReadyAddresses: true,
 					},
 				},
@@ -307,4 +229,43 @@ func TestEtcdReconciliation(t *testing.T) {
 		})
 	}
 
+}
+
+// Test helpers
+
+// etcdLabels returns standard labels for etcd resources in tests
+func etcdLabels(t testing.TB, instanceName string) map[string]string {
+	t.Helper()
+	return map[string]string{
+		"app.kubernetes.io/component":  "etcd",
+		"app.kubernetes.io/instance":   instanceName,
+		"app.kubernetes.io/managed-by": "multigres-operator",
+		"app.kubernetes.io/name":       "multigres",
+		"app.kubernetes.io/part-of":    "multigres",
+		"multigres.com/cell":           "multigres-global-topo",
+	}
+}
+
+// etcdOwnerRefs returns owner references for an Etcd resource
+func etcdOwnerRefs(t testing.TB, etcdName string) []metav1.OwnerReference {
+	t.Helper()
+	return []metav1.OwnerReference{{
+		APIVersion:         "multigres.com/v1alpha1",
+		Kind:               "Etcd",
+		Name:               etcdName,
+		Controller:         ptr.To(true),
+		BlockOwnerDeletion: ptr.To(true),
+	}}
+}
+
+// tcpPort creates a simple TCP container port
+func tcpPort(t testing.TB, name string, port int32) corev1.ContainerPort {
+	t.Helper()
+	return corev1.ContainerPort{Name: name, ContainerPort: port, Protocol: corev1.ProtocolTCP}
+}
+
+// tcpServicePort creates a TCP service port with named target
+func tcpServicePort(t testing.TB, name string, port int32) corev1.ServicePort {
+	t.Helper()
+	return corev1.ServicePort{Name: name, Port: port, TargetPort: intstr.FromString(name), Protocol: corev1.ProtocolTCP}
 }
