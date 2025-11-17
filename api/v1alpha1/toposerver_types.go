@@ -122,8 +122,8 @@ type TopoServer struct {
 
 // TopoServerList contains a list of TopoServer
 type TopoServerList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `             json:",inline"`
+	metav1.ListMeta `             json:"metadata,omitempty"`
 	Items           []TopoServer `json:"items"`
 }
 
