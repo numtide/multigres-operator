@@ -107,7 +107,7 @@ type GlobalTopoServerRefSpec struct {
 type CellTopoServerSpec struct {
 	// External defines connection details for an unmanaged, external topo server.
 	// +optional
-	External *ExternalTopoServerSpec `json:"external,omitempty"`
+	// External *ExternalTopoServerSpec `json:"external,omitempty"`
 
 	// ManagedSpec defines the spec for a managed, cell-local topo server.
 	// If set, the Cell controller will create a child TopoServer CR.
