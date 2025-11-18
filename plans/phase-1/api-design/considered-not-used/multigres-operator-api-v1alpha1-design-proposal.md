@@ -5,6 +5,8 @@ state: ready
 
 ## Summary
 
+>This was the initial design proposal. It was the basis for the final, amended proposal based on conversations and feedback from the Multigres team.
+
 This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on two user-editable Custom Resources (CRs):
 
 1.  **`MultigresCluster`**: The root resource that defines the desired state (intent) of the entire cluster.

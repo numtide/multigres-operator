@@ -1,5 +1,7 @@
 # MultigresCluster API v1alpha1
 
+This is the final design we will be using to implement the operator based on discussions with the Multigres team.
+
 ## Summary
 
 This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on a root `MultigresCluster` resource that acts as the single source of truth, supported by three specifically scoped template resources:
@@ -308,7 +310,7 @@ status:
       totalShards: 3
 ```
 
-### User Managed CR: CoreTemplate (NEW)
+### User Managed CR: CoreTemplate
 
   * This CR is NOT a child resource. It is purely a configuration object.
   * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
@@ -818,44 +820,69 @@ status:
   poolsReady: True
 ```
 
-## Defaults & Webhooks (REVISED)
+## Defaults & Webhooks
 
-To simplify user experience and ensure cluster stability, a mutating admission webhook will resolve the configuration for each component based on a strict 4-level override chain.
+To simplify user experience and ensure cluster stability, the operator uses a combination of **Mutating Webhooks** (for applying defaults) and **Validating Webhooks** (for synchronous checks), alongside **Controller Finalizers** (for asynchronous protection).
 
-### The 4-Level Override Chain
+### 1. Configuration Defaults (Mutating Webhook)
 
-This logic is applied consistently for `GlobalTopoServer`, `MultiAdmin`, `Cells`, and `Shards`:
+A mutating admission webhook applies a strict **4-Level Override Chain** to resolve configurations. This logic is applied consistently for Cluster Components (`GlobalTopoServer`, `MultiAdmin`, `Cells`) and Database Shards.
 
-1.  **Component-Level Definition (Highest Precedence):**
+#### Cluster Component Override Chain
+*Applies to `GlobalTopoServer`, `MultiAdmin`, and `Cells` defined in `MultigresCluster`.*
 
-      * If an inline `spec` (e.g., `managedSpec`, `external`, or `spec`) is provided for the component, it is used.
-      * *Else*, if an explicit template reference (e.g., `templateRef` or `cellTemplate`) is provided, it is used.
-      * (It is a validation error to provide both an inline `spec` and an explicit template reference).
+1.  **Component-Level Definition (Highest):** An inline `spec` (e.g., `managedSpec`) or an explicit `templateRef` / `cellTemplate` on the component itself.
+2.  **Cluster-Level Default Template:** The corresponding template defined in `spec.templateDefaults` (e.g., `templateDefaults.coreTemplate` or `templateDefaults.cellTemplate`).
+3.  **Namespace-Level Default Template:** A template of the correct kind (e.g., `CoreTemplate`) named `default` in the same namespace as the cluster.
+4.  **Operator Hardcoded Defaults (Lowest):** A final fallback applied by the operator code (e.g., default resources, default replicas).
 
-2.  **Cluster-Level Default Template:**
+#### Shard Override Chain
+*Applies to every Shard defined in `spec.databases[].tablegroups[].shards[]`.*
 
-      * *Else*, if the corresponding field in `spec.templateDefaults` is set (e.g., `templateDefaults.coreTemplate` for globals, `templateDefaults.cellTemplate` for cells), the webhook will inject a reference to that template.
+1.  **Shard-Level Definition (Highest):** An inline `spec` or an explicit `shardTemplate` defined on the specific shard entry in the `MultigresCluster` YAML.
+2.  **Cluster-Level Default Template:** The `spec.templateDefaults.shardTemplate` field in the root `MultigresCluster` CR.
+3.  **Namespace-Level Default Template:** A `ShardTemplate` named `default` in the same namespace as the cluster.
+4.  **Operator Hardcoded Defaults (Lowest):** A final fallback applied by the operator.
 
-3.  **Namespace-Level Default Template:**
+---
 
-      * *Else*, the webhook will attempt to inject a reference to a template of the correct kind with the reserved name `default` in the cluster's namespace (e.g., `CoreTemplate` named `default`).
+### 2. Synchronous Validating Webhooks
 
-4.  **Operator Hardcoded Defaults (Lowest Precedence):**
+Webhooks are used *only* for fast, synchronous, and semantic validation to prevent invalid configurations from being accepted by the API server.
 
-      * *Else*, if no inline spec or template is found, the webhook will inject a hardcoded, production-ready default specification.
+#### `MultigresCluster`
+* **On `CREATE` and `UPDATE`:**
+    * **Template Existence:** Validates that all templates referenced in `spec.templateDefaults` or explicitly in components (Core, Cell, or Shard templates) exist *at the time of application*.
+    * **Component Spec Mutex:** Enforces that `managedSpec`, `external`, and `templateRef` are mutually exclusive for components like `GlobalTopoServer`.
+    * **Uniqueness:** Validates that all names are unique within their respective scopes:
+        * Cell names in `spec.cells`.
+        * Database names in `spec.databases`.
+        * TableGroup names within a Database.
+        * Shard names within a TableGroup.
+    * **Topology Integrity:** Verifies that if a Shard is pinned to a specific cell (via overrides), that cell exists in the `spec.cells` list.
 
-### Operator Hardcoded Defaults
+#### `CoreTemplate`, `CellTemplate`, `ShardTemplate`
+* **On `CREATE` and `UPDATE`:**
+    * **Schema Validation:** Ensures the template spec contains valid configuration for its specific type (e.g., a `CellTemplate` cannot contain `multiAdmin` config).
 
-If the override chain is exhausted, the following defaults are injected:
+---
 
-  * **GlobalTopoServer:**
-      * Replicas: 3
-      * Storage: 10Gi (standard PVC)
-      * Resources: Requests {cpu: 500m, memory: 1Gi}, Limits {cpu: 1, memory: 2Gi}
-  * **MultiAdmin:**
-      * Replicas: 2
-      * Resources: Requests {cpu: 200m, memory: 256Mi}, Limits {cpu: 500m, memory: 512Mi}
-  * **(Default `CellTemplate` and `ShardTemplate` specs would also be defined here)**
+### 3. Asynchronous Controller and Finalizer Logic
+
+Asynchronous logic is used for operations that depend on external state or require blocking deletion, handled by controllers and finalizers.
+
+#### `MultigresCluster`
+* **Deletion Protection (Finalizer):**
+    1.  The `MultigresCluster` controller adds a finalizer (e.g., `multigres.com/cleanup`) to the CR upon creation.
+    2.  On deletion, the controller ensures all child resources (StatefulSets, PVCs, Services) are properly terminated before removing the finalizer.
+    3.  *Note:* Since databases are embedded in the cluster CR, deleting the cluster implies deleting all databases.
+
+#### `CoreTemplate`, `CellTemplate`, `ShardTemplate`
+* **In-Use Protection (Finalizer):**
+    1.  These templates are protected by a "fan-out" finalizer pattern to prevent accidental deletion of templates actively used by production clusters.
+    2.  **Logic:** When a `MultigresCluster` controller reconciles and sees it is using "prod-cell-template", it adds a finalizer (e.g., `multigres.com/in-use-by-example-cluster`) *to the `CellTemplate` object*.
+    3.  **Cleanup:** When the `MultigresCluster` is deleted (or updated to stop using that template), its controller removes that specific finalizer from the template.
+    4.  **Result:** Kubernetes will reject the deletion of a Template if any Cluster is still referencing it (because the finalizers won't be empty).
 
 ## End-User Examples
 
@@ -1029,3 +1056,66 @@ spec:
   * **2025-11-07:** Finalized the "Scoped Template" model (`CellTemplate` & `ShardTemplate`) and restored full explicit `database` -\> `tablegroup` -\> `shard` hierarchy.
   * **2025-11-10:** Refactored `pools` to use Maps instead of Lists and introduced atomic grouping for `resources` and `storage` to ensure safer template overrides.
   * **2025-11-11:** Introduced a consistent 4-level override chain (inline/explicit-template -\> cluster-default -\> namespace-default -\> webhook) for all components. Added `CoreTemplate` CRD and `spec.templateDefaults` block to support this. Reverted `spec.coreComponents` nesting to top-level `globalTopoServer` and `multiadmin` fields.
+  * **2025-11-14:** Explored a multi-CRD "claim" model (`MultigresDatabase` + `MultigresDatabaseResources`) to support DDL-driven workflows and strong RBAC separation.
+  * **2025-11-18:** Reverted to the 2025-11-11 monolithic `MultigresCluster` design to align with client requirements for Postgres-native management. The `MultigresDatabase` CRD was rejected. We will instead support the DDL workflow via a synchronization controller that patches the monolithic `MultigresCluster` CR based on the `SystemCatalog` state.
+
+
+## Drawbacks
+
+We have reverted to this design but the requirement to create resources via DDL (`CREATE DATABASE`) hasn't been dropped, but postponed. What follows are some caveats when following the current design as it stands right now and also incorporating this Posgres compatibility requirement:
+
+* **Broken "Delete" UX (Zombie Resources):** To support the "DB is Truth" requirement, the Operator **cannot** delete a database simply because it is removed from the `spec.databases` list as it might still exist in the default database schema ("system catalog"). This breaks the standard Kubernetes expectation that "deleting config = deleting resource." Users must use imperative SQL (`DROP DATABASE`) to delete resources; removing them from Git will only orphan them, leaving them running and accruing costs ("Zombie Databases"). Including a bidirectional update process here may complicate things.
+* **Perpetual GitOps Drift:** Since users can create databases via DDL at any time, the `MultigresCluster` CR in Git will rarely match the actual cluster state. `kubectl diff` will be noisy, and the `status` field will become the only reliable view of the system, degrading the value of the declarative spec. This can be mitigated if we have a component that constantly writes these changes to either git and applies them declaratively, but it is not a common pattern.
+* **Status Object Bloat (Scalability):** Because the Operator must track "Discovered" (DDL-created) databases in the `status` field to make them visible to SREs, a cluster with thousands of databases risks hitting the Kubernetes object size limit (etcd limits). This limits the scalability of the reporting mechanism compared to fanning out to separate CRs. We don't foresee an issue with this at this stage as we are planning to support only one database for the initial MVP, even though the spec has been defined to accept more for future compatibility.
+* **Resource "Adoption" Friction:** Databases created via DDL are assigned a default `ShardTemplate`. To "upgrade" or resize these databases, an SRE must manually "adopt" them by adding them to the `MultigresCluster` YAML with the correct name and new template. This introduces a manual step and a potential race condition where a new database might be under-provisioned before it can be adopted.
+* **Default DB Schema (System Catalog) Availability Dependency:** The Operator's reconciliation loop now strictly depends on the read availability of the "Default Database" (System Catalog). If the Default Database is down or locked, the Operator becomes "blind" and cannot reconcile *any* part of the cluster, unlike a pure CRD model which relies only on the highly available Kubernetes API. This may not be much of an issue as either way, if the default DB is down, there it wouldn't work either way. 
+* **API Hotspot and "Blast Radius" Risk:** By centralizing all database definitions into the monolithic `MultigresCluster` CR, this single object becomes a massive reconciliation hotspot. A single typo in this large resource (e.g., while "adopting" a database) could potentially break reconciliation for the entire cluster's control plane.
+* **Rename/Replace Ambiguity:** Postgres allows `ALTER DATABASE RENAME`, but Kubernetes relies on stable names. If a user renames a database in SQL, the Operator may perceive this as a "Delete" (of the old name) and "Create" (of the new name), potentially attempting to re-provision the old name if it still exists in the YAML.
+* **Lack of Namespace Isolation:** All databases must be defined in (or adopted into) the central `MultigresCluster` resource. This effectively forces all application teams to rely on platform admins to manage resource sizing, removing the ability to use Kubernetes RBAC for self-service resource management in separate namespaces. No clean DBA/Platform Engineer persona separation model. 
+
+
+## Drawbacks
+
+While the proposed parent/child model with read-only children provides significant benefits for simplicity and stability, it has several trade-offs:
+
+* **API Hotspot and "Blast Radius" Risk:** By centralizing all database definitions into the monolithic `MultigresCluster` CR, this single object becomes a massive reconciliation hotspot. Every DDL-driven database creation and every GitOps update fights to modify the same list. A single typo in this large resource could potentially break reconciliation for the entire cluster.
+* **"Two Masters" Conflict:** Supporting both declarative GitOps and imperative DDL creation creates a split-brain risk. The design relies on a complex synchronization controller to patch the CR based on database state, which introduces race conditions and potential resource version conflicts.
+* **Lack of Namespace Isolation:** Without the `MultigresDatabase` claim model, all databases must be defined in the central `MultigresCluster` resource. This forces all application teams to have permissions in the platform namespace to manage their databases, breaking standard Kubernetes RBAC patterns for multi-tenancy.
+* **Potential User Confusion:** Users accustomed to editing any Kubernetes resource might be confused when their manual edits to a child `Cell` or `Shard` CR are immediately reverted by the operator.
+* **Abstraction of Templates:** The template CRs (`CoreTemplate`, `CellTemplate`, etc.) add a layer of indirection. A user must look in two places to fully understand a component's configuration, which adds a slight learning curve.
+
+## Alternatives
+
+Several alternative designs were considered and rejected in favor of the current parent/child model.
+
+### Alternative 1: Component CRDs Only (No Parent)
+
+This model would provide individual, user-managed CRDs for `MultiGateway`, `MultiOrch`, `MultiPooler`, and `Etcd`. Users would be responsible for "composing" a cluster by creating these resources themselves.
+
+* **Pros:** Maximum flexibility and composability.
+* **Cons:** Extremely verbose and complex for a standard deployment. Users must manually create all components and wire them together correctly.
+* **Rejected Because:** Makes the common case (deploying a full cluster) unnecessarily complex and error-prone.
+
+### Alternative 2: Hybrid Model with `managed: true/false` Flag
+
+This model would feature a top-level `MultigresCluster` CR, but each component section would have a `managed: true/false` flag. If `true`, the operator manages the child resource. If `false`, the operator ignores it.
+
+* **Pros:** Offers a "best-of-both-worlds" approach.
+* **Cons:** Introduces significant complexity around resource ownership and lifecycle (e.g., handling transitions from managed to unmanaged). Creates a high risk of cluster misconfiguration.
+* **Rejected Because:** The lifecycle and ownership transitions were deemed too complex and risky for a production-grade operator.
+
+### Alternative 3: The "Claim" Model (`MultigresDatabase`)
+
+This design (explored on 2025-11-14) separated the cluster definition from database definitions. Users would create a `MultigresDatabase` CR in their own namespace, which would "claim" resources from the central cluster.
+
+* **Pros:** Solved the "API Hotspot" problem by fanning out DB definitions. Enabled true Kubernetes-native multi-tenancy via RBAC. provided a clean, declarative target for DDL translation.
+* **Cons:** Introduced additional CRDs.
+* **Rejected Because:** preferred Postgres-native "System Catalog" approach where the database state is the primary source of truth, rejecting the separation of the "DBA persona" and the additional CRDs.
+
+### Alternative 4: Helm Charts Instead of CRDs
+
+This approach would use Helm charts to deploy Multigres components without an operator.
+
+* **Pros:** Familiar deployment model for many Kubernetes users.
+* **Cons:** No automatic reconciliation, no custom status reporting, and no active lifecycle management (failover, scaling, etc.).
+* **Rejected Because:** The operator pattern provides superior lifecycle management, observability, and automation, which are critical for a stateful database system.

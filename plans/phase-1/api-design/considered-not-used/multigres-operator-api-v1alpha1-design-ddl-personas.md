@@ -1,5 +1,7 @@
 # MultigresCluster API v1alpha1
 
+>This design was considered and discussed with the Multigres team but eventually rejected due to being overly complex for the initial stages of multigres operator.
+
 ## Summary
 
 This proposal defines the `v1alpha1` API for the Multigres Operator. The design is centered on a root `MultigresCluster` resource, which defines the core infrastructure, and a `MultigresDatabase` resource, which defines the logical database topology.
