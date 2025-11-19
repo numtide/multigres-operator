@@ -15,38 +15,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
-// EnvtestOption is a functional option for configuring envtest.
-type EnvtestOption func(*envtestConfig)
-
-type envtestConfig struct {
-	enableGC bool
-}
-
-// WithGarbageCollection enables the Kubernetes garbage collector in envtest.
-// This allows testing of cascading deletes via owner references.
-//
-// Default: enabled
-func WithGarbageCollection(enabled bool) EnvtestOption {
-	return func(c *envtestConfig) {
-		c.enableGC = enabled
-	}
-}
-
-func SetUpEnvtest(t testing.TB, opts ...EnvtestOption) *rest.Config {
+func SetUpEnvtest(t testing.TB) *rest.Config {
 	t.Helper()
-
-	config := &envtestConfig{
-		enableGC: true,
-	}
-
-	for _, opt := range opts {
-		opt(config)
-	}
-
-	apiServer := &envtest.APIServer{}
-	if config.enableGC {
-		apiServer.Configure().Enable("enable-garbage-collector")
-	}
 
 	testEnv := &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join(
@@ -54,9 +24,6 @@ func SetUpEnvtest(t testing.TB, opts ...EnvtestOption) *rest.Config {
 			"../../../../",
 			"config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
-		ControlPlane: envtest.ControlPlane{
-			APIServer: apiServer,
-		},
 	}
 	cfg, err := testEnv.Start()
 	if err != nil {
@@ -213,18 +180,16 @@ func StartManager(t testing.TB, mgr manager.Manager) {
 //	reconciler := &YourReconciler{Client: c, Scheme: scheme}
 //	reconciler.SetupWithManager(mgr)
 //
-// Options can be passed to configure envtest behavior:
-//
-//	// Disable garbage collection
-//	mgr := testutil.SetUpEnvtestManager(t, scheme,
-//	    testutil.WithGarbageCollection(false),
-//	)
+// Note: envtest does not support garbage collection (cascading deletion via owner references)
+// because it only runs kube-apiserver and etcd, not kube-controller-manager where the
+// garbage collector controller runs. To test cascading deletion, use kind with
+// UseExistingCluster: true, or test that owner references are set correctly instead.
 //
 // For more control, use the individual functions instead.
-func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme, opts ...EnvtestOption) manager.Manager {
+func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme) manager.Manager {
 	t.Helper()
 
-	cfg := SetUpEnvtest(t, opts...)
+	cfg := SetUpEnvtest(t)
 	mgr := SetUpManager(t, cfg, scheme)
 	StartManager(t, mgr)
 
