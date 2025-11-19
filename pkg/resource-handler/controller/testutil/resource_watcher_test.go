@@ -661,3 +661,77 @@ func TestWaitForDeletion(t *testing.T) {
 		})
 	}
 }
+
+// TestWaitForDeletion_CascadingDelete tests cascading deletion with garbage collector.
+//
+// This test is currently skipped because envtest does not support garbage collection.
+// Envtest only runs kube-apiserver and etcd, not kube-controller-manager where the
+// garbage collector controller actually runs. As a result, cascading deletion via
+// owner references does not work in envtest.
+//
+// To test cascading deletion properly, this test should be moved to a separate
+// test suite that uses kind. That will be implemented in a future PR with kind-based
+// integration tests.
+//
+// For now, we test that owner references are set correctly (which is our controller's
+// responsibility), and trust that Kubernetes GC will handle the actual deletion
+// (which is Kubernetes's responsibility and is well-tested upstream).
+func TestWaitForDeletion_CascadingDelete(t *testing.T) {
+	t.Skip("Cascading deletion not supported in envtest (requires kube-controller-manager). " +
+		"This test will be moved to kind-based integration tests in a future PR. " +
+		"See: https://github.com/kubernetes-sigs/controller-runtime/issues/626")
+
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	ctx := context.Background()
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
+	c := mgr.GetClient()
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr)
+
+	owner := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "owner", Namespace: "default"},
+		Data:       map[string]string{"key": "value"},
+	}
+	if err := c.Create(ctx, owner); err != nil {
+		t.Fatalf("Failed to create owner: %v", err)
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "owned-svc",
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion:         "v1",
+				Kind:               "ConfigMap",
+				Name:               owner.Name,
+				UID:                owner.UID,
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(true),
+			}},
+		},
+		Spec: corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+	}
+	if err := c.Create(ctx, svc); err != nil {
+		t.Fatalf("Failed to create owned service: %v", err)
+	}
+
+	// Wait for service to be created
+	watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
+	if err := watcher.WaitForMatch(svc); err != nil {
+		t.Fatalf("Failed to wait for service creation: %v", err)
+	}
+
+	// Delete owner - should cascade to owned service
+	if err := c.Delete(ctx, owner); err != nil {
+		t.Fatalf("Failed to delete owner: %v", err)
+	}
+
+	// Wait for cascading deletion
+	if err := watcher.WaitForDeletion(testutil.Obj[corev1.Service]("owned-svc", "default")); err != nil {
+		t.Errorf("Cascading deletion failed: %v", err)
+	}
+}
