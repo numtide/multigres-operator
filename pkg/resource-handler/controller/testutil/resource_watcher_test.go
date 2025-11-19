@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -420,6 +421,99 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 
 			// Wait for assertion to complete
 			<-done
+		})
+	}
+}
+
+// TestObj tests the generic Obj helper function.
+func TestObj(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		obj      client.Object
+		expected client.Object
+	}{
+		"Service": {
+			obj: testutil.Obj[corev1.Service]("my-service", "my-namespace"),
+			expected: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-service",
+					Namespace: "my-namespace",
+				},
+			},
+		},
+		"StatefulSet": {
+			obj: testutil.Obj[appsv1.StatefulSet]("my-sts", "default"),
+			expected: &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-sts",
+					Namespace: "default",
+				},
+			},
+		},
+		"Deployment": {
+			obj: testutil.Obj[appsv1.Deployment]("my-deploy", "kube-system"),
+			expected: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-deploy",
+					Namespace: "kube-system",
+				},
+			},
+		},
+		"ConfigMap": {
+			obj: testutil.Obj[corev1.ConfigMap]("my-cm", "default"),
+			expected: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-cm",
+					Namespace: "default",
+				},
+			},
+		},
+		"Secret": {
+			obj: testutil.Obj[corev1.Secret]("my-secret", "default"),
+			expected: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-secret",
+					Namespace: "default",
+				},
+			},
+		},
+		"Pod": {
+			obj: testutil.Obj[corev1.Pod]("my-pod", "default"),
+			expected: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "default",
+				},
+			},
+		},
+		"DaemonSet": {
+			obj: testutil.Obj[appsv1.DaemonSet]("my-ds", "default"),
+			expected: &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-ds",
+					Namespace: "default",
+				},
+			},
+		},
+		"ReplicaSet": {
+			obj: testutil.Obj[appsv1.ReplicaSet]("my-rs", "default"),
+			expected: &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-rs",
+					Namespace: "default",
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if diff := cmp.Diff(tc.expected, tc.obj); diff != "" {
+				t.Errorf("Obj mismatch (-want +got):\n%s", diff)
+			}
 		})
 	}
 }

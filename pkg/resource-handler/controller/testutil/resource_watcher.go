@@ -702,3 +702,21 @@ func extractKind(obj client.Object) string {
 	}
 	return kind
 }
+
+// Obj creates a client.Object with the given name and namespace.
+// This is a convenience helper for deletion testing and other scenarios
+// where you need to reference an object by name/namespace only.
+//
+// Example:
+//
+//	watcher.WaitForDeletion(testutil.Obj[appsv1.StatefulSet]("etcd", "default"))
+func Obj[T any, PT interface {
+	*T
+	client.Object
+}](name, namespace string) PT {
+	obj := new(T)
+	ptr := PT(obj)
+	ptr.SetName(name)
+	ptr.SetNamespace(namespace)
+	return ptr
+}
