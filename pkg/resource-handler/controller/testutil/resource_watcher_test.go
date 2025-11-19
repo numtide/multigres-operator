@@ -517,3 +517,147 @@ func TestObj(t *testing.T) {
 		})
 	}
 }
+
+// TestWaitForDeletion tests the WaitForDeletion function.
+func TestWaitForDeletion(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		setup      func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error
+		delete     func(ctx context.Context, c client.Client) error
+		assertFunc func(t *testing.T, watcher *testutil.ResourceWatcher)
+	}{
+		"single service deletion": {
+			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
+				svc := &corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-svc", Namespace: "default"},
+					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+				}
+				if err := c.Create(ctx, svc); err != nil {
+					return err
+				}
+				// Wait for creation to be observed
+				watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
+				return watcher.WaitForMatch(svc)
+			},
+			delete: func(ctx context.Context, c client.Client) error {
+				return c.Delete(ctx, testutil.Obj[corev1.Service]("test-svc", "default"))
+			},
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
+				err := watcher.WaitForDeletion(testutil.Obj[corev1.Service]("test-svc", "default"))
+				if err != nil {
+					t.Errorf("Failed to wait for deletion: %v", err)
+				}
+			},
+		},
+		"multiple services deletion": {
+			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
+				svc1 := &corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "svc-1", Namespace: "default"},
+					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+				}
+				svc2 := &corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "svc-2", Namespace: "default"},
+					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+				}
+				if err := c.Create(ctx, svc1); err != nil {
+					return err
+				}
+				if err := c.Create(ctx, svc2); err != nil {
+					return err
+				}
+				watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
+				return watcher.WaitForMatch(svc1, svc2)
+			},
+			delete: func(ctx context.Context, c client.Client) error {
+				if err := c.Delete(ctx, testutil.Obj[corev1.Service]("svc-1", "default")); err != nil {
+					return err
+				}
+				return c.Delete(ctx, testutil.Obj[corev1.Service]("svc-2", "default"))
+			},
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
+				err := watcher.WaitForDeletion(
+					testutil.Obj[corev1.Service]("svc-1", "default"),
+					testutil.Obj[corev1.Service]("svc-2", "default"),
+				)
+				if err != nil {
+					t.Errorf("Failed to wait for multiple deletions: %v", err)
+				}
+			},
+		},
+		"mixed resource types deletion": {
+			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
+				svc := &corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "my-svc", Namespace: "default"},
+					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+				}
+				deploy := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "my-deploy", Namespace: "default"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+							Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+						},
+					},
+				}
+				if err := c.Create(ctx, svc); err != nil {
+					return err
+				}
+				if err := c.Create(ctx, deploy); err != nil {
+					return err
+				}
+				watcher.SetCmpOpts(
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreServiceRuntimeFields(),
+					testutil.IgnoreDeploymentRuntimeFields(),
+					testutil.IgnoreDeploymentSpecDefaults(),
+					testutil.IgnorePodSpecDefaults(),
+				)
+				return watcher.WaitForMatch(svc, deploy)
+			},
+			delete: func(ctx context.Context, c client.Client) error {
+				if err := c.Delete(ctx, testutil.Obj[corev1.Service]("my-svc", "default")); err != nil {
+					return err
+				}
+				return c.Delete(ctx, testutil.Obj[appsv1.Deployment]("my-deploy", "default"))
+			},
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
+				err := watcher.WaitForDeletion(
+					testutil.Obj[corev1.Service]("my-svc", "default"),
+					testutil.Obj[appsv1.Deployment]("my-deploy", "default"),
+				)
+				if err != nil {
+					t.Errorf("Failed to wait for mixed type deletions: %v", err)
+				}
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		name, tc := name, tc
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+			_ = appsv1.AddToScheme(scheme)
+
+			ctx := context.Background()
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
+			c := mgr.GetClient()
+			watcher := testutil.NewResourceWatcher(t, ctx, mgr)
+
+			if err := tc.setup(ctx, c, watcher); err != nil {
+				t.Fatalf("Setup failed: %v", err)
+			}
+
+			if err := tc.delete(ctx, c); err != nil {
+				t.Fatalf("Delete failed: %v", err)
+			}
+
+			tc.assertFunc(t, watcher)
+		})
+	}
+}

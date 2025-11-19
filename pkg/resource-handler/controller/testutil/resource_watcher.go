@@ -720,3 +720,84 @@ func Obj[T any, PT interface {
 	ptr.SetNamespace(namespace)
 	return ptr
 }
+
+// WaitForDeletion waits for one or more resources to be deleted (receive DELETED events).
+// This checks that resources were fully removed from the cluster, not just
+// marked for deletion with DeletionTimestamp.
+//
+// Uses the watcher's configured timeout. The timeout applies to the entire operation,
+// not per resource. All resources share the same deadline.
+//
+// Example:
+//
+//	// Delete parent resource
+//	client.Delete(ctx, etcd)
+//
+//	// Wait for owned resources to be cascade deleted
+//	err := watcher.WaitForDeletion(
+//	    testutil.Obj[appsv1.StatefulSet]("etcd", "default"),
+//	    testutil.Obj[corev1.Service]("etcd", "default"),
+//	    testutil.Obj[corev1.Service]("etcd-headless", "default"),
+//	)
+func (rw *ResourceWatcher) WaitForDeletion(objs ...client.Object) error {
+	rw.t.Helper()
+
+	if len(objs) == 0 {
+		return nil
+	}
+
+	deadline := time.Now().Add(rw.timeout)
+
+	for _, obj := range objs {
+		if err := rw.waitForSingleDeletion(obj, deadline); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// waitForSingleDeletion waits for a single resource to be deleted.
+func (rw *ResourceWatcher) waitForSingleDeletion(obj client.Object, deadline time.Time) error {
+	rw.t.Helper()
+
+	kind := extractKind(obj)
+	name := obj.GetName()
+	namespace := obj.GetNamespace()
+
+	// Check existing events first
+	if evt := rw.findLatestEvent(func(e ResourceEvent) bool {
+		return e.Kind == kind && e.Name == name && e.Namespace == namespace && e.Type == "DELETED"
+	}); evt != nil {
+		rw.t.Logf("Matched DELETED \"%s\" %s/%s (from existing events)", kind, namespace, name)
+		return nil
+	}
+
+	// Subscribe to new events
+	subCh := rw.subscribe()
+	defer rw.unsubscribe(subCh)
+
+	// Wait for DELETED event
+	predicate := func(evt ResourceEvent) error {
+		if evt.Kind != kind || evt.Name != name || evt.Namespace != namespace {
+			return ErrKeepWaiting
+		}
+		if evt.Type == "DELETED" {
+			rw.t.Logf("Matched DELETED \"%s\" %s/%s", kind, namespace, name)
+			return nil
+		}
+		return ErrKeepWaiting
+	}
+
+	_, err := waitForEvent(rw.t, subCh, deadline, predicate)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("timeout waiting for %s %s/%s to be deleted", kind, namespace, name)
+		}
+		if errors.Is(err, context.Canceled) {
+			return fmt.Errorf("watcher stopped")
+		}
+		return err
+	}
+	return nil
+}
