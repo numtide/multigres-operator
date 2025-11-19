@@ -588,6 +588,24 @@ func (rw *ResourceWatcher) sendEvent(eventType, kind string, obj client.Object) 
 	}
 }
 
+// findLatestEvent searches for an event matching the predicate function (newest first).
+// The predicate is called with each event (newest to oldest) while holding the read lock.
+// Returns the first matching event, or nil if none found.
+func (rw *ResourceWatcher) findLatestEvent(predicate func(ResourceEvent) bool) *ResourceEvent {
+	rw.t.Helper()
+
+	rw.mu.RLock()
+	defer rw.mu.RUnlock()
+
+	for i := len(rw.events) - 1; i >= 0; i-- {
+		if predicate(rw.events[i]) {
+			evt := rw.events[i]
+			return &evt
+		}
+	}
+	return nil
+}
+
 // findLatestEventFor finds the most recent event matching the given object.
 // If the object has empty name and namespace, it matches by kind only.
 // Returns nil if no matching event found.
@@ -598,33 +616,18 @@ func (rw *ResourceWatcher) findLatestEventFor(obj client.Object) *ResourceEvent 
 	name := obj.GetName()
 	namespace := obj.GetNamespace()
 
-	rw.mu.RLock()
-	defer rw.mu.RUnlock()
-
-	// Iterate backwards to find latest event first
-	for i := len(rw.events) - 1; i >= 0; i-- {
-		evt := rw.events[i]
-
-		// Must match kind
+	return rw.findLatestEvent(func(evt ResourceEvent) bool {
 		if evt.Kind != kind {
-			continue
+			return false
 		}
-
-		// If name is specified, must match name
 		if name != "" && evt.Name != name {
-			continue
+			return false
 		}
-
-		// If namespace is specified, must match namespace
 		if namespace != "" && evt.Namespace != namespace {
-			continue
+			return false
 		}
-
-		// Found a match
-		return &evt
-	}
-
-	return nil
+		return true
+	})
 }
 
 // checkLatestEventMatches finds the latest event for the expected object and compares it.
