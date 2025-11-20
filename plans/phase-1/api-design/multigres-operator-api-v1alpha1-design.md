@@ -11,7 +11,7 @@ This proposal defines the `v1alpha1` API for the Multigres Operator. The design 
 3.  **`CellTemplate`**: A reusable, namespaced resource for defining standard configurations for Cell-level components (`MultiGateway` and optionally `LocalTopoServer`).
 4.  **`ShardTemplate`**: A reusable, namespaced resource for defining standard configurations for Shard-level components (`MultiOrch` and `Pools`).
 
-All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) are implemented as read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers.
+All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) are should be considered read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers. If the user edits them directly, they will get immediately reverted by the parent CR.
 
 ## Motivation
 
