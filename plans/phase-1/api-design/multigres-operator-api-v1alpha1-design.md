@@ -31,7 +31,7 @@ The formalized parent/child model addresses these by ensuring:
   * **Cells:** Explicitly defined in the root CR; can be specified inline or via a `CellTemplate`.
   * **Databases:** Follows a strict physical hierarchy: `Database` -\> `TableGroup` -\> `Shard`.
   * **Shards:** Can be specified inline or via a `ShardTemplate`.
-  * **MultiOrch:** Located at the **Shard** level to provide dedicated orchestration per Raft group.
+  * **MultiOrch:** Located at the **Shard** level to provide dedicated orchestration.
 
 ```ascii
 [MultigresCluster] 🚀 (Root CR - user-editable)
@@ -72,7 +72,7 @@ The formalized parent/child model addresses these by ensuring:
 ### User Managed CR: MultigresCluster
 
   * This CR and the three scoped templates (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
-  * All other child CRs will be owned by this top-level CR. Any manual changes to those child CRs will be automatically reverted by their respective controllers to match the `MultigresCluster` definition.
+  * All other child CRs will be owned by this top-level CR. Any manual changes to those child CRs will be immediately reverted by the `MultigresCluster` cluster controller.
   * All component configurations (`globalTopoServer`, `multiadmin`, `cells`, `shards`) follow a consistent pattern: they can be defined via an inline `spec` (e.g., `managedSpec`) or by referencing a template (`templateRef`). Providing both is a validation error.
   * **Override Chain:** All components use the following 4-level precedence chain for configuration:
     1.  **Component-Level Definition:** An inline `spec` (e.g., `managedSpec`) or an explicit `templateRef` on the component itself.
@@ -112,6 +112,9 @@ spec:
   # ----------------------------------------------------------------
   # These are the default templates to use for any component that
   # does not have an inline 'spec' or an explicit 'templateRef'.
+  # These are optional.
+  # if they don't exist the controller will pick whichever is named 'default'
+  # or use the controller defaults.
   templateDefaults:
     coreTemplate: "cluster-wide-core"
     cellTemplate: "cluster-wide-cell"
@@ -225,22 +228,8 @@ spec:
           # Shards are strictly explicitly defined. 
           # No 'partitioning: { count: 10 }' auto-generation.
           shards:
-            # --- SHARD 0: Using an Explicit Template ---
+            # --- SHARD 0: Using Inline Spec (No Template) ---
             - name: "0"
-              # Precedence 1: Explicit template reference
-              shardTemplate: "standard-shard-ha"
-              # Overrides are crucial here to pin pools to specific cells
-              # if the template uses generic cell names.
-              overrides:
-                 # MAP STRUCTURE: Keyed by pool name for safe targeting.
-                 pools:
-                   # Overriding the pool named 'primary' from the template
-                   # to ensure it lives in a specific cell for this shard.
-                   primary:
-                     cell: "us-east-1a"
-            
-            # --- SHARD 1: Using Inline Spec (No Template) ---
-            - name: "1"
               # Precedence 1: Inline spec
               spec:
                 multiOrch:
@@ -274,7 +263,21 @@ spec:
                        limits:
                          cpu: "1"
                          memory: "2Gi"
-            
+
+            # --- SHARD 1: Using an Explicit Template ---
+            - name: "1"
+              # Precedence 1: Explicit template reference
+              shardTemplate: "standard-shard-ha"
+              # Overrides are crucial here to pin pools to specific cells
+              # if the template uses generic cell names.
+              overrides:
+                 # MAP STRUCTURE: Keyed by pool name for safe targeting.
+                 pools:
+                   # Overriding the pool named 'primary' from the template
+                   # to ensure it lives in a specific cell for this shard.
+                   primary:
+                     cell: "us-east-1a"
+                     
             # --- SHARD 2: Using Cluster Default Template ---
             - name: "2"
               # 'spec' and 'shardTemplate' are omitted.
@@ -497,7 +500,7 @@ These resources are created and reconciled by the `MultigresCluster` controller.
 #### Child CR: TopoServer
 
   * Applies to both Global (owned by `MultigresCluster`) and Local (owned by `Cell`) topology servers.
-  * This CR does *not* exist if the user configures an `external` etcd connection in the parent.
+  * This CR does *not* exist if a separate, `external` etcd definition is used in the parent (e.g. using etcd-operator to provision one).
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -536,7 +539,7 @@ status:
 #### Child CR: Cell
 
   * Owned by `MultigresCluster`.
-  * Strictly contains `MultiGateway` and optional `LocalTopoServer`. `MultiOrch` is NO LONGER here (moved to Shard).
+  * Strictly contains `MultiGateway` and optional `LocalTopoServer`.
   * The `allCells` field is used for discovery by gateways.
 
 ```yaml
@@ -587,7 +590,7 @@ spec:
   #
   # topoServer:
   #   external:
-  #     address: "etcd-us-east-1a.my-domain.com:2379"
+  #     address: "my-etcd.some-namespace.svc.cluster.local:2379"
   #     rootPath: "/multigres/us-east-1a"
 
   # Option 3: Managed Local
@@ -759,7 +762,7 @@ status:
 #### Child CR: Shard
 
   * Owned by `TableGroup`.
-  * Now contains `MultiOrch` (Raft leader helper) AND `Pools` (actual data nodes).
+  * Contains `MultiOrch` (consensus management) and `Pools` (actual data nodes).
   * Represents one entry from the `TableGroup` shards list.
 
 ```yaml
@@ -874,7 +877,7 @@ Asynchronous logic is used for operations that depend on external state or requi
 #### `MultigresCluster`
 * **Deletion Protection (Finalizer):**
     1.  The `MultigresCluster` controller adds a finalizer (e.g., `multigres.com/cleanup`) to the CR upon creation.
-    2.  On deletion, the controller ensures all child resources (StatefulSets, PVCs, Services) are properly terminated before removing the finalizer.
+    2.  On deletion, the controller ensures all child resources (StatefulSets, Services) are properly terminated before removing the finalizer. NOTE: We should consider optional flag to delete PVCs too, default will be to keep them.
     3.  *Note:* Since databases are embedded in the cluster CR, deleting the cluster implies deleting all databases.
 
 #### `CoreTemplate`, `CellTemplate`, `ShardTemplate`
@@ -1072,17 +1075,6 @@ We have reverted to this design but the requirement to create resources via DDL 
 * **API Hotspot and "Blast Radius" Risk:** By centralizing all database definitions into the monolithic `MultigresCluster` CR, this single object becomes a massive reconciliation hotspot. A single typo in this large resource (e.g., while "adopting" a database) could potentially break reconciliation for the entire cluster's control plane.
 * **Rename/Replace Ambiguity:** Postgres allows `ALTER DATABASE RENAME`, but Kubernetes relies on stable names. If a user renames a database in SQL, the Operator may perceive this as a "Delete" (of the old name) and "Create" (of the new name), potentially attempting to re-provision the old name if it still exists in the YAML.
 * **Lack of Namespace Isolation:** All databases must be defined in (or adopted into) the central `MultigresCluster` resource. This effectively forces all application teams to rely on platform admins to manage resource sizing, removing the ability to use Kubernetes RBAC for self-service resource management in separate namespaces. No clean DBA/Platform Engineer persona separation model. 
-
-
-## Drawbacks
-
-While the proposed parent/child model with read-only children provides significant benefits for simplicity and stability, it has several trade-offs:
-
-* **API Hotspot and "Blast Radius" Risk:** By centralizing all database definitions into the monolithic `MultigresCluster` CR, this single object becomes a massive reconciliation hotspot. Every DDL-driven database creation and every GitOps update fights to modify the same list. A single typo in this large resource could potentially break reconciliation for the entire cluster.
-* **"Two Masters" Conflict:** Supporting both declarative GitOps and imperative DDL creation creates a split-brain risk. The design relies on a complex synchronization controller to patch the CR based on database state, which introduces race conditions and potential resource version conflicts.
-* **Lack of Namespace Isolation:** Without the `MultigresDatabase` claim model, all databases must be defined in the central `MultigresCluster` resource. This forces all application teams to have permissions in the platform namespace to manage their databases, breaking standard Kubernetes RBAC patterns for multi-tenancy.
-* **Potential User Confusion:** Users accustomed to editing any Kubernetes resource might be confused when their manual edits to a child `Cell` or `Shard` CR are immediately reverted by the operator.
-* **Abstraction of Templates:** The template CRs (`CoreTemplate`, `CellTemplate`, etc.) add a layer of indirection. A user must look in two places to fully understand a component's configuration, which adds a slight learning curve.
 
 ## Alternatives
 
