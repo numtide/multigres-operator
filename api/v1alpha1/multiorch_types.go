@@ -154,8 +154,8 @@ type MultiOrch_X struct {
 
 // MultiOrchList contains a list of MultiOrch
 type MultiOrchList_X struct {
-	metav1.TypeMeta `            json:",inline"`
-	metav1.ListMeta `            json:"metadata,omitempty"`
+	metav1.TypeMeta `              json:",inline"`
+	metav1.ListMeta `              json:"metadata,omitempty"`
 	Items           []MultiOrch_X `json:"items"`
 }
 
