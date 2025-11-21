@@ -1363,12 +1363,6 @@ spec:
                           - readOnly
                           type: string
                       type: object
-                      x-kubernetes-validations:
-                      - message: dataVolumeClaimTemplate must include a 'storage'
-                          resource request
-                        rule: '!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources)
-                          && has(self.dataVolumeClaimTemplate.resources.requests)
-                          && has(self.dataVolumeClaimTemplate.resources.requests[''storage'']))'
                     type: array
                 type: object
                 x-kubernetes-validations:
