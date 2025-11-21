@@ -25,7 +25,7 @@ import (
 // the fields to be serialized.
 
 // MultiOrchSpec defines the desired state of MultiOrch.
-type MultiOrchSpec_X struct {
+type MultiOrchSpecX struct {
 	// CellName is the name of the cell this MultiOrch belongs to.
 	// +kubebuilder:validation:MinLength=1
 	// +optional
@@ -106,7 +106,7 @@ type MultiOrchSpec_X struct {
 }
 
 // MultiOrchStatus defines the observed state of MultiOrch.
-type MultiOrchStatus_X struct {
+type MultiOrchStatusX struct {
 	// Ready indicates whether the MultiOrch is healthy and available.
 	Ready bool `json:"ready"`
 
@@ -134,7 +134,7 @@ type MultiOrchStatus_X struct {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // MultiOrch is the Schema for the multiorches API
-type MultiOrch_X struct {
+type MultiOrchX struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
@@ -143,22 +143,22 @@ type MultiOrch_X struct {
 
 	// spec defines the desired state of MultiOrch
 	// +required
-	Spec MultiOrchSpec_X `json:"spec"`
+	Spec MultiOrchSpecX `json:"spec"`
 
 	// status defines the observed state of MultiOrch
 	// +optional
-	Status MultiOrchStatus_X `json:"status,omitempty,omitzero"`
+	Status MultiOrchStatusX `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
 // MultiOrchList contains a list of MultiOrch
-type MultiOrchList_X struct {
+type MultiOrchListX struct {
 	metav1.TypeMeta `              json:",inline"`
 	metav1.ListMeta `              json:"metadata,omitempty"`
-	Items           []MultiOrch_X `json:"items"`
+	Items           []MultiOrchX `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&MultiOrch_X{}, &MultiOrchList_X{})
+	SchemeBuilder.Register(&MultiOrchX{}, &MultiOrchListX{})
 }
