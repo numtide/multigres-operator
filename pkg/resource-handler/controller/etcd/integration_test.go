@@ -10,7 +10,13 @@ import (
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	etcdcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/etcd"
 )
@@ -31,4 +37,235 @@ func TestSetupWithManager(t *testing.T) {
 	}).SetupWithManager(mgr); err != nil {
 		t.Fatalf("Failed to create controller, %v", err)
 	}
+}
+
+func TestEtcdReconciliation(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	tests := map[string]struct {
+		etcd            *multigresv1alpha1.Etcd
+		existingObjects []client.Object
+		failureConfig   *testutil.FailureConfig
+		wantResources   []client.Object
+		assertFunc      func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
+	}{
+		"simple etcd input": {
+			etcd: &multigresv1alpha1.Etcd{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-etcd",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.EtcdSpec{},
+			},
+			wantResources: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "test-etcd",
+						Namespace:       "default",
+						Labels:          etcdLabels(t, "test-etcd"),
+						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    ptr.To(int32(3)),
+						ServiceName: "test-etcd-headless",
+						Selector: &metav1.LabelSelector{
+							MatchLabels: etcdLabels(t, "test-etcd"),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: etcdLabels(t, "test-etcd"),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "etcd",
+										Image: "gcr.io/etcd-development/etcd:v3.5.9",
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "client", 2379),
+											tcpPort(t, "peer", 2380),
+										},
+										Env: []corev1.EnvVar{
+											{
+												Name: "POD_NAME",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.name",
+													},
+												},
+											},
+											{
+												Name: "POD_NAMESPACE",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.namespace",
+													},
+												},
+											},
+											{Name: "ETCD_NAME", Value: "$(POD_NAME)"},
+											{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
+											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
+											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
+											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
+											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+											{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
+											{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-etcd"},
+											{Name: "ETCD_INITIAL_CLUSTER", Value: "test-etcd-0=http://test-etcd-0.test-etcd-headless.default.svc.cluster.local:2380,test-etcd-1=http://test-etcd-1.test-etcd-headless.default.svc.cluster.local:2380,test-etcd-2=http://test-etcd-2.test-etcd-headless.default.svc.cluster.local:2380"},
+										},
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "data", MountPath: "/var/lib/etcd"},
+										},
+									},
+								},
+							},
+						},
+						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+							{
+								ObjectMeta: metav1.ObjectMeta{Name: "data"},
+								Spec: corev1.PersistentVolumeClaimSpec{
+									AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+									Resources: corev1.VolumeResourceRequirements{
+										Requests: corev1.ResourceList{
+											corev1.ResourceStorage: resource.MustParse("10Gi"),
+										},
+									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+								},
+								Status: corev1.PersistentVolumeClaimStatus{
+									Phase: corev1.ClaimPending,
+								},
+							},
+						},
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "test-etcd",
+						Namespace:       "default",
+						Labels:          etcdLabels(t, "test-etcd"),
+						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "client", 2379),
+						},
+						Selector: etcdLabels(t, "test-etcd"),
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "test-etcd-headless",
+						Namespace:       "default",
+						Labels:          etcdLabels(t, "test-etcd"),
+						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeClusterIP,
+						ClusterIP: corev1.ClusterIPNone,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "client", 2379),
+							tcpServicePort(t, "peer", 2380),
+						},
+						Selector:                 etcdLabels(t, "test-etcd"),
+						PublishNotReadyAddresses: true,
+					},
+				},
+			},
+		},
+		// "another test": {
+		// 	etcd: &multigresv1alpha1.Etcd{
+		// 		ObjectMeta: metav1.ObjectMeta{
+		// 			Name:      "test-etcd",
+		// 			Namespace: "default",
+		// 		},
+		// 		Spec: multigresv1alpha1.EtcdSpec{},
+		// 	},
+		// },
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
+
+			watcher := testutil.NewResourceWatcher(t, ctx, mgr,
+				testutil.WithCmpOpts(
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreServiceRuntimeFields(),
+					testutil.IgnoreStatefulSetRuntimeFields(),
+					testutil.IgnorePodSpecDefaults(),
+					testutil.IgnoreStatefulSetSpecDefaults(),
+				),
+				testutil.WithExtraResource(&multigresv1alpha1.Etcd{}),
+			)
+			client := mgr.GetClient()
+
+			etcdReconciler := &etcdcontroller.EtcdReconciler{
+				Client: mgr.GetClient(),
+				Scheme: mgr.GetScheme(),
+			}
+			if err := etcdReconciler.SetupWithManager(mgr, controller.Options{
+				// Needed for the parallel test runs
+				SkipNameValidation: ptr.To(true),
+			}); err != nil {
+				t.Fatalf("Failed to create controller, %v", err)
+			}
+
+			if err := client.Create(ctx, tc.etcd); err != nil {
+				t.Fatalf("Failed to create the initial item, %v", err)
+			}
+
+			if err := watcher.WaitForMatch(tc.wantResources...); err != nil {
+				t.Errorf("Resources mismatch:\n%v", err)
+			}
+		})
+	}
+
+}
+
+// Test helpers
+
+// etcdLabels returns standard labels for etcd resources in tests
+func etcdLabels(t testing.TB, instanceName string) map[string]string {
+	t.Helper()
+	return map[string]string{
+		"app.kubernetes.io/component":  "etcd",
+		"app.kubernetes.io/instance":   instanceName,
+		"app.kubernetes.io/managed-by": "multigres-operator",
+		"app.kubernetes.io/name":       "multigres",
+		"app.kubernetes.io/part-of":    "multigres",
+		"multigres.com/cell":           "multigres-global-topo",
+	}
+}
+
+// etcdOwnerRefs returns owner references for an Etcd resource
+func etcdOwnerRefs(t testing.TB, etcdName string) []metav1.OwnerReference {
+	t.Helper()
+	return []metav1.OwnerReference{{
+		APIVersion:         "multigres.com/v1alpha1",
+		Kind:               "Etcd",
+		Name:               etcdName,
+		Controller:         ptr.To(true),
+		BlockOwnerDeletion: ptr.To(true),
+	}}
+}
+
+// tcpPort creates a simple TCP container port
+func tcpPort(t testing.TB, name string, port int32) corev1.ContainerPort {
+	t.Helper()
+	return corev1.ContainerPort{Name: name, ContainerPort: port, Protocol: corev1.ProtocolTCP}
+}
+
+// tcpServicePort creates a TCP service port with named target
+func tcpServicePort(t testing.TB, name string, port int32) corev1.ServicePort {
+	t.Helper()
+	return corev1.ServicePort{Name: name, Port: port, TargetPort: intstr.FromString(name), Protocol: corev1.ProtocolTCP}
 }

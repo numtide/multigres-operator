@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -89,21 +88,44 @@ func SetUpEnvtestWithKubeconfig(t testing.TB) (*rest.Config, func()) {
 	}
 }
 
+// SetUpClient creates a direct Kubernetes client (non-cached).
+//
+// IMPORTANT: This creates a client that bypasses the manager's cache and reads
+// directly from the API server. This is different from mgr.GetClient() which
+// uses cached reads (same as controllers).
+//
+// When to use SetUpClient:
+//
+// 1. Testing cache synchronization:
+//   - Verify what's actually in the API server vs what the cache sees
+//   - Useful when debugging "why doesn't my controller see this resource?"
+//
+// 2. Strong consistency requirements:
+//
+//   - Need immediate reads after writes (no cache lag)
+//
+//   - Testing race conditions or timing-sensitive behavior
+//
+//     3. Comparing cached vs direct reads:
+//     directClient := SetUpClient(t, cfg, scheme)
+//     cachedClient := mgr.GetClient()
+//     // Create resource
+//     cachedClient.Create(ctx, obj)
+//     // Direct read (guaranteed to see it)
+//     directClient.Get(ctx, key, &actual)
+//     // Cached read (might lag slightly)
+//     cachedClient.Get(ctx, key, &fromCache)
+//
+// For most tests, use mgr.GetClient() instead - it tests what controllers actually see.
 func SetUpClient(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) client.Client {
+	t.Helper()
+
 	k8sClient, err := client.New(cfg, client.Options{Scheme: scheme})
 	if err != nil {
 		t.Fatalf("Failed to setup a Kubernetes client: %v", err)
 	}
 
 	return k8sClient
-}
-
-func SetUpClientSet(t testing.TB, cfg *rest.Config) *kubernetes.Clientset {
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		fmt.Printf("Failed to setup kubernetes clientset %v", err)
-	}
-	return clientset
 }
 
 func SetUpManager(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) manager.Manager {
@@ -144,4 +166,32 @@ func StartManager(t testing.TB, mgr manager.Manager) {
 	if !mgr.GetCache().WaitForCacheSync(ctx) {
 		t.Fatal("Cache failed to sync")
 	}
+}
+
+// SetUpEnvtestManager is a convenience function that combines SetUpEnvtest,
+// SetUpManager, and StartManager into a single call.
+//
+// This is the recommended way to set up integration tests:
+//
+//	mgr := testutil.SetUpEnvtestManager(t, scheme)
+//	c := mgr.GetClient()
+//
+//	// Setup your controller
+//	reconciler := &YourReconciler{Client: c, Scheme: scheme}
+//	reconciler.SetupWithManager(mgr)
+//
+// Note: envtest does not support garbage collection (cascading deletion via owner references)
+// because it only runs kube-apiserver and etcd, not kube-controller-manager where the
+// garbage collector controller runs. To test cascading deletion, use kind with
+// UseExistingCluster: true, or test that owner references are set correctly instead.
+//
+// For more control, use the individual functions instead.
+func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme) manager.Manager {
+	t.Helper()
+
+	cfg := SetUpEnvtest(t)
+	mgr := SetUpManager(t, cfg, scheme)
+	StartManager(t, mgr)
+
+	return mgr
 }

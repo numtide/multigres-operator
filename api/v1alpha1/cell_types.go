@@ -103,7 +103,7 @@ type GlobalTopoServerRefSpec struct {
 // CellTopoServerSpec defines the topology server configuration for this cell.
 // Only one of External or ManagedSpec should be set.
 // If neither is set, the cell uses the top-level GlobalTopoServer.
-// +kubebuilder:validation:XValidation:rule="(has(self.external) ? 1 : 0) + (has(self.managedSpec) ? 1 : 0) <= 1",message="only one of 'external' or 'managedSpec' can be set for topoServer"
+// TODO: Add validation when External field is uncommented
 type CellTopoServerSpec struct {
 	// External defines connection details for an unmanaged, external topo server.
 	// +optional
