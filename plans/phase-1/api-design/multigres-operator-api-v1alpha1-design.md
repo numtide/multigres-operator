@@ -11,7 +11,7 @@ This proposal defines the `v1alpha1` API for the Multigres Operator. The design 
 3.  **`CellTemplate`**: A reusable, namespaced resource for defining standard configurations for Cell-level components (`MultiGateway` and optionally `LocalTopoServer`).
 4.  **`ShardTemplate`**: A reusable, namespaced resource for defining standard configurations for Shard-level components (`MultiOrch` and `Pools`).
 
-All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) are should be considered read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers. If the user edits them directly, they will get immediately reverted by the parent CR.
+All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) should be considered read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers. If the user edits them directly, they will get immediately reverted by the parent CR.
 
 ## Motivation
 
@@ -69,6 +69,15 @@ The formalized parent/child model addresses these by ensuring:
 
 ## Design Details: API Specification
 
+### The `default` Flag (System Resources)
+
+Both `Database` and `TableGroup` entries support a boolean `default` flag (defaulting to `false`). This flag maps the definition to the **System Default** infrastructure created during the cluster's bootstrap phase.
+
+  * **On a Database (`default: true`):** Indicates this entry defines the configuration for the system-level database (typically named `postgres`) that contains the global catalog. There can be only one default database per cluster.
+  * **On a TableGroup (`default: true`):** Indicates this entry defines the configuration for the "Catch-All" or "Unsharded" group of that database. Every database has exactly one Default TableGroup where tables land by default.
+
+Defining these entries allows the user to explicitly configure the resources (replicas, storage, compute) allocated to these system components, rather than relying on hardcoded operator defaults.
+
 ### User Managed CR: MultigresCluster
 
   * This CR and the three scoped templates (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
@@ -120,7 +129,7 @@ spec:
     shardTemplate: "cluster-wide-shard"
 
   # ----------------------------------------------------------------
-  # Global Components (REVISED)
+  # Global Components
   # ----------------------------------------------------------------
   
   # Global TopoServer is a singleton. It follows the 4-level override chain.
@@ -219,11 +228,67 @@ spec:
   # Database Topology (Database -> TableGroup -> Shard)
   # ----------------------------------------------------------------
   databases:
-    - name: "production_db"
+    # --- EXAMPLE 1: Configuring the System Default Database ---
+    # This entry targets the system-level database created during bootstrap.
+    # We mark it as 'default: true' to apply this configuration to the 
+    # bootstrap resources (instead of creating a new user database).
+    - name: "postgres"
+      default: true
       tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0"
+              # define resources for the system default shard
+              shardTemplate: "standard-shard-ha"
+
+    # --- EXAMPLE 2: A User Database ---
+    - name: "production_db"
+      # default: false (Implicit) - This creates a new logical database
+      tablegroups:
+        # The default unsharded group for this specific database.
+        # Default tablegroups can only have one shard.
+        # It handles all tables not explicitly moved to 'orders_tg'.
+        - name: "main_unsharded"
+          default: true
+          shards:
+            - name: "0"
+              spec:
+                multiOrch:
+                  replicas: 1
+                  resources:
+                     requests:
+                       cpu: "100m"
+                       memory: "128Mi"
+                     limits:
+                       cpu: "200m"
+                       memory: "256Mi"
+                pools:
+                  primary:
+                    type: "readWrite"
+                    cell: "us-east-1b"
+                    replicas: 2
+                    storage:
+                       size: "100Gi"
+                       class: "standard-gp3"
+                    postgres:
+                       requests:
+                         cpu: "2"
+                         memory: "4Gi"
+                       limits:
+                         cpu: "4"
+                         memory: "8Gi"
+                    multipooler:
+                       requests:
+                         cpu: "500m"
+                         memory: "1Gi"
+                       limits:
+                         cpu: "1"
+                         memory: "2Gi"
+
+        # A custom sharded group for high-volume data
         - name: "orders_tg"
-          # Shards are strictly explicitly defined. 
-          # No 'partitioning: { count: 10 }' auto-generation.
+          # default: false (Implicit)
           shards:
             # --- SHARD 0: Using Inline Spec (No Template) ---
             - name: "0"
