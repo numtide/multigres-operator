@@ -62,6 +62,9 @@ type ShardPoolSpec struct {
 	// +kubebuilder:validation:Pattern:="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 	Cell string `json:"cell,omitempty"`
 
+	Database   string `json:"database,omitempty"`
+	TableGroup string `json:"tableGroup,omitempty"`
+
 	// Replicas is the desired number of pods in this pool.
 	// +kubebuilder:validation:Minimum=1
 	// +optional
@@ -83,6 +86,9 @@ type ShardPoolSpec struct {
 	// MultiPooler defines the configuration for the MultiPooler container.
 	// +optional
 	MultiPooler MultiPoolerSpec `json:"multipooler,omitempty"`
+
+	// MultiOrch defines the desired state of MultiOrch.
+	MultiOrch MultiOrchSpec `json:"multiOrch,omitempty"`
 }
 
 // PostgresSpec defines the configuration for the Postgres container.
@@ -94,6 +100,21 @@ type PostgresSpec struct {
 
 // MultiPoolerSpec defines the configuration for the MultiPooler container.
 type MultiPoolerSpec struct {
+	// Resources defines the compute resource requirements for the MultiPooler container.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// MultiOrchSpec defines the configuration for the MultiPooler container.
+type MultiOrchSpec struct {
+	// Cells is the name of the cells MultiOrch needs to be deployed to.
+	Cells []string `json:"cells,omitempty"`
+
+	// Image is the MultiOrch container image to use.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Image string `json:"image,omitempty"`
+
 	// Resources defines the compute resource requirements for the MultiPooler container.
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
