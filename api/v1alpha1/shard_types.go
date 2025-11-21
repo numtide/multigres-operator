@@ -49,7 +49,7 @@ type ShardImagesSpec struct {
 
 // ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
 // This is the core reusable spec for a shard's pod.
-// +kubebuilder:validation:XValidation:rule="!has(self.dataVolumeClaimTemplate) || (has(self.dataVolumeClaimTemplate.resources) && has(self.dataVolumeClaimTemplate.resources.requests) && has(self.dataVolumeClaimTemplate.resources.requests['storage']))",message="dataVolumeClaimTemplate must include a 'storage' resource request"
+// TODO: Re-enable storage validation when CEL cost budget is addressed (add maxItems to pools array)
 type ShardPoolSpec struct {
 	// Type of the pool (e.g., "replica", "readOnly").
 	// +kubebuilder:validation:Enum=replica;readOnly
