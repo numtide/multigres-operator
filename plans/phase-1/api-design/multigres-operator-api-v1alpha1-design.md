@@ -178,7 +178,6 @@ spec:
       zone: "us-east-1a" 
       # region: "us-east-1"
       
-      # Precedence 1: Explicit template reference
       cellTemplate: "standard-cell-ha"
       
       # Optional overrides applied ON TOP of the template.
@@ -189,7 +188,6 @@ spec:
     # --- CELL 2: Using Inline Spec (No Template) ---
     - name: "us-east-1b"
       zone: "us-east-1b"
-      # Precedence 1: Inline spec
       spec:
          multiGateway:
            replicas: 2
@@ -229,7 +227,6 @@ spec:
           shards:
             # --- SHARD 0: Using Inline Spec (No Template) ---
             - name: "0"
-              # Precedence 1: Inline spec
               spec:
                 multiOrch:
                   replicas: 1
@@ -265,7 +262,6 @@ spec:
 
             # --- SHARD 1: Using an Explicit Template ---
             - name: "1"
-              # Precedence 1: Explicit template reference
               shardTemplate: "standard-shard-ha"
               # Overrides are crucial here to pin pools to specific cells
               # if the template uses generic cell names.
@@ -993,7 +989,6 @@ spec:
     cellTemplate: "cluster-default-cell"
     shardTemplate: "cluster-default-shard"
   
-  # Precedence 1: Inline spec for core components
   globalTopoServer:
     external:
       endpoints: 
@@ -1015,11 +1010,9 @@ spec:
           memory: "512Mi"
 
   cells:
-    # Precedence 1: Explicit template reference
     - name: "us-east-1a"
       zone: "us-east-1a"
       cellTemplate: "high-throughput-gateway"
-    # Precedence 1: Explicit template reference with atomic override
     - name: "us-west-2a"
       zone: "us-west-2a"
       cellTemplate: "standard-gateway"
@@ -1039,7 +1032,6 @@ spec:
       tablegroups:
         - name: "auth"
           shards:
-            # Precedence 1: Explicit template reference
             - name: "0"
               shardTemplate: "geo-distributed-shard"
               overrides:
@@ -1056,7 +1048,6 @@ spec:
                        limits:
                          cpu: "8"
                          memory: "16Gi"
-            # Precedence 1: Explicit template reference
             - name: "1"
               shardTemplate: "geo-distributed-shard"
               overrides:
