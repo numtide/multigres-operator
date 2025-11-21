@@ -73,9 +73,9 @@ The formalized parent/child model addresses these by ensuring:
 
   * This CR and the three scoped templates (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
   * All other child CRs will be owned by this top-level CR. Any manual changes to those child CRs will be immediately reverted by the `MultigresCluster` cluster controller.
-  * All component configurations (`globalTopoServer`, `multiadmin`, `cells`, `shards`) follow a consistent pattern: they can be defined via an inline `spec` (e.g., `managedSpec`) or by referencing a template (`templateRef`). Providing both is a validation error.
+  * All component configurations (`globalTopoServer`, `multiadmin`, `cells`, `shards`) follow a consistent pattern: they can be defined via an inline `spec` or by referencing a template (`templateRef`). Providing both is a validation error.
   * **Override Chain:** All components use the following 4-level precedence chain for configuration:
-    1.  **Component-Level Definition:** An inline `spec` (e.g., `managedSpec`) or an explicit `templateRef` on the component itself.
+    1.  **Component-Level Definition:** An inline `spec` or an explicit `templateRef` on the component itself.
     2.  **Cluster-Level Default:** The corresponding template defined in `spec.templateDefaults` (e.g., `templateDefaults.coreTemplate` or `templateDefaults.cellTemplate`).
     3.  **Namespace-Level Default:** A template of the correct kind (e.g., `CoreTemplate`) named `default` in the same namespace.
     4.  **Operator Hardcoded Defaults:** A final fallback applied by the operator's admission webhook.
@@ -124,10 +124,10 @@ spec:
   # ----------------------------------------------------------------
   
   # Global TopoServer is a singleton. It follows the 4-level override chain.
-  # It supports EITHER a 'managedSpec' OR 'external' OR 'templateRef'.
+  # It supports EITHER a 'managed' OR 'external' OR 'templateRef'.
   globalTopoServer:
     # --- OPTION 1: Inline Managed Spec ---
-    managedSpec:
+    managed:
       replicas: 3
       storage:
         size: "10Gi"
@@ -152,10 +152,10 @@ spec:
     # templateRef: "my-explicit-core-template"
 
   # MultiAdmin is a singleton. It follows the 4-level override chain.
-  # It supports EITHER a 'managedSpec' OR a 'templateRef'.
+  # It supports EITHER a 'spec' OR a 'templateRef'.
   multiadmin:
     # --- OPTION 1: Inline Managed Spec ---
-    managedSpec:
+    spec:
       replicas: 2
       resources:
         requests: 
@@ -203,7 +203,7 @@ spec:
          # --- Optional Local TopoServer ---
          # If omitted, this cell uses the GlobalTopoServer.
          # localTopoServer:
-         #   managedSpec:
+         #   managed:
          #      replicas: 3
          #      storage:
          #        size: "5Gi"
@@ -328,7 +328,7 @@ spec:
   # Defines the Global TopoServer component
   globalTopoServer:
     # --- OPTION 1: Managed by Operator ---
-    managedSpec:
+    managed:
       replicas: 3
       storage:
         size: "10Gi"
@@ -349,7 +349,7 @@ spec:
 
   # Defines the MultiAdmin component
   multiadmin:
-    managedSpec:
+    spec:
       replicas: 2
       resources:
         requests: 
@@ -398,7 +398,7 @@ spec:
   # If omitted, cells use the GlobalTopoServer by default.
   #
   # localTopoServer:
-  #   managedSpec:
+  #   managed:
   #     replicas: 3
   #     storage:
   #       class: "standard-gp3"
@@ -512,7 +512,7 @@ metadata:
       name: "example-cluster"
       controller: true
 spec:
-  # Fully resolved 'managedSpec' from MultigresCluster inline definition
+  # Resolved from MultigresCluster.
   replicas: 3
   storage:
     size: "10Gi"
@@ -594,7 +594,7 @@ spec:
   # Option 3: Managed Local
   #
   # topoServer:
-  #   managedSpec:
+  #   managed:
   #     rootPath: "/multigres/us-east-1a"
   #     image: "quay.io/coreos/etcd:v3.5"
   #     replicas: 3
@@ -845,7 +845,7 @@ A mutating admission webhook applies a strict **4-Level Override Chain** to reso
 
 *Applies to `GlobalTopoServer`, `MultiAdmin`, and `Cells` defined in `MultigresCluster`.*
 
-1.  **Component-Level Definition (Highest):** An inline `spec` (e.g., `managedSpec`) or an explicit `templateRef` / `cellTemplate` on the component itself.
+1.  **Component-Level Definition (Highest):** An inline `spec` or an explicit `templateRef` / `cellTemplate` on the component itself.
 2.  **Cluster-Level Default Template:** The corresponding template defined in `spec.templateDefaults` (e.g., `templateDefaults.coreTemplate` or `templateDefaults.cellTemplate`).
 3.  **Namespace-Level Default Template:** A template of the correct kind (e.g., `CoreTemplate`) named `default` in the same namespace as the cluster.
 4.  **Operator Hardcoded Defaults (Lowest):** A final fallback applied by the operator code (e.g., default resources, default replicas).
@@ -869,7 +869,7 @@ Webhooks are used *only* for fast, synchronous, and semantic validation to preve
 
   * **On `CREATE` and `UPDATE`:**
       * **Template Existence:** Validates that all templates referenced in `spec.templateDefaults` or explicitly in components (Core, Cell, or Shard templates) exist *at the time of application*.
-      * **Component Spec Mutex:** Enforces that `managedSpec`, `external`, and `templateRef` are mutually exclusive for components like `GlobalTopoServer`.
+      * **Component Spec Mutex:** Enforces that `managed`, `external`, and `templateRef` are mutually exclusive for components like `GlobalTopoServer`.
       * **Uniqueness:** Validates that all names are unique within their respective scopes:
           * Cell names in `spec.cells`.
           * Database names in `spec.databases`.
@@ -1004,7 +1004,7 @@ spec:
       clientCertSecret: "etcd-client-cert"
   
   multiadmin:
-    managedSpec:
+    spec:
       replicas: 1
       resources:
         requests:
