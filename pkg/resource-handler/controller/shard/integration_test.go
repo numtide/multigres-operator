@@ -61,11 +61,13 @@ func TestShardReconciliation(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []string{"us-west-1a", "us-west-1b"}, // 2 cells = 2 replicas
 					},
-					Pools: []multigresv1alpha1.ShardPoolSpec{
-						{
-							Cell:     "us-west-1a",
-							Type:     "replica",
-							Replicas: ptr.To(int32(2)),
+					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+						"primary": {
+							Cell:       "us-west-1a",
+							Type:       "replica",
+							Database:   "testdb",
+							TableGroup: "default",
+							Replicas:   ptr.To(int32(2)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
 								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 								Resources: corev1.VolumeResourceRequirements{
@@ -138,16 +140,16 @@ func TestShardReconciliation(t *testing.T) {
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-replica",
+						Name:            "test-shard-pool-primary",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-replica", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "test-shard-replica-headless",
+						ServiceName: "test-shard-pool-primary-headless",
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-replica", "shard-pool", "us-west-1a"),
+							MatchLabels: shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
 						},
 						PodManagementPolicy: appsv1.ParallelPodManagement,
 						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -155,7 +157,7 @@ func TestShardReconciliation(t *testing.T) {
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "test-shard-replica", "shard-pool", "us-west-1a"),
+								Labels: shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
 							},
 							Spec: corev1.PodSpec{
 								InitContainers: []corev1.Container{
@@ -216,9 +218,9 @@ func TestShardReconciliation(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-replica-headless",
+						Name:            "test-shard-pool-primary-headless",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-replica", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -229,7 +231,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15270),
 							tcpServicePort(t, "postgres", 5432),
 						},
-						Selector:                 shardLabels(t, "test-shard-replica", "shard-pool", "us-west-1a"),
+						Selector:                 shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
 						PublishNotReadyAddresses: true,
 					},
 				},
