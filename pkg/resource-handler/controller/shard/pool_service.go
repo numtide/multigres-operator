@@ -51,12 +51,8 @@ func BuildPoolHeadlessService(
 }
 
 // buildPoolName generates a consistent name for pool resources.
-// Uses the pool type if specified, otherwise uses pool index.
-func buildPoolName(shardName string, pool multigresv1alpha1.ShardPoolSpec, poolIndex int) string {
-	if pool.Type != "" {
-		return fmt.Sprintf("%s-%s", shardName, pool.Type)
-	}
-	return fmt.Sprintf("%s-pool-%d", shardName, poolIndex)
+func buildPoolName(shardName string, poolName string, poolSpec multigresv1alpha1.ShardPoolSpec) string {
+	return fmt.Sprintf("%s-pool-%s", shardName, poolName)
 }
 
 // buildPoolLabels creates standard labels for pool resources.
