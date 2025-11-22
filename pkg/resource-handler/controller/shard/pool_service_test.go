@@ -18,12 +18,12 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		shard     *multigresv1alpha1.Shard
-		pool      multigresv1alpha1.ShardPoolSpec
-		poolIndex int
-		scheme    *runtime.Scheme
-		want      *corev1.Service
-		wantErr   bool
+		shard    *multigresv1alpha1.Shard
+		poolName string
+		poolSpec multigresv1alpha1.ShardPoolSpec
+		scheme   *runtime.Scheme
+		want     *corev1.Service
+		wantErr  bool
 	}{
 		"replica pool headless service": {
 			shard: &multigresv1alpha1.Shard{
@@ -34,11 +34,11 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolName: "primary",
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				Type: "replica",
 			},
-			poolIndex: 0,
-			scheme:    scheme,
+			scheme: scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard-replica-headless",
@@ -103,19 +103,19 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{
-				Type: "readOnly",
+			poolName: "ro",
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
+				Type: "readonly",
 				Cell: "zone-east",
 			},
-			poolIndex: 1,
-			scheme:    scheme,
+			scheme: scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-001-readOnly-headless",
+					Name:      "shard-001-ro-headless",
 					Namespace: "prod",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-readOnly",
+						"app.kubernetes.io/instance":   "shard-001-ro",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -135,7 +135,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-readOnly",
+						"app.kubernetes.io/instance":   "shard-001-ro",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -173,16 +173,16 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			pool:      multigresv1alpha1.ShardPoolSpec{},
-			poolIndex: 3,
-			scheme:    scheme,
+			poolName: "primary",
+			poolSpec: multigresv1alpha1.ShardPoolSpec{},
+			scheme:   scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-002-pool-3-headless",
+					Name:      "shard-002-pool-primary-headless",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-3",
+						"app.kubernetes.io/instance":   "shard-002-pool-primary",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -202,7 +202,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-3",
+						"app.kubernetes.io/instance":   "shard-002-pool-primary",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -239,18 +239,18 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				Type: "replica",
 			},
-			poolIndex: 0,
-			scheme:    runtime.NewScheme(), // empty scheme
-			wantErr:   true,
+			poolName: "primary",
+			scheme:   runtime.NewScheme(), // empty scheme
+			wantErr:  true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := BuildPoolHeadlessService(tc.shard, tc.pool, tc.poolIndex, tc.scheme)
+			got, err := BuildPoolHeadlessService(tc.shard, tc.poolName, tc.poolSpec, tc.scheme)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildPoolHeadlessService() error = %v, wantErr %v", err, tc.wantErr)
@@ -268,66 +268,16 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 	}
 }
 
-func TestBuildPoolName(t *testing.T) {
-	tests := map[string]struct {
-		shardName string
-		pool      multigresv1alpha1.ShardPoolSpec
-		poolIndex int
-		want      string
-	}{
-		"with pool type": {
-			shardName: "shard-001",
-			pool: multigresv1alpha1.ShardPoolSpec{
-				Type: "replica",
-			},
-			poolIndex: 0,
-			want:      "shard-001-replica",
-		},
-		"with readOnly type": {
-			shardName: "test-shard",
-			pool: multigresv1alpha1.ShardPoolSpec{
-				Type: "readOnly",
-			},
-			poolIndex: 1,
-			want:      "test-shard-readOnly",
-		},
-		"without type uses index": {
-			shardName: "shard-002",
-			pool:      multigresv1alpha1.ShardPoolSpec{},
-			poolIndex: 2,
-			want:      "shard-002-pool-2",
-		},
-		"empty type uses index": {
-			shardName: "my-shard",
-			pool: multigresv1alpha1.ShardPoolSpec{
-				Type: "",
-			},
-			poolIndex: 5,
-			want:      "my-shard-pool-5",
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := buildPoolName(tc.shardName, tc.pool, tc.poolIndex)
-
-			if got != tc.want {
-				t.Errorf("buildPoolName() = %s, want %s", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestBuildPoolLabels(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
-		pool     multigresv1alpha1.ShardPoolSpec
+		poolSpec multigresv1alpha1.ShardPoolSpec
 		poolName string
 		want     map[string]string
 	}{
 		"with custom cell": {
 			shard: &multigresv1alpha1.Shard{},
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				Cell: "zone-west",
 			},
 			poolName: "test-shard-replica",
@@ -341,7 +291,7 @@ func TestBuildPoolLabels(t *testing.T) {
 		},
 		"without cell uses default": {
 			shard:    &multigresv1alpha1.Shard{},
-			pool:     multigresv1alpha1.ShardPoolSpec{},
+			poolSpec: multigresv1alpha1.ShardPoolSpec{},
 			poolName: "test-shard-pool-0",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
@@ -353,7 +303,7 @@ func TestBuildPoolLabels(t *testing.T) {
 		},
 		"with empty cell uses default": {
 			shard: &multigresv1alpha1.Shard{},
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				Cell: "",
 			},
 			poolName: "my-shard-readOnly",
@@ -369,7 +319,7 @@ func TestBuildPoolLabels(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildPoolLabels(tc.shard, tc.pool, tc.poolName)
+			got := buildPoolLabels(tc.shard, tc.poolName, tc.poolSpec)
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildPoolLabels() mismatch (-want +got):\n%s", diff)

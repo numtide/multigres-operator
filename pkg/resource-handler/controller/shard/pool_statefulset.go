@@ -27,17 +27,17 @@ const (
 // - PVC for postgres data
 func BuildPoolStatefulSet(
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
-	poolIndex int,
+	poolName string,
+	poolSpec multigresv1alpha1.ShardPoolSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
-	poolName := buildPoolName(shard.Name, pool, poolIndex)
-	headlessServiceName := poolName + "-headless"
-	labels := buildPoolLabels(shard, pool, poolName)
+	name := buildPoolName(shard.Name, poolName, poolSpec)
+	headlessServiceName := name + "-headless"
+	labels := buildPoolLabels(shard, poolName, poolSpec)
 
 	replicas := DefaultPoolReplicas
-	if pool.Replicas != nil {
-		replicas = *pool.Replicas
+	if poolSpec.Replicas != nil {
+		replicas = *poolSpec.Replicas
 	}
 
 	sts := &appsv1.StatefulSet{
@@ -64,20 +64,20 @@ func BuildPoolStatefulSet(
 					// Init containers: pgctld copies binary, multipooler is a native sidecar
 					InitContainers: []corev1.Container{
 						buildPgctldInitContainer(shard),
-						buildMultiPoolerSidecar(shard, pool),
+						buildMultiPoolerSidecar(shard, poolSpec, poolName),
 					},
 					// Postgres is the main container (runs pgctld binary)
 					Containers: []corev1.Container{
-						buildPostgresContainer(shard, pool),
+						buildPostgresContainer(shard, poolSpec),
 					},
 					// Shared volume for pgctld binary
 					Volumes: []corev1.Volume{
 						buildPgctldVolume(),
 					},
-					Affinity: pool.Affinity,
+					Affinity: poolSpec.Affinity,
 				},
 			},
-			VolumeClaimTemplates: buildPoolVolumeClaimTemplates(pool),
+			VolumeClaimTemplates: buildPoolVolumeClaimTemplates(poolSpec),
 		},
 	}
 

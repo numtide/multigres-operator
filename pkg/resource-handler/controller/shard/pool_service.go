@@ -2,7 +2,6 @@ package shard
 
 import (
 	"fmt"
-	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,16 +21,16 @@ const (
 // Headless services are required for StatefulSet pod DNS records.
 func BuildPoolHeadlessService(
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
-	poolIndex int,
+	poolName string,
+	poolSpec multigresv1alpha1.ShardPoolSpec,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	poolName := buildPoolName(shard.Name, pool, poolIndex)
-	labels := buildPoolLabels(shard, pool, poolName)
+	name := buildPoolName(shard.Name, poolName, poolSpec)
+	labels := buildPoolLabels(shard, poolName, poolSpec)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      poolName + "-headless",
+			Name:      name + "-headless",
 			Namespace: shard.Namespace,
 			Labels:    labels,
 		},
@@ -55,21 +54,25 @@ func buildPoolName(shardName string, poolName string, poolSpec multigresv1alpha1
 	return fmt.Sprintf("%s-pool-%s", shardName, poolName)
 }
 
-// buildPoolLabels creates standard labels for pool resources.
-// Uses the pool's cell name from the Cell field.
+// buildPoolLabels creates standard labels for pool resources, and uses the
+// pool's database, table group, and cell details. Any additional labels are
+// also merged, while keeping the main labels.
 func buildPoolLabels(
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
 	poolName string,
+	poolSpec multigresv1alpha1.ShardPoolSpec,
 ) map[string]string {
-	cellName := pool.Cell
+	cellName := poolSpec.Cell
 	if cellName == "" {
 		cellName = metadata.DefaultCellName
 	}
 
 	labels := metadata.BuildStandardLabels(poolName, PoolComponentName)
-	// Merge any labels associated from Shard.
-	maps.Copy(labels, shard.GetObjectMeta().GetLabels())
+	metadata.AddCellLabel(labels, cellName)
+	metadata.AddDatabaseLabel(labels, poolSpec.Database)
+	metadata.AddTableGroupLabel(labels, poolSpec.TableGroup)
+
+	metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 
 	return labels
 }
