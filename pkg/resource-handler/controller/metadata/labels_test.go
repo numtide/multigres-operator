@@ -12,118 +12,101 @@ func TestBuildStandardLabels(t *testing.T) {
 	tests := map[string]struct {
 		resourceName  string
 		componentName string
-		cellName      string
 		want          map[string]string
 	}{
-		"basic case with all parameters": {
+		"basic case": {
 			resourceName:  "my-etcd-cluster",
 			componentName: "etcd",
-			cellName:      "cell-1",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "my-etcd-cluster",
 				"app.kubernetes.io/component":  "etcd",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "cell-1",
 			},
 		},
-		"empty cellName uses default": {
+		"gateway component": {
 			resourceName:  "my-gateway",
 			componentName: "gateway",
-			cellName:      "",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "my-gateway",
 				"app.kubernetes.io/component":  "gateway",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "multigres-global-topo",
 			},
 		},
-		"with cellName should add cell label": {
+		"orch component": {
 			resourceName:  "my-orch",
 			componentName: "orch",
-			cellName:      "cell-alpha",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "my-orch",
 				"app.kubernetes.io/component":  "orch",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "cell-alpha",
 			},
 		},
 		"empty resourceName": {
 			resourceName:  "",
 			componentName: "pooler",
-			cellName:      "cell-2",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "",
 				"app.kubernetes.io/component":  "pooler",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "cell-2",
 			},
 		},
 		"empty componentName": {
 			resourceName:  "my-resource",
 			componentName: "",
-			cellName:      "cell-3",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "my-resource",
 				"app.kubernetes.io/component":  "",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "cell-3",
 			},
 		},
-		"all empty strings - uses default cell": {
+		"all empty strings": {
 			resourceName:  "",
 			componentName: "",
-			cellName:      "",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "",
 				"app.kubernetes.io/component":  "",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "multigres-global-topo",
 			},
 		},
 		"special characters in names": {
 			resourceName:  "my-resource-123",
 			componentName: "etcd-v3",
-			cellName:      "cell-prod-1",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "my-resource-123",
 				"app.kubernetes.io/component":  "etcd-v3",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "cell-prod-1",
 			},
 		},
 		"long names": {
 			resourceName:  "very-long-resource-name-with-many-segments",
 			componentName: "gateway-proxy-component",
-			cellName:      "cell-production-region-1",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "very-long-resource-name-with-many-segments",
 				"app.kubernetes.io/component":  "gateway-proxy-component",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "cell-production-region-1",
 			},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := metadata.BuildStandardLabels(tc.resourceName, tc.componentName, tc.cellName)
+			got := metadata.BuildStandardLabels(tc.resourceName, tc.componentName)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("BuildStandardLabels() mismatch (-want +got):\n%s", diff)
 			}
