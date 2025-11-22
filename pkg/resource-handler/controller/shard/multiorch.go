@@ -24,7 +24,9 @@ func BuildMultiOrchDeployment(
 	shard *multigresv1alpha1.Shard,
 	scheme *runtime.Scheme,
 ) (*appsv1.Deployment, error) {
-	replicas := DefaultMultiOrchReplicas
+	// MultiOrch needs to be deployed one per Cell.
+	cellCount := len(shard.Spec.MultiOrch.Cells)
+	replicas := int32(cellCount)
 
 	name := shard.Name + "-multiorch"
 	// MultiOrch doesn't have a specific cell, use default

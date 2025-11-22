@@ -31,7 +31,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []string{"us-west-1a"}, // 1 cell = 1 replica
+					},
+				},
 			},
 			scheme: scheme,
 			want: &appsv1.Deployment{
@@ -57,7 +61,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					},
 				},
 				Spec: appsv1.DeploymentSpec{
-					Replicas: ptr.To(DefaultMultiOrchReplicas),
+					Replicas: ptr.To(int32(1)), // Replicas = len(cells)
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
@@ -97,7 +101,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Namespace: "prod-ns",
 					UID:       "prod-uid",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []string{"zone1", "zone2"}, // 2 cells = 2 replicas
+					},
+				},
 			},
 			scheme: scheme,
 			want: &appsv1.Deployment{
@@ -123,7 +131,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					},
 				},
 				Spec: appsv1.DeploymentSpec{
-					Replicas: ptr.To(DefaultMultiOrchReplicas),
+					Replicas: ptr.To(int32(2)), // Replicas = len(cells) = 2
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",

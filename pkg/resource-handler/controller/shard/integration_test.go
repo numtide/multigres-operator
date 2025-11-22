@@ -58,6 +58,9 @@ func TestShardReconciliation(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []string{"us-west-1a", "us-west-1b"}, // 2 cells = 2 replicas
+					},
 					Pools: []multigresv1alpha1.ShardPoolSpec{
 						{
 							Cell:     "us-west-1a",
