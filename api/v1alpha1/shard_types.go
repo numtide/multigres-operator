@@ -33,6 +33,9 @@ type ShardSpec struct {
 	// +optional
 	Images ShardImagesSpec `json:"images,omitempty"`
 
+	// MultiOrch defines the desired state of MultiOrch.
+	MultiOrch MultiOrchSpec `json:"multiOrch,omitempty"`
+
 	// Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
 	// This is a direct copy from the parent MultiTableGroup's shardTemplate.
 	// +optional
@@ -86,9 +89,6 @@ type ShardPoolSpec struct {
 	// MultiPooler defines the configuration for the MultiPooler container.
 	// +optional
 	MultiPooler MultiPoolerSpec `json:"multipooler,omitempty"`
-
-	// MultiOrch defines the desired state of MultiOrch.
-	MultiOrch MultiOrchSpec `json:"multiOrch,omitempty"`
 }
 
 // PostgresSpec defines the configuration for the Postgres container.
