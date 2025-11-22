@@ -144,10 +144,7 @@ spec:
                     type: object
                 type: object
               pools:
-                description: |-
-                  Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
-                  This is a direct copy from the parent MultiTableGroup's shardTemplate.
-                items:
+                additionalProperties:
                   description: |-
                     ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
                     This is the core reusable spec for a shard's pod.
@@ -1424,7 +1421,10 @@ spec:
                       - readOnly
                       type: string
                   type: object
-                type: array
+                description: |-
+                  Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
+                  This is a direct copy from the parent TableGroup's Pools definition.
+                type: object
             type: object
             x-kubernetes-validations:
             - message: at least one shard pool must be defined
