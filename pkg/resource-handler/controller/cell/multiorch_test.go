@@ -47,7 +47,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -69,7 +68,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multiorch",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone1",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -80,7 +78,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multiorch",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone1",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -125,7 +122,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone2",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -147,7 +143,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multiorch",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone2",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -158,7 +153,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multiorch",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone2",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -203,7 +197,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone3",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -225,7 +218,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multiorch",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone3",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -236,7 +228,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multiorch",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone3",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -297,7 +288,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone4",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -319,7 +309,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multiorch",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone4",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -330,7 +319,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multiorch",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone4",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -401,7 +389,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone5",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -423,7 +410,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multiorch",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone5",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -434,7 +420,6 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multiorch",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone5",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -530,7 +515,6 @@ func TestBuildMultiOrchService(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -551,7 +535,6 @@ func TestBuildMultiOrchService(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
 					},
 					Ports: []corev1.ServicePort{
 						{Name: "http", Port: MultiOrchHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
@@ -582,7 +565,6 @@ func TestBuildMultiOrchService(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "eu-central",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -603,7 +585,6 @@ func TestBuildMultiOrchService(t *testing.T) {
 						"app.kubernetes.io/component":  "multiorch",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "eu-central",
 					},
 					Ports: []corev1.ServicePort{
 						{Name: "http", Port: MultiOrchHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},

@@ -18,7 +18,7 @@ func BuildService(
 	mg *multigresv1alpha1.MultiGateway,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	labels := metadata.BuildStandardLabels(mg.Name, ComponentName, mg.Spec.CellName)
+	labels := metadata.BuildStandardLabels(mg.Name, ComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

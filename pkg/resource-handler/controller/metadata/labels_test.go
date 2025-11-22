@@ -237,21 +237,18 @@ func TestMergeLabels(t *testing.T) {
 				"app.kubernetes.io/instance":   "standard-instance",
 				"app.kubernetes.io/component":  "standard-component",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "standard-cell",
 			},
 			customLabels: map[string]string{
 				"app.kubernetes.io/name":       "custom-app",       // conflict: standard wins
 				"app.kubernetes.io/instance":   "custom-instance",  // conflict: standard wins
 				"app.kubernetes.io/component":  "custom-component", // conflict: standard wins
 				"app.kubernetes.io/managed-by": "custom-operator",  // conflict: standard wins
-				"multigres.com/cell":           "custom-cell",      // conflict: standard wins
 			},
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres", // All standard values win
 				"app.kubernetes.io/instance":   "standard-instance",
 				"app.kubernetes.io/component":  "standard-component",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "standard-cell",
 			},
 		},
 		"part-of label conflict - standard wins": {

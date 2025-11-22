@@ -41,7 +41,6 @@ func TestBuildService(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -62,7 +61,6 @@ func TestBuildService(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					Ports: buildServicePorts(&multigresv1alpha1.MultiGateway{}),
 				},

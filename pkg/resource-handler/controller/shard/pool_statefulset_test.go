@@ -12,7 +12,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
 )
 
 func TestBuildPoolStatefulSet(t *testing.T) {
@@ -59,7 +58,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           metadata.DefaultCellName,
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -82,7 +80,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           metadata.DefaultCellName,
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -97,7 +94,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           metadata.DefaultCellName,
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -167,7 +163,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone-west",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -190,7 +185,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone-west",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -205,7 +199,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone-west",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -272,7 +265,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           metadata.DefaultCellName,
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -295,7 +287,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           metadata.DefaultCellName,
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -310,7 +301,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           metadata.DefaultCellName,
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -394,7 +384,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           metadata.DefaultCellName,
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -417,7 +406,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           metadata.DefaultCellName,
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -432,7 +420,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           metadata.DefaultCellName,
 							},
 						},
 						Spec: corev1.PodSpec{

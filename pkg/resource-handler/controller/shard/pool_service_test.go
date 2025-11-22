@@ -11,7 +11,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
 )
 
 func TestBuildPoolHeadlessService(t *testing.T) {
@@ -50,7 +49,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           metadata.DefaultCellName,
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -71,7 +69,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           metadata.DefaultCellName,
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -122,7 +119,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone-east",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -143,7 +139,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone-east",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -191,7 +186,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           metadata.DefaultCellName,
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -212,7 +206,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           metadata.DefaultCellName,
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -344,7 +337,6 @@ func TestBuildPoolLabels(t *testing.T) {
 				"app.kubernetes.io/component":  PoolComponentName,
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           "zone-west",
 			},
 		},
 		"without cell uses default": {
@@ -357,7 +349,6 @@ func TestBuildPoolLabels(t *testing.T) {
 				"app.kubernetes.io/component":  PoolComponentName,
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           metadata.DefaultCellName,
 			},
 		},
 		"with empty cell uses default": {
@@ -372,7 +363,6 @@ func TestBuildPoolLabels(t *testing.T) {
 				"app.kubernetes.io/component":  PoolComponentName,
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"multigres.com/cell":           metadata.DefaultCellName,
 			},
 		},
 	}

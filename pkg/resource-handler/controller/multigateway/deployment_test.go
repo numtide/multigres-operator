@@ -50,7 +50,6 @@ func TestBuildDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -72,7 +71,6 @@ func TestBuildDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -83,7 +81,6 @@ func TestBuildDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -126,7 +123,6 @@ func TestBuildDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -148,7 +144,6 @@ func TestBuildDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -159,7 +154,6 @@ func TestBuildDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
 							},
 						},
 						Spec: corev1.PodSpec{

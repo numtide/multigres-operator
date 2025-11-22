@@ -53,7 +53,7 @@ func BuildStatefulSet(
 	headlessServiceName := toposerver.Name + "-headless"
 	// TODO: Support cell-local TopoServers by adding CellName field to TopoServerSpec
 	// For now, TopoServer is always global topology
-	labels := metadata.BuildStandardLabels(toposerver.Name, ComponentName, "multigres-global-topo")
+	labels := metadata.BuildStandardLabels(toposerver.Name, ComponentName)
 
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{

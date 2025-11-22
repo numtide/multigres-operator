@@ -237,7 +237,6 @@ func toposerverLabels(t testing.TB, instanceName string) map[string]string {
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
-		"multigres.com/cell":           "multigres-global-topo",
 	}
 }
 

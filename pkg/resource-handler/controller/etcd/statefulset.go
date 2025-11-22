@@ -52,7 +52,7 @@ func BuildStatefulSet(
 	}
 
 	headlessServiceName := etcd.Name + "-headless"
-	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName, etcd.Spec.CellName)
+	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName)
 	podLabels := metadata.MergeLabels(labels, etcd.Spec.PodLabels)
 
 	sts := &appsv1.StatefulSet{

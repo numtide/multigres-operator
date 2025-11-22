@@ -47,7 +47,7 @@ func BuildMultiOrchDeployment(
 	}
 
 	name := cell.Name + "-multiorch"
-	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName, cell.Spec.Name)
+	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -95,7 +95,7 @@ func BuildMultiOrchService(
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
 	name := cell.Name + "-multiorch"
-	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName, cell.Spec.Name)
+	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

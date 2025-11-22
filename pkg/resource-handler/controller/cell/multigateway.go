@@ -50,7 +50,7 @@ func BuildMultiGatewayDeployment(
 	}
 
 	name := cell.Name + "-multigateway"
-	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName, cell.Spec.Name)
+	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -99,7 +99,7 @@ func BuildMultiGatewayService(
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
 	name := cell.Name + "-multigateway"
-	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName, cell.Spec.Name)
+	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

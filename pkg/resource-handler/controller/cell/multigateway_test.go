@@ -47,7 +47,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -69,7 +68,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone1",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -80,7 +78,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone1",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -126,7 +123,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone2",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -148,7 +144,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone2",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -159,7 +154,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone2",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -205,7 +199,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone3",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -227,7 +220,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone3",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -238,7 +230,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone3",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -300,7 +291,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone4",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -322,7 +312,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone4",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -333,7 +322,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone4",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -405,7 +393,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone5",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -427,7 +414,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "zone5",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -438,7 +424,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "zone5",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -535,7 +520,6 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -556,7 +540,6 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
 					},
 					Ports: []corev1.ServicePort{
 						{Name: "http", Port: MultiGatewayHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
@@ -588,7 +571,6 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "us-west",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -609,7 +591,6 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "us-west",
 					},
 					Ports: []corev1.ServicePort{
 						{Name: "http", Port: MultiGatewayHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},

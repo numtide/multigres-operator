@@ -15,7 +15,7 @@ package shard
 // 		cellName = metadata.DefaultCellName
 // 	}
 
-// 	labels := metadata.BuildStandardLabels(poolName, PoolComponentName, cellName)
+// 	labels := metadata.BuildStandardLabels(poolName, PoolComponentName)
 // 	// Merge any labels associated from Shard.
 // 	maps.Copy(labels, shard.GetObjectMeta().GetLabels())
 

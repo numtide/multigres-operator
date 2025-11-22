@@ -654,7 +654,6 @@ func cellLabels(t testing.TB, instanceName, component, cellName string) map[stri
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
-		"multigres.com/cell":           cellName,
 	}
 }
 

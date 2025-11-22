@@ -18,7 +18,7 @@ func BuildHeadlessService(
 	etcd *multigresv1alpha1.Etcd,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName, etcd.Spec.CellName)
+	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -47,7 +47,7 @@ func BuildClientService(
 	etcd *multigresv1alpha1.Etcd,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName, etcd.Spec.CellName)
+	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

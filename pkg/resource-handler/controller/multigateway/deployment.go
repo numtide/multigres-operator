@@ -41,7 +41,7 @@ func BuildDeployment(
 		image = mg.Spec.Image
 	}
 
-	labels := metadata.BuildStandardLabels(mg.Name, ComponentName, mg.Spec.CellName)
+	labels := metadata.BuildStandardLabels(mg.Name, ComponentName)
 	podLabels := metadata.MergeLabels(labels, mg.Spec.PodLabels)
 
 	deployment := &appsv1.Deployment{

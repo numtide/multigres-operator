@@ -16,9 +16,6 @@ import (
 const (
 	// MultiOrchComponentName is the component label value for MultiOrch resources
 	MultiOrchComponentName = "multiorch"
-
-	// DefaultMultiOrchReplicas is the default number of MultiOrch replicas
-	DefaultMultiOrchReplicas int32 = 2
 )
 
 // BuildMultiOrchDeployment creates a Deployment for the MultiOrch component.
@@ -31,7 +28,7 @@ func BuildMultiOrchDeployment(
 
 	name := shard.Name + "-multiorch"
 	// MultiOrch doesn't have a specific cell, use default
-	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName, metadata.DefaultCellName)
+	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -70,7 +67,7 @@ func BuildMultiOrchService(
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
 	name := shard.Name + "-multiorch"
-	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName, metadata.DefaultCellName)
+	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

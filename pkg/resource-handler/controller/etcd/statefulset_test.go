@@ -55,7 +55,6 @@ func TestBuildStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  "etcd",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -78,7 +77,6 @@ func TestBuildStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  "etcd",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -93,7 +91,6 @@ func TestBuildStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  "etcd",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -164,7 +161,6 @@ func TestBuildStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  "etcd",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -187,7 +183,6 @@ func TestBuildStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  "etcd",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -202,7 +197,6 @@ func TestBuildStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  "etcd",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -272,7 +266,6 @@ func TestBuildStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  "etcd",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -295,7 +288,6 @@ func TestBuildStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  "etcd",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -310,7 +302,6 @@ func TestBuildStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  "etcd",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -388,7 +379,6 @@ func TestBuildStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  "etcd",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -411,7 +401,6 @@ func TestBuildStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  "etcd",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -426,7 +415,6 @@ func TestBuildStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  "etcd",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
 							},
 						},
 						Spec: corev1.PodSpec{
