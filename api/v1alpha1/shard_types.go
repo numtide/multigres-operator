@@ -37,9 +37,9 @@ type ShardSpec struct {
 	MultiOrch MultiOrchSpec `json:"multiOrch,omitempty"`
 
 	// Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
-	// This is a direct copy from the parent MultiTableGroup's shardTemplate.
+	// This is a direct copy from the parent TableGroup's Pools definition.
 	// +optional
-	Pools []ShardPoolSpec `json:"pools,omitempty"`
+	Pools map[string]ShardPoolSpec `json:"pools,omitempty"`
 }
 
 // ShardImagesSpec defines the images required for a Shard.
