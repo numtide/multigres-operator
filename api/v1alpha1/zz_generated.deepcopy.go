@@ -809,9 +809,9 @@ func (in *ShardSpec) DeepCopyInto(out *ShardSpec) {
 	in.MultiOrch.DeepCopyInto(&out.MultiOrch)
 	if in.Pools != nil {
 		in, out := &in.Pools, &out.Pools
-		*out = make([]ShardPoolSpec, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+		*out = make(map[string]ShardPoolSpec, len(*in))
+		for key, val := range *in {
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 }
