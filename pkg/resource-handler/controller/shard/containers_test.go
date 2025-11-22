@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 
@@ -14,14 +15,14 @@ import (
 func TestBuildPostgresContainer(t *testing.T) {
 	tests := map[string]struct {
 		shard *multigresv1alpha1.Shard
-		pool  multigresv1alpha1.ShardPoolSpec
+		poolSpec multigresv1alpha1.ShardPoolSpec
 		want  corev1.Container
 	}{
 		"default postgres image with no resources": {
 			shard: &multigresv1alpha1.Shard{
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{},
+			poolSpec: multigresv1alpha1.ShardPoolSpec{},
 			want: corev1.Container{
 				Name:      "postgres",
 				Image:     DefaultPostgresImage,
@@ -46,7 +47,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 					},
 				},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{},
+			poolSpec: multigresv1alpha1.ShardPoolSpec{},
 			want: corev1.Container{
 				Name:      "postgres",
 				Image:     "postgres:16",
@@ -67,7 +68,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			shard: &multigresv1alpha1.Shard{
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				Postgres: multigresv1alpha1.PostgresSpec{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -110,7 +111,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildPostgresContainer(tc.shard, tc.pool)
+			got := buildPostgresContainer(tc.shard, tc.poolSpec)
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildPostgresContainer() mismatch (-want +got):\n%s", diff)
@@ -122,17 +123,33 @@ func TestBuildPostgresContainer(t *testing.T) {
 func TestBuildMultiPoolerSidecar(t *testing.T) {
 	tests := map[string]struct {
 		shard *multigresv1alpha1.Shard
-		pool  multigresv1alpha1.ShardPoolSpec
+		poolSpec multigresv1alpha1.ShardPoolSpec
 		want  corev1.Container
 	}{
 		"default multipooler image with no resources": {
 			shard: &multigresv1alpha1.Shard{
-				Spec: multigresv1alpha1.ShardSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+				Spec:       multigresv1alpha1.ShardSpec{},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{},
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
+				Cell:       "zone1",
+				Database:   "testdb",
+				TableGroup: "default",
+			},
 			want: corev1.Container{
-				Name:          "multipooler",
-				Image:         DefaultMultiPoolerImage,
+				Name:  "multipooler",
+				Image: DefaultMultiPoolerImage,
+				Args: []string{
+					"--http-port", "15200",
+					"--grpc-port", "15270",
+					"--topo-implementation", "etcd2",
+					"--cell", "zone1",
+					"--database", "testdb",
+					"--table-group", "default",
+					"--service-id", "test-shard-pool-primary",
+					"--pgctld-addr", "localhost:15470",
+					"--pg-port", "5432",
+				},
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
 				RestartPolicy: &sidecarRestartPolicy,
@@ -140,16 +157,32 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 		},
 		"custom multipooler image": {
 			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "custom-shard"},
 				Spec: multigresv1alpha1.ShardSpec{
 					Images: multigresv1alpha1.ShardImagesSpec{
 						MultiPooler: "custom/multipooler:v1.0.0",
 					},
 				},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{},
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
+				Cell:       "zone2",
+				Database:   "proddb",
+				TableGroup: "orders",
+			},
 			want: corev1.Container{
-				Name:          "multipooler",
-				Image:         "custom/multipooler:v1.0.0",
+				Name:  "multipooler",
+				Image: "custom/multipooler:v1.0.0",
+				Args: []string{
+					"--http-port", "15200",
+					"--grpc-port", "15270",
+					"--topo-implementation", "etcd2",
+					"--cell", "zone2",
+					"--database", "proddb",
+					"--table-group", "orders",
+					"--service-id", "custom-shard-pool-primary",
+					"--pgctld-addr", "localhost:15470",
+					"--pg-port", "5432",
+				},
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
 				RestartPolicy: &sidecarRestartPolicy,
@@ -157,9 +190,13 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 		},
 		"with resource requirements": {
 			shard: &multigresv1alpha1.Shard{
-				Spec: multigresv1alpha1.ShardSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: "resource-shard"},
+				Spec:       multigresv1alpha1.ShardSpec{},
 			},
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
+				Cell:       "zone1",
+				Database:   "mydb",
+				TableGroup: "default",
 				MultiPooler: multigresv1alpha1.MultiPoolerSpec{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -176,6 +213,17 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			want: corev1.Container{
 				Name:  "multipooler",
 				Image: DefaultMultiPoolerImage,
+				Args: []string{
+					"--http-port", "15200",
+					"--grpc-port", "15270",
+					"--topo-implementation", "etcd2",
+					"--cell", "zone1",
+					"--database", "mydb",
+					"--table-group", "default",
+					"--service-id", "resource-shard-pool-primary",
+					"--pgctld-addr", "localhost:15470",
+					"--pg-port", "5432",
+				},
 				Ports: buildMultiPoolerContainerPorts(),
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -194,7 +242,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildMultiPoolerSidecar(tc.shard, tc.pool)
+			got := buildMultiPoolerSidecar(tc.shard, tc.poolSpec, "primary")
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildMultiPoolerSidecar() mismatch (-want +got):\n%s", diff)
@@ -213,8 +261,9 @@ func TestBuildPgctldInitContainer(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
 			want: corev1.Container{
-				Name:  "pgctld-init",
-				Image: DefaultPgctldImage,
+				Name:    "pgctld-init",
+				Image:   DefaultPgctldImage,
+				Command: []string{"sh", "-c", "cp /pgctld /shared/pgctld && chmod +x /shared/pgctld"},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      PgctldVolumeName,
@@ -285,7 +334,7 @@ func TestBuildDataVolumeClaimTemplate(t *testing.T) {
 		want corev1.PersistentVolumeClaim
 	}{
 		"with storage class and size": {
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
 					StorageClassName: ptr.To("fast-ssd"),
 					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -309,7 +358,7 @@ func TestBuildDataVolumeClaimTemplate(t *testing.T) {
 			},
 		},
 		"minimal spec": {
-			pool: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{},
 			},
 			want: corev1.PersistentVolumeClaim{
