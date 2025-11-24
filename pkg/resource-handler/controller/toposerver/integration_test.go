@@ -34,7 +34,9 @@ func TestSetupWithManager(t *testing.T) {
 	if err := (&toposervercontroller.TopoServerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, controller.Options{
+		SkipNameValidation: ptr.To(true),
+	}); err != nil {
 		t.Fatalf("Failed to create controller, %v", err)
 	}
 }
