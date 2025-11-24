@@ -14,7 +14,7 @@ func TestBuildStandardLabels(t *testing.T) {
 		componentName string
 		want          map[string]string
 	}{
-		"basic case": {
+		"typical case": {
 			resourceName:  "my-etcd-cluster",
 			componentName: "etcd",
 			want: map[string]string{
@@ -25,79 +25,13 @@ func TestBuildStandardLabels(t *testing.T) {
 				"app.kubernetes.io/managed-by": "multigres-operator",
 			},
 		},
-		"gateway component": {
-			resourceName:  "my-gateway",
-			componentName: "gateway",
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "my-gateway",
-				"app.kubernetes.io/component":  "gateway",
-				"app.kubernetes.io/part-of":    "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-		},
-		"orch component": {
-			resourceName:  "my-orch",
-			componentName: "orch",
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "my-orch",
-				"app.kubernetes.io/component":  "orch",
-				"app.kubernetes.io/part-of":    "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-		},
-		"empty resourceName": {
-			resourceName:  "",
-			componentName: "pooler",
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "",
-				"app.kubernetes.io/component":  "pooler",
-				"app.kubernetes.io/part-of":    "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-		},
-		"empty componentName": {
-			resourceName:  "my-resource",
-			componentName: "",
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "my-resource",
-				"app.kubernetes.io/component":  "",
-				"app.kubernetes.io/part-of":    "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-		},
-		"all empty strings": {
+		"empty strings allowed": {
 			resourceName:  "",
 			componentName: "",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "",
 				"app.kubernetes.io/component":  "",
-				"app.kubernetes.io/part-of":    "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-		},
-		"special characters in names": {
-			resourceName:  "my-resource-123",
-			componentName: "etcd-v3",
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "my-resource-123",
-				"app.kubernetes.io/component":  "etcd-v3",
-				"app.kubernetes.io/part-of":    "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-		},
-		"long names": {
-			resourceName:  "very-long-resource-name-with-many-segments",
-			componentName: "gateway-proxy-component",
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "very-long-resource-name-with-many-segments",
-				"app.kubernetes.io/component":  "gateway-proxy-component",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
 			},
@@ -120,7 +54,7 @@ func TestMergeLabels(t *testing.T) {
 		customLabels   map[string]string
 		want           map[string]string
 	}{
-		"both maps populated - standard labels should win on conflicts": {
+		"standard labels win on conflicts": {
 			standardLabels: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "my-resource",
@@ -128,176 +62,45 @@ func TestMergeLabels(t *testing.T) {
 				"app.kubernetes.io/managed-by": "multigres-operator",
 			},
 			customLabels: map[string]string{
-				"app.kubernetes.io/name": "user-app", // conflict: standard should win
-				"custom-label-1":         "value1",
-				"custom-label-2":         "value2",
+				"app.kubernetes.io/name":      "user-app",      // conflict
+				"app.kubernetes.io/component": "user-override", // conflict
+				"env":                         "production",    // no conflict
+				"team":                        "platform",      // no conflict
 			},
 			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres", // Standard wins
+				"app.kubernetes.io/name":       "multigres",
 				"app.kubernetes.io/instance":   "my-resource",
 				"app.kubernetes.io/component":  "etcd",
 				"app.kubernetes.io/managed-by": "multigres-operator",
-				"custom-label-1":               "value1",
-				"custom-label-2":               "value2",
+				"env":                          "production",
+				"team":                         "platform",
 			},
 		},
-		"standardLabels nil, customLabels populated": {
+		"nil maps handled correctly": {
+			standardLabels: nil,
+			customLabels:   nil,
+			want:           map[string]string{},
+		},
+		"only custom labels": {
 			standardLabels: nil,
 			customLabels: map[string]string{
-				"custom-label-1": "value1",
-				"custom-label-2": "value2",
+				"env":  "dev",
+				"team": "platform",
 			},
 			want: map[string]string{
-				"custom-label-1": "value1",
-				"custom-label-2": "value2",
+				"env":  "dev",
+				"team": "platform",
 			},
 		},
-		"customLabels nil, standardLabels populated": {
+		"only standard labels": {
 			standardLabels: map[string]string{
 				"app.kubernetes.io/name":      "multigres",
-				"app.kubernetes.io/instance":  "my-resource",
 				"app.kubernetes.io/component": "gateway",
 			},
 			customLabels: nil,
 			want: map[string]string{
 				"app.kubernetes.io/name":      "multigres",
-				"app.kubernetes.io/instance":  "my-resource",
 				"app.kubernetes.io/component": "gateway",
-			},
-		},
-		"both maps nil": {
-			standardLabels: nil,
-			customLabels:   nil,
-			want:           map[string]string{},
-		},
-		"overlapping keys - standard should override custom": {
-			standardLabels: map[string]string{
-				"app.kubernetes.io/name":      "multigres",
-				"app.kubernetes.io/instance":  "resource-1",
-				"app.kubernetes.io/component": "orch",
-			},
-			customLabels: map[string]string{
-				"app.kubernetes.io/instance":  "user-defined-name", // conflict: standard should win
-				"app.kubernetes.io/component": "user-component",    // conflict: standard should win
-				"user-label":                  "user-value",        // no conflict: should be preserved
-			},
-			want: map[string]string{
-				"app.kubernetes.io/name":      "multigres",
-				"app.kubernetes.io/instance":  "resource-1", // Standard wins
-				"app.kubernetes.io/component": "orch",       // Standard wins
-				"user-label":                  "user-value", // Custom preserved
-			},
-		},
-		"custom labels with keys not in standard - should be preserved": {
-			standardLabels: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-			customLabels: map[string]string{
-				"env":             "production",
-				"team":            "platform",
-				"version":         "v1.2.3",
-				"app.custom.io/x": "custom-value",
-			},
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-				"app.custom.io/x":              "custom-value",
-				"env":                          "production",
-				"team":                         "platform",
-				"version":                      "v1.2.3",
-			},
-		},
-		"empty standard labels map": {
-			standardLabels: map[string]string{},
-			customLabels: map[string]string{
-				"custom-label": "value",
-			},
-			want: map[string]string{
-				"custom-label": "value",
-			},
-		},
-		"empty custom labels map": {
-			standardLabels: map[string]string{
-				"app.kubernetes.io/name": "multigres",
-			},
-			customLabels: map[string]string{},
-			want: map[string]string{
-				"app.kubernetes.io/name": "multigres",
-			},
-		},
-		"both maps empty": {
-			standardLabels: map[string]string{},
-			customLabels:   map[string]string{},
-			want:           map[string]string{},
-		},
-		"all standard labels can override custom labels": {
-			standardLabels: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "standard-instance",
-				"app.kubernetes.io/component":  "standard-component",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-			customLabels: map[string]string{
-				"app.kubernetes.io/name":       "custom-app",       // conflict: standard wins
-				"app.kubernetes.io/instance":   "custom-instance",  // conflict: standard wins
-				"app.kubernetes.io/component":  "custom-component", // conflict: standard wins
-				"app.kubernetes.io/managed-by": "custom-operator",  // conflict: standard wins
-			},
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres", // All standard values win
-				"app.kubernetes.io/instance":   "standard-instance",
-				"app.kubernetes.io/component":  "standard-component",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-		},
-		"part-of label conflict - standard wins": {
-			standardLabels: map[string]string{
-				"app.kubernetes.io/name":    "multigres",
-				"app.kubernetes.io/part-of": "multigres",
-			},
-			customLabels: map[string]string{
-				"app.kubernetes.io/part-of": "custom-app", // conflict: standard should win
-				"custom-label":              "value",
-			},
-			want: map[string]string{
-				"app.kubernetes.io/name":    "multigres",
-				"app.kubernetes.io/part-of": "multigres", // Standard wins
-				"custom-label":              "value",
-			},
-		},
-		"complex scenario with many labels": {
-			standardLabels: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "my-cluster",
-				"app.kubernetes.io/component":  "pooler",
-				"app.kubernetes.io/part-of":    "multigres",
-				"app.kubernetes.io/managed-by": "multigres-operator",
-			},
-			customLabels: map[string]string{
-				"app.kubernetes.io/component": "user-override", // conflict: standard should win
-				"app.kubernetes.io/part-of":   "custom-part",   // conflict: standard should win
-				"app.custom.io/name":          "custom-app",
-				"kubernetes.io/name":          "k8s-name",
-				"monitoring":                  "enabled",
-				"backup":                      "true",
-				"tier":                        "critical",
-				"owner":                       "team-database",
-				"cost-center":                 "engineering",
-			},
-			want: map[string]string{
-				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "my-cluster",
-				"app.kubernetes.io/component":  "pooler",    // Standard wins
-				"app.kubernetes.io/part-of":    "multigres", // Standard wins
-				"app.kubernetes.io/managed-by": "multigres-operator",
-				"app.custom.io/name":           "custom-app",
-				"kubernetes.io/name":           "k8s-name",
-				"monitoring":                   "enabled",
-				"backup":                       "true",
-				"tier":                         "critical",
-				"owner":                        "team-database",
-				"cost-center":                  "engineering",
 			},
 		},
 	}
@@ -307,6 +110,213 @@ func TestMergeLabels(t *testing.T) {
 			got := metadata.MergeLabels(tc.standardLabels, tc.customLabels)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("MergeLabels() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAddMultigresLabels(t *testing.T) {
+	tests := map[string]struct {
+		addFunc func(map[string]string, string) map[string]string
+		value   string
+		key     string
+	}{
+		"AddCellLabel": {
+			addFunc: metadata.AddCellLabel,
+			value:   "zone1",
+			key:     "multigres.com/cell",
+		},
+		"AddClusterLabel": {
+			addFunc: metadata.AddClusterLabel,
+			value:   "prod-cluster",
+			key:     "multigres.com/cluster",
+		},
+		"AddShardLabel": {
+			addFunc: metadata.AddShardLabel,
+			value:   "shard-0",
+			key:     "multigres.com/shard",
+		},
+		"AddDatabaseLabel": {
+			addFunc: metadata.AddDatabaseLabel,
+			value:   "proddb",
+			key:     "multigres.com/database",
+		},
+		"AddTableGroupLabel": {
+			addFunc: metadata.AddTableGroupLabel,
+			value:   "orders",
+			key:     "multigres.com/tablegroup",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			labels := map[string]string{
+				"app.kubernetes.io/name": "multigres",
+			}
+			result := tc.addFunc(labels, tc.value)
+
+			want := map[string]string{
+				"app.kubernetes.io/name": "multigres",
+				tc.key:                   tc.value,
+			}
+
+			if diff := cmp.Diff(want, result); diff != "" {
+				t.Errorf("%s mismatch (-want +got):\n%s", name, diff)
+			}
+
+			// Verify it modified the original map
+			if labels[tc.key] != tc.value {
+				t.Errorf("%s should modify the original map", name)
+			}
+		})
+	}
+}
+
+func TestLabelOperations_ComplexScenarios(t *testing.T) {
+	tests := map[string]struct {
+		setupFunc func() map[string]string
+		want      map[string]string
+	}{
+		"build standard labels then add all multigres labels": {
+			setupFunc: func() map[string]string {
+				labels := metadata.BuildStandardLabels("my-shard", "shard-pool")
+				metadata.AddCellLabel(labels, "zone1")
+				metadata.AddClusterLabel(labels, "prod-cluster")
+				metadata.AddShardLabel(labels, "shard-0")
+				metadata.AddDatabaseLabel(labels, "proddb")
+				metadata.AddTableGroupLabel(labels, "orders")
+				return labels
+			},
+			want: map[string]string{
+				"app.kubernetes.io/name":       "multigres",
+				"app.kubernetes.io/instance":   "my-shard",
+				"app.kubernetes.io/component":  "shard-pool",
+				"app.kubernetes.io/part-of":    "multigres",
+				"app.kubernetes.io/managed-by": "multigres-operator",
+				"multigres.com/cell":           "zone1",
+				"multigres.com/cluster":        "prod-cluster",
+				"multigres.com/shard":          "shard-0",
+				"multigres.com/database":       "proddb",
+				"multigres.com/tablegroup":     "orders",
+			},
+		},
+		"merge custom labels then add multigres labels": {
+			setupFunc: func() map[string]string {
+				standard := metadata.BuildStandardLabels("etcd-1", "etcd")
+				custom := map[string]string{
+					"env":  "production",
+					"team": "platform",
+				}
+				labels := metadata.MergeLabels(standard, custom)
+				metadata.AddCellLabel(labels, "zone2")
+				metadata.AddClusterLabel(labels, "main-cluster")
+				return labels
+			},
+			want: map[string]string{
+				"app.kubernetes.io/name":       "multigres",
+				"app.kubernetes.io/instance":   "etcd-1",
+				"app.kubernetes.io/component":  "etcd",
+				"app.kubernetes.io/part-of":    "multigres",
+				"app.kubernetes.io/managed-by": "multigres-operator",
+				"multigres.com/cell":           "zone2",
+				"multigres.com/cluster":        "main-cluster",
+				"env":                          "production",
+				"team":                         "platform",
+			},
+		},
+		"chain all label operations for shard pool": {
+			setupFunc: func() map[string]string {
+				poolName := "shard-0-pool-primary"
+				labels := metadata.BuildStandardLabels(poolName, "shard-pool")
+				metadata.AddCellLabel(labels, "us-east-1a")
+				metadata.AddClusterLabel(labels, "production")
+				metadata.AddShardLabel(labels, "0")
+				metadata.AddDatabaseLabel(labels, "orders_db")
+				metadata.AddTableGroupLabel(labels, "orders_tg")
+
+				custom := map[string]string{
+					"monitoring": "prometheus",
+					"backup":     "enabled",
+				}
+				return metadata.MergeLabels(labels, custom)
+			},
+			want: map[string]string{
+				"app.kubernetes.io/name":       "multigres",
+				"app.kubernetes.io/instance":   "shard-0-pool-primary",
+				"app.kubernetes.io/component":  "shard-pool",
+				"app.kubernetes.io/part-of":    "multigres",
+				"app.kubernetes.io/managed-by": "multigres-operator",
+				"multigres.com/cell":           "us-east-1a",
+				"multigres.com/cluster":        "production",
+				"multigres.com/shard":          "0",
+				"multigres.com/database":       "orders_db",
+				"multigres.com/tablegroup":     "orders_tg",
+				"monitoring":                   "prometheus",
+				"backup":                       "enabled",
+			},
+		},
+		"merge with conflicting multigres labels - standard wins": {
+			setupFunc: func() map[string]string {
+				labels := metadata.BuildStandardLabels("resource", "component")
+				metadata.AddCellLabel(labels, "zone1")
+				metadata.AddShardLabel(labels, "shard-0")
+
+				conflicting := map[string]string{
+					"multigres.com/cell":  "zone-override",
+					"multigres.com/shard": "shard-override",
+					"custom":              "value",
+				}
+				return metadata.MergeLabels(labels, conflicting)
+			},
+			want: map[string]string{
+				"app.kubernetes.io/name":       "multigres",
+				"app.kubernetes.io/instance":   "resource",
+				"app.kubernetes.io/component":  "component",
+				"app.kubernetes.io/part-of":    "multigres",
+				"app.kubernetes.io/managed-by": "multigres-operator",
+				"multigres.com/cell":           "zone1",
+				"multigres.com/shard":          "shard-0",
+				"custom":                       "value",
+			},
+		},
+		"add labels to empty map": {
+			setupFunc: func() map[string]string {
+				labels := make(map[string]string)
+				metadata.AddCellLabel(labels, "zone3")
+				metadata.AddShardLabel(labels, "shard-1")
+				metadata.AddDatabaseLabel(labels, "testdb")
+				return labels
+			},
+			want: map[string]string{
+				"multigres.com/cell":     "zone3",
+				"multigres.com/shard":    "shard-1",
+				"multigres.com/database": "testdb",
+			},
+		},
+		"overwrite cell label multiple times - last wins": {
+			setupFunc: func() map[string]string {
+				labels := metadata.BuildStandardLabels("resource", "component")
+				metadata.AddCellLabel(labels, "zone1")
+				metadata.AddCellLabel(labels, "zone2")
+				metadata.AddCellLabel(labels, "zone3")
+				return labels
+			},
+			want: map[string]string{
+				"app.kubernetes.io/name":       "multigres",
+				"app.kubernetes.io/instance":   "resource",
+				"app.kubernetes.io/component":  "component",
+				"app.kubernetes.io/part-of":    "multigres",
+				"app.kubernetes.io/managed-by": "multigres-operator",
+				"multigres.com/cell":           "zone3",
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tc.setupFunc()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Label operations mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
