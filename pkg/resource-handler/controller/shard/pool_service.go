@@ -67,6 +67,8 @@ func buildPoolLabels(
 	if cellName == "" {
 		cellName = metadata.DefaultCellName
 	}
+	// TODO: Remove this once we figure what to do with the cell name.
+	_ = cellName
 
 	labels := metadata.BuildStandardLabels(fullPoolName, PoolComponentName)
 	// TODO: Add multigres.com/* labels after finalizing label design:
