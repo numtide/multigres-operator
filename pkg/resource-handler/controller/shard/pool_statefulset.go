@@ -31,7 +31,7 @@ func BuildPoolStatefulSet(
 	poolSpec multigresv1alpha1.ShardPoolSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
-	name := buildPoolName(shard.Name, poolName, poolSpec)
+	name := buildPoolName(shard.Name, poolName)
 	headlessServiceName := name + "-headless"
 	labels := buildPoolLabels(shard, poolName, poolSpec)
 
@@ -42,7 +42,7 @@ func BuildPoolStatefulSet(
 
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      poolName,
+			Name:      name,
 			Namespace: shard.Namespace,
 			Labels:    labels,
 		},

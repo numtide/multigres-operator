@@ -20,8 +20,8 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
-		poolSpec multigresv1alpha1.ShardPoolSpec
 		poolName string
+		poolSpec multigresv1alpha1.ShardPoolSpec
 		scheme   *runtime.Scheme
 		want     *appsv1.StatefulSet
 		wantErr  bool
@@ -49,11 +49,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 			poolName: "primary",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-replica",
+					Name:      "test-shard-pool-primary",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-replica",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -70,12 +70,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "test-shard-replica-headless",
+					ServiceName: "test-shard-pool-primary-headless",
 					Replicas:    ptr.To(DefaultPoolReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-shard-replica",
+							"app.kubernetes.io/instance":   "test-shard-pool-primary",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -89,7 +89,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-shard-replica",
+								"app.kubernetes.io/instance":   "test-shard-pool-primary",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -153,11 +153,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 			poolName: "replica",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-001-readOnly",
+					Name:      "shard-001-pool-replica",
 					Namespace: "prod",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-readOnly",
+						"app.kubernetes.io/instance":   "shard-001-pool-replica",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -174,12 +174,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "shard-001-readOnly-headless",
+					ServiceName: "shard-001-pool-replica-headless",
 					Replicas:    ptr.To(int32(3)),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-001-readOnly",
+							"app.kubernetes.io/instance":   "shard-001-pool-replica",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -193,7 +193,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-001-readOnly",
+								"app.kubernetes.io/instance":   "shard-001-pool-replica",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -202,7 +202,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
-								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "test-shard"}}, multigresv1alpha1.ShardPoolSpec{}, "primary"),
+								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "shard-001"}}, multigresv1alpha1.ShardPoolSpec{Cell: "zone-west"}, "replica"),
 							},
 							Containers: []corev1.Container{
 								buildPostgresContainer(&multigresv1alpha1.Shard{}, multigresv1alpha1.ShardPoolSpec{}),
@@ -254,11 +254,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 			poolName: "readOnly",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-002-pool-2",
+					Name:      "shard-002-pool-readOnly",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-2",
+						"app.kubernetes.io/instance":   "shard-002-pool-readOnly",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -275,12 +275,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "shard-002-pool-2-headless",
+					ServiceName: "shard-002-pool-readOnly-headless",
 					Replicas:    ptr.To(DefaultPoolReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-002-pool-2",
+							"app.kubernetes.io/instance":   "shard-002-pool-readOnly",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -294,7 +294,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-002-pool-2",
+								"app.kubernetes.io/instance":   "shard-002-pool-readOnly",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -303,7 +303,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
-								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "test-shard"}}, multigresv1alpha1.ShardPoolSpec{}, "primary"),
+								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "shard-002"}}, multigresv1alpha1.ShardPoolSpec{}, "readOnly"),
 							},
 							Containers: []corev1.Container{
 								buildPostgresContainer(&multigresv1alpha1.Shard{}, multigresv1alpha1.ShardPoolSpec{}),
@@ -372,11 +372,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 			poolName: "primary",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-affinity-replica",
+					Name:      "shard-affinity-pool-primary",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-affinity-replica",
+						"app.kubernetes.io/instance":   "shard-affinity-pool-primary",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -393,12 +393,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "shard-affinity-replica-headless",
+					ServiceName: "shard-affinity-pool-primary-headless",
 					Replicas:    ptr.To(DefaultPoolReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-affinity-replica",
+							"app.kubernetes.io/instance":   "shard-affinity-pool-primary",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -412,7 +412,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-affinity-replica",
+								"app.kubernetes.io/instance":   "shard-affinity-pool-primary",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -421,7 +421,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
-								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "test-shard"}}, multigresv1alpha1.ShardPoolSpec{}, "primary"),
+								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity"}}, multigresv1alpha1.ShardPoolSpec{}, "primary"),
 							},
 							Containers: []corev1.Container{
 								buildPostgresContainer(&multigresv1alpha1.Shard{}, multigresv1alpha1.ShardPoolSpec{}),
@@ -510,8 +510,8 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 
 func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 	tests := map[string]struct {
-		pool multigresv1alpha1.ShardPoolSpec
-		want []corev1.PersistentVolumeClaim
+		poolSpec multigresv1alpha1.ShardPoolSpec
+		want     []corev1.PersistentVolumeClaim
 	}{
 		"with storage class and size": {
 			poolSpec: multigresv1alpha1.ShardPoolSpec{
@@ -589,7 +589,7 @@ func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildPoolVolumeClaimTemplates(tc.pool)
+			got := buildPoolVolumeClaimTemplates(tc.poolSpec)
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildPoolVolumeClaimTemplates() mismatch (-want +got):\n%s", diff)
