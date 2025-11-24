@@ -25,7 +25,7 @@ func BuildPoolHeadlessService(
 	poolSpec multigresv1alpha1.ShardPoolSpec,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := buildPoolName(shard.Name, poolName, poolSpec)
+	name := buildPoolName(shard.Name, poolName)
 	labels := buildPoolLabels(shard, poolName, poolSpec)
 
 	svc := &corev1.Service{
@@ -50,7 +50,7 @@ func BuildPoolHeadlessService(
 }
 
 // buildPoolName generates a consistent name for pool resources.
-func buildPoolName(shardName string, poolName string, poolSpec multigresv1alpha1.ShardPoolSpec) string {
+func buildPoolName(shardName, poolName string) string {
 	return fmt.Sprintf("%s-pool-%s", shardName, poolName)
 }
 
@@ -62,15 +62,17 @@ func buildPoolLabels(
 	poolName string,
 	poolSpec multigresv1alpha1.ShardPoolSpec,
 ) map[string]string {
+	fullPoolName := buildPoolName(shard.Name, poolName)
 	cellName := poolSpec.Cell
 	if cellName == "" {
 		cellName = metadata.DefaultCellName
 	}
 
-	labels := metadata.BuildStandardLabels(poolName, PoolComponentName)
-	metadata.AddCellLabel(labels, cellName)
-	metadata.AddDatabaseLabel(labels, poolSpec.Database)
-	metadata.AddTableGroupLabel(labels, poolSpec.TableGroup)
+	labels := metadata.BuildStandardLabels(fullPoolName, PoolComponentName)
+	// TODO: Add multigres.com/* labels after finalizing label design:
+	// metadata.AddCellLabel(labels, cellName)
+	// metadata.AddDatabaseLabel(labels, poolSpec.Database)
+	// metadata.AddTableGroupLabel(labels, poolSpec.TableGroup)
 
 	metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 
