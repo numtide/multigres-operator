@@ -80,9 +80,9 @@ func (r *ShardReconciler) Reconcile(
 	}
 
 	// Reconcile each pool
-	for i, pool := range shard.Spec.Pools {
-		if err := r.reconcilePool(ctx, shard, pool, i); err != nil {
-			logger.Error(err, "Failed to reconcile pool", "poolIndex", i)
+	for poolName, pool := range shard.Spec.Pools {
+		if err := r.reconcilePool(ctx, shard, poolName, pool); err != nil {
+			logger.Error(err, "Failed to reconcile pool", "poolName", poolName)
 			return ctrl.Result{}, err
 		}
 	}
@@ -199,16 +199,16 @@ func (r *ShardReconciler) reconcileMultiOrchService(
 func (r *ShardReconciler) reconcilePool(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
-	poolIndex int,
+	poolName string,
+	poolSpec multigresv1alpha1.ShardPoolSpec,
 ) error {
 	// Reconcile pool StatefulSet
-	if err := r.reconcilePoolStatefulSet(ctx, shard, pool, poolIndex); err != nil {
+	if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, poolSpec); err != nil {
 		return fmt.Errorf("failed to reconcile pool StatefulSet: %w", err)
 	}
 
 	// Reconcile pool headless Service
-	if err := r.reconcilePoolHeadlessService(ctx, shard, pool, poolIndex); err != nil {
+	if err := r.reconcilePoolHeadlessService(ctx, shard, poolName, poolSpec); err != nil {
 		return fmt.Errorf("failed to reconcile pool headless Service: %w", err)
 	}
 
@@ -219,10 +219,10 @@ func (r *ShardReconciler) reconcilePool(
 func (r *ShardReconciler) reconcilePoolStatefulSet(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
-	poolIndex int,
+	poolName string,
+	poolSpec multigresv1alpha1.ShardPoolSpec,
 ) error {
-	desired, err := BuildPoolStatefulSet(shard, pool, poolIndex, r.Scheme)
+	desired, err := BuildPoolStatefulSet(shard, poolName, poolSpec, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build pool StatefulSet: %w", err)
 	}
@@ -258,10 +258,10 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 func (r *ShardReconciler) reconcilePoolHeadlessService(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
-	poolIndex int,
+	poolName string,
+	poolSpec multigresv1alpha1.ShardPoolSpec,
 ) error {
-	desired, err := BuildPoolHeadlessService(shard, pool, poolIndex, r.Scheme)
+	desired, err := BuildPoolHeadlessService(shard, poolName, poolSpec, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build pool headless Service: %w", err)
 	}
@@ -302,12 +302,12 @@ func (r *ShardReconciler) updateStatus(
 	var totalPods, readyPods int32
 
 	// Aggregate status from all pool StatefulSets
-	for i, pool := range shard.Spec.Pools {
-		poolName := buildPoolName(shard.Name, pool, i)
+	for poolName, _ := range shard.Spec.Pools {
+		stsName := buildPoolName(shard.Name, poolName)
 		sts := &appsv1.StatefulSet{}
 		err := r.Get(
 			ctx,
-			client.ObjectKey{Namespace: shard.Namespace, Name: poolName},
+			client.ObjectKey{Namespace: shard.Namespace, Name: stsName},
 			sts,
 		)
 		if err != nil {
