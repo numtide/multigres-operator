@@ -487,7 +487,7 @@ metadata:
   namespace: example
 spec:
   # Template strictly defines only Shard-scoped components.
-  
+
   # MultiOrch is a shard-level component.
   multiOrch:
     replicas: 1 
@@ -638,8 +638,9 @@ spec:
   # A reference to the GLOBAL TopoServer.
   # Always populated by the parent controller if no local server is used.
   globalTopoServer:
+    address: "example-cluster-global-client.example.svc.cluster.local:2379"
     rootPath: "/multigres/global"
-    clientServiceName: "example-cluster-global-client"
+    implementation: "etcd2"
 
   # Option 1: Using the Global TopoServer (Default)
   #
@@ -651,6 +652,7 @@ spec:
   #   external:
   #     address: "my-etcd.some-namespace.svc.cluster.local:2379"
   #     rootPath: "/multigres/us-east-1a"
+  #     implementation: "etcd2"
 
   # Option 3: Managed Local
   #
@@ -711,6 +713,12 @@ spec:
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
+
+  # A reference to the GLOBAL TopoServer.
+  globalTopoServer:
+    address: "example-cluster-global-client.example.svc.cluster.local:2379"
+    rootPath: "/multigres/global"
+    implementation: "etcd2"
   
   # The list of FULLY RESOLVED shard specifications.
   # This is pushed down from the MultigresCluster controller.
@@ -853,6 +861,12 @@ spec:
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
+
+  # A reference to the GLOBAL TopoServer.
+  globalTopoServer:
+    address: "example-cluster-global-client.example.svc.cluster.local:2379"
+    rootPath: "/multigres/global"
+    implementation: "etcd2"
   
   # Fully resolved from parent TableGroup spec
   multiOrch:
