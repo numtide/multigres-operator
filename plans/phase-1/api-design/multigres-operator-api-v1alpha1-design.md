@@ -254,8 +254,8 @@ spec:
           shards:
             - name: "0"
               spec:
-                multiOrch:
-                  replicas: 1
+                multiorch:
+                  # replicas: 1
                   resources:
                      requests:
                        cpu: "100m"
@@ -267,7 +267,7 @@ spec:
                   primary:
                     type: "readWrite"
                     cell: "us-east-1b"
-                    replicas: 2
+                    # replicas: 2
                     storage:
                        size: "100Gi"
                        class: "standard-gp3"
@@ -293,8 +293,8 @@ spec:
             # --- SHARD 0: Using Inline Spec (No Template) ---
             - name: "0"
               spec:
-                multiOrch:
-                  replicas: 1
+                multiorch:
+                  # replicas: 1
                   resources:
                      requests:
                        cpu: "100m"
@@ -478,6 +478,7 @@ spec:
   * Similar to `CellTemplate`, this is a pure configuration object.
   * It defines the "shape" of a shard: its orchestration and its data pools.
   * **Important:** `pools` is a **MAP**, keyed by the pool name. This ensures that overrides can safely target a specific pool without relying on brittle list array indices.
+  * `multiorch` is deployed per cell x pooler x shard unless a `withMultiorch: false` is specified in the relevant pooler, in which case it will not be deployed with that pooler. This often means that the pooler will not be deployed in that cell unless there is more than pooler defined for that specific cell.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -489,8 +490,10 @@ spec:
   # Template strictly defines only Shard-scoped components.
 
   # MultiOrch is a shard-level component.
-  multiOrch:
-    replicas: 1 
+  # The Operator will deploy one instance of this Deployment into EVERY Cell 
+  # that hosts a Pool for this Shard, unless the pool has a boolean field withMultiorch: false
+  multiorch:
+    # replicas: 1 # replicas per cell and pool this multiorch is deployed
     resources:
       requests:
         cpu: "100m"
@@ -503,6 +506,7 @@ spec:
   pools:
     primary:
       type: "readWrite"
+      # withMultiorch: true # This field defaults to true.
       # 'cell' can be left empty here or omitted entirely. It MUST be overridden in the 
       # MultigresCluster CR if left empty.
       # Alternatively, it can be set to a generic value if this template 
@@ -529,6 +533,7 @@ spec:
 
     dr-replica:
       type: "readOnly"
+      withMultiorch: false # this pool will have no multiorch.
       cell: "us-west-2a" # Hardcoded cell example in template
       replicas: 1
       storage:
@@ -724,9 +729,8 @@ spec:
   # This is pushed down from the MultigresCluster controller.
   shards:
     - name: "0"
-      multiOrch:
-        replicas: 1
-        image: "multigres/multigres:latest"
+      multiorch:
+        # replicas: 1
         resources:
           requests:
             cpu: "100m"
@@ -758,9 +762,8 @@ spec:
                 memory: "1Gi"
     
     - name: "1"
-      multiOrch:
-        replicas: 1
-        image: "multigres/multigres:latest"
+      multiorch:
+        # replicas: 1
         resources:
           requests:
             cpu: "100m"
@@ -794,9 +797,8 @@ spec:
     # This shard's spec is resolved from a template
     # (e.g., "cluster-wide-shard")
     - name: "2"
-      multiOrch:
-        replicas: 1
-        image: "multigres/multigres:latest"
+      multiorch:
+        # replicas: 1
         resources:
           requests:
             cpu: "100m"
@@ -869,9 +871,8 @@ spec:
     implementation: "etcd2"
   
   # Fully resolved from parent TableGroup spec
-  multiOrch:
-    replicas: 1
-    image: "multigres/multigres:latest"
+  multiorch:
+    # replicas: 1
     resources:
       requests:
         cpu: "100m"
