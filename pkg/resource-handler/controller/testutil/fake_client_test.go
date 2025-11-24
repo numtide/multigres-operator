@@ -17,13 +17,6 @@ func TestFakeClientWithFailures_Get(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
 	tests := map[string]struct {
 		config  *FailureConfig
 		key     client.ObjectKey
@@ -74,6 +67,13 @@ func TestFakeClientWithFailures_Get(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
 
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -164,13 +164,6 @@ func TestFakeClientWithFailures_Update(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
 	tests := map[string]struct {
 		config  *FailureConfig
 		wantErr bool
@@ -190,6 +183,13 @@ func TestFakeClientWithFailures_Update(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
 
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -212,13 +212,6 @@ func TestFakeClientWithFailures_Delete(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
 
 	tests := map[string]struct {
 		config  *FailureConfig
@@ -246,6 +239,13 @@ func TestFakeClientWithFailures_Delete(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
+
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(pod.DeepCopy()).
@@ -268,13 +268,6 @@ func TestFakeClientWithFailures_StatusUpdate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
 	tests := map[string]struct {
 		config  *FailureConfig
 		wantErr bool
@@ -294,6 +287,13 @@ func TestFakeClientWithFailures_StatusUpdate(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
 
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -318,13 +318,6 @@ func TestFakeClientWithFailures_List(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
 	tests := map[string]struct {
 		config  *FailureConfig
 		wantErr bool
@@ -346,6 +339,13 @@ func TestFakeClientWithFailures_List(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
 
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -370,13 +370,6 @@ func TestFakeClientWithFailures_Patch(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
 	tests := map[string]struct {
 		config  *FailureConfig
 		wantErr bool
@@ -396,6 +389,13 @@ func TestFakeClientWithFailures_Patch(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
 
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -420,13 +420,6 @@ func TestFakeClientWithFailures_DeleteAllOf(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
 	tests := map[string]struct {
 		config  *FailureConfig
 		wantErr bool
@@ -448,6 +441,13 @@ func TestFakeClientWithFailures_DeleteAllOf(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
 
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -475,13 +475,6 @@ func TestFakeClientWithFailures_StatusPatch(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
 	tests := map[string]struct {
 		config  *FailureConfig
 		wantErr bool
@@ -501,6 +494,13 @@ func TestFakeClientWithFailures_StatusPatch(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+				},
+			}
 
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
