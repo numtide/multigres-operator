@@ -47,7 +47,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "primary",
-			scheme:    scheme,
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard-replica",
@@ -152,7 +151,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "replica",
-			scheme:    scheme,
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "shard-001-readOnly",
@@ -254,7 +252,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "readOnly",
-			scheme:    scheme,
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "shard-002-pool-2",
@@ -373,7 +370,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "primary",
-			scheme:    scheme,
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "shard-affinity-replica",
@@ -483,14 +479,18 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				Type: "replica",
 			},
 			poolName: "primary",
-			scheme:    runtime.NewScheme(), // empty scheme
-			wantErr:   true,
+			scheme:   runtime.NewScheme(), // empty scheme
+			wantErr:  true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := BuildPoolStatefulSet(tc.shard, tc.poolName, tc.poolSpec, tc.scheme)
+			testScheme := scheme
+			if tc.scheme != nil {
+				testScheme = tc.scheme
+			}
+			got, err := BuildPoolStatefulSet(tc.shard, tc.poolName, tc.poolSpec, testScheme)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildPoolStatefulSet() error = %v, wantErr %v", err, tc.wantErr)

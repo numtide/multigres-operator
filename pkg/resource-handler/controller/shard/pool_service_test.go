@@ -38,7 +38,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 			poolSpec: multigresv1alpha1.ShardPoolSpec{
 				Type: "replica",
 			},
-			scheme: scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard-replica-headless",
@@ -108,7 +107,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				Type: "readonly",
 				Cell: "zone-east",
 			},
-			scheme: scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "shard-001-ro-headless",
@@ -175,7 +173,6 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 			},
 			poolName: "primary",
 			poolSpec: multigresv1alpha1.ShardPoolSpec{},
-			scheme:   scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "shard-002-pool-primary-headless",
@@ -250,7 +247,11 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := BuildPoolHeadlessService(tc.shard, tc.poolName, tc.poolSpec, tc.scheme)
+			testScheme := scheme
+			if tc.scheme != nil {
+				testScheme = tc.scheme
+			}
+			got, err := BuildPoolHeadlessService(tc.shard, tc.poolName, tc.poolSpec, testScheme)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildPoolHeadlessService() error = %v, wantErr %v", err, tc.wantErr)
