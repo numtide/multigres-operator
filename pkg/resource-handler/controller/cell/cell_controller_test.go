@@ -1,4 +1,4 @@
-package cell
+package cell_test
 
 import (
 	"slices"
@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 )
 
@@ -82,19 +83,19 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				}
 
 				// Verify defaults
-				if *mgDeploy.Spec.Replicas != DefaultMultiGatewayReplicas {
+				if *mgDeploy.Spec.Replicas != int32(2) {
 					t.Errorf(
 						"MultiGateway Deployment replicas = %d, want %d",
 						*mgDeploy.Spec.Replicas,
-						DefaultMultiGatewayReplicas,
+						int32(2),
 					)
 				}
 
-				if *moDeploy.Spec.Replicas != DefaultMultiOrchReplicas {
+				if *moDeploy.Spec.Replicas != int32(2) {
 					t.Errorf(
 						"MultiOrch Deployment replicas = %d, want %d",
 						*moDeploy.Spec.Replicas,
-						DefaultMultiOrchReplicas,
+						int32(2),
 					)
 				}
 
@@ -103,7 +104,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-cell", Namespace: "default"}, updatedCell); err != nil {
 					t.Fatalf("Failed to get Cell: %v", err)
 				}
-				if !slices.Contains(updatedCell.Finalizers, finalizerName) {
+				if !slices.Contains(updatedCell.Finalizers, "cell.multigres.com/finalizer") {
 					t.Errorf("Finalizer should be added")
 				}
 			},
@@ -113,7 +114,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "existing-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
@@ -217,7 +218,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					Name:              "test-cell-deletion",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{finalizerName},
+					Finalizers:        []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone3",
@@ -229,7 +230,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 						Name:              "test-cell-deletion",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{finalizerName},
+						Finalizers:        []string{"cell.multigres.com/finalizer"},
 					},
 					Spec: multigresv1alpha1.CellSpec{
 						Name: "zone3",
@@ -254,7 +255,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell-ready",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone4",
@@ -329,7 +330,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					}
 				}
 
-				if !slices.Contains(updatedCell.Finalizers, finalizerName) {
+				if !slices.Contains(updatedCell.Finalizers, "cell.multigres.com/finalizer") {
 					t.Errorf("Finalizer should be present")
 				}
 			},
@@ -339,7 +340,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell-partial",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone5",
@@ -439,7 +440,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell-status",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -503,7 +504,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -538,7 +539,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -581,7 +582,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -616,7 +617,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell-svc",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -665,7 +666,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -712,7 +713,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -768,7 +769,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -815,7 +816,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-cell",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -874,7 +875,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					Name:              "test-cell-del",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{finalizerName},
+					Finalizers:        []string{"cell.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -886,7 +887,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 						Name:              "test-cell-del",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{finalizerName},
+						Finalizers:        []string{"cell.multigres.com/finalizer"},
 					},
 					Spec: multigresv1alpha1.CellSpec{
 						Name: "zone1",
@@ -933,7 +934,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
 
-			reconciler := &CellReconciler{
+			reconciler := &cell.CellReconciler{
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -991,7 +992,7 @@ func TestCellReconciler_ReconcileNotFound(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := &CellReconciler{
+	reconciler := &cell.CellReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
