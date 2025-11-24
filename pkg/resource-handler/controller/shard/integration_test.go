@@ -164,15 +164,27 @@ func TestShardReconciliation(t *testing.T) {
 							Spec: corev1.PodSpec{
 								InitContainers: []corev1.Container{
 									{
-										Name:  "pgctld-init",
-										Image: "ghcr.io/multigres/pgctld:latest",
+										Name:    "pgctld-init",
+										Image:   "ghcr.io/multigres/pgctld:latest",
+										Command: []string{"sh", "-c", "cp /pgctld /shared/pgctld && chmod +x /shared/pgctld"},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
 										},
 									},
 									{
-										Name:          "multipooler",
-										Image:         "ghcr.io/multigres/multipooler:latest",
+										Name:  "multipooler",
+										Image: "ghcr.io/multigres/multipooler:latest",
+										Args: []string{
+											"--http-port", "15200",
+											"--grpc-port", "15270",
+											"--topo-implementation", "etcd2",
+											"--cell", "us-west-1a",
+											"--database", "testdb",
+											"--table-group", "default",
+											"--service-id", "test-shard-pool-primary",
+											"--pgctld-addr", "localhost:15470",
+											"--pg-port", "5432",
+										},
 										Ports:         multipoolerPorts(t),
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 									},
