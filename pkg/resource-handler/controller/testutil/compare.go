@@ -185,8 +185,19 @@ func IgnoreObjectMetaCompletely() cmp.Option {
 }
 
 // IgnoreStatus ignores the Status subresource completely.
+//
+// Because cmpopts.IgnoreFields requires the first param to be an actual struct
+// type, this handles by going through each path to see if the field name is
+// "Status", and if so, ignore.
 func IgnoreStatus() cmp.Option {
-	return cmpopts.IgnoreFields(struct{ Status any }{}, "Status")
+	return cmp.FilterPath(func(p cmp.Path) bool {
+		// Check if the field name is "Status"
+		if len(p) == 0 {
+			return false
+		}
+		sf, ok := p[len(p)-1].(cmp.StructField)
+		return ok && sf.Name() == "Status"
+	}, cmp.Ignore())
 }
 
 // CompareOptions returns common options for comparing Kubernetes objects.
