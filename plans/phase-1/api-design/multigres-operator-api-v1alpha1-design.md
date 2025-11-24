@@ -133,10 +133,10 @@ spec:
   # ----------------------------------------------------------------
   
   # Global TopoServer is a singleton. It follows the 4-level override chain.
-  # It supports EITHER a 'managed' OR 'external' OR 'templateRef'.
+  # It supports EITHER a 'etcd' OR 'external' OR 'templateRef'.
   globalTopoServer:
-    # --- OPTION 1: Inline Managed Spec ---
-    managed:
+    # --- OPTION 1: Inline Etcd Spec ---
+    etcd:
       replicas: 3
       storage:
         size: "10Gi"
@@ -163,7 +163,7 @@ spec:
   # MultiAdmin is a singleton. It follows the 4-level override chain.
   # It supports EITHER a 'spec' OR a 'templateRef'.
   multiadmin:
-    # --- OPTION 1: Inline Managed Spec ---
+    # --- OPTION 1: Inline Spec ---
     spec:
       replicas: 2
       resources:
@@ -210,7 +210,7 @@ spec:
          # --- Optional Local TopoServer ---
          # If omitted, this cell uses the GlobalTopoServer.
          # localTopoServer:
-         #   managed:
+         #   etcd:
          #      replicas: 3
          #      storage:
          #        size: "5Gi"
@@ -389,7 +389,7 @@ spec:
   # Defines the Global TopoServer component
   globalTopoServer:
     # --- OPTION 1: Managed by Operator ---
-    managed:
+    etcd:
       replicas: 3
       storage:
         size: "10Gi"
@@ -459,7 +459,7 @@ spec:
   # If omitted, cells use the GlobalTopoServer by default.
   #
   # localTopoServer:
-  #   managed:
+  #   etcd:
   #     replicas: 3
   #     storage:
   #       class: "standard-gp3"
@@ -662,7 +662,7 @@ spec:
   # Option 3: Managed Local
   #
   # topoServer:
-  #   managed:
+  #   etcd:
   #     rootPath: "/multigres/us-east-1a"
   #     image: "quay.io/coreos/etcd:v3.5"
   #     replicas: 3
@@ -945,7 +945,7 @@ Webhooks are used *only* for fast, synchronous, and semantic validation to preve
 
   * **On `CREATE` and `UPDATE`:**
       * **Template Existence:** Validates that all templates referenced in `spec.templateDefaults` or explicitly in components (Core, Cell, or Shard templates) exist *at the time of application*.
-      * **Component Spec Mutex:** Enforces that `managed`, `external`, and `templateRef` are mutually exclusive for components like `GlobalTopoServer`.
+      * **Component Spec Mutex:** Enforces that `etcd`, `external`, and `templateRef` are mutually exclusive for components like `GlobalTopoServer`.
       * **Uniqueness:** Validates that all names are unique within their respective scopes:
           * Cell names in `spec.cells`.
           * Database names in `spec.databases`.
