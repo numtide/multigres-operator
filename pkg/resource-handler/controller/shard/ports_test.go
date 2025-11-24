@@ -39,7 +39,11 @@ func TestBuildMultiPoolerContainerPorts(t *testing.T) {
 			got := buildMultiPoolerContainerPorts()
 
 			if len(got) != len(tt.want) {
-				t.Errorf("buildMultiPoolerContainerPorts() length = %d, want %d", len(got), len(tt.want))
+				t.Errorf(
+					"buildMultiPoolerContainerPorts() length = %d, want %d",
+					len(got),
+					len(tt.want),
+				)
 				return
 			}
 
@@ -48,10 +52,20 @@ func TestBuildMultiPoolerContainerPorts(t *testing.T) {
 					t.Errorf("port[%d].Name = %s, want %s", i, port.Name, tt.want[i].Name)
 				}
 				if port.ContainerPort != tt.want[i].ContainerPort {
-					t.Errorf("port[%d].ContainerPort = %d, want %d", i, port.ContainerPort, tt.want[i].ContainerPort)
+					t.Errorf(
+						"port[%d].ContainerPort = %d, want %d",
+						i,
+						port.ContainerPort,
+						tt.want[i].ContainerPort,
+					)
 				}
 				if port.Protocol != tt.want[i].Protocol {
-					t.Errorf("port[%d].Protocol = %s, want %s", i, port.Protocol, tt.want[i].Protocol)
+					t.Errorf(
+						"port[%d].Protocol = %s, want %s",
+						i,
+						port.Protocol,
+						tt.want[i].Protocol,
+					)
 				}
 			}
 		})
@@ -93,7 +107,11 @@ func TestBuildPoolHeadlessServicePorts(t *testing.T) {
 			got := buildPoolHeadlessServicePorts()
 
 			if len(got) != len(tt.want) {
-				t.Errorf("buildPoolHeadlessServicePorts() length = %d, want %d", len(got), len(tt.want))
+				t.Errorf(
+					"buildPoolHeadlessServicePorts() length = %d, want %d",
+					len(got),
+					len(tt.want),
+				)
 				return
 			}
 
@@ -105,10 +123,20 @@ func TestBuildPoolHeadlessServicePorts(t *testing.T) {
 					t.Errorf("port[%d].Port = %d, want %d", i, port.Port, tt.want[i].Port)
 				}
 				if port.TargetPort != tt.want[i].TargetPort {
-					t.Errorf("port[%d].TargetPort = %v, want %v", i, port.TargetPort, tt.want[i].TargetPort)
+					t.Errorf(
+						"port[%d].TargetPort = %v, want %v",
+						i,
+						port.TargetPort,
+						tt.want[i].TargetPort,
+					)
 				}
 				if port.Protocol != tt.want[i].Protocol {
-					t.Errorf("port[%d].Protocol = %s, want %s", i, port.Protocol, tt.want[i].Protocol)
+					t.Errorf(
+						"port[%d].Protocol = %s, want %s",
+						i,
+						port.Protocol,
+						tt.want[i].Protocol,
+					)
 				}
 			}
 		})
@@ -142,7 +170,11 @@ func TestBuildMultiOrchContainerPorts(t *testing.T) {
 			got := buildMultiOrchContainerPorts()
 
 			if len(got) != len(tt.want) {
-				t.Errorf("buildMultiOrchContainerPorts() length = %d, want %d", len(got), len(tt.want))
+				t.Errorf(
+					"buildMultiOrchContainerPorts() length = %d, want %d",
+					len(got),
+					len(tt.want),
+				)
 				return
 			}
 
@@ -151,10 +183,20 @@ func TestBuildMultiOrchContainerPorts(t *testing.T) {
 					t.Errorf("port[%d].Name = %s, want %s", i, port.Name, tt.want[i].Name)
 				}
 				if port.ContainerPort != tt.want[i].ContainerPort {
-					t.Errorf("port[%d].ContainerPort = %d, want %d", i, port.ContainerPort, tt.want[i].ContainerPort)
+					t.Errorf(
+						"port[%d].ContainerPort = %d, want %d",
+						i,
+						port.ContainerPort,
+						tt.want[i].ContainerPort,
+					)
 				}
 				if port.Protocol != tt.want[i].Protocol {
-					t.Errorf("port[%d].Protocol = %s, want %s", i, port.Protocol, tt.want[i].Protocol)
+					t.Errorf(
+						"port[%d].Protocol = %s, want %s",
+						i,
+						port.Protocol,
+						tt.want[i].Protocol,
+					)
 				}
 			}
 		})
@@ -190,7 +232,11 @@ func TestBuildMultiOrchServicePorts(t *testing.T) {
 			got := buildMultiOrchServicePorts()
 
 			if len(got) != len(tt.want) {
-				t.Errorf("buildMultiOrchServicePorts() length = %d, want %d", len(got), len(tt.want))
+				t.Errorf(
+					"buildMultiOrchServicePorts() length = %d, want %d",
+					len(got),
+					len(tt.want),
+				)
 				return
 			}
 
@@ -202,10 +248,20 @@ func TestBuildMultiOrchServicePorts(t *testing.T) {
 					t.Errorf("port[%d].Port = %d, want %d", i, port.Port, tt.want[i].Port)
 				}
 				if port.TargetPort != tt.want[i].TargetPort {
-					t.Errorf("port[%d].TargetPort = %v, want %v", i, port.TargetPort, tt.want[i].TargetPort)
+					t.Errorf(
+						"port[%d].TargetPort = %v, want %v",
+						i,
+						port.TargetPort,
+						tt.want[i].TargetPort,
+					)
 				}
 				if port.Protocol != tt.want[i].Protocol {
-					t.Errorf("port[%d].Protocol = %s, want %s", i, port.Protocol, tt.want[i].Protocol)
+					t.Errorf(
+						"port[%d].Protocol = %s, want %s",
+						i,
+						port.Protocol,
+						tt.want[i].Protocol,
+					)
 				}
 			}
 		})

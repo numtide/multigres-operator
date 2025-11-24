@@ -302,7 +302,7 @@ func (r *ShardReconciler) updateStatus(
 	var totalPods, readyPods int32
 
 	// Aggregate status from all pool StatefulSets
-	for poolName, _ := range shard.Spec.Pools {
+	for poolName := range shard.Spec.Pools {
 		stsName := buildPoolName(shard.Name, poolName)
 		sts := &appsv1.StatefulSet{}
 		err := r.Get(

@@ -74,9 +74,21 @@ func BuildMultiGatewayDeployment(
 							Image:     image,
 							Resources: cell.Spec.MultiGateway.ResourceRequirements,
 							Ports: []corev1.ContainerPort{
-								{Name: "http", ContainerPort: MultiGatewayHTTPPort, Protocol: corev1.ProtocolTCP},
-								{Name: "grpc", ContainerPort: MultiGatewayGRPCPort, Protocol: corev1.ProtocolTCP},
-								{Name: "postgres", ContainerPort: MultiGatewayPostgresPort, Protocol: corev1.ProtocolTCP},
+								{
+									Name:          "http",
+									ContainerPort: MultiGatewayHTTPPort,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "grpc",
+									ContainerPort: MultiGatewayGRPCPort,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "postgres",
+									ContainerPort: MultiGatewayPostgresPort,
+									Protocol:      corev1.ProtocolTCP,
+								},
 							},
 						},
 					},
@@ -111,9 +123,24 @@ func BuildMultiGatewayService(
 			Type:     corev1.ServiceTypeClusterIP,
 			Selector: labels,
 			Ports: []corev1.ServicePort{
-				{Name: "http", Port: MultiGatewayHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
-				{Name: "grpc", Port: MultiGatewayGRPCPort, TargetPort: intstr.FromString("grpc"), Protocol: corev1.ProtocolTCP},
-				{Name: "postgres", Port: MultiGatewayPostgresPort, TargetPort: intstr.FromString("postgres"), Protocol: corev1.ProtocolTCP},
+				{
+					Name:       "http",
+					Port:       MultiGatewayHTTPPort,
+					TargetPort: intstr.FromString("http"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "grpc",
+					Port:       MultiGatewayGRPCPort,
+					TargetPort: intstr.FromString("grpc"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "postgres",
+					Port:       MultiGatewayPostgresPort,
+					TargetPort: intstr.FromString("postgres"),
+					Protocol:   corev1.ProtocolTCP,
+				},
 			},
 		},
 	}

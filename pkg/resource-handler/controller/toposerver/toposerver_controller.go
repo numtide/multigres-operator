@@ -35,7 +35,10 @@ type TopoServerReconciler struct {
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile handles TopoServer resource reconciliation.
-func (r *TopoServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *TopoServerReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Fetch the TopoServer instance
@@ -101,7 +104,11 @@ func (r *TopoServerReconciler) reconcileStatefulSet(
 	}
 
 	existing := &appsv1.StatefulSet{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new StatefulSet
@@ -172,7 +179,11 @@ func (r *TopoServerReconciler) reconcileClientService(
 	}
 
 	existing := &corev1.Service{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new Service
@@ -196,7 +207,10 @@ func (r *TopoServerReconciler) reconcileClientService(
 }
 
 // updateStatus updates the TopoServer status based on observed state.
-func (r *TopoServerReconciler) updateStatus(ctx context.Context, toposerver *multigresv1alpha1.TopoServer) error {
+func (r *TopoServerReconciler) updateStatus(
+	ctx context.Context,
+	toposerver *multigresv1alpha1.TopoServer,
+) error {
 	// Get the StatefulSet to check status
 	sts := &appsv1.StatefulSet{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name}, sts)
@@ -280,7 +294,10 @@ func (r *TopoServerReconciler) handleDeletion(
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *TopoServerReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.Options) error {
+func (r *TopoServerReconciler) SetupWithManager(
+	mgr ctrl.Manager,
+	opts ...controller.Options,
+) error {
 	controllerOpts := controller.Options{}
 	if len(opts) > 0 {
 		controllerOpts = opts[0]

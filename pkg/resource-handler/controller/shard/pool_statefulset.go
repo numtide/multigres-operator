@@ -90,7 +90,9 @@ func BuildPoolStatefulSet(
 
 // buildPoolVolumeClaimTemplates creates the PVC templates for a pool.
 // Uses the pool's DataVolumeClaimTemplate if provided.
-func buildPoolVolumeClaimTemplates(pool multigresv1alpha1.ShardPoolSpec) []corev1.PersistentVolumeClaim {
+func buildPoolVolumeClaimTemplates(
+	pool multigresv1alpha1.ShardPoolSpec,
+) []corev1.PersistentVolumeClaim {
 	pvc := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DataVolumeName,

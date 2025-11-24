@@ -71,8 +71,16 @@ func BuildMultiOrchDeployment(
 							Image:     image,
 							Resources: cell.Spec.MultiOrch.ResourceRequirements,
 							Ports: []corev1.ContainerPort{
-								{Name: "http", ContainerPort: MultiOrchHTTPPort, Protocol: corev1.ProtocolTCP},
-								{Name: "grpc", ContainerPort: MultiOrchGRPCPort, Protocol: corev1.ProtocolTCP},
+								{
+									Name:          "http",
+									ContainerPort: MultiOrchHTTPPort,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "grpc",
+									ContainerPort: MultiOrchGRPCPort,
+									Protocol:      corev1.ProtocolTCP,
+								},
 							},
 						},
 					},
@@ -107,8 +115,18 @@ func BuildMultiOrchService(
 			Type:     corev1.ServiceTypeClusterIP,
 			Selector: labels,
 			Ports: []corev1.ServicePort{
-				{Name: "http", Port: MultiOrchHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
-				{Name: "grpc", Port: MultiOrchGRPCPort, TargetPort: intstr.FromString("grpc"), Protocol: corev1.ProtocolTCP},
+				{
+					Name:       "http",
+					Port:       MultiOrchHTTPPort,
+					TargetPort: intstr.FromString("http"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "grpc",
+					Port:       MultiOrchGRPCPort,
+					TargetPort: intstr.FromString("grpc"),
+					Protocol:   corev1.ProtocolTCP,
+				},
 			},
 		},
 	}

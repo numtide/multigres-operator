@@ -113,7 +113,10 @@ func buildEtcdConfigEnv(toposerverName, serviceName, namespace string) []corev1.
 // Format: member-0=http://member-0.service.ns.svc.cluster.local:2380,...
 //
 // Ref: https://etcd.io/docs/latest/op-guide/clustering/#static
-func buildEtcdClusterPeerList(toposerverName, serviceName, namespace string, replicas int32) string {
+func buildEtcdClusterPeerList(
+	toposerverName, serviceName, namespace string,
+	replicas int32,
+) string {
 	if replicas < 0 {
 		return ""
 	}

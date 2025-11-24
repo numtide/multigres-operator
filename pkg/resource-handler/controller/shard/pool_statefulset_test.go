@@ -98,10 +98,19 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
-								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "test-shard"}}, multigresv1alpha1.ShardPoolSpec{}, "primary"),
+								buildMultiPoolerSidecar(
+									&multigresv1alpha1.Shard{
+										ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+									},
+									multigresv1alpha1.ShardPoolSpec{},
+									"primary",
+								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(&multigresv1alpha1.Shard{}, multigresv1alpha1.ShardPoolSpec{}),
+								buildPostgresContainer(
+									&multigresv1alpha1.Shard{},
+									multigresv1alpha1.ShardPoolSpec{},
+								),
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
@@ -114,7 +123,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								Name: DataVolumeName,
 							},
 							Spec: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -202,10 +213,19 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
-								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "shard-001"}}, multigresv1alpha1.ShardPoolSpec{Cell: "zone-west"}, "replica"),
+								buildMultiPoolerSidecar(
+									&multigresv1alpha1.Shard{
+										ObjectMeta: metav1.ObjectMeta{Name: "shard-001"},
+									},
+									multigresv1alpha1.ShardPoolSpec{Cell: "zone-west"},
+									"replica",
+								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(&multigresv1alpha1.Shard{}, multigresv1alpha1.ShardPoolSpec{}),
+								buildPostgresContainer(
+									&multigresv1alpha1.Shard{},
+									multigresv1alpha1.ShardPoolSpec{},
+								),
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
@@ -219,7 +239,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							Spec: corev1.PersistentVolumeClaimSpec{
 								StorageClassName: ptr.To("fast-ssd"),
-								AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("20Gi"),
@@ -303,10 +325,19 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
-								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "shard-002"}}, multigresv1alpha1.ShardPoolSpec{}, "readOnly"),
+								buildMultiPoolerSidecar(
+									&multigresv1alpha1.Shard{
+										ObjectMeta: metav1.ObjectMeta{Name: "shard-002"},
+									},
+									multigresv1alpha1.ShardPoolSpec{},
+									"readOnly",
+								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(&multigresv1alpha1.Shard{}, multigresv1alpha1.ShardPoolSpec{}),
+								buildPostgresContainer(
+									&multigresv1alpha1.Shard{},
+									multigresv1alpha1.ShardPoolSpec{},
+								),
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
@@ -319,7 +350,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								Name: DataVolumeName,
 							},
 							Spec: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("5Gi"),
@@ -421,10 +454,19 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
-								buildMultiPoolerSidecar(&multigresv1alpha1.Shard{ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity"}}, multigresv1alpha1.ShardPoolSpec{}, "primary"),
+								buildMultiPoolerSidecar(
+									&multigresv1alpha1.Shard{
+										ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity"},
+									},
+									multigresv1alpha1.ShardPoolSpec{},
+									"primary",
+								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(&multigresv1alpha1.Shard{}, multigresv1alpha1.ShardPoolSpec{}),
+								buildPostgresContainer(
+									&multigresv1alpha1.Shard{},
+									multigresv1alpha1.ShardPoolSpec{},
+								),
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
@@ -454,7 +496,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								Name: DataVolumeName,
 							},
 							Spec: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),

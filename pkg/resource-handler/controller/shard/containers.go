@@ -39,7 +39,10 @@ var sidecarRestartPolicy = corev1.ContainerRestartPolicyAlways
 
 // buildPostgresContainer creates the postgres container spec for a pool.
 // This runs pgctld binary (which wraps postgres) and mounts persistent data storage.
-func buildPostgresContainer(shard *multigresv1alpha1.Shard, pool multigresv1alpha1.ShardPoolSpec) corev1.Container {
+func buildPostgresContainer(
+	shard *multigresv1alpha1.Shard,
+	pool multigresv1alpha1.ShardPoolSpec,
+) corev1.Container {
 	image := DefaultPostgresImage
 	if shard.Spec.Images.Postgres != "" {
 		image = shard.Spec.Images.Postgres
@@ -65,7 +68,11 @@ func buildPostgresContainer(shard *multigresv1alpha1.Shard, pool multigresv1alph
 // buildMultiPoolerSidecar creates the multipooler sidecar container spec.
 // This is implemented as a native sidecar using init container with
 // restartPolicy: Always (K8s 1.28+).
-func buildMultiPoolerSidecar(shard *multigresv1alpha1.Shard, pool multigresv1alpha1.ShardPoolSpec, poolName string) corev1.Container {
+func buildMultiPoolerSidecar(
+	shard *multigresv1alpha1.Shard,
+	pool multigresv1alpha1.ShardPoolSpec,
+	poolName string,
+) corev1.Container {
 	image := DefaultMultiPoolerImage
 	if shard.Spec.Images.MultiPooler != "" {
 		image = shard.Spec.Images.MultiPooler
@@ -151,7 +158,9 @@ func buildPgctldVolume() corev1.Volume {
 }
 
 // buildDataVolumeClaimTemplate creates the PVC template for PostgreSQL data.
-func buildDataVolumeClaimTemplate(pool multigresv1alpha1.ShardPoolSpec) corev1.PersistentVolumeClaim {
+func buildDataVolumeClaimTemplate(
+	pool multigresv1alpha1.ShardPoolSpec,
+) corev1.PersistentVolumeClaim {
 	// Use the pool's DataVolumeClaimTemplate directly if provided
 	return corev1.PersistentVolumeClaim{
 		Spec: pool.DataVolumeClaimTemplate,

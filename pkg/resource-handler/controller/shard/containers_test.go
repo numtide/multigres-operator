@@ -261,9 +261,13 @@ func TestBuildPgctldInitContainer(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
 			want: corev1.Container{
-				Name:    "pgctld-init",
-				Image:   DefaultPgctldImage,
-				Command: []string{"sh", "-c", "cp /pgctld /shared/pgctld && chmod +x /shared/pgctld"},
+				Name:  "pgctld-init",
+				Image: DefaultPgctldImage,
+				Command: []string{
+					"sh",
+					"-c",
+					"cp /pgctld /shared/pgctld && chmod +x /shared/pgctld",
+				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      PgctldVolumeName,

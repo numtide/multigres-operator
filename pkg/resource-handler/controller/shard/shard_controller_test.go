@@ -56,7 +56,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(1)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -129,7 +131,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(2)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -144,7 +148,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(3)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("5Gi"),
@@ -216,7 +222,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(5)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("20Gi"),
@@ -301,7 +309,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -331,7 +341,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 								Database:   "testdb",
 								TableGroup: "default",
 								DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+									AccessModes: []corev1.PersistentVolumeAccessMode{
+										corev1.ReadWriteOnce,
+									},
 									Resources: corev1.VolumeResourceRequirements{
 										Requests: corev1.ResourceList{
 											corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -375,7 +387,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(3)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -472,7 +486,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(5)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -536,7 +552,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Condition status = %s, want False", availableCondition.Status)
 				}
 				if availableCondition.Reason != "NotAllPodsReady" {
-					t.Errorf("Condition reason = %s, want NotAllPodsReady", availableCondition.Reason)
+					t.Errorf(
+						"Condition reason = %s, want NotAllPodsReady",
+						availableCondition.Reason,
+					)
 				}
 
 				if updatedShard.Status.TotalPods != 5 {
@@ -566,7 +585,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(2)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -581,7 +602,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(3)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("5Gi"),
@@ -675,7 +698,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -709,7 +734,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -723,7 +750,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok && deploy.Name == "test-shard-multiorch" {
+					if deploy, ok := obj.(*appsv1.Deployment); ok &&
+						deploy.Name == "test-shard-multiorch" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -749,7 +777,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -773,7 +803,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok && deploy.Name == "test-shard-multiorch" {
+					if deploy, ok := obj.(*appsv1.Deployment); ok &&
+						deploy.Name == "test-shard-multiorch" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -799,7 +830,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -838,7 +871,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -878,7 +913,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -931,7 +968,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -976,7 +1015,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -990,7 +1031,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if sts, ok := obj.(*appsv1.StatefulSet); ok && sts.Name == "test-shard-pool-primary" {
+					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
+						sts.Name == "test-shard-pool-primary" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1017,7 +1059,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							TableGroup: "default",
 							Replicas:   ptr.To(int32(5)),
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1053,7 +1097,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if sts, ok := obj.(*appsv1.StatefulSet); ok && sts.Name == "test-shard-pool-primary" {
+					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
+						sts.Name == "test-shard-pool-primary" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1079,7 +1124,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1131,7 +1178,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1145,7 +1194,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-pool-primary-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-shard-pool-primary-headless" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1171,7 +1221,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1210,7 +1262,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-pool-primary-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-shard-pool-primary-headless" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1236,7 +1289,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1269,7 +1324,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-pool-primary-headless" && key.Namespace == "default" {
+					if key.Name == "test-shard-pool-primary-headless" &&
+						key.Namespace == "default" {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -1294,7 +1350,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1330,7 +1388,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1360,7 +1420,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 								Database:   "testdb",
 								TableGroup: "default",
 								DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+									AccessModes: []corev1.PersistentVolumeAccessMode{
+										corev1.ReadWriteOnce,
+									},
 									Resources: corev1.VolumeResourceRequirements{
 										Requests: corev1.ResourceList{
 											corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1394,7 +1456,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
@@ -1429,7 +1493,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							Database:   "testdb",
 							TableGroup: "default",
 							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceStorage: resource.MustParse("10Gi"),

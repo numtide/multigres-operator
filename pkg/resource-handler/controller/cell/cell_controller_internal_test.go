@@ -163,7 +163,10 @@ func TestUpdateStatus_MultiGatewayDeploymentNotFound(t *testing.T) {
 	// Call updateStatus when MultiGateway Deployment doesn't exist yet
 	err := reconciler.updateStatus(context.Background(), cell)
 	if err != nil {
-		t.Errorf("updateStatus() should not error when MultiGateway Deployment not found, got: %v", err)
+		t.Errorf(
+			"updateStatus() should not error when MultiGateway Deployment not found, got: %v",
+			err,
+		)
 	}
 }
 
@@ -209,7 +212,10 @@ func TestUpdateStatus_MultiOrchDeploymentNotFound(t *testing.T) {
 	// Call updateStatus when MultiOrch Deployment doesn't exist
 	err := reconciler.updateStatus(context.Background(), cell)
 	if err != nil {
-		t.Errorf("updateStatus() should not error when MultiOrch Deployment not found, got: %v", err)
+		t.Errorf(
+			"updateStatus() should not error when MultiOrch Deployment not found, got: %v",
+			err,
+		)
 	}
 }
 

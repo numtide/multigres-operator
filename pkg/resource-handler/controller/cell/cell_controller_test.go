@@ -181,7 +181,10 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				}
 
 				if *mgDeploy.Spec.Replicas != 5 {
-					t.Errorf("MultiGateway Deployment replicas = %d, want 5", *mgDeploy.Spec.Replicas)
+					t.Errorf(
+						"MultiGateway Deployment replicas = %d, want 5",
+						*mgDeploy.Spec.Replicas,
+					)
 				}
 
 				if mgDeploy.Spec.Template.Spec.Containers[0].Image != "custom/multigateway:v1.0.0" {
@@ -412,7 +415,10 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Condition status = %s, want False", readyCondition.Status)
 				}
 				if readyCondition.Reason != "ComponentsNotReady" {
-					t.Errorf("Condition reason = %s, want ComponentsNotReady", readyCondition.Reason)
+					t.Errorf(
+						"Condition reason = %s, want ComponentsNotReady",
+						readyCondition.Reason,
+					)
 				}
 			},
 		},
@@ -491,7 +497,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok && deploy.Name == "test-cell-multigateway" {
+					if deploy, ok := obj.(*appsv1.Deployment); ok &&
+						deploy.Name == "test-cell-multigateway" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -526,7 +533,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok && deploy.Name == "test-cell-multigateway" {
+					if deploy, ok := obj.(*appsv1.Deployment); ok &&
+						deploy.Name == "test-cell-multigateway" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -569,7 +577,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-cell-multigateway" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-cell-multigateway" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -604,7 +613,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-cell-multigateway" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-cell-multigateway" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -653,7 +663,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok && deploy.Name == "test-cell-multiorch" {
+					if deploy, ok := obj.(*appsv1.Deployment); ok &&
+						deploy.Name == "test-cell-multiorch" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -700,7 +711,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok && deploy.Name == "test-cell-multiorch" {
+					if deploy, ok := obj.(*appsv1.Deployment); ok &&
+						deploy.Name == "test-cell-multiorch" {
 						return testutil.ErrInjected
 					}
 					return nil

@@ -87,8 +87,16 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 									Image:     DefaultMultiOrchImage,
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
-										{Name: "http", ContainerPort: MultiOrchHTTPPort, Protocol: corev1.ProtocolTCP},
-										{Name: "grpc", ContainerPort: MultiOrchGRPCPort, Protocol: corev1.ProtocolTCP},
+										{
+											Name:          "http",
+											ContainerPort: MultiOrchHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiOrchGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
 									},
 								},
 							},
@@ -162,8 +170,16 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 									Image:     DefaultMultiOrchImage,
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
-										{Name: "http", ContainerPort: MultiOrchHTTPPort, Protocol: corev1.ProtocolTCP},
-										{Name: "grpc", ContainerPort: MultiOrchGRPCPort, Protocol: corev1.ProtocolTCP},
+										{
+											Name:          "http",
+											ContainerPort: MultiOrchHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiOrchGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
 									},
 								},
 							},
@@ -237,8 +253,16 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 									Image:     "custom/multiorch:v2.0.0",
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
-										{Name: "http", ContainerPort: MultiOrchHTTPPort, Protocol: corev1.ProtocolTCP},
-										{Name: "grpc", ContainerPort: MultiOrchGRPCPort, Protocol: corev1.ProtocolTCP},
+										{
+											Name:          "http",
+											ContainerPort: MultiOrchHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiOrchGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
 									},
 								},
 							},
@@ -328,8 +352,16 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 									Image:     DefaultMultiOrchImage,
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
-										{Name: "http", ContainerPort: MultiOrchHTTPPort, Protocol: corev1.ProtocolTCP},
-										{Name: "grpc", ContainerPort: MultiOrchGRPCPort, Protocol: corev1.ProtocolTCP},
+										{
+											Name:          "http",
+											ContainerPort: MultiOrchHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiOrchGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
 									},
 								},
 							},
@@ -438,8 +470,16 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 										},
 									},
 									Ports: []corev1.ContainerPort{
-										{Name: "http", ContainerPort: MultiOrchHTTPPort, Protocol: corev1.ProtocolTCP},
-										{Name: "grpc", ContainerPort: MultiOrchGRPCPort, Protocol: corev1.ProtocolTCP},
+										{
+											Name:          "http",
+											ContainerPort: MultiOrchHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiOrchGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
 									},
 								},
 							},
@@ -537,8 +577,18 @@ func TestBuildMultiOrchService(t *testing.T) {
 						"app.kubernetes.io/managed-by": "multigres-operator",
 					},
 					Ports: []corev1.ServicePort{
-						{Name: "http", Port: MultiOrchHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
-						{Name: "grpc", Port: MultiOrchGRPCPort, TargetPort: intstr.FromString("grpc"), Protocol: corev1.ProtocolTCP},
+						{
+							Name:       "http",
+							Port:       MultiOrchHTTPPort,
+							TargetPort: intstr.FromString("http"),
+							Protocol:   corev1.ProtocolTCP,
+						},
+						{
+							Name:       "grpc",
+							Port:       MultiOrchGRPCPort,
+							TargetPort: intstr.FromString("grpc"),
+							Protocol:   corev1.ProtocolTCP,
+						},
 					},
 				},
 			},
@@ -587,8 +637,18 @@ func TestBuildMultiOrchService(t *testing.T) {
 						"app.kubernetes.io/managed-by": "multigres-operator",
 					},
 					Ports: []corev1.ServicePort{
-						{Name: "http", Port: MultiOrchHTTPPort, TargetPort: intstr.FromString("http"), Protocol: corev1.ProtocolTCP},
-						{Name: "grpc", Port: MultiOrchGRPCPort, TargetPort: intstr.FromString("grpc"), Protocol: corev1.ProtocolTCP},
+						{
+							Name:       "http",
+							Port:       MultiOrchHTTPPort,
+							TargetPort: intstr.FromString("http"),
+							Protocol:   corev1.ProtocolTCP,
+						},
+						{
+							Name:       "grpc",
+							Port:       MultiOrchGRPCPort,
+							TargetPort: intstr.FromString("grpc"),
+							Protocol:   corev1.ProtocolTCP,
+						},
 					},
 				},
 			},

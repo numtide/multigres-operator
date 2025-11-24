@@ -262,7 +262,11 @@ func (r *CellReconciler) reconcileMultiOrchService(
 func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alpha1.Cell) error {
 	// Get the MultiGateway Deployment to check status
 	mgDeploy := &appsv1.Deployment{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: cell.Name + "-multigateway"}, mgDeploy)
+	err := r.Get(
+		ctx,
+		client.ObjectKey{Namespace: cell.Namespace, Name: cell.Name + "-multigateway"},
+		mgDeploy,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Deployment not created yet
@@ -273,7 +277,11 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 
 	// Get the MultiOrch Deployment to check status
 	moDeploy := &appsv1.Deployment{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: cell.Name + "-multiorch"}, moDeploy)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: cell.Namespace, Name: cell.Name + "-multiorch"},
+		moDeploy,
+	)
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to get MultiOrch Deployment for status: %w", err)
 	}
@@ -306,8 +314,10 @@ func (r *CellReconciler) buildConditions(
 		LastTransitionTime: metav1.Now(),
 	}
 
-	mgReady := mgDeploy.Status.ReadyReplicas == mgDeploy.Status.Replicas && mgDeploy.Status.Replicas > 0
-	moReady := moDeploy != nil && moDeploy.Status.ReadyReplicas == moDeploy.Status.Replicas && moDeploy.Status.Replicas > 0
+	mgReady := mgDeploy.Status.ReadyReplicas == mgDeploy.Status.Replicas &&
+		mgDeploy.Status.Replicas > 0
+	moReady := moDeploy != nil && moDeploy.Status.ReadyReplicas == moDeploy.Status.Replicas &&
+		moDeploy.Status.Replicas > 0
 
 	if mgReady && moReady {
 		readyCondition.Status = metav1.ConditionTrue

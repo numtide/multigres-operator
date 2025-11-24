@@ -113,7 +113,9 @@ func BuildStatefulSet(
 // buildVolumeClaimTemplates creates the PVC templates for etcd data storage.
 // TODO: Add StorageSize and StorageClassName fields to TopoServerSpec for simpler configuration
 // (similar to Etcd). For now, only DataVolumeClaimTemplate is supported.
-func buildVolumeClaimTemplates(toposerver *multigresv1alpha1.TopoServer) []corev1.PersistentVolumeClaim {
+func buildVolumeClaimTemplates(
+	toposerver *multigresv1alpha1.TopoServer,
+) []corev1.PersistentVolumeClaim {
 	if len(toposerver.Spec.DataVolumeClaimTemplate.AccessModes) > 0 {
 		return []corev1.PersistentVolumeClaim{
 			{

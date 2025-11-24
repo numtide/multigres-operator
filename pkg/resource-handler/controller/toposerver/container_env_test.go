@@ -170,7 +170,12 @@ func TestBuildEtcdClusterPeerList(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildEtcdClusterPeerList(tc.toposerverName, tc.serviceName, tc.namespace, tc.replicas)
+			got := buildEtcdClusterPeerList(
+				tc.toposerverName,
+				tc.serviceName,
+				tc.namespace,
+				tc.replicas,
+			)
 			if got != tc.want {
 				t.Errorf("buildEtcdClusterPeerList() = %v, want %v", got, tc.want)
 			}

@@ -15,8 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 )
 
 func TestTopoServerReconciler_Reconcile(t *testing.T) {
@@ -86,7 +86,10 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-toposerver", Namespace: "default"}, updatedTopoServer); err != nil {
 					t.Fatalf("Failed to get TopoServer: %v", err)
 				}
-				if !slices.Contains(updatedTopoServer.Finalizers, "toposerver.multigres.com/finalizer") {
+				if !slices.Contains(
+					updatedTopoServer.Finalizers,
+					"toposerver.multigres.com/finalizer",
+				) {
 					t.Errorf("Finalizer should be added")
 				}
 			},
@@ -228,7 +231,10 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Status.Replicas = %d, want 3", updatedTopoServer.Status.Replicas)
 				}
 				if updatedTopoServer.Status.ReadyReplicas != 3 {
-					t.Errorf("Status.ReadyReplicas = %d, want 3", updatedTopoServer.Status.ReadyReplicas)
+					t.Errorf(
+						"Status.ReadyReplicas = %d, want 3",
+						updatedTopoServer.Status.ReadyReplicas,
+					)
 				}
 				if len(updatedTopoServer.Status.Conditions) == 0 {
 					t.Error("Status.Conditions should not be empty")
@@ -242,7 +248,10 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					}
 				}
 
-				if !slices.Contains(updatedTopoServer.Finalizers, "toposerver.multigres.com/finalizer") {
+				if !slices.Contains(
+					updatedTopoServer.Finalizers,
+					"toposerver.multigres.com/finalizer",
+				) {
 					t.Errorf("Finalizer should be present")
 				}
 			},
@@ -390,7 +399,8 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-toposerver-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-toposerver-headless" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -423,7 +433,8 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-toposerver-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-toposerver-headless" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -612,7 +623,8 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			// Create the TopoServer resource if not in existing objects
 			toposerverInExisting := false
 			for _, obj := range tc.existingObjects {
-				if toposerver, ok := obj.(*multigresv1alpha1.TopoServer); ok && toposerver.Name == tc.toposerver.Name {
+				if toposerver, ok := obj.(*multigresv1alpha1.TopoServer); ok &&
+					toposerver.Name == tc.toposerver.Name {
 					toposerverInExisting = true
 					break
 				}
