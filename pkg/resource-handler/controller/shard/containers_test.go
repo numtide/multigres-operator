@@ -5,8 +5,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -14,9 +14,9 @@ import (
 
 func TestBuildPostgresContainer(t *testing.T) {
 	tests := map[string]struct {
-		shard *multigresv1alpha1.Shard
+		shard    *multigresv1alpha1.Shard
 		poolSpec multigresv1alpha1.ShardPoolSpec
-		want  corev1.Container
+		want     corev1.Container
 	}{
 		"default postgres image with no resources": {
 			shard: &multigresv1alpha1.Shard{
@@ -122,9 +122,9 @@ func TestBuildPostgresContainer(t *testing.T) {
 
 func TestBuildMultiPoolerSidecar(t *testing.T) {
 	tests := map[string]struct {
-		shard *multigresv1alpha1.Shard
+		shard    *multigresv1alpha1.Shard
 		poolSpec multigresv1alpha1.ShardPoolSpec
-		want  corev1.Container
+		want     corev1.Container
 	}{
 		"default multipooler image with no resources": {
 			shard: &multigresv1alpha1.Shard{
@@ -330,8 +330,8 @@ func TestBuildPgctldVolume(t *testing.T) {
 
 func TestBuildDataVolumeClaimTemplate(t *testing.T) {
 	tests := map[string]struct {
-		pool multigresv1alpha1.ShardPoolSpec
-		want corev1.PersistentVolumeClaim
+		poolSpec multigresv1alpha1.ShardPoolSpec
+		want     corev1.PersistentVolumeClaim
 	}{
 		"with storage class and size": {
 			poolSpec: multigresv1alpha1.ShardPoolSpec{
@@ -369,7 +369,7 @@ func TestBuildDataVolumeClaimTemplate(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildDataVolumeClaimTemplate(tc.pool)
+			got := buildDataVolumeClaimTemplate(tc.poolSpec)
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildDataVolumeClaimTemplate() mismatch (-want +got):\n%s", diff)
