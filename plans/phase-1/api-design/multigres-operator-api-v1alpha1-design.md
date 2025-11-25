@@ -31,7 +31,7 @@ The formalized parent/child model addresses these by ensuring:
   * **Cells:** Explicitly defined in the root CR; can be specified inline or via a `CellTemplate`.
   * **Databases:** Follows a strict physical hierarchy: `Database` -\> `TableGroup` -\> `Shard`.
   * **Shards:** Can be specified inline or via a `ShardTemplate`.
-  * **MultiOrch:** Located at the **Shard** level to provide dedicated orchestration.
+  * **Multiorch** Located at the **Shard** level to provide dedicated orchestration.
 
 ```ascii
 [MultigresCluster] 🚀 (Root CR - user-editable)
@@ -255,7 +255,6 @@ spec:
             - name: "0"
               spec:
                 multiorch:
-                  # replicas: 1
                   resources:
                      requests:
                        cpu: "100m"
@@ -266,8 +265,9 @@ spec:
                 pools:
                   primary:
                     type: "readWrite"
-                    cell: "us-east-1b"
-                    # replicas: 2
+                    cells: 
+                      - "us-east-1b"
+                    replicas: 2
                     storage:
                        size: "100Gi"
                        class: "standard-gp3"
@@ -294,7 +294,6 @@ spec:
             - name: "0"
               spec:
                 multiorch:
-                  # replicas: 1
                   resources:
                      requests:
                        cpu: "100m"
@@ -305,7 +304,8 @@ spec:
                 pools:
                   primary:
                     type: "readWrite"
-                    cell: "us-east-1b"
+                    cells: 
+                      - "us-east-1b"
                     replicas: 2
                     storage:
                        size: "100Gi"
@@ -336,7 +336,8 @@ spec:
                    # Overriding the pool named 'primary' from the template
                    # to ensure it lives in a specific cell for this shard.
                    primary:
-                     cell: "us-east-1a"
+                     cells: 
+                       - "us-east-1a"
                      
             # --- SHARD 2: Using Cluster Default Template ---
             - name: "2"
@@ -347,7 +348,8 @@ spec:
               overrides:
                  pools:
                    primary:
-                     cell: "us-east-1c"
+                     cells: 
+                       - "us-east-1c"
 
 status:
   observedGeneration: 1
@@ -475,10 +477,11 @@ spec:
 
 ### User Managed CR: ShardTemplate
 
-  * Similar to `CellTemplate`, this is a pure configuration object.
+* Similar to `CellTemplate`, this is a pure configuration object.
   * It defines the "shape" of a shard: its orchestration and its data pools.
   * **Important:** `pools` is a **MAP**, keyed by the pool name. This ensures that overrides can safely target a specific pool without relying on brittle list array indices.
-  * `multiorch` is deployed per cell x pooler x shard unless a `withMultiorch: false` is specified in the relevant pooler, in which case it will not be deployed with that pooler. This often means that the pooler will not be deployed in that cell unless there is more than pooler defined for that specific cell.
+  * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty, it defaults to all cells where pools are defined.
+  * **Pool Placement:** `pools` now uses a `cells` list. For `readWrite` pools (Primary), this list typically contains a single cell. For `readOnly` pools (Replicas), this list can contain multiple cells to apply the same configuration across multiple zones.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -491,9 +494,11 @@ spec:
 
   # MultiOrch is a shard-level component.
   # The Operator will deploy one instance of this Deployment into EVERY Cell 
-  # that hosts a Pool for this Shard, unless the pool has a boolean field withMultiorch: false
+  # listed in 'cells'. If 'cells' is empty, it defaults to all cells 
+  # where pools are defined.
   multiorch:
     # replicas: 1 # replicas per cell and pool this multiorch is deployed
+    cells: [] # Defaults to all populated cells
     resources:
       requests:
         cpu: "100m"
@@ -506,12 +511,11 @@ spec:
   pools:
     primary:
       type: "readWrite"
-      # withMultiorch: true # This field defaults to true.
-      # 'cell' can be left empty here or omitted entirely. It MUST be overridden in the 
-      # MultigresCluster CR if left empty.
+      # 'cells' can be left empty here or omitted entirely. It MUST be overridden in the 
+      # MultigresCluster CR if left empty or missing.
       # Alternatively, it can be set to a generic value if this template 
       # is specific to a region (e.g., "us-east-template").
-      cell: "" 
+      cells: [] 
       replicas: 2
       storage:
         class: "standard-gp3"
@@ -533,8 +537,9 @@ spec:
 
     dr-replica:
       type: "readOnly"
-      withMultiorch: false # this pool will have no multiorch.
-      cell: "us-west-2a" # Hardcoded cell example in template
+      # This pool will be deployed to all cells listed here.
+      cells: 
+        - "us-west-2a" 
       replicas: 1
       storage:
          class: "standard-gp3"
@@ -730,7 +735,9 @@ spec:
   shards:
     - name: "0"
       multiorch:
-        # replicas: 1
+        cells: 
+          - "us-east-1a"
+          - "us-east-1b"
         resources:
           requests:
             cpu: "100m"
@@ -740,7 +747,8 @@ spec:
             memory: "256Mi"
       pools:
         primary:
-          cell: "us-east-1a"
+          cells: 
+            - "us-east-1a"
           type: "readWrite"
           replicas: 2
           storage:
@@ -763,7 +771,8 @@ spec:
     
     - name: "1"
       multiorch:
-        # replicas: 1
+        cells: 
+           - "us-east-1b"
         resources:
           requests:
             cpu: "100m"
@@ -773,7 +782,8 @@ spec:
             memory: "256Mi"
       pools:
         primary:
-          cell: "us-east-1b"
+          cells: 
+            - "us-east-1b"
           type: "readWrite"
           replicas: 2
           storage:
@@ -798,7 +808,8 @@ spec:
     # (e.g., "cluster-wide-shard")
     - name: "2"
       multiorch:
-        # replicas: 1
+        cells: 
+          - "us-east-1c"
         resources:
           requests:
             cpu: "100m"
@@ -808,7 +819,8 @@ spec:
             memory: "256Mi"
       pools:
         primary:
-          cell: "us-east-1c" # Resolved from override
+          cells: 
+            - "us-east-1c" # Resolved from override
           type: "readWrite"
           replicas: 2 # Assuming '2' from template
           storage:
@@ -872,7 +884,8 @@ spec:
   
   # Fully resolved from parent TableGroup spec
   multiorch:
-    # replicas: 1
+    cells: 
+      - "us-east-1a"
     resources:
       requests:
         cpu: "100m"
@@ -883,7 +896,8 @@ spec:
 
   pools:
     primary:
-      cell: "us-east-1a" 
+      cells: 
+        - "us-east-1a" 
       type: "readWrite"
       replicas: 2
       storage:
@@ -934,7 +948,7 @@ A mutating admission webhook applies a strict **4-Level Override Chain** to reso
 2.  **Cluster-Level Default Template:** The `spec.templateDefaults.shardTemplate` field in the root `MultigresCluster` CR.
 3.  **Namespace-Level Default Template:** A `ShardTemplate` named `default` in the same namespace as the cluster.
 4.  **Operator Hardcoded Defaults (Lowest):** A final fallback applied by the operator.
-
+5.  **List Replacement Behavior:** When overriding the `cells` field (in pools or multiorch), the new list specified in the override *completely replaces* the list defined in the template. It is not merged or appended.
 -----
 
 ### 2\. Synchronous Validating Webhooks
@@ -1148,12 +1162,13 @@ spec:
   * **2025-11-11:** Introduced a consistent 4-level override chain (inline/explicit-template -\> cluster-default -\> namespace-default -\> webhook) for all components. Added `CoreTemplate` CRD and `spec.templateDefaults` block to support this. Reverted `spec.coreComponents` nesting to top-level `globalTopoServer` and `multiadmin` fields.
   * **2025-11-14:** Explored a multi-CRD "claim" model (`MultigresDatabase` + `MultigresDatabaseResources`) to support DDL-driven workflows and strong RBAC separation.
   * **2025-11-18:** Reverted to the 2025-11-11 monolithic `MultigresCluster` design to align with client requirements for Postgres-native "System Catalog" management. The `MultigresDatabase` CRD was rejected. We will instead support the DDL workflow via a synchronization controller that patches the monolithic `MultigresCluster` CR based on the `SystemCatalog` state.
+  * **2025-11-25:** Moved `multiorch` and `pool` placement from single `cell` fields to explicit `cells` lists. This supports multi-cell pool definitions (e.g., for uniform read replicas) and decouples MultiOrch placement from pool presence, while maintaining safety via a "defaults to all" logic.
 
 ## Drawbacks
 
 We have reverted to this design but the requirement to create resources via DDL (`CREATE DATABASE`) hasn't been dropped, but postponed. What follows are some caveats when following the current design as it stands right now and also incorporating this Posgres compatibility requirement:
 
-  * **Broken "Delete" UX (Zombie Resources):** To support the "DB is Truth" requirement, the Operator **cannot** delete a database simply because it is removed from the `spec.databases` list as it might still exist in the default dastabase schema ("system catalog"). This breaks the standard Kubernetes expectation that "deleting config = deleting resource." Users must use imperative SQL (`DROP DATABASE`) to delete resources; removing them from Git will only orphan them, leaving them running and accruing costs ("Zombie Databases"). Including a bidirectional update process here may complicate things.
+  * **Broken "Delete" UX (Zombie Resources):** To support the "DB is Truth" requirement, the Operator **cannot** delete a database simply because it is removed from the `spec.databases` list as it might still exist in the default database schema ("system catalog"). This breaks the standard Kubernetes expectation that "deleting config = deleting resource." Users must use imperative SQL (`DROP DATABASE`) to delete resources; removing them from Git will only orphan them, leaving them running and accruing costs ("Zombie Databases"). Including a bidirectional update process here may complicate things.
   * **Perpetual GitOps Drift:** Since users can create databases via DDL at any time, the `MultigresCluster` CR in Git will rarely match the actual cluster state. `kubectl diff` will be noisy, and the `status` field will become the only reliable view of the system, degrading the value of the declarative spec. This can be mitigated if we have a component that constantly writes these changes to either git and applies them declaratively, but it is not a common pattern.
   * **Status Object Bloat (Scalability):** Because the Operator must track "Discovered" (DDL-created) databases in the `status` field to make them visible to SREs, a cluster with thousands of databases risks hitting the Kubernetes object size limit (etcd limits). This limits the scalability of the reporting mechanism compared to fanning out to separate CRs.
   * **Resource "Adoption" Friction:** Databases created via DDL are assigned a default `ShardTemplate`. To "upgrade" or resize these databases, an SRE must manually "adopt" them by adding them to the `MultigresCluster` YAML with the correct name and new template. This introduces a manual step and a potential race condition where a new database might be under-provisioned before it can be adopted.
