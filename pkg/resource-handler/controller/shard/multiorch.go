@@ -24,7 +24,10 @@ func BuildMultiOrchDeployment(
 	shard *multigresv1alpha1.Shard,
 	scheme *runtime.Scheme,
 ) (*appsv1.Deployment, error) {
-	// MultiOrch needs to be deployed one per Cell.
+	// MultiOrch should be deployed one per Cell.
+	// The user provided config of "Cells" can specify exact cells to deploy to,
+	// and when not specified, MultigresCluster configuration should pass down
+	// computed list of Cells associated for the entire MultigresCluster.
 	cellCount := len(shard.Spec.MultiOrch.Cells)
 	replicas := int32(cellCount)
 
@@ -51,6 +54,8 @@ func BuildMultiOrchDeployment(
 					Containers: []corev1.Container{
 						buildMultiOrchContainer(shard),
 					},
+					// TODO: Add Affinity support to MultiOrchSpec (like Cell's StatelessSpec)
+					// This would allow pod affinity/anti-affinity rules for MultiOrch deployment
 				},
 			},
 		},
