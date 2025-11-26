@@ -22,129 +22,100 @@ import (
 )
 
 // ============================================================================
-// Shard Spec (Read-only API)
+// Shard Component Specs (Reusable)
 // ============================================================================
+//
+// These specs define the specific components of a shard (Orchestration and Data Pools).
+// They are used by ShardTemplate, TableGroup, and the Shard Child CR.
 
-// ShardSpec defines the desired state of Shard
-// This spec is populated by the MultiTableGroup controller.
-// +kubebuilder:validation:XValidation:rule="has(self.pools) && size(self.pools) > 0",message="at least one shard pool must be defined"
-type ShardSpec struct {
-	// Images required for this shard's pods.
+// MultiOrchSpec defines the configuration specifically for MultiOrch,
+// which requires placement logic (cell targeting).
+type MultiOrchSpec struct {
+	StatelessSpec `json:",inline"`
+
+	// Cells defines the list of cells where this MultiOrch should be deployed.
+	// If empty, it defaults to all cells where pools are defined.
 	// +optional
-	Images ShardImagesSpec `json:"images,omitempty"`
-
-	// MultiOrch defines the desired state of MultiOrch.
-	MultiOrch MultiOrchSpec `json:"multiOrch,omitempty"`
-
-	// Pools defines the different pools of pods for this shard (e.g., replicas, read-only).
-	// This is a direct copy from the parent TableGroup's Pools definition.
-	// +optional
-	Pools map[string]ShardPoolSpec `json:"pools,omitempty"`
+	Cells []string `json:"cells,omitempty"`
 }
 
-// ShardImagesSpec defines the images required for a Shard.
-type ShardImagesSpec struct {
-	// +optional
-	MultiPooler string `json:"multipooler,omitempty"`
-	// +optional
-	Postgres string `json:"postgres,omitempty"`
-}
-
-// ShardPoolSpec defines the desired state of a pool of shard replicas (e.g., primary, replica, read-only).
-// This is the core reusable spec for a shard's pod.
-// TODO: Re-enable storage validation when CEL cost budget is addressed (add maxItems to pools array)
-type ShardPoolSpec struct {
-	// Type of the pool (e.g., "replica", "readOnly").
-	// +kubebuilder:validation:Enum=replica;readOnly
+// PoolSpec defines the configuration for a data pool (StatefulSet).
+type PoolSpec struct {
+	// Type of the pool (e.g., "readWrite", "readOnly").
+	// +kubebuilder:validation:Enum=readWrite;readOnly
 	// +optional
 	Type string `json:"type,omitempty"`
 
-	// Cell is the name of the Cell this pool should run in.
+	// Cells defines the list of cells where this Pool should be deployed.
 	// +optional
-	// +kubebuilder:validation:MaxLength:=63
-	// +kubebuilder:validation:Pattern:="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
-	Cell string `json:"cell,omitempty"`
+	Cells []string `json:"cells,omitempty"`
 
-	Database   string `json:"database,omitempty"`
-	TableGroup string `json:"tableGroup,omitempty"`
-
-	// Replicas is the desired number of pods in this pool.
-	// +kubebuilder:validation:Minimum=1
+	// ReplicasPerCell is the desired number of pods PER CELL in this pool.
+	// +kubebuilder:validation:Minimum=0
 	// +optional
-	Replicas *int32 `json:"replicas,omitempty"`
+	ReplicasPerCell *int32 `json:"replicasPerCell,omitempty"`
+
+	// Storage defines the storage configuration for the pool's data volumes.
+	// +optional
+	Storage StorageSpec `json:"storage,omitempty"`
+
+	// Postgres container configuration.
+	// +optional
+	Postgres ContainerConfig `json:"postgres,omitempty"`
+
+	// Multipooler container configuration.
+	// +optional
+	Multipooler ContainerConfig `json:"multipooler,omitempty"`
 
 	// Affinity defines the pod's scheduling constraints.
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// DataVolumeClaimTemplate provides a spec for the PersistentVolumeClaim
-	// that will be created for each replica.
-	// +optional
-	DataVolumeClaimTemplate corev1.PersistentVolumeClaimSpec `json:"dataVolumeClaimTemplate,omitempty"`
-
-	// Postgres defines the configuration for the Postgres container.
-	// +optional
-	Postgres PostgresSpec `json:"postgres,omitempty"`
-
-	// MultiPooler defines the configuration for the MultiPooler container.
-	// +optional
-	MultiPooler MultiPoolerSpec `json:"multipooler,omitempty"`
 }
 
-// PostgresSpec defines the configuration for the Postgres container.
-type PostgresSpec struct {
-	// Resources defines the compute resource requirements for the Postgres container.
-	// +optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+// ============================================================================
+// Shard Spec (Read-only API)
+// ============================================================================
+//
+// Shard is a child CR managed by TableGroup.
+// Represents a single logical shard with its orchestration and pools.
+
+// ShardSpec defines the desired state of Shard.
+type ShardSpec struct {
+	ShardName string `json:"shardName"`
+
+	// Images required.
+	Images ShardImages `json:"images"`
+
+	// GlobalTopoServer reference.
+	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`
+
+	// MultiOrch fully resolved spec.
+	MultiOrch MultiOrchSpec `json:"multiorch"`
+
+	// Pools fully resolved spec.
+	Pools map[string]PoolSpec `json:"pools"`
 }
 
-// MultiPoolerSpec defines the configuration for the MultiPooler container.
-type MultiPoolerSpec struct {
-	// Resources defines the compute resource requirements for the MultiPooler container.
-	// +optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// MultiOrchSpec defines the configuration for the MultiPooler container.
-type MultiOrchSpec struct {
-	// Cells is the name of the cells MultiOrch needs to be deployed to.
-	Cells []string `json:"cells,omitempty"`
-
-	// Image is the MultiOrch container image to use.
-	// +kubebuilder:validation:MinLength=1
-	// +optional
-	Image string `json:"image,omitempty"`
-
-	// Resources defines the compute resource requirements for the MultiPooler container.
-	// +optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+// ShardImages defines the images required for a Shard.
+type ShardImages struct {
+	MultiOrch   string `json:"multiorch"`
+	MultiPooler string `json:"multipooler"`
+	Postgres    string `json:"postgres"`
 }
 
 // ============================================================================
 // CR Controller Status Specs
 // ============================================================================
 
-// ShardStatus defines the observed state of Shard
+// ShardStatus defines the observed state of Shard.
 type ShardStatus struct {
-	// ObservedGeneration is the most recent generation observed by the controller.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Conditions represent the latest available observations of the Shard's state.
+	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// PrimaryCell is the cell currently holding the primary replica for this shard.
-	// +optional
 	PrimaryCell string `json:"primaryCell,omitempty"`
-
-	// TotalPods is the total number of pods managed by this shard across all pools.
-	// +optional
-	TotalPods int32 `json:"totalPods,omitempty"`
-
-	// ReadyPods is the number of pods for this shard that are ready.
-	// +optional
-	ReadyPods int32 `json:"readyPods,omitempty"`
+	OrchReady   bool   `json:"orchReady"`
+	PoolsReady  bool   `json:"poolsReady"`
 }
 
 // ============================================================================
@@ -153,13 +124,10 @@ type ShardStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status",description="Current availability status"
-// +kubebuilder:printcolumn:name="Primary Cell",type="string",JSONPath=".status.primaryCell",description="Cell of the primary replica"
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyPods",description="Ready pods"
-// +kubebuilder:printcolumn:name="Total",type="string",JSONPath=".status.totalPods",description="Total pods"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Primary",type="string",JSONPath=".status.primaryCell"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
-// Shard is the Schema for the Shards API
+// Shard is the Schema for the shards API
 type Shard struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -172,8 +140,8 @@ type Shard struct {
 
 // ShardList contains a list of Shard
 type ShardList struct {
-	metav1.TypeMeta `        json:",inline"`
-	metav1.ListMeta `        json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Shard `json:"items"`
 }
 
