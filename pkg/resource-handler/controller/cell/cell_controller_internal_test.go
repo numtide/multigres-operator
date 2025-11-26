@@ -75,64 +75,6 @@ func TestReconcileMultiGatewayService_InvalidScheme(t *testing.T) {
 	}
 }
 
-// TestReconcileMultiOrchDeployment_InvalidScheme tests the error path when BuildMultiOrchDeployment fails.
-func TestReconcileMultiOrchDeployment_InvalidScheme(t *testing.T) {
-	invalidScheme := runtime.NewScheme()
-
-	cell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.CellSpec{
-			Name: "zone1",
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(invalidScheme).
-		Build()
-
-	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
-	}
-
-	err := reconciler.reconcileMultiOrchDeployment(context.Background(), cell)
-	if err == nil {
-		t.Error("reconcileMultiOrchDeployment() should error with invalid scheme")
-	}
-}
-
-// TestReconcileMultiOrchService_InvalidScheme tests the error path when BuildMultiOrchService fails.
-func TestReconcileMultiOrchService_InvalidScheme(t *testing.T) {
-	invalidScheme := runtime.NewScheme()
-
-	cell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.CellSpec{
-			Name: "zone1",
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(invalidScheme).
-		Build()
-
-	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
-	}
-
-	err := reconciler.reconcileMultiOrchService(context.Background(), cell)
-	if err == nil {
-		t.Error("reconcileMultiOrchService() should error with invalid scheme")
-	}
-}
-
 // TestUpdateStatus_MultiGatewayDeploymentNotFound tests the NotFound path in updateStatus.
 func TestUpdateStatus_MultiGatewayDeploymentNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -165,55 +107,6 @@ func TestUpdateStatus_MultiGatewayDeploymentNotFound(t *testing.T) {
 	if err != nil {
 		t.Errorf(
 			"updateStatus() should not error when MultiGateway Deployment not found, got: %v",
-			err,
-		)
-	}
-}
-
-// TestUpdateStatus_MultiOrchDeploymentNotFound tests when MultiOrch Deployment is not found.
-func TestUpdateStatus_MultiOrchDeploymentNotFound(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-
-	cell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.CellSpec{
-			Name: "zone1",
-		},
-	}
-
-	// Create MultiGateway Deployment but not MultiOrch
-	mgDeploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell-multigateway",
-			Namespace: "default",
-		},
-		Status: appsv1.DeploymentStatus{
-			Replicas:      2,
-			ReadyReplicas: 2,
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(cell, mgDeploy).
-		WithStatusSubresource(&multigresv1alpha1.Cell{}).
-		Build()
-
-	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	// Call updateStatus when MultiOrch Deployment doesn't exist
-	err := reconciler.updateStatus(context.Background(), cell)
-	if err != nil {
-		t.Errorf(
-			"updateStatus() should not error when MultiOrch Deployment not found, got: %v",
 			err,
 		)
 	}
@@ -330,82 +223,6 @@ func TestReconcileMultiGatewayService_GetError(t *testing.T) {
 	}
 }
 
-// TestReconcileMultiOrchDeployment_GetError tests error path on Get MultiOrch Deployment (not NotFound).
-func TestReconcileMultiOrchDeployment_GetError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	cell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.CellSpec{
-			Name: "zone1",
-		},
-	}
-
-	// Create client with failure injection
-	baseClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(cell).
-		Build()
-
-	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-cell-multiorch", testutil.ErrNetworkTimeout),
-	})
-
-	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	err := reconciler.reconcileMultiOrchDeployment(context.Background(), cell)
-	if err == nil {
-		t.Error("reconcileMultiOrchDeployment() should error on Get failure")
-	}
-}
-
-// TestReconcileMultiOrchService_GetError tests error path on Get MultiOrch Service (not NotFound).
-func TestReconcileMultiOrchService_GetError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	cell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.CellSpec{
-			Name: "zone1",
-		},
-	}
-
-	// Create client with failure injection
-	baseClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(cell).
-		Build()
-
-	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-cell-multiorch", testutil.ErrNetworkTimeout),
-	})
-
-	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	err := reconciler.reconcileMultiOrchService(context.Background(), cell)
-	if err == nil {
-		t.Error("reconcileMultiOrchService() should error on Get failure")
-	}
-}
-
 // TestUpdateStatus_GetError tests error path on Get MultiGateway Deployment (not NotFound).
 func TestUpdateStatus_GetError(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -443,96 +260,6 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	}
 }
 
-// TestUpdateStatus_GetMultiOrchError tests error path on Get MultiOrch Deployment (not NotFound).
-func TestUpdateStatus_GetMultiOrchError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-
-	cell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.CellSpec{
-			Name: "zone1",
-		},
-	}
-
-	// Create MultiGateway Deployment so we get past that Get
-	mgDeploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cell-multigateway",
-			Namespace: "default",
-		},
-		Status: appsv1.DeploymentStatus{
-			Replicas:      2,
-			ReadyReplicas: 2,
-		},
-	}
-
-	baseClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(cell, mgDeploy).
-		WithStatusSubresource(&multigresv1alpha1.Cell{}).
-		Build()
-
-	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-cell-multiorch", testutil.ErrNetworkTimeout),
-	})
-
-	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	err := reconciler.updateStatus(context.Background(), cell)
-	if err == nil {
-		t.Error("updateStatus() should error on Get MultiOrch failure")
-	}
-}
-
-// TestBuildConditions_NilMultiOrchDeployment tests buildConditions when MultiOrch deployment is nil.
-func TestBuildConditions_NilMultiOrchDeployment(t *testing.T) {
-	reconciler := &CellReconciler{}
-
-	cell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-cell",
-			Namespace:  "default",
-			Generation: 1,
-		},
-		Spec: multigresv1alpha1.CellSpec{
-			Name: "zone1",
-		},
-	}
-
-	mgDeploy := &appsv1.Deployment{
-		Status: appsv1.DeploymentStatus{
-			Replicas:      2,
-			ReadyReplicas: 2,
-		},
-	}
-
-	// Pass nil for MultiOrch deployment
-	conditions := reconciler.buildConditions(cell, mgDeploy, nil)
-
-	if len(conditions) == 0 {
-		t.Fatal("buildConditions() should return conditions")
-	}
-
-	readyCondition := conditions[0]
-	if readyCondition.Type != "Ready" {
-		t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
-	}
-	if readyCondition.Status != metav1.ConditionFalse {
-		t.Errorf("Condition status = %s, want False (MultiOrch is nil)", readyCondition.Status)
-	}
-	if readyCondition.Reason != "ComponentsNotReady" {
-		t.Errorf("Condition reason = %s, want ComponentsNotReady", readyCondition.Reason)
-	}
-}
-
 // TestBuildConditions_ZeroReplicas tests buildConditions when deployments have zero replicas.
 func TestBuildConditions_ZeroReplicas(t *testing.T) {
 	reconciler := &CellReconciler{}
@@ -555,14 +282,7 @@ func TestBuildConditions_ZeroReplicas(t *testing.T) {
 		},
 	}
 
-	moDeploy := &appsv1.Deployment{
-		Status: appsv1.DeploymentStatus{
-			Replicas:      0,
-			ReadyReplicas: 0,
-		},
-	}
-
-	conditions := reconciler.buildConditions(cell, mgDeploy, moDeploy)
+	conditions := reconciler.buildConditions(cell, mgDeploy)
 
 	if len(conditions) == 0 {
 		t.Fatal("buildConditions() should return conditions")
@@ -575,7 +295,7 @@ func TestBuildConditions_ZeroReplicas(t *testing.T) {
 	if readyCondition.Status != metav1.ConditionFalse {
 		t.Errorf("Condition status = %s, want False (zero replicas)", readyCondition.Status)
 	}
-	if readyCondition.Reason != "ComponentsNotReady" {
-		t.Errorf("Condition reason = %s, want ComponentsNotReady", readyCondition.Reason)
+	if readyCondition.Reason != "MultiGatewayNotReady" {
+		t.Errorf("Condition reason = %s, want MultiGatewayNotReady", readyCondition.Reason)
 	}
 }

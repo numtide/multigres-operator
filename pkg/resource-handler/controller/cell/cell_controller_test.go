@@ -66,35 +66,11 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					t.Errorf("MultiGateway Service should exist: %v", err)
 				}
 
-				// Verify MultiOrch Deployment was created
-				moDeploy := &appsv1.Deployment{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-cell-multiorch", Namespace: "default"},
-					moDeploy); err != nil {
-					t.Errorf("MultiOrch Deployment should exist: %v", err)
-				}
-
-				// Verify MultiOrch Service was created
-				moSvc := &corev1.Service{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-cell-multiorch", Namespace: "default"},
-					moSvc); err != nil {
-					t.Errorf("MultiOrch Service should exist: %v", err)
-				}
-
 				// Verify defaults
 				if *mgDeploy.Spec.Replicas != int32(2) {
 					t.Errorf(
 						"MultiGateway Deployment replicas = %d, want %d",
 						*mgDeploy.Spec.Replicas,
-						int32(2),
-					)
-				}
-
-				if *moDeploy.Spec.Replicas != int32(2) {
-					t.Errorf(
-						"MultiOrch Deployment replicas = %d, want %d",
-						*moDeploy.Spec.Replicas,
 						int32(2),
 					)
 				}
@@ -121,12 +97,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(5)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(3)),
-					},
 					Images: multigresv1alpha1.CellImagesSpec{
 						MultiGateway: "custom/multigateway:v1.0.0",
-						MultiOrch:    "custom/multiorch:v1.0.0",
 					},
 				},
 			},
@@ -147,25 +119,6 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "existing-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-cell-multiorch",
-						Namespace: "default",
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)), // will be updated to 3
-					},
-					Status: appsv1.DeploymentStatus{
-						Replicas:      2,
-						ReadyReplicas: 2,
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-cell-multiorch",
 						Namespace: "default",
 					},
 				},
@@ -191,26 +144,6 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					t.Errorf(
 						"MultiGateway image = %s, want custom/multigateway:v1.0.0",
 						mgDeploy.Spec.Template.Spec.Containers[0].Image,
-					)
-				}
-
-				moDeploy := &appsv1.Deployment{}
-				err = c.Get(t.Context(), types.NamespacedName{
-					Name:      "existing-cell-multiorch",
-					Namespace: "default",
-				}, moDeploy)
-				if err != nil {
-					t.Fatalf("Failed to get MultiOrch Deployment: %v", err)
-				}
-
-				if *moDeploy.Spec.Replicas != 3 {
-					t.Errorf("MultiOrch Deployment replicas = %d, want 3", *moDeploy.Spec.Replicas)
-				}
-
-				if moDeploy.Spec.Template.Spec.Containers[0].Image != "custom/multiorch:v1.0.0" {
-					t.Errorf(
-						"MultiOrch image = %s, want custom/multiorch:v1.0.0",
-						moDeploy.Spec.Template.Spec.Containers[0].Image,
 					)
 				}
 			},
@@ -265,9 +198,6 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
-					},
 				},
 			},
 			existingObjects: []client.Object{
@@ -290,25 +220,6 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-ready-multiorch",
-						Namespace: "default",
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
-					},
-					Status: appsv1.DeploymentStatus{
-						Replicas:      2,
-						ReadyReplicas: 2,
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-ready-multiorch",
-						Namespace: "default",
-					},
-				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
 				updatedCell := &multigresv1alpha1.Cell{}
@@ -328,8 +239,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					if readyCondition.Status != metav1.ConditionTrue {
 						t.Errorf("Condition status = %s, want True", readyCondition.Status)
 					}
-					if readyCondition.Reason != "AllComponentsReady" {
-						t.Errorf("Condition reason = %s, want AllComponentsReady", readyCondition.Reason)
+					if readyCondition.Reason != "MultiGatewayReady" {
+						t.Errorf("Condition reason = %s, want MultiGatewayReady", readyCondition.Reason)
 					}
 				}
 
@@ -348,9 +259,6 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone5",
 					MultiGateway: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(3)),
-					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(3)),
 					},
 				},
@@ -375,25 +283,6 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-partial-multiorch",
-						Namespace: "default",
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(3)),
-					},
-					Status: appsv1.DeploymentStatus{
-						Replicas:      3,
-						ReadyReplicas: 3,
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-partial-multiorch",
-						Namespace: "default",
-					},
-				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
 				updatedCell := &multigresv1alpha1.Cell{}
@@ -414,9 +303,9 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				if readyCondition.Status != metav1.ConditionFalse {
 					t.Errorf("Condition status = %s, want False", readyCondition.Status)
 				}
-				if readyCondition.Reason != "ComponentsNotReady" {
+				if readyCondition.Reason != "MultiGatewayNotReady" {
 					t.Errorf(
-						"Condition reason = %s, want ComponentsNotReady",
+						"Condition reason = %s, want MultiGatewayNotReady",
 						readyCondition.Reason,
 					)
 				}
@@ -465,22 +354,10 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-status-multiorch",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-status-multiorch",
-						Namespace: "default",
-					},
-				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				// Fail MultiGateway Deployment Get after successful reconciliation calls
-				OnGet: testutil.FailKeyAfterNCalls(4, testutil.ErrNetworkTimeout),
+				// Fail MultiGateway Deployment Get in updateStatus (after reconcile calls)
+				OnGet: testutil.FailKeyAfterNCalls(2, testutil.ErrNetworkTimeout),
 			},
 			wantErr: true,
 		},
@@ -647,221 +524,6 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					"default",
 					testutil.ErrNetworkTimeout,
 				),
-			},
-			wantErr: true,
-		},
-		"error on MultiOrch Deployment create": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cell",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-cell-multiorch" {
-						return testutil.ErrPermissionError
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on MultiOrch Deployment Update": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(5)),
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multiorch",
-						Namespace: "default",
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-cell-multiorch" {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get MultiOrch Deployment (network error)": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-cell-multiorch" {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on MultiOrch Service create": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cell",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-cell-multiorch" {
-						return testutil.ErrPermissionError
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on MultiOrch Service Update": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multiorch",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multiorch",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-cell-multiorch" {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get MultiOrch Service (network error)": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multiorch",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-cell-multiorch" && key.Namespace == "default" {
-						// Only fail Service Get, not Deployment Get
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
 			},
 			wantErr: true,
 		},

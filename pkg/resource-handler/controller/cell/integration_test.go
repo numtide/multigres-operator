@@ -125,53 +125,6 @@ func TestCellReconciliation(t *testing.T) {
 						Selector: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1"),
 					},
 				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "test-cell-multiorch", "multiorch", "zone1"),
-						OwnerReferences: cellOwnerRefs(t, "test-cell"),
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "test-cell-multiorch", "multiorch", "zone1"),
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "test-cell-multiorch", "multiorch", "zone1"),
-							},
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{
-									{
-										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
-										Ports: []corev1.ContainerPort{
-											tcpPort(t, "http", 15200),
-											tcpPort(t, "grpc", 15270),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "test-cell-multiorch", "multiorch", "zone1"),
-						OwnerReferences: cellOwnerRefs(t, "test-cell"),
-					},
-					Spec: corev1.ServiceSpec{
-						Type: corev1.ServiceTypeClusterIP,
-						Ports: []corev1.ServicePort{
-							tcpServicePort(t, "http", 15200),
-							tcpServicePort(t, "grpc", 15270),
-						},
-						Selector: cellLabels(t, "test-cell-multiorch", "multiorch", "zone1"),
-					},
-				},
 			},
 		},
 		"cell with custom replicas": {
@@ -242,53 +195,6 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "postgres", 15432),
 						},
 						Selector: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2"),
-					},
-				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "custom-replicas-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-replicas-cell-multiorch", "multiorch", "zone2"),
-						OwnerReferences: cellOwnerRefs(t, "custom-replicas-cell"),
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(3)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "custom-replicas-cell-multiorch", "multiorch", "zone2"),
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "custom-replicas-cell-multiorch", "multiorch", "zone2"),
-							},
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{
-									{
-										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
-										Ports: []corev1.ContainerPort{
-											tcpPort(t, "http", 15200),
-											tcpPort(t, "grpc", 15270),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "custom-replicas-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-replicas-cell-multiorch", "multiorch", "zone2"),
-						OwnerReferences: cellOwnerRefs(t, "custom-replicas-cell"),
-					},
-					Spec: corev1.ServiceSpec{
-						Type: corev1.ServiceTypeClusterIP,
-						Ports: []corev1.ServicePort{
-							tcpServicePort(t, "http", 15200),
-							tcpServicePort(t, "grpc", 15270),
-						},
-						Selector: cellLabels(t, "custom-replicas-cell-multiorch", "multiorch", "zone2"),
 					},
 				},
 			},
@@ -365,53 +271,6 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "postgres", 15432),
 						},
 						Selector: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3"),
-					},
-				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "custom-images-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-images-cell-multiorch", "multiorch", "zone3"),
-						OwnerReferences: cellOwnerRefs(t, "custom-images-cell"),
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "custom-images-cell-multiorch", "multiorch", "zone3"),
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "custom-images-cell-multiorch", "multiorch", "zone3"),
-							},
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{
-									{
-										Name:  "multiorch",
-										Image: "custom/multiorch:v1.0.0",
-										Ports: []corev1.ContainerPort{
-											tcpPort(t, "http", 15200),
-											tcpPort(t, "grpc", 15270),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "custom-images-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-images-cell-multiorch", "multiorch", "zone3"),
-						OwnerReferences: cellOwnerRefs(t, "custom-images-cell"),
-					},
-					Spec: corev1.ServiceSpec{
-						Type: corev1.ServiceTypeClusterIP,
-						Ports: []corev1.ServicePort{
-							tcpServicePort(t, "http", 15200),
-							tcpServicePort(t, "grpc", 15270),
-						},
-						Selector: cellLabels(t, "custom-images-cell-multiorch", "multiorch", "zone3"),
 					},
 				},
 			},
@@ -535,70 +394,6 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "postgres", 15432),
 						},
 						Selector: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4"),
-					},
-				},
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "affinity-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "affinity-cell-multiorch", "multiorch", "zone4"),
-						OwnerReferences: cellOwnerRefs(t, "affinity-cell"),
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "affinity-cell-multiorch", "multiorch", "zone4"),
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "affinity-cell-multiorch", "multiorch", "zone4"),
-							},
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{
-									{
-										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
-										Ports: []corev1.ContainerPort{
-											tcpPort(t, "http", 15200),
-											tcpPort(t, "grpc", 15270),
-										},
-									},
-								},
-								Affinity: &corev1.Affinity{
-									PodAntiAffinity: &corev1.PodAntiAffinity{
-										PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-											{
-												Weight: 100,
-												PodAffinityTerm: corev1.PodAffinityTerm{
-													LabelSelector: &metav1.LabelSelector{
-														MatchLabels: map[string]string{
-															"app.kubernetes.io/component": "multiorch",
-														},
-													},
-													TopologyKey: "kubernetes.io/hostname",
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "affinity-cell-multiorch",
-						Namespace:       "default",
-						Labels:          cellLabels(t, "affinity-cell-multiorch", "multiorch", "zone4"),
-						OwnerReferences: cellOwnerRefs(t, "affinity-cell"),
-					},
-					Spec: corev1.ServiceSpec{
-						Type: corev1.ServiceTypeClusterIP,
-						Ports: []corev1.ServicePort{
-							tcpServicePort(t, "http", 15200),
-							tcpServicePort(t, "grpc", 15270),
-						},
-						Selector: cellLabels(t, "affinity-cell-multiorch", "multiorch", "zone4"),
 					},
 				},
 			},

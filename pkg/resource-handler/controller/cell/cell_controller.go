@@ -75,18 +75,6 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile MultiOrch Deployment
-	if err := r.reconcileMultiOrchDeployment(ctx, cell); err != nil {
-		logger.Error(err, "Failed to reconcile MultiOrch Deployment")
-		return ctrl.Result{}, err
-	}
-
-	// Reconcile MultiOrch Service
-	if err := r.reconcileMultiOrchService(ctx, cell); err != nil {
-		logger.Error(err, "Failed to reconcile MultiOrch Service")
-		return ctrl.Result{}, err
-	}
-
 	// Update status
 	if err := r.updateStatus(ctx, cell); err != nil {
 		logger.Error(err, "Failed to update status")
@@ -189,75 +177,6 @@ func (r *CellReconciler) reconcileMultiGatewayService(
 	return nil
 }
 
-// reconcileMultiOrchDeployment creates or updates the MultiOrch Deployment.
-func (r *CellReconciler) reconcileMultiOrchDeployment(
-	ctx context.Context,
-	cell *multigresv1alpha1.Cell,
-) error {
-	desired, err := BuildMultiOrchDeployment(cell, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build MultiOrch Deployment: %w", err)
-	}
-
-	existing := &appsv1.Deployment{}
-	name := cell.Name + "-multiorch"
-	err = r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: name}, existing)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Deployment
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create MultiOrch Deployment: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get MultiOrch Deployment: %w", err)
-	}
-
-	// Update existing Deployment
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update MultiOrch Deployment: %w", err)
-	}
-
-	return nil
-}
-
-// reconcileMultiOrchService creates or updates the MultiOrch Service.
-func (r *CellReconciler) reconcileMultiOrchService(
-	ctx context.Context,
-	cell *multigresv1alpha1.Cell,
-) error {
-	desired, err := BuildMultiOrchService(cell, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build MultiOrch Service: %w", err)
-	}
-
-	existing := &corev1.Service{}
-	name := cell.Name + "-multiorch"
-	err = r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: name}, existing)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Service
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create MultiOrch Service: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get MultiOrch Service: %w", err)
-	}
-
-	// Update existing Service
-	existing.Spec.Ports = desired.Spec.Ports
-	existing.Spec.Selector = desired.Spec.Selector
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update MultiOrch Service: %w", err)
-	}
-
-	return nil
-}
-
 // updateStatus updates the Cell status based on observed state.
 func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alpha1.Cell) error {
 	// Get the MultiGateway Deployment to check status
@@ -275,22 +194,11 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 		return fmt.Errorf("failed to get MultiGateway Deployment for status: %w", err)
 	}
 
-	// Get the MultiOrch Deployment to check status
-	moDeploy := &appsv1.Deployment{}
-	err = r.Get(
-		ctx,
-		client.ObjectKey{Namespace: cell.Namespace, Name: cell.Name + "-multiorch"},
-		moDeploy,
-	)
-	if err != nil && !errors.IsNotFound(err) {
-		return fmt.Errorf("failed to get MultiOrch Deployment for status: %w", err)
-	}
-
 	// Update status fields
 	cell.Status.ObservedGeneration = cell.Generation
 
 	// Update conditions
-	cell.Status.Conditions = r.buildConditions(cell, mgDeploy, moDeploy)
+	cell.Status.Conditions = r.buildConditions(cell, mgDeploy)
 
 	if err := r.Status().Update(ctx, cell); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -303,11 +211,10 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 func (r *CellReconciler) buildConditions(
 	cell *multigresv1alpha1.Cell,
 	mgDeploy *appsv1.Deployment,
-	moDeploy *appsv1.Deployment,
 ) []metav1.Condition {
 	conditions := []metav1.Condition{}
 
-	// Ready condition - both MultiGateway and MultiOrch must be ready
+	// Ready condition - MultiGateway must be ready
 	readyCondition := metav1.Condition{
 		Type:               "Ready",
 		ObservedGeneration: cell.Generation,
@@ -316,28 +223,15 @@ func (r *CellReconciler) buildConditions(
 
 	mgReady := mgDeploy.Status.ReadyReplicas == mgDeploy.Status.Replicas &&
 		mgDeploy.Status.Replicas > 0
-	moReady := moDeploy != nil && moDeploy.Status.ReadyReplicas == moDeploy.Status.Replicas &&
-		moDeploy.Status.Replicas > 0
 
-	if mgReady && moReady {
+	if mgReady {
 		readyCondition.Status = metav1.ConditionTrue
-		readyCondition.Reason = "AllComponentsReady"
-		readyCondition.Message = "MultiGateway and MultiOrch are ready"
+		readyCondition.Reason = "MultiGatewayReady"
+		readyCondition.Message = fmt.Sprintf("MultiGateway %d/%d ready", mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
 	} else {
 		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = "ComponentsNotReady"
-
-		var moReadyReplicas, moTotalReplicas int32
-		if moDeploy != nil {
-			moReadyReplicas = moDeploy.Status.ReadyReplicas
-			moTotalReplicas = moDeploy.Status.Replicas
-		}
-
-		readyCondition.Message = fmt.Sprintf(
-			"MultiGateway: %d/%d ready, MultiOrch: %d/%d ready",
-			mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas,
-			moReadyReplicas, moTotalReplicas,
-		)
+		readyCondition.Reason = "MultiGatewayNotReady"
+		readyCondition.Message = fmt.Sprintf("MultiGateway %d/%d ready", mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
 	}
 
 	conditions = append(conditions, readyCondition)
