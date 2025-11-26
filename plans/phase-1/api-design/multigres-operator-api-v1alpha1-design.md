@@ -267,7 +267,7 @@ spec:
                     type: "readWrite"
                     cells: 
                       - "us-east-1b"
-                    replicas: 2
+                    replicasPerCell: 2
                     storage:
                        size: "100Gi"
                        class: "standard-gp3"
@@ -306,7 +306,7 @@ spec:
                     type: "readWrite"
                     cells: 
                       - "us-east-1b"
-                    replicas: 2
+                    replicasPerCell: 2
                     storage:
                        size: "100Gi"
                        class: "standard-gp3"
@@ -516,7 +516,7 @@ spec:
       # Alternatively, it can be set to a generic value if this template 
       # is specific to a region (e.g., "us-east-template").
       cells: [] 
-      replicas: 2
+      replicasPerCell: 2
       storage:
         class: "standard-gp3"
         size: "100Gi"
@@ -750,7 +750,7 @@ spec:
           cells: 
             - "us-east-1a"
           type: "readWrite"
-          replicas: 2
+          replicasPerCell: 2
           storage:
              size: "100Gi"
              class: "standard-gp3"
@@ -785,7 +785,7 @@ spec:
           cells: 
             - "us-east-1b"
           type: "readWrite"
-          replicas: 2
+          replicasPerCell: 2
           storage:
              size: "100Gi"
              class: "standard-gp3"
@@ -822,7 +822,7 @@ spec:
           cells: 
             - "us-east-1c" # Resolved from override
           type: "readWrite"
-          replicas: 2 # Assuming '2' from template
+          replicasPerCell: 2 # Assuming '2' from template
           storage:
              size: "100Gi" # Assuming '100Gi' from template
              class: "standard-gp3" # Assuming 'standard-gp3' from template
@@ -899,7 +899,7 @@ spec:
       cells: 
         - "us-east-1a" 
       type: "readWrite"
-      replicas: 2
+      replicasPerCell: 2
       storage:
          size: "100Gi"
          class: "standard-gp3"
