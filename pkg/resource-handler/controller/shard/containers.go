@@ -131,17 +131,22 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 		image = shard.Spec.MultiOrch.Image
 	}
 
-	// TODO: Add full command line arguments:
-	// --http-port, --grpc-port (from ports or defaults)
-	// --topo-global-server-addresses (from global topo server ref)
-	// --topo-global-root (from global topo server ref)
-	// --topo-implementation etcd2
-	// --cell (needs to be determined per-pod based on shard.Spec.MultiOrch.Cells)
+	// TODO: Add remaining command line arguments:
+	// --topo-global-server-addresses (needs global topo server ref in ShardSpec)
+	// --topo-global-root (needs global topo server ref in ShardSpec)
+	// --cell (needs to be determined per-pod using StatefulSet with topology spread or env var from Downward API based on shard.Spec.MultiOrch.Cells)
 	// --log-level, --log-output, --hostname
+
+	args := []string{
+		"--http-port", "15300",
+		"--grpc-port", "15370",
+		"--topo-implementation", "etcd2",
+	}
 
 	return corev1.Container{
 		Name:      "multiorch",
 		Image:     image,
+		Args:      args,
 		Ports:     buildMultiOrchContainerPorts(),
 		Resources: shard.Spec.MultiOrch.Resources,
 	}

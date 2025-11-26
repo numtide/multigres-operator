@@ -16,10 +16,10 @@ const (
 	DefaultPostgresPort int32 = 5432
 
 	// DefaultMultiOrchHTTPPort is the default port for MultiOrch HTTP traffic.
-	DefaultMultiOrchHTTPPort int32 = 15200
+	DefaultMultiOrchHTTPPort int32 = 15300
 
 	// DefaultMultiOrchGRPCPort is the default port for MultiOrch gRPC traffic.
-	DefaultMultiOrchGRPCPort int32 = 15270
+	DefaultMultiOrchGRPCPort int32 = 15370
 )
 
 // buildMultiPoolerContainerPorts creates the port definitions for the multipooler sidecar container.

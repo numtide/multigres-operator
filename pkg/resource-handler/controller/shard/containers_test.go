@@ -301,7 +301,13 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 			want: corev1.Container{
 				Name:  "multiorch",
 				Image: DefaultMultiOrchImage,
-				Ports: buildMultiOrchContainerPorts(),
+				Args: []string{
+					"--http-port", "15300",
+					"--grpc-port", "15370",
+					"--topo-implementation", "etcd2",
+				},
+				Ports:     buildMultiOrchContainerPorts(),
+				Resources: corev1.ResourceRequirements{},
 			},
 		},
 	}

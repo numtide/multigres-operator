@@ -83,11 +83,9 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{
-									Name:  "multiorch",
-									Image: DefaultMultiOrchImage,
-									Ports: buildMultiOrchContainerPorts(),
-								},
+								buildMultiOrchContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{},
+								}),
 							},
 						},
 					},
@@ -153,11 +151,9 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
-								{
-									Name:  "multiorch",
-									Image: DefaultMultiOrchImage,
-									Ports: buildMultiOrchContainerPorts(),
-								},
+								buildMultiOrchContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{},
+								}),
 							},
 						},
 					},

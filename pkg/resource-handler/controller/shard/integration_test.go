@@ -110,9 +110,14 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name:  "multiorch",
 										Image: "numtide/multigres-operator:latest",
+										Args: []string{
+											"--http-port", "15300",
+											"--grpc-port", "15370",
+											"--topo-implementation", "etcd2",
+										},
 										Ports: []corev1.ContainerPort{
-											tcpPort(t, "http", 15200),
-											tcpPort(t, "grpc", 15270),
+											tcpPort(t, "http", 15300),
+											tcpPort(t, "grpc", 15370),
 										},
 									},
 								},
@@ -132,8 +137,8 @@ func TestShardReconciliation(t *testing.T) {
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
-							tcpServicePort(t, "http", 15200),
-							tcpServicePort(t, "grpc", 15270),
+							tcpServicePort(t, "http", 15300),
+							tcpServicePort(t, "grpc", 15370),
 						},
 						// TODO: Cell information is not mapped for MultiOrch
 						// Selector:          shardLabels(t, "test-shard-multiorch", "multiorch", "us-west-1a"),
