@@ -83,9 +83,9 @@ Defining these entries allows the user to explicitly configure the resources (re
   * This CR and the three scoped templates (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
     * All other child CRs will be owned by this top-level CR. Any manual changes to those child CRs will be immediately reverted by the `MultigresCluster` cluster controller.
   * All component configurations (`globalTopoServer`, `multiadmin`, `cells`, `shards`) follow a consistent pattern: they can be defined via an inline `spec` or by referencing a template (`templateRef`). Providing both is a validation error.
-    * **Override Chain:** All components use the following 4-level precedence chain for configuration:
+    * **4-level Override Chain:** All components use the following 4-level precedence chain for configuration:
       1.  **Component-Level Definition:** An inline `spec` or an explicit `templateRef` on the component itself.
-      2.  **Cluster-Level Default:** The corresponding template defined in `spec.templateDefaults` (e.g., `templateDefaults.coreTemplate` or `templateDefaults.cellTemplate`).
+      2.  **Defaults in MultigresCluster spec:** The corresponding template defined in `spec.templateDefaults` (e.g., `templateDefaults.coreTemplate` or `templateDefaults.cellTemplate`).
       3.  **Namespace-Level Default:** A template of the correct kind (e.g., `CoreTemplate`) named `default` in the same namespace.
       4.  **Operator Hardcoded Defaults:** A final fallback applied by the operator's admission webhook.
     * **Atomic Overrides:** To ensure safety, highly interdependent fields are grouped (e.g., `resources`, `storage`). When using `overrides`, you must replace the *entire* group, not just individual sub-fields (e.g., you cannot override just `cpu limit` without also providing `cpu request`).
