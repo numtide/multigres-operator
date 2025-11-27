@@ -4,27 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: cells.multigres.com
+  name: celltemplates.multigres.com
 spec:
   group: multigres.com
   names:
-    kind: Cell
-    listKind: CellList
-    plural: cells
-    singular: cell
+    kind: CellTemplate
+    listKind: CellTemplateList
+    plural: celltemplates
+    singular: celltemplate
   scope: Namespaced
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.gatewayReadyReplicas
-      name: Gateway
-      type: integer
-    - jsonPath: .status.conditions[?(@.type=='Available')].status
-      name: Ready
-      type: string
-    name: v1alpha1
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Cell is the Schema for the cells API
+        description: CellTemplate is the Schema for the celltemplates API
         properties:
           apiVersion:
             description: |-
@@ -44,37 +37,118 @@ spec:
           metadata:
             type: object
           spec:
-            description: CellSpec defines the desired state of Cell.
+            description: CellTemplateSpec defines reusable config for Cell components
+              (Gateway, LocalTopo).
             properties:
-              allCells:
-                description: AllCells list for discovery.
-                items:
-                  type: string
-                type: array
-              globalTopoServer:
-                description: GlobalTopoServer reference (always populated).
+              localTopoServer:
+                description: LocalTopoServer configuration (optional).
                 properties:
-                  address:
-                    type: string
-                  implementation:
-                    type: string
-                  rootPath:
-                    type: string
-                required:
-                - address
-                - implementation
-                - rootPath
+                  etcd:
+                    description: Etcd defines an inline managed Etcd cluster.
+                    properties:
+                      replicas:
+                        description: Replicas is the desired number of etcd members.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      resources:
+                        description: Resources defines the compute resource requirements.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This field depends on the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                      storage:
+                        description: Storage configuration for Etcd data.
+                        properties:
+                          class:
+                            description: Class is the StorageClass name.
+                            type: string
+                          size:
+                            description: Size of the persistent volume.
+                            pattern: ^([0-9]+)(.+)$
+                            type: string
+                        type: object
+                    type: object
+                  external:
+                    description: External defines connection details for an unmanaged,
+                      external topo server.
+                    properties:
+                      caSecret:
+                        description: CASecret is the name of the secret containing
+                          the CA certificate.
+                        type: string
+                      clientCertSecret:
+                        description: ClientCertSecret is the name of the secret containing
+                          the client cert/key.
+                        type: string
+                      endpoints:
+                        description: Endpoints is a list of client URLs.
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                    required:
+                    - endpoints
+                    type: object
                 type: object
-              images:
-                description: Images required for this cell.
-                properties:
-                  multigateway:
-                    type: string
-                required:
-                - multigateway
-                type: object
+                x-kubernetes-validations:
+                - message: only one of 'etcd' or 'external' can be set
+                  rule: '!(has(self.etcd) && has(self.external))'
               multiGateway:
-                description: MultiGateway fully resolved config.
+                description: MultiGateway configuration.
                 properties:
                   affinity:
                     description: Affinity defines the pod's scheduling constraints.
@@ -1070,210 +1144,7 @@ spec:
                         type: object
                     type: object
                 type: object
-              name:
-                description: Name is the logical name of the cell.
-                type: string
-              topoServer:
-                description: TopoServer defines the local topology config.
-                properties:
-                  etcd:
-                    description: Etcd defines an inline managed Etcd cluster.
-                    properties:
-                      replicas:
-                        description: Replicas is the desired number of etcd members.
-                        format: int32
-                        minimum: 1
-                        type: integer
-                      resources:
-                        description: Resources defines the compute resource requirements.
-                        properties:
-                          claims:
-                            description: |-
-                              Claims lists the names of resources, defined in spec.resourceClaims,
-                              that are used by this container.
-
-                              This field depends on the
-                              DynamicResourceAllocation feature gate.
-
-                              This field is immutable. It can only be set for containers.
-                            items:
-                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                              properties:
-                                name:
-                                  description: |-
-                                    Name must match the name of one entry in pod.spec.resourceClaims of
-                                    the Pod where this field is used. It makes that resource available
-                                    inside a container.
-                                  type: string
-                                request:
-                                  description: |-
-                                    Request is the name chosen for a request in the referenced claim.
-                                    If empty, everything from the claim is made available, otherwise
-                                    only the result of this request.
-                                  type: string
-                              required:
-                              - name
-                              type: object
-                            type: array
-                            x-kubernetes-list-map-keys:
-                            - name
-                            x-kubernetes-list-type: map
-                          limits:
-                            additionalProperties:
-                              anyOf:
-                              - type: integer
-                              - type: string
-                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                              x-kubernetes-int-or-string: true
-                            description: |-
-                              Limits describes the maximum amount of compute resources allowed.
-                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                            type: object
-                          requests:
-                            additionalProperties:
-                              anyOf:
-                              - type: integer
-                              - type: string
-                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                              x-kubernetes-int-or-string: true
-                            description: |-
-                              Requests describes the minimum amount of compute resources required.
-                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                            type: object
-                        type: object
-                      storage:
-                        description: Storage configuration for Etcd data.
-                        properties:
-                          class:
-                            description: Class is the StorageClass name.
-                            type: string
-                          size:
-                            description: Size of the persistent volume.
-                            pattern: ^([0-9]+)(.+)$
-                            type: string
-                        type: object
-                    type: object
-                  external:
-                    description: External defines connection details for an unmanaged,
-                      external topo server.
-                    properties:
-                      caSecret:
-                        description: CASecret is the name of the secret containing
-                          the CA certificate.
-                        type: string
-                      clientCertSecret:
-                        description: ClientCertSecret is the name of the secret containing
-                          the client cert/key.
-                        type: string
-                      endpoints:
-                        description: Endpoints is a list of client URLs.
-                        items:
-                          type: string
-                        minItems: 1
-                        type: array
-                    required:
-                    - endpoints
-                    type: object
-                type: object
-                x-kubernetes-validations:
-                - message: only one of 'etcd' or 'external' can be set
-                  rule: '!(has(self.etcd) && has(self.external))'
-              topologyReconciliation:
-                description: TopologyReconciliation flags.
-                properties:
-                  pruneTablets:
-                    type: boolean
-                  registerCell:
-                    type: boolean
-                required:
-                - pruneTablets
-                - registerCell
-                type: object
-              zone:
-                description: Zone indicates the physical availability zone.
-                type: string
-            required:
-            - globalTopoServer
-            - images
-            - multiGateway
-            - name
-            type: object
-          status:
-            description: CellStatus defines the observed state of Cell.
-            properties:
-              conditions:
-                description: Conditions represent the latest available observations.
-                items:
-                  description: Condition contains details for one aspect of the current
-                    state of this API Resource.
-                  properties:
-                    lastTransitionTime:
-                      description: |-
-                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                      format: date-time
-                      type: string
-                    message:
-                      description: |-
-                        message is a human readable message indicating details about the transition.
-                        This may be an empty string.
-                      maxLength: 32768
-                      type: string
-                    observedGeneration:
-                      description: |-
-                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                        with respect to the current state of the instance.
-                      format: int64
-                      minimum: 0
-                      type: integer
-                    reason:
-                      description: |-
-                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                        Producers of specific condition types may define expected values and meanings for this field,
-                        and whether the values are considered a guaranteed API.
-                        The value should be a CamelCase string.
-                        This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                      type: string
-                    status:
-                      description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
-                      type: string
-                    type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                      type: string
-                  required:
-                  - lastTransitionTime
-                  - message
-                  - reason
-                  - status
-                  - type
-                  type: object
-                type: array
-              gatewayReadyReplicas:
-                format: int32
-                type: integer
-              gatewayReplicas:
-                format: int32
-                type: integer
-              gatewayServiceName:
-                type: string
-            required:
-            - gatewayReadyReplicas
-            - gatewayReplicas
             type: object
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
