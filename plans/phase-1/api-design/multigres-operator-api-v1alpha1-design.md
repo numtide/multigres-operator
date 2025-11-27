@@ -121,8 +121,8 @@ spec:
   # These are the default templates to use for any component that
   # does not have an inline 'spec' or an explicit 'templateRef'.
   # These are optional.
-  # if they don't exist the controller will pick whichever is named 'default'
-  # or use the controller defaults.
+  # If these defaults are not specified, the controller will pick whichever is
+  # named 'default' in the namespace, or use the controller defaults.
   templateDefaults:
     coreTemplate: "cluster-wide-core"
     cellTemplate: "cluster-wide-cell"
