@@ -69,15 +69,6 @@ The formalized parent/child model addresses these by ensuring:
 
 ## Design Details: API Specification
 
-### The `default` Flag (System Resources)
-
-Both `Database` and `TableGroup` entries support a boolean `default` flag (defaulting to `false`). This flag maps the definition to the **System Default** infrastructure created during the cluster's bootstrap phase.
-
-  * **On a Database (`default: true`):** Indicates this entry defines the configuration for the system-level database (typically named `postgres`) that contains the global catalog. There can be only one default database per cluster.
-  * **On a TableGroup (`default: true`):** Indicates this entry defines the configuration for the "Catch-All" or "Unsharded" group of that database. Every database has exactly one Default TableGroup where tables land by default.
-
-Defining these entries allows the user to explicitly configure the resources (replicas, storage, compute) allocated to these system components, rather than relying on hardcoded operator defaults.
-
 ### User Managed CR: MultigresCluster
 
   * This CR and the three scoped templates (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) are the *only* editable entries for the end-user.
@@ -561,6 +552,15 @@ spec:
            cpu: "1"
            memory: "1Gi"
 ```
+
+### The `default` Flag (System Resources)
+
+Both `Database` and `TableGroup` entries support a boolean `default` flag (defaulting to `false`). This flag maps the definition to the **System Default** infrastructure created during the cluster's bootstrap phase.
+
+  * **On a Database (`default: true`):** Indicates this entry defines the configuration for the system-level database (typically named `postgres`) that contains the global catalog. There can be only one default database per cluster.
+  * **On a TableGroup (`default: true`):** Indicates this entry defines the configuration for the "Catch-All" or "Unsharded" group of that database. Every database has exactly one Default TableGroup where tables land by default.
+
+Defining these entries allows the user to explicitly configure the resources (replicas, storage, compute) allocated to these system components, rather than relying on hardcoded operator defaults.
 
 ### Child Resources (Read-Only)
 
