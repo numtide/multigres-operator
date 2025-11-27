@@ -477,14 +477,13 @@ spec:
 
 ### User Managed CR: ShardTemplate
 
-  * This CR is NOT a child resource. It is purely a configuration object.
-  * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
-  * When created, templates are not reconciled until referenced by a `MultigresCluster`.
-* Similar to `CellTemplate`, this is a pure configuration object.
-  * It defines the "shape" of a shard: its orchestration and its data pools.
-  * **Important:** `pools` is a **MAP**, keyed by the pool name. This ensures that overrides can safely target a specific pool without relying on brittle list array indices.
-  * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty or omitted, it defaults to all cells where pools are defined.
-  * **Pool Placement:** `pools` now uses a `cells` list. For `readWrite` pools (Primary), this list typically contains a single cell. For `readOnly` pools (Replicas), this list can contain multiple cells to apply the same configuration across multiple zones.
+* This CR is NOT a child resource. It is purely a configuration object.
+* It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
+* When created, templates are not reconciled until referenced by a `MultigresCluster`.
+* Similar to `CellTemplate`, this is a pure configuration object. It defines the "shape" of a shard: its orchestration and its data pools.
+* **`pools` is a MAP, keyed by the pool name:** Using a map structure ensures that overrides are resilient to changes in the underlying template; unlike list arrays where inserting or reordering items shifts indices—potentially causing an override targeting "index 1" to accidentally apply to the wrong pool if the template order changes—keyed maps guarantee that an override for a specific pool (e.g., `primary`) always targets that exact logical resource, regardless of how other pools are added or organized in the template.  
+* **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty or omitted, it defaults to all cells where pools are defined.
+* **Pool Placement:** `pools` now uses a `cells` list. For `readWrite` pools (Primary), this list typically contains a single cell. For `readOnly` pools (Replicas), this list can contain multiple cells to apply the same configuration across multiple zones.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
