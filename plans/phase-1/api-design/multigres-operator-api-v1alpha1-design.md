@@ -246,9 +246,9 @@ spec:
     - name: "production_db"
       # default: false (Implicit) - This creates a new logical database
       tablegroups:
-        # The default unsharded group for this specific database.
-        # Default tablegroups can only have one shard.
-        # It handles all tables not explicitly moved to 'orders_tg'.
+        # The default TableGroup for this specific database.
+        # Note that the default TableGroup can only have one shard (i.e. unsharded).
+        # It handles all tables not explicitly moved to 'orders_tg' in this example.
         - name: "main_unsharded"
           default: true
           shards:
@@ -379,7 +379,7 @@ status:
 
   * This CR is NOT a child resource. It is purely a configuration object.
   * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
-  * It defines the shape of the cluster's core control plane. A `CoreTemplate` can contain definitions for *both* components. When a component (e.g., `globalTopoServer`) references this template, the controller will extract the relevant section.
+  * It defines the shape of the cluster's core control plane, which comprises Global Topo Server and MultiAdmin. A `CoreTemplate` can contain definitions for *both* components. When a component (e.g., `globalTopoServer`) references this template, the controller will extract the relevant section.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -457,7 +457,7 @@ spec:
              topologyKey: "kubernetes.io/hostname"
 
   # --- OPTIONAL: Local TopoServer ---
-  # Define if cells using this template should have their own dedicated ETCD.
+  # Define if cells using this template should have their own dedicated etcd.
   # If omitted, cells use the GlobalTopoServer by default.
   #
   # localTopoServer:
@@ -477,10 +477,13 @@ spec:
 
 ### User Managed CR: ShardTemplate
 
+  * This CR is NOT a child resource. It is purely a configuration object.
+  * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
+  * When created, templates are not reconciled until referenced by a `MultigresCluster`.
 * Similar to `CellTemplate`, this is a pure configuration object.
   * It defines the "shape" of a shard: its orchestration and its data pools.
   * **Important:** `pools` is a **MAP**, keyed by the pool name. This ensures that overrides can safely target a specific pool without relying on brittle list array indices.
-  * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty, it defaults to all cells where pools are defined.
+  * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty or omitted, it defaults to all cells where pools are defined.
   * **Pool Placement:** `pools` now uses a `cells` list. For `readWrite` pools (Primary), this list typically contains a single cell. For `readOnly` pools (Replicas), this list can contain multiple cells to apply the same configuration across multiple zones.
 
 ```yaml
