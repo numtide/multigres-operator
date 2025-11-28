@@ -870,6 +870,8 @@ metadata:
       name: "production-db-orders-tg"
       controller: true
 spec:
+  databaseName: "production_db"
+  tableGroupName: "orders_tg"
   shardName: "0"
 
   # Images passed down from global configuration
