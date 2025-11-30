@@ -12,6 +12,8 @@ import (
 )
 
 func TestComparisonOptions(t *testing.T) {
+	now := time.Now()
+
 	tests := map[string]struct {
 		obj1    any
 		obj2    any
@@ -48,15 +50,56 @@ func TestComparisonOptions(t *testing.T) {
 		},
 		"IgnoreStatus": {
 			obj1: &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "svc",
-					Namespace: "default",
-				},
-				Spec: corev1.ServiceSpec{
-					Type: corev1.ServiceTypeClusterIP,
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+				Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
 				Status: corev1.ServiceStatus{
-					// Status differs - should be ignored
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{IP: "1.2.3.4"}},
+					},
+				},
+			},
+			obj2: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
+				Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{IP: "5.6.7.8"}},
+					},
+				},
+			},
+			options: cmp.Options{testutil.IgnoreStatus()},
+		},
+		"IgnoreObjectMetaCompletely": {
+			obj1: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc1",
+					Namespace: "ns1",
+					UID:       "uid1",
+					Labels:    map[string]string{"foo": "bar"},
+				},
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+			},
+			obj2: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "completely-different",
+					Namespace: "ns2",
+					UID:       "uid2",
+					Labels:    map[string]string{"different": "labels"},
+				},
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+			},
+			options: cmp.Options{testutil.IgnoreObjectMetaCompletely()},
+		},
+		"CompareOptions": {
+			obj1: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "svc",
+					UID:               "uid1",
+					ResourceVersion:   "123",
+					CreationTimestamp: metav1.Time{Time: now},
+				},
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+				Status: corev1.ServiceStatus{
 					LoadBalancer: corev1.LoadBalancerStatus{
 						Ingress: []corev1.LoadBalancerIngress{{IP: "1.2.3.4"}},
 					},
@@ -64,20 +107,54 @@ func TestComparisonOptions(t *testing.T) {
 			},
 			obj2: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "svc",
-					Namespace: "default",
+					Name:              "svc",
+					UID:               "uid2",
+					ResourceVersion:   "999",
+					CreationTimestamp: metav1.Time{Time: now.Add(1 * time.Hour)},
 				},
-				Spec: corev1.ServiceSpec{
-					Type: corev1.ServiceTypeClusterIP, // Must match
-				},
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
 				Status: corev1.ServiceStatus{
-					// Status differs - should be ignored
 					LoadBalancer: corev1.LoadBalancerStatus{
 						Ingress: []corev1.LoadBalancerIngress{{IP: "5.6.7.8"}},
 					},
 				},
 			},
-			options: cmp.Options{testutil.IgnoreStatus()},
+			options: testutil.CompareOptions(),
+		},
+		"CompareSpecOnly": {
+			obj1: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc1",
+					Namespace: "ns1",
+					Labels:    map[string]string{"foo": "bar"},
+				},
+				Spec: corev1.ServiceSpec{
+					Type:  corev1.ServiceTypeClusterIP,
+					Ports: []corev1.ServicePort{{Name: "http", Port: 80}},
+				},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{IP: "1.2.3.4"}},
+					},
+				},
+			},
+			obj2: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "different",
+					Namespace: "ns2",
+					Labels:    map[string]string{"different": "labels"},
+				},
+				Spec: corev1.ServiceSpec{
+					Type:  corev1.ServiceTypeClusterIP,
+					Ports: []corev1.ServicePort{{Name: "http", Port: 80}},
+				},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{IP: "9.9.9.9"}},
+					},
+				},
+			},
+			options: testutil.CompareSpecOnly(),
 		},
 	}
 
