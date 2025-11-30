@@ -178,26 +178,34 @@ func IgnoreDeploymentSpecDefaults() cmp.Option {
 	)
 }
 
+// filterByFieldName returns a filter function that checks if the last path element
+// is a struct field with the given name. Extracted for testability.
+func filterByFieldName(fieldName string) func(cmp.Path) bool {
+	return func(p cmp.Path) bool {
+		// Check if the current path step is a struct field with the target name
+		if len(p) == 0 {
+			return false
+		}
+		if sf, ok := p[len(p)-1].(cmp.StructField); ok {
+			return sf.Name() == fieldName
+		}
+		return false
+	}
+}
+
 // IgnoreObjectMetaCompletely ignores the entire ObjectMeta (use when you only
 // care about Spec).
+// Uses a filter function to match any struct field named "ObjectMeta".
 func IgnoreObjectMetaCompletely() cmp.Option {
-	return cmpopts.IgnoreFields(metav1.ObjectMeta{})
+	return cmp.FilterPath(filterByFieldName("ObjectMeta"), cmp.Ignore())
 }
 
 // IgnoreStatus ignores the Status subresource completely.
 //
 // Because cmpopts.IgnoreFields requires the first param to be an actual struct
-// type, this handles by going through each path to see if the field name is
-// "Status", and if so, ignore.
+// type, this uses a filter function to match any struct field named "Status".
 func IgnoreStatus() cmp.Option {
-	return cmp.FilterPath(func(p cmp.Path) bool {
-		// Check if the field name is "Status"
-		if len(p) == 0 {
-			return false
-		}
-		sf, ok := p[len(p)-1].(cmp.StructField)
-		return ok && sf.Name() == "Status"
-	}, cmp.Ignore())
+	return cmp.FilterPath(filterByFieldName("Status"), cmp.Ignore())
 }
 
 // CompareOptions returns common options for comparing Kubernetes objects.
