@@ -939,7 +939,7 @@ A mutating admission webhook applies a strict **4-Level Override Chain** to reso
 
 *Applies to `GlobalTopoServer`, `MultiAdmin`, and `Cells` defined in `MultigresCluster`.*
 
-1.  **Component-Level Definition (Highest):** An inline `spec` or an explicit `templateRef` / `cellTemplate` on the component itself.
+1.  **Component-Level Definition (Highest):** An inline `spec` or an explicit `templateRef` / `cellTemplate`, along with optional `overrides` on the component itself.
 2.  **Cluster-Level Default Template:** The corresponding template defined in `spec.templateDefaults` (e.g., `templateDefaults.coreTemplate` or `templateDefaults.cellTemplate`).
 3.  **Namespace-Level Default Template:** A template of the correct kind (e.g., `CoreTemplate`) named `default` in the same namespace as the cluster.
 4.  **Operator Hardcoded Defaults (Lowest):** A final fallback applied by the operator code (e.g., default resources, default replicas).
@@ -1170,7 +1170,7 @@ spec:
 
 ## Drawbacks
 
-We have reverted to this design but the requirement to create resources via DDL (`CREATE DATABASE`) hasn't been dropped, but postponed. What follows are some caveats when following the current design as it stands right now and also incorporating this Posgres compatibility requirement:
+The requirement to create resources via DDL (`CREATE DATABASE`) to provide Postgres native interface was a part of the design discussions .This has not been dropped, but postponed. What follows are some caveats when following the current design as it stands right now and also incorporating this Posgres compatibility requirement:
 
   * **Broken "Delete" UX (Zombie Resources):** To support the "DB is Truth" requirement, the Operator **cannot** delete a database simply because it is removed from the `spec.databases` list as it might still exist in the default database schema ("system catalog"). This breaks the standard Kubernetes expectation that "deleting config = deleting resource." Users must use imperative SQL (`DROP DATABASE`) to delete resources; removing them from Git will only orphan them, leaving them running and accruing costs ("Zombie Databases"). Including a bidirectional update process here may complicate things.
   * **Perpetual GitOps Drift:** Since users can create databases via DDL at any time, the `MultigresCluster` CR in Git will rarely match the actual cluster state. `kubectl diff` will be noisy, and the `status` field will become the only reliable view of the system, degrading the value of the declarative spec. This can be mitigated if we have a component that constantly writes these changes to either git and applies them declaratively, but it is not a common pattern.
