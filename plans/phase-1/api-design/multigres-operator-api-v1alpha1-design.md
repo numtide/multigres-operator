@@ -971,11 +971,6 @@ Webhooks are used *only* for fast, synchronous, and semantic validation to preve
           * Shard names within a TableGroup.
       * **Topology Integrity:** Verifies that if a Shard is pinned to a specific cell (via overrides), that cell exists in the `spec.cells` list.
 
-#### `CoreTemplate`, `CellTemplate`, `ShardTemplate`
-
-  * **On `CREATE` and `UPDATE`:**
-      * **Schema Validation:** Ensures the template spec contains valid configuration for its specific type (e.g., a `CellTemplate` cannot contain `multiAdmin` config).
-
 -----
 
 ### 3\. Asynchronous Controller and Finalizer Logic
