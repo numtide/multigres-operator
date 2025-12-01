@@ -986,11 +986,13 @@ Asynchronous logic is used for operations that depend on external state or requi
 
 #### `CoreTemplate`, `CellTemplate`, `ShardTemplate`
 
-  * **In-Use Protection (Finalizer):**
-    1.  These templates are protected by a "fan-out" finalizer pattern to prevent accidental deletion of templates actively used by production clusters.
-    2.  **Logic:** When a `MultigresCluster` controller reconciles and sees it is using "prod-cell-template", it adds a finalizer (e.g., `multigres.com/in-use-by-example-cluster`) *to the `CellTemplate` object*.
-    3.  **Cleanup:** When the `MultigresCluster` is deleted (or updated to stop using that template), its controller removes that specific finalizer from the template.
-    4.  **Result:** Kubernetes will reject the deletion of a Template if any Cluster is still referencing it (because the finalizers won't be empty).
+* **In-Use Protection (Validating Webhook):**
+    1.  **Mechanism:** A Validating Webhook intercepts all `DELETE` operations on Template resources.
+    2.  **Logic:**
+        * The webhook queries for any `MultigresCluster` resources that reference the template being deleted.
+        * To make this query efficient, the `MultigresCluster` controller must apply **Tracking Labels** to the Cluster CR whenever a template is referenced (e.g., `multigres.com/cell-template: prod-small`).
+        * If the query returns any results (meaning the template is in use), the webhook **rejects** the deletion request with a `403 Forbidden` error.
+    3.  **Benefit:** This prevents the Template from ever entering a "Terminating" state, ensuring it remains fully editable and active even if a user accidentally tries to delete it.
 
 ## End-User Examples
 
