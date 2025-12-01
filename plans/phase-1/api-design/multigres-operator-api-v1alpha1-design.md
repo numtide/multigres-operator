@@ -980,7 +980,7 @@ Asynchronous logic is used for operations that depend on external state or requi
 #### `MultigresCluster`
 
   * **Deletion Protection (Finalizer):**
-    1.  The `MultigresCluster` controller adds a finalizer (e.g., `multigres.com/cleanup`) to the CR upon creation.
+    1.  The `MultigresCluster` controller adds a finalizer (e.g., `multigrescluster.multigres.com/finalizer`) to the CR upon creation.
     2.  On deletion, the controller ensures all child resources (StatefulSets, Services) are properly terminated before removing the finalizer. NOTE: We should consider optional flag to delete PVCs too, default will be to keep them.
     3.  *Note:* Since databases are embedded in the cluster CR, deleting the cluster implies deleting all databases. No extra "claim" check is needed here.
 
