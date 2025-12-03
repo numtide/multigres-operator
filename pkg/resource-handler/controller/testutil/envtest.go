@@ -1,10 +1,13 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -15,77 +18,56 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
-func SetUpEnvtest(t testing.TB) *rest.Config {
-	t.Helper()
+// EnvtestOption is a functional option for configuring envtest setup.
+type EnvtestOption func(*envtestConfig)
 
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join(
-			// Go back up to repo root
-			"../../../../",
-			"config", "crd", "bases")},
-		ErrorIfCRDPathMissing: true,
-	}
-	cfg, err := testEnv.Start()
-	if err != nil {
-		t.Fatalf("Setting up with envtest failed, %v", err)
-	}
-	t.Cleanup(func() {
-		if err := testEnv.Stop(); err != nil {
-			t.Fatalf("Failed to stop envtest, %v", err)
-		}
-	})
-
-	return cfg
+type envtestConfig struct {
+	generateKubeconfig bool
 }
 
-// SetUpEnvtestWithKubeconfig starts Kubernetes API server for testing, and
-// keeps it running for further debugging.
-func SetUpEnvtestWithKubeconfig(t testing.TB) (*rest.Config, func()) {
+// WithKubeconfig generates a kubeconfig file for debugging and keeps envtest running.
+func WithKubeconfig() EnvtestOption {
+	return func(cfg *envtestConfig) {
+		cfg.generateKubeconfig = true
+	}
+}
+
+// SetUpEnvtest starts Kubernetes API server for testing.
+//
+// This requires the envtest binary to be available. Kubebuilder setup helps
+// downloading the relevant binaries into bin directory using the make script.
+//
+// By default, envtest is automatically cleaned up when the test finishes.
+//
+// Options:
+//   - WithKubeconfig(): Generates kubeconfig for debugging and keeps envtest running
+func SetUpEnvtest(t testing.TB, opts ...EnvtestOption) *rest.Config {
 	t.Helper()
 
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join(
-			// Go back up to repo root
-			"../../../../",
-			"config", "crd", "bases")},
-		ErrorIfCRDPathMissing: true,
-	}
-	cfg, err := testEnv.Start()
-	if err != nil {
-		t.Fatalf("Setting up with envtest failed, %v", err)
-	}
-	// Purposely no clean-up to run so that the envtest setup can be debugged
-	// further.
+	cfg := &envtestConfig{}
 
-	// Write kubeconfig to file
-	user, err := testEnv.ControlPlane.AddUser(envtest.User{
-		Name:   "envtest-admin",
-		Groups: []string{"system:masters"},
-	}, nil)
-	if err != nil {
-		t.Fatalf("Failed to add user for testing, %v", err)
+	// Apply options
+	for _, opt := range opts {
+		opt(cfg)
 	}
 
-	kubeconfig, err := user.KubeConfig()
-	if err != nil {
-		t.Fatalf("Failed to generate kubeconfig, %v", err)
+	testEnv := createEnvtestEnvironment(t)
+	restCfg := startEnvtest(t, testEnv)
+
+	// If kubeconfig generation is enabled, do not set up cleanup.
+	if cfg.generateKubeconfig {
+		kubeconfigPath := generateKubeconfigFile(t, testEnv)
+		t.Cleanup(func() {
+			fmt.Printf("Kubeconfig written to: %s\n", kubeconfigPath)
+			fmt.Printf("Connect with: export KUBECONFIG=%s\n", kubeconfigPath)
+		})
+		return restCfg
 	}
 
-	kubeconfigPath := filepath.Join(os.TempDir(), "envtest-kubeconfig")
-	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0o644); err != nil {
-		t.Fatalf("Failed to write kubeconfig to file, %v", err)
-	}
+	// Default: cleanup envtest when test finishes
+	t.Cleanup(cleanEnvtest(t, testEnv))
 
-	t.Cleanup(func() {
-		fmt.Printf("Kubeconfig written to: %s\n", kubeconfigPath)
-		fmt.Printf("Connect with: export KUBECONFIG=%s\n", kubeconfigPath)
-	})
-
-	return cfg, func() {
-		if err := testEnv.Stop(); err != nil {
-			t.Fatalf("Failed to stop envtest, %v", err)
-		}
-	}
+	return restCfg
 }
 
 // SetUpClient creates a direct Kubernetes client (non-cached).
@@ -94,19 +76,20 @@ func SetUpEnvtestWithKubeconfig(t testing.TB) (*rest.Config, func()) {
 // directly from the API server. This is different from mgr.GetClient() which
 // uses cached reads (same as controllers).
 //
-// When to use SetUpClient:
+// For most tests, use mgr.GetClient() instead - it tests what controllers
+// actually see.
 //
-// 1. Testing cache synchronization:
-//   - Verify what's actually in the API server vs what the cache sees
-//   - Useful when debugging "why doesn't my controller see this resource?"
+// Note about when to use SetUpClient:
 //
-// 2. Strong consistency requirements:
+//  1. Testing cache synchronization:
+//     - Verify what's actually in the API server vs what the cache sees
+//     - Useful when debugging "why doesn't my controller see this resource?"
 //
-//   - Need immediate reads after writes (no cache lag)
+//  2. Strong consistency requirements:
+//     - Need immediate reads after writes (no cache lag)
+//     - Testing race conditions or timing-sensitive behavior
 //
-//   - Testing race conditions or timing-sensitive behavior
-//
-//     3. Comparing cached vs direct reads:
+//  3. Comparing cached vs direct reads:
 //     directClient := SetUpClient(t, cfg, scheme)
 //     cachedClient := mgr.GetClient()
 //     // Create resource
@@ -115,8 +98,6 @@ func SetUpEnvtestWithKubeconfig(t testing.TB) (*rest.Config, func()) {
 //     directClient.Get(ctx, key, &actual)
 //     // Cached read (might lag slightly)
 //     cachedClient.Get(ctx, key, &fromCache)
-//
-// For most tests, use mgr.GetClient() instead - it tests what controllers actually see.
 func SetUpClient(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) client.Client {
 	t.Helper()
 
@@ -128,6 +109,22 @@ func SetUpClient(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) client.
 	return k8sClient
 }
 
+// SetUpManager creates a controller-runtime manager for testing.
+//
+// The manager is created but NOT started - you must call StartManager separately.
+// This separation allows you to register controllers and configure the manager
+// before starting it.
+//
+// Typical usage:
+//
+//	mgr := testutil.SetUpManager(t, cfg, scheme)
+//	// Register your controllers
+//	reconciler := &YourReconciler{Client: mgr.GetClient(), Scheme: scheme}
+//	reconciler.SetupWithManager(mgr)
+//	// Start the manager
+//	testutil.StartManager(t, mgr)
+//
+// Or use SetUpEnvtestManager for a combined setup.
 func SetUpManager(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) manager.Manager {
 	t.Helper()
 
@@ -145,18 +142,37 @@ func SetUpManager(t testing.TB, cfg *rest.Config, scheme *runtime.Scheme) manage
 		},
 	})
 	if err != nil {
-		t.Fatalf("Failed to start manager: %v", err)
+		t.Fatalf("Failed to set up manager: %v", err)
 	}
 
 	return mgr
 }
 
+// StartManager starts the manager using t.Context().
+//
+// The manager runs in a background goroutine. If the manager fails to start
+// (e.g., controller registration errors), the error will be reported via
+// t.Errorf and is visible in test output.
+//
+// Note: t.Context() gets cancelled when the test finishes, which cleanly stops
+// the manager.
 func StartManager(t testing.TB, mgr manager.Manager) {
 	t.Helper()
 
-	// t.Context gets cancelled before the test cleanup function runs.
-	ctx := t.Context()
+	_ = startManager(t, t.Context(), mgr)
+}
+
+// startManager is the internal implementation of StartManager that takes a context
+// and returns a done channel for testing purposes. The channel is closed when the
+// manager goroutine completes, allowing tests to wait for manager errors to be
+// fully processed.
+func startManager(t testing.TB, ctx context.Context, mgr manager.Manager) <-chan struct{} {
+	t.Helper()
+
+	done := make(chan struct{})
+
 	go func() {
+		defer close(done)
 		if err := mgr.Start(ctx); err != nil {
 			t.Errorf("Manager failed: %v", err)
 		}
@@ -166,6 +182,8 @@ func StartManager(t testing.TB, mgr manager.Manager) {
 	if !mgr.GetCache().WaitForCacheSync(ctx) {
 		t.Fatal("Cache failed to sync")
 	}
+
+	return done
 }
 
 // SetUpEnvtestManager is a convenience function that combines SetUpEnvtest,
@@ -180,12 +198,12 @@ func StartManager(t testing.TB, mgr manager.Manager) {
 //	reconciler := &YourReconciler{Client: c, Scheme: scheme}
 //	reconciler.SetupWithManager(mgr)
 //
-// Note: envtest does not support garbage collection (cascading deletion via owner references)
-// because it only runs kube-apiserver and etcd, not kube-controller-manager where the
-// garbage collector controller runs. To test cascading deletion, use kind with
-// UseExistingCluster: true, or test that owner references are set correctly instead.
+// Note: envtest does not support garbage collection (cascading deletion via
+// owner references), because it only runs kube-apiserver and etcd, not
+// kube-controller-manager where the garbage collector controller runs. To test
+// cascading deletion, use kind based testing instead.
 //
-// For more control, use the individual functions instead.
+// Also, for more control, you can use the individual functions separately.
 func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme) manager.Manager {
 	t.Helper()
 
@@ -194,4 +212,101 @@ func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme) manager.Manager {
 	StartManager(t, mgr)
 
 	return mgr
+}
+
+// createEnvtestEnvironment creates an envtest.Environment with CRD paths.
+// Extracted for testability.
+func createEnvtestEnvironment(t testing.TB) *envtest.Environment {
+	t.Helper()
+
+	return &envtest.Environment{
+		CRDDirectoryPaths: []string{filepath.Join(
+			// Go back up to repo root
+			"../../../../",
+			"config", "crd", "bases")},
+		ErrorIfCRDPathMissing: true,
+		// Increase timeout to handle resource contention when many tests run in parallel
+		ControlPlaneStartTimeout: 60 * time.Second,
+		ControlPlaneStopTimeout:  60 * time.Second,
+	}
+}
+
+func startEnvtest(t testing.TB, testEnv *envtest.Environment) *rest.Config {
+	t.Helper()
+
+	cfg, err := testEnv.Start()
+	if err != nil {
+		t.Fatalf("Setting up with envtest failed, %v", err)
+	}
+
+	return cfg
+}
+
+func cleanEnvtest(t testing.TB, testEnv *envtest.Environment, testCtrls ...testControl) func() {
+	t.Helper()
+
+	return func() {
+		err := testEnv.Stop()
+		if err != nil || slices.Contains(testCtrls, forcedFailureFirst) {
+			t.Fatalf("Failed to stop envtest, %v", err)
+		}
+	}
+}
+
+// createEnvtestDir creates a unique temporary subdirectory under the given base directory
+// for hosting envtest kubeconfigs. The directory is NOT automatically cleaned up,
+// allowing the kubeconfig to persist for debugging purposes when the test environment
+// is kept running.
+//
+// This function uses testing.TB and t.Fatal for easy corner case testing.
+// Returns the path to the created directory.
+func createEnvtestDir(t testing.TB, baseDir string) string {
+	t.Helper()
+
+	// Create a unique temporary directory with "envtest-" prefix
+	dir, err := os.MkdirTemp(baseDir, "envtest-")
+	if err != nil {
+		t.Fatalf("Failed to create envtest directory: %v", err)
+	}
+
+	return dir
+}
+
+// writeKubeconfigFile writes kubeconfig content to a file at the specified path.
+// This function uses testing.TB and t.Fatal for easy corner case testing.
+func writeKubeconfigFile(t testing.TB, kubeconfigPath string, kubeconfig []byte) {
+	t.Helper()
+
+	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0o644); err != nil {
+		t.Fatalf("Failed to write kubeconfig file: %v", err)
+	}
+}
+
+// generateKubeconfigFile creates a kubeconfig file for the envtest environment.
+// Extracted for testability. Returns the path to the kubeconfig file.
+//
+// The extra variadic arguments are only to be used for internal testing.
+func generateKubeconfigFile(t testing.TB, testEnv *envtest.Environment, testCtrls ...testControl) string {
+	t.Helper()
+
+	user, err := testEnv.ControlPlane.AddUser(envtest.User{
+		Name:   "envtest-admin",
+		Groups: []string{"system:masters"},
+	}, nil)
+	// NOTE: test failure injection logic
+	if err != nil || slices.Contains(testCtrls, forcedFailureFirst) {
+		t.Fatalf("Failed to add envtest user: %v", err)
+	}
+	kubeconfig, err := user.KubeConfig()
+	// NOTE: test failure injection logic
+	if err != nil || slices.Contains(testCtrls, forcedFailureSecond) {
+		t.Fatalf("Failed to get kubeconfig from user: %v", err)
+	}
+
+	// Use a unique subdirectory for each test to avoid conflicts
+	tempDir := createEnvtestDir(t, os.TempDir())
+	kubeconfigPath := filepath.Join(tempDir, "kubeconfig")
+	writeKubeconfigFile(t, kubeconfigPath, kubeconfig)
+
+	return kubeconfigPath
 }
