@@ -533,7 +533,7 @@ spec:
       # This pool will be deployed to all cells listed here.
       cells: 
         - "us-west-2a" 
-      replicas: 1
+      replicasPerCell: 1
       storage:
          class: "standard-gp3"
          size: "100Gi"
@@ -1059,13 +1059,15 @@ spec:
             overrides:
               pools:
                 primary:
-                  cell: "us-east-1a"
+                  cells: 
+                    - "us-east-1a"
           - name: "1"
             # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
             overrides:
               pools:
                 primary:
-                  cell: "us-west-2a"
+                  cells: 
+                    - "us-west-2a"
 ```
 
 ### 3\. The Power User (Explicit Overrides)
@@ -1134,7 +1136,8 @@ spec:
                 pools:
                   primary:
                     # Partial override of a simple field
-                    cell: "us-east-1a"
+                    cells: 
+                      - "us-east-1a"
                     # OVERRIDE of Postgres compute for this specific shard
                     postgres:
                        requests:
@@ -1148,7 +1151,8 @@ spec:
               overrides:
                 pools:
                   primary:
-                    cell: "us-west-2a"
+                    cells:
+                      - "us-west-2a"
 ```
 
 ## Implementation History
