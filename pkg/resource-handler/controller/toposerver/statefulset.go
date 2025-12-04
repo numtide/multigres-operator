@@ -1,4 +1,4 @@
-package etcd
+package toposerver
 
 import (
 	"fmt"
@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	// ComponentName is the component label value for etcd resources
-	ComponentName = "etcd"
+	// ComponentName is the component label value for toposerver resources
+	ComponentName = "toposerver"
 
 	// DefaultReplicas is the default number of etcd replicas
 	DefaultReplicas int32 = 3
@@ -34,31 +34,31 @@ const (
 	DataMountPath = "/var/lib/etcd"
 )
 
-// BuildStatefulSet creates a StatefulSet for the Etcd cluster.
-// Returns a deterministic StatefulSet based on the Etcd spec.
+// BuildStatefulSet creates a StatefulSet for the TopoServer cluster.
+// Returns a deterministic StatefulSet based on the TopoServer spec.
 func BuildStatefulSet(
-	etcd *multigresv1alpha1.Etcd,
+	toposerver *multigresv1alpha1.TopoServer,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
 	replicas := DefaultReplicas
-	// TODO: Debatable whether this defaulting makes sense.
-	if etcd.Spec.Replicas != nil {
-		replicas = *etcd.Spec.Replicas
+	if toposerver.Spec.Replicas != nil {
+		replicas = *toposerver.Spec.Replicas
 	}
 
 	image := DefaultImage
-	if etcd.Spec.Image != "" {
-		image = etcd.Spec.Image
+	if toposerver.Spec.Image != "" {
+		image = toposerver.Spec.Image
 	}
 
-	headlessServiceName := etcd.Name + "-headless"
-	labels := metadata.BuildStandardLabels(etcd.Name, ComponentName, etcd.Spec.CellName)
-	podLabels := metadata.MergeLabels(labels, etcd.Spec.PodLabels)
+	headlessServiceName := toposerver.Name + "-headless"
+	// TODO: Support cell-local TopoServers by adding CellName field to TopoServerSpec
+	// For now, TopoServer is always global topology
+	labels := metadata.BuildStandardLabels(toposerver.Name, ComponentName)
 
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      etcd.Name,
-			Namespace: etcd.Namespace,
+			Name:      toposerver.Name,
+			Namespace: toposerver.Namespace,
 			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -73,24 +73,21 @@ func BuildStatefulSet(
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      podLabels,
-					Annotations: etcd.Spec.PodAnnotations,
+					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: etcd.Spec.ServiceAccountName,
-					ImagePullSecrets:   etcd.Spec.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
 							Name:      "etcd",
 							Image:     image,
-							Resources: etcd.Spec.Resources,
+							Resources: toposerver.Spec.Resources,
 							Env: buildContainerEnv(
-								etcd.Name,
-								etcd.Namespace,
+								toposerver.Name,
+								toposerver.Namespace,
 								replicas,
 								headlessServiceName,
 							),
-							Ports: buildContainerPorts(etcd),
+							Ports: buildContainerPorts(toposerver),
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      DataVolumeName,
@@ -99,17 +96,14 @@ func BuildStatefulSet(
 							},
 						},
 					},
-					Affinity:                  etcd.Spec.Affinity,
-					Tolerations:               etcd.Spec.Tolerations,
-					NodeSelector:              etcd.Spec.NodeSelector,
-					TopologySpreadConstraints: etcd.Spec.TopologySpreadConstraints,
+					Affinity: toposerver.Spec.Affinity,
 				},
 			},
-			VolumeClaimTemplates: buildVolumeClaimTemplates(etcd),
+			VolumeClaimTemplates: buildVolumeClaimTemplates(toposerver),
 		},
 	}
 
-	if err := ctrl.SetControllerReference(etcd, sts, scheme); err != nil {
+	if err := ctrl.SetControllerReference(toposerver, sts, scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
@@ -117,25 +111,24 @@ func BuildStatefulSet(
 }
 
 // buildVolumeClaimTemplates creates the PVC templates for etcd data storage.
-// Caller decides whether to use VolumeClaimTemplate or build from simple fields.
-func buildVolumeClaimTemplates(etcd *multigresv1alpha1.Etcd) []corev1.PersistentVolumeClaim {
-	if etcd.Spec.VolumeClaimTemplate != nil {
+// TODO: Add StorageSize and StorageClassName fields to TopoServerSpec for simpler configuration
+// (similar to Etcd). For now, only DataVolumeClaimTemplate is supported.
+func buildVolumeClaimTemplates(
+	toposerver *multigresv1alpha1.TopoServer,
+) []corev1.PersistentVolumeClaim {
+	if len(toposerver.Spec.DataVolumeClaimTemplate.AccessModes) > 0 {
 		return []corev1.PersistentVolumeClaim{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: DataVolumeName,
 				},
-				Spec: *etcd.Spec.VolumeClaimTemplate,
+				Spec: toposerver.Spec.DataVolumeClaimTemplate,
 			},
 		}
 	}
 
-	storageSize := DefaultStorageSize
-	if etcd.Spec.StorageSize != "" {
-		storageSize = etcd.Spec.StorageSize
-	}
-
+	// Use default storage if not specified
 	return []corev1.PersistentVolumeClaim{
-		storage.BuildPVCTemplate(DataVolumeName, etcd.Spec.StorageClassName, storageSize),
+		storage.BuildPVCTemplate(DataVolumeName, nil, DefaultStorageSize),
 	}
 }

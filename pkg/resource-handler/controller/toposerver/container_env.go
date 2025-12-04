@@ -1,4 +1,4 @@
-package etcd
+package toposerver
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 // StatefulSets. This combines pod identity, etcd config, and cluster peer
 // discovery details.
 func buildContainerEnv(
-	etcdName, namespace string,
+	toposerverName, namespace string,
 	replicas int32,
 	serviceName string,
 ) []corev1.EnvVar {
@@ -21,10 +21,10 @@ func buildContainerEnv(
 	envVars = append(envVars, buildPodIdentityEnv()...)
 
 	// Add etcd configuration variables
-	envVars = append(envVars, buildEtcdConfigEnv(etcdName, serviceName, namespace)...)
+	envVars = append(envVars, buildEtcdConfigEnv(toposerverName, serviceName, namespace)...)
 
 	// Add the initial cluster peer list
-	clusterPeerList := buildEtcdClusterPeerList(etcdName, serviceName, namespace, replicas)
+	clusterPeerList := buildEtcdClusterPeerList(toposerverName, serviceName, namespace, replicas)
 	envVars = append(envVars, corev1.EnvVar{
 		Name:  "ETCD_INITIAL_CLUSTER",
 		Value: clusterPeerList,
@@ -63,7 +63,7 @@ func buildPodIdentityEnv() []corev1.EnvVar {
 // These configure etcd's network endpoints and cluster formation.
 //
 // Ref: https://etcd.io/docs/latest/op-guide/configuration/
-func buildEtcdConfigEnv(etcdName, serviceName, namespace string) []corev1.EnvVar {
+func buildEtcdConfigEnv(toposerverName, serviceName, namespace string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "ETCD_NAME",
@@ -101,7 +101,7 @@ func buildEtcdConfigEnv(etcdName, serviceName, namespace string) []corev1.EnvVar
 		},
 		{
 			Name:  "ETCD_INITIAL_CLUSTER_TOKEN",
-			Value: etcdName,
+			Value: toposerverName,
 		},
 	}
 }
@@ -113,14 +113,17 @@ func buildEtcdConfigEnv(etcdName, serviceName, namespace string) []corev1.EnvVar
 // Format: member-0=http://member-0.service.ns.svc.cluster.local:2380,...
 //
 // Ref: https://etcd.io/docs/latest/op-guide/clustering/#static
-func buildEtcdClusterPeerList(etcdName, serviceName, namespace string, replicas int32) string {
+func buildEtcdClusterPeerList(
+	toposerverName, serviceName, namespace string,
+	replicas int32,
+) string {
 	if replicas < 0 {
 		return ""
 	}
 
 	peers := make([]string, 0, replicas)
 	for i := range replicas {
-		podName := fmt.Sprintf("%s-%d", etcdName, i)
+		podName := fmt.Sprintf("%s-%d", toposerverName, i)
 		peerURL := fmt.Sprintf("%s=http://%s.%s.%s.svc.cluster.local:2380",
 			podName, podName, serviceName, namespace)
 		peers = append(peers, peerURL)

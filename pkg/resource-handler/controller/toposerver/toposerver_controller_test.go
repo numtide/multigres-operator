@@ -1,4 +1,4 @@
-package etcd
+package toposerver_test
 
 import (
 	"slices"
@@ -9,15 +9,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 )
 
-func TestEtcdReconciler_Reconcile(t *testing.T) {
+func TestTopoServerReconciler_Reconcile(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
@@ -26,7 +28,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		etcd            *multigresv1alpha1.Etcd
+		toposerver      *multigresv1alpha1.TopoServer
 		existingObjects []client.Object
 		failureConfig   *testutil.FailureConfig
 		// TODO: If wantErr is false but failureConfig is set, assertions may fail
@@ -34,81 +36,86 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		// partial failures that don't prevent reconciliation success.
 		wantErr     bool
 		wantRequeue bool
-		assertFunc  func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
+		assertFunc  func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer)
 	}{
 		////----------------------------------------
 		///   Success
 		//------------------------------------------
-		"create all resources for new Etcd": {
-			etcd: &multigresv1alpha1.Etcd{
+		"create all resources for new TopoServer": {
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
 				// Verify all three resources were created
 				sts := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd", Namespace: "default"},
+					types.NamespacedName{Name: "test-toposerver", Namespace: "default"},
 					sts); err != nil {
 					t.Errorf("StatefulSet should exist: %v", err)
 				}
 
 				headlessSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd-headless", Namespace: "default"},
+					types.NamespacedName{Name: "test-toposerver-headless", Namespace: "default"},
 					headlessSvc); err != nil {
 					t.Errorf("Headless Service should exist: %v", err)
 				}
 
 				clientSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd", Namespace: "default"},
+					types.NamespacedName{Name: "test-toposerver", Namespace: "default"},
 					clientSvc); err != nil {
 					t.Errorf("Client Service should exist: %v", err)
 				}
 
 				// Verify defaults and finalizer
-				if *sts.Spec.Replicas != DefaultReplicas {
+				if *sts.Spec.Replicas != int32(3) {
 					t.Errorf(
 						"StatefulSet replicas = %d, want %d",
 						*sts.Spec.Replicas,
-						DefaultReplicas,
+						int32(3),
 					)
 				}
 
-				updatedEtcd := &multigresv1alpha1.Etcd{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-etcd", Namespace: "default"}, updatedEtcd); err != nil {
-					t.Fatalf("Failed to get Etcd: %v", err)
+				updatedTopoServer := &multigresv1alpha1.TopoServer{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-toposerver", Namespace: "default"}, updatedTopoServer); err != nil {
+					t.Fatalf("Failed to get TopoServer: %v", err)
 				}
-				if !slices.Contains(updatedEtcd.Finalizers, finalizerName) {
+				if !slices.Contains(
+					updatedTopoServer.Finalizers,
+					"toposerver.multigres.com/finalizer",
+				) {
 					t.Errorf("Finalizer should be added")
 				}
 			},
 		},
 		"update existing resources": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "existing-etcd",
+					Name:       "existing-toposerver",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{
-					Replicas: int32Ptr(5),
-					Image:    "quay.io/coreos/etcd:v3.5.15",
+				Spec: multigresv1alpha1.TopoServerChildSpec{
+					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
+						Replicas: ptr.To(int32(5)),
+						Image:    "quay.io/coreos/etcd:v3.5.15",
+					},
 				},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-etcd",
+						Name:      "existing-toposerver",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: int32Ptr(3), // will be updated to 5
+						Replicas: ptr.To(int32(3)), // will be updated to 5
 					},
 					Status: appsv1.StatefulSetStatus{
 						Replicas:      3,
@@ -117,21 +124,21 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-etcd-headless",
+						Name:      "existing-toposerver-headless",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-etcd",
+						Name:      "existing-toposerver",
 						Namespace: "default",
 					},
 				},
 			},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
 				sts := &appsv1.StatefulSet{}
 				err := c.Get(t.Context(), types.NamespacedName{
-					Name:      "existing-etcd",
+					Name:      "existing-toposerver",
 					Namespace: "default",
 				}, sts)
 				if err != nil {
@@ -150,111 +157,61 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		"etcd with cellName": {
-			etcd: &multigresv1alpha1.Etcd{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "etcd-zone1",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.EtcdSpec{
-					CellName: "zone1",
-				},
-			},
-			existingObjects: []client.Object{},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				sts := &appsv1.StatefulSet{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "etcd-zone1", Namespace: "default"},
-					sts); err != nil {
-					t.Fatalf("Failed to get StatefulSet: %v", err)
-				}
-				if sts.Labels["multigres.com/cell"] != "zone1" {
-					t.Errorf(
-						"StatefulSet cell label = %s, want zone1",
-						sts.Labels["multigres.com/cell"],
-					)
-				}
-
-				headlessSvc := &corev1.Service{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "etcd-zone1-headless", Namespace: "default"},
-					headlessSvc); err != nil {
-					t.Fatalf("Failed to get headless Service: %v", err)
-				}
-				if headlessSvc.Labels["multigres.com/cell"] != "zone1" {
-					t.Errorf(
-						"Headless Service cell label = %s, want zone1",
-						headlessSvc.Labels["multigres.com/cell"],
-					)
-				}
-
-				clientSvc := &corev1.Service{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "etcd-zone1", Namespace: "default"},
-					clientSvc); err != nil {
-					t.Fatalf("Failed to get client Service: %v", err)
-				}
-				if clientSvc.Labels["multigres.com/cell"] != "zone1" {
-					t.Errorf(
-						"Client Service cell label = %s, want zone1",
-						clientSvc.Labels["multigres.com/cell"],
-					)
-				}
-			},
-		},
 		"deletion with finalizer": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-etcd-deletion",
+					Name:              "test-toposerver-deletion",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{finalizerName},
+					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{
-				&multigresv1alpha1.Etcd{
+				&multigresv1alpha1.TopoServer{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:              "test-etcd-deletion",
+						Name:              "test-toposerver-deletion",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{finalizerName},
+						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 					},
-					Spec: multigresv1alpha1.EtcdSpec{},
+					Spec: multigresv1alpha1.TopoServerChildSpec{},
 				},
 			},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				updatedEtcd := &multigresv1alpha1.Etcd{}
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				updatedTopoServer := &multigresv1alpha1.TopoServer{}
 				err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd-deletion", Namespace: "default"},
-					updatedEtcd)
+					types.NamespacedName{Name: "test-toposerver-deletion", Namespace: "default"},
+					updatedTopoServer)
 				if err == nil {
 					t.Errorf(
-						"Etcd object should be deleted but still exists (finalizers: %v)",
-						updatedEtcd.Finalizers,
+						"TopoServer object should be deleted but still exists (finalizers: %v)",
+						updatedTopoServer.Finalizers,
 					)
 				}
 			},
 		},
 		"all replicas ready status": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd-ready",
+					Name:       "test-toposerver-ready",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{
-					Replicas: int32Ptr(3),
+				Spec: multigresv1alpha1.TopoServerChildSpec{
+					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
+						Replicas: ptr.To(int32(3)),
+					},
 				},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-ready",
+						Name:      "test-toposerver-ready",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: int32Ptr(3),
+						Replicas: ptr.To(int32(3)),
 					},
 					Status: appsv1.StatefulSetStatus{
 						Replicas:      3,
@@ -262,27 +219,27 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			assertFunc: func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd) {
-				updatedEtcd := &multigresv1alpha1.Etcd{}
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				updatedTopoServer := &multigresv1alpha1.TopoServer{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-etcd-ready", Namespace: "default"},
-					updatedEtcd); err != nil {
-					t.Fatalf("Failed to get Etcd: %v", err)
+					types.NamespacedName{Name: "test-toposerver-ready", Namespace: "default"},
+					updatedTopoServer); err != nil {
+					t.Fatalf("Failed to get TopoServer: %v", err)
 				}
 
-				if !updatedEtcd.Status.Ready {
-					t.Error("Status.Ready should be true")
+				if updatedTopoServer.Status.Replicas != 3 {
+					t.Errorf("Status.Replicas = %d, want 3", updatedTopoServer.Status.Replicas)
 				}
-				if updatedEtcd.Status.Replicas != 3 {
-					t.Errorf("Status.Replicas = %d, want 3", updatedEtcd.Status.Replicas)
+				if updatedTopoServer.Status.ReadyReplicas != 3 {
+					t.Errorf(
+						"Status.ReadyReplicas = %d, want 3",
+						updatedTopoServer.Status.ReadyReplicas,
+					)
 				}
-				if updatedEtcd.Status.ReadyReplicas != 3 {
-					t.Errorf("Status.ReadyReplicas = %d, want 3", updatedEtcd.Status.ReadyReplicas)
-				}
-				if len(updatedEtcd.Status.Conditions) == 0 {
+				if len(updatedTopoServer.Status.Conditions) == 0 {
 					t.Error("Status.Conditions should not be empty")
 				} else {
-					readyCondition := updatedEtcd.Status.Conditions[0]
+					readyCondition := updatedTopoServer.Status.Conditions[0]
 					if readyCondition.Type != "Ready" {
 						t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
 					}
@@ -291,7 +248,10 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 					}
 				}
 
-				if !slices.Contains(updatedEtcd.Finalizers, finalizerName) {
+				if !slices.Contains(
+					updatedTopoServer.Finalizers,
+					"toposerver.multigres.com/finalizer",
+				) {
 					t.Errorf("Finalizer should be present")
 				}
 			},
@@ -300,32 +260,32 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 		///   Error
 		//------------------------------------------
 		"error on status update": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName("test-etcd", testutil.ErrInjected),
+				OnStatusUpdate: testutil.FailOnObjectName("test-toposerver", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},
 		"error on Get StatefulSet in updateStatus (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd-status",
+					Name:       "test-toposerver-status",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-status",
+						Name:      "test-toposerver-status",
 						Namespace: "default",
 					},
 				},
@@ -339,17 +299,17 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on client Service create": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd" {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-toposerver" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -358,37 +318,37 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on client Service Update": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-toposerver",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-toposerver",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-headless",
+						Name:      "test-toposerver-headless",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-toposerver",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd" {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-toposerver" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -397,31 +357,31 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on Get client Service (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd-svc",
+					Name:       "test-toposerver-svc",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-svc",
+						Name:      "test-toposerver-svc",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-svc-headless",
+						Name:      "test-toposerver-svc-headless",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: testutil.FailOnNamespacedKeyName(
-					"test-etcd-svc",
+					"test-toposerver-svc",
 					"default",
 					testutil.ErrNetworkTimeout,
 				),
@@ -429,17 +389,18 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on headless Service create": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-toposerver-headless" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -448,31 +409,32 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on headless Service Update": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-toposerver",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-toposerver",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd-headless",
+						Name:      "test-toposerver-headless",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-etcd-headless" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-toposerver-headless" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -481,25 +443,25 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on Get headless Service (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-toposerver",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-toposerver",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-etcd-headless" {
+					if key.Name == "test-toposerver-headless" {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -508,12 +470,12 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on StatefulSet create": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -527,24 +489,26 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on StatefulSet Update": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-toposerver",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{
-					Replicas: int32Ptr(5),
+				Spec: multigresv1alpha1.TopoServerChildSpec{
+					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
+						Replicas: ptr.To(int32(5)),
+					},
 				},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-etcd",
+						Name:      "test-toposerver",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: int32Ptr(3),
+						Replicas: ptr.To(int32(3)),
 					},
 				},
 			},
@@ -559,18 +523,18 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on Get StatefulSet (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-etcd",
+					Name:       "test-toposerver",
 					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-etcd" {
+					if key.Name == "test-toposerver" {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -579,56 +543,56 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		"error on finalizer Update": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-etcd", testutil.ErrInjected),
+				OnUpdate: testutil.FailOnObjectName("test-toposerver", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},
 		"deletion error on finalizer removal": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-etcd-del",
+					Name:              "test-toposerver-del",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{finalizerName},
+					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{
-				&multigresv1alpha1.Etcd{
+				&multigresv1alpha1.TopoServer{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:              "test-etcd-del",
+						Name:              "test-toposerver-del",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{finalizerName},
+						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 					},
-					Spec: multigresv1alpha1.EtcdSpec{},
+					Spec: multigresv1alpha1.TopoServerChildSpec{},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-etcd-del", testutil.ErrInjected),
+				OnUpdate: testutil.FailOnObjectName("test-toposerver-del", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},
-		"error on Get Etcd (network error)": {
-			etcd: &multigresv1alpha1.Etcd{
+		"error on Get TopoServer (network error)": {
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName("test-etcd", testutil.ErrNetworkTimeout),
+				OnGet: testutil.FailOnKeyName("test-toposerver", testutil.ErrNetworkTimeout),
 			},
 			wantErr: true,
 		},
@@ -642,7 +606,7 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
-				WithStatusSubresource(&multigresv1alpha1.Etcd{}).
+				WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
 				Build()
 
 			fakeClient := client.Client(baseClient)
@@ -651,31 +615,32 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
 
-			reconciler := &EtcdReconciler{
+			reconciler := &toposerver.TopoServerReconciler{
 				Client: fakeClient,
 				Scheme: scheme,
 			}
 
-			// Create the Etcd resource if not in existing objects
-			etcdInExisting := false
+			// Create the TopoServer resource if not in existing objects
+			toposerverInExisting := false
 			for _, obj := range tc.existingObjects {
-				if etcd, ok := obj.(*multigresv1alpha1.Etcd); ok && etcd.Name == tc.etcd.Name {
-					etcdInExisting = true
+				if toposerver, ok := obj.(*multigresv1alpha1.TopoServer); ok &&
+					toposerver.Name == tc.toposerver.Name {
+					toposerverInExisting = true
 					break
 				}
 			}
-			if !etcdInExisting {
-				err := fakeClient.Create(t.Context(), tc.etcd)
+			if !toposerverInExisting {
+				err := fakeClient.Create(t.Context(), tc.toposerver)
 				if err != nil {
-					t.Fatalf("Failed to create Etcd: %v", err)
+					t.Fatalf("Failed to create TopoServer: %v", err)
 				}
 			}
 
 			// Reconcile
 			req := ctrl.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      tc.etcd.Name,
-					Namespace: tc.etcd.Namespace,
+					Name:      tc.toposerver.Name,
+					Namespace: tc.toposerver.Namespace,
 				},
 			}
 
@@ -697,13 +662,13 @@ func TestEtcdReconciler_Reconcile(t *testing.T) {
 
 			// Run custom assertions if provided
 			if tc.assertFunc != nil {
-				tc.assertFunc(t, fakeClient, tc.etcd)
+				tc.assertFunc(t, fakeClient, tc.toposerver)
 			}
 		})
 	}
 }
 
-func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
+func TestTopoServerReconciler_ReconcileNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -713,7 +678,7 @@ func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := &EtcdReconciler{
+	reconciler := &toposerver.TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
@@ -721,7 +686,7 @@ func TestEtcdReconciler_ReconcileNotFound(t *testing.T) {
 	// Reconcile non-existent resource
 	req := ctrl.Request{
 		NamespacedName: types.NamespacedName{
-			Name:      "nonexistent-etcd",
+			Name:      "nonexistent-toposerver",
 			Namespace: "default",
 		},
 	}

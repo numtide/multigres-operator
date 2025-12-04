@@ -1,0 +1,513 @@
+//go:build integration
+// +build integration
+
+package testutil
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+)
+
+// mockTB implements testing.TB for capturing Fatal/Fatalf and Error/Errorf calls.
+type mockTB struct {
+	testing.TB
+	fatalCalled  bool
+	errorCalled  bool
+	logCalled    bool
+	cleanupFuncs []func()
+}
+
+func (m *mockTB) Helper() {}
+func (m *mockTB) Fatal(args ...interface{}) {
+	m.fatalCalled = true
+}
+func (m *mockTB) Fatalf(format string, args ...interface{}) {
+	m.fatalCalled = true
+}
+func (m *mockTB) Error(args ...interface{}) {
+	m.errorCalled = true
+}
+func (m *mockTB) Errorf(format string, args ...interface{}) {
+	m.errorCalled = true
+}
+func (m *mockTB) Log(args ...interface{}) {
+	m.logCalled = true
+}
+func (m *mockTB) Logf(format string, args ...any) {
+	m.logCalled = true
+}
+func (m *mockTB) Cleanup(f func()) {
+	m.cleanupFuncs = append(m.cleanupFuncs, f)
+}
+
+// runCleanups executes all registered cleanup functions in reverse order.
+func (m *mockTB) runCleanups() {
+	for i := len(m.cleanupFuncs) - 1; i >= 0; i-- {
+		m.cleanupFuncs[i]()
+	}
+}
+
+// TestCreateEnvtestEnvironment tests environment creation.
+func TestCreateEnvtestEnvironment(t *testing.T) {
+	t.Parallel()
+
+	env := createEnvtestEnvironment(t)
+
+	if env == nil {
+		t.Fatal("createEnvtestEnvironment() returned nil")
+	}
+
+	if len(env.CRDDirectoryPaths) != 1 {
+		t.Errorf("CRDDirectoryPaths length = %d, want 1", len(env.CRDDirectoryPaths))
+	}
+
+	expectedPath := filepath.Join("../../../../", "config", "crd", "bases")
+	if env.CRDDirectoryPaths[0] != expectedPath {
+		t.Errorf("CRDDirectoryPaths[0] = %s, want %s", env.CRDDirectoryPaths[0], expectedPath)
+	}
+
+	if !env.ErrorIfCRDPathMissing {
+		t.Error("ErrorIfCRDPathMissing should be true")
+	}
+}
+
+// TestStartEnvtest tests both success and error paths.
+func TestStartEnvtest(t *testing.T) {
+	tests := map[string]struct {
+		setupFunc func(t testing.TB) *envtest.Environment
+		wantFatal bool
+	}{
+		"success - valid environment": {
+			setupFunc: func(t testing.TB) *envtest.Environment {
+				return createEnvtestEnvironment(t)
+			},
+			wantFatal: false,
+		},
+		"error - invalid CRD path": {
+			setupFunc: func(t testing.TB) *envtest.Environment {
+				return &envtest.Environment{
+					CRDDirectoryPaths:     []string{"/nonexistent/invalid/path"},
+					ErrorIfCRDPathMissing: true,
+				}
+			},
+			wantFatal: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+			env := tc.setupFunc(mock)
+			defer env.Stop() // Safe even if Start failed
+
+			cfg := startEnvtest(mock, env)
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+
+			if !tc.wantFatal {
+				if cfg == nil {
+					t.Error("Config should not be nil on success")
+				}
+				if cfg.Host == "" {
+					t.Error("Config.Host should not be empty on success")
+				}
+			}
+		})
+	}
+}
+
+// TestCreateEnvtestDir tests that t.Fatal is called correctly.
+func TestCreateEnvtestDir(t *testing.T) {
+	tests := map[string]struct {
+		baseDir   string
+		wantFatal bool
+	}{
+		"success - valid base directory": {
+			baseDir:   os.TempDir(),
+			wantFatal: false,
+		},
+		"error - invalid base directory": {
+			baseDir:   "/nonexistent/invalid/path",
+			wantFatal: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+
+			dir := createEnvtestDir(mock, tc.baseDir)
+			t.Cleanup(func() {
+				os.RemoveAll(dir)
+			})
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+
+			if !tc.wantFatal && dir == "" {
+				t.Error("createEnvtestDir() returned empty string")
+			}
+		})
+	}
+}
+
+// TestWriteKubeconfigFile tests kubeconfig file writing.
+func TestWriteKubeconfigFile(t *testing.T) {
+	tests := map[string]struct {
+		setupPath func(t *testing.T) string
+		content   []byte
+		wantFatal bool
+	}{
+		"success - writes to valid path": {
+			setupPath: func(t *testing.T) string {
+				dir := t.TempDir()
+				return filepath.Join(dir, "kubeconfig")
+			},
+			content:   []byte("test kubeconfig content"),
+			wantFatal: false,
+		},
+		"success - writes empty content": {
+			setupPath: func(t *testing.T) string {
+				dir := t.TempDir()
+				return filepath.Join(dir, "kubeconfig")
+			},
+			content:   []byte{},
+			wantFatal: false,
+		},
+		"success - overwrites existing file": {
+			setupPath: func(t *testing.T) string {
+				dir := t.TempDir()
+				path := filepath.Join(dir, "kubeconfig")
+				// Pre-create the file
+				os.WriteFile(path, []byte("old content"), 0o644)
+				return path
+			},
+			content:   []byte("new content"),
+			wantFatal: false,
+		},
+		"error - invalid path (directory doesn't exist)": {
+			setupPath: func(t *testing.T) string {
+				return filepath.Join("/nonexistent", "invalid", "path", "kubeconfig")
+			},
+			content:   []byte("test content"),
+			wantFatal: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+			path := tc.setupPath(t)
+
+			writeKubeconfigFile(mock, path, tc.content)
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+
+			if !tc.wantFatal {
+				// Verify file was written
+				content, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatalf("Failed to read written file: %v", err)
+				}
+
+				// Verify content matches
+				if string(content) != string(tc.content) {
+					t.Errorf("File content = %q, want %q", string(content), string(tc.content))
+				}
+
+				// Verify file permissions
+				info, err := os.Stat(path)
+				if err != nil {
+					t.Fatalf("Failed to stat file: %v", err)
+				}
+
+				expectedMode := os.FileMode(0o644)
+				if info.Mode().Perm() != expectedMode {
+					t.Errorf("File permissions = %o, want %o", info.Mode().Perm(), expectedMode)
+				}
+			}
+		})
+	}
+}
+
+// TestSetUpClient tests that t.Fatal is called correctly.
+func TestSetUpClient(t *testing.T) {
+	tests := map[string]struct {
+		setupFunc func(t testing.TB) (*rest.Config, *runtime.Scheme)
+		wantFatal bool
+	}{
+		"success - valid config and scheme": {
+			setupFunc: func(t testing.TB) (*rest.Config, *runtime.Scheme) {
+				cfg := SetUpEnvtest(t)
+				scheme := runtime.NewScheme()
+				return cfg, scheme
+			},
+			wantFatal: false,
+		},
+		"error - nil config": {
+			setupFunc: func(t testing.TB) (*rest.Config, *runtime.Scheme) {
+				scheme := runtime.NewScheme()
+				return nil, scheme
+			},
+			wantFatal: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+			cfg, scheme := tc.setupFunc(mock)
+
+			SetUpClient(mock, cfg, scheme)
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+		})
+	}
+}
+
+// failingRunnable is a test runnable that fails immediately on Start.
+type failingRunnable struct{}
+
+func (f *failingRunnable) Start(ctx context.Context) error {
+	return fmt.Errorf("failing runnable: intentional test failure")
+}
+
+// TestStartManager_Internal tests the internal startManager function.
+func TestStartManager_Internal(t *testing.T) {
+	tests := map[string]struct {
+		setupFunc func(t testing.TB) (context.Context, manager.Manager)
+		wantFatal bool
+		wantError bool
+	}{
+		"success - manager starts and cache syncs": {
+			setupFunc: func(t testing.TB) (context.Context, manager.Manager) {
+				cfg := SetUpEnvtest(t)
+				scheme := runtime.NewScheme()
+				mgr := SetUpManager(t, cfg, scheme)
+				ctx, cancel := context.WithCancel(context.Background())
+				t.Cleanup(cancel)
+				return ctx, mgr
+			},
+			wantFatal: false,
+			wantError: false,
+		},
+		"error - cache sync fails": {
+			setupFunc: func(t testing.TB) (context.Context, manager.Manager) {
+				cfg := SetUpEnvtest(t)
+				scheme := runtime.NewScheme()
+				mgr := SetUpManager(t, cfg, scheme)
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel() // Cancel immediately - WaitForCacheSync will fail
+				return ctx, mgr
+			},
+			wantFatal: true,
+			wantError: false,
+		},
+		"error - manager Start fails": {
+			setupFunc: func(t testing.TB) (context.Context, manager.Manager) {
+				cfg := SetUpEnvtest(t)
+				scheme := runtime.NewScheme()
+				mgr := SetUpManager(t, cfg, scheme)
+				// Add a runnable that will fail on Start
+				if err := mgr.Add(&failingRunnable{}); err != nil {
+					t.Fatalf("Failed to add failing runnable: %v", err)
+				}
+				return t.Context(), mgr
+			},
+			wantFatal: false,
+			wantError: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+			ctx, mgr := tc.setupFunc(mock)
+
+			done := startManager(mock, ctx, mgr)
+
+			// For success case, cancel context and wait for manager to stop
+			// For error case with cancelled context, done won't be waited on
+			if !mock.fatalCalled {
+				mock.runCleanups()
+				<-done
+			}
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+
+			if mock.errorCalled != tc.wantError {
+				t.Errorf("errorCalled = %v, want %v", mock.errorCalled, tc.wantError)
+			}
+		})
+	}
+}
+
+// TestCleanEnvtest tests that t.Fatal is called correctly.
+func TestCleanEnvtest(t *testing.T) {
+	tests := map[string]struct {
+		setupFunc func(t testing.TB) *envtest.Environment
+		testCtrls []testControl
+		wantFatal bool
+	}{
+		"success - environment stops cleanly": {
+			setupFunc: func(t testing.TB) *envtest.Environment {
+				env := createEnvtestEnvironment(t)
+				startEnvtest(t, env)
+				return env
+			},
+			testCtrls: nil,
+			wantFatal: false,
+		},
+		"error - Stop fails": {
+			setupFunc: func(t testing.TB) *envtest.Environment {
+				env := createEnvtestEnvironment(t)
+				startEnvtest(t, env)
+				return env
+			},
+			testCtrls: []testControl{forcedFailureFirst},
+			wantFatal: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+			env := tc.setupFunc(mock)
+
+			cleanup := cleanEnvtest(mock, env, tc.testCtrls...)
+			cleanup()
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+		})
+	}
+}
+
+// TestSetUpManager tests that t.Fatal is called correctly.
+func TestSetUpManager(t *testing.T) {
+	tests := map[string]struct {
+		setupFunc func(t testing.TB) (*rest.Config, *runtime.Scheme)
+		wantFatal bool
+	}{
+		"success - valid config and scheme": {
+			setupFunc: func(t testing.TB) (*rest.Config, *runtime.Scheme) {
+				cfg := SetUpEnvtest(t)
+				scheme := runtime.NewScheme()
+				return cfg, scheme
+			},
+			wantFatal: false,
+		},
+		"error - nil config": {
+			setupFunc: func(t testing.TB) (*rest.Config, *runtime.Scheme) {
+				scheme := runtime.NewScheme()
+				return nil, scheme
+			},
+			wantFatal: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+			cfg, scheme := tc.setupFunc(mock)
+
+			SetUpManager(mock, cfg, scheme)
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+		})
+	}
+}
+
+// TestGenerateKubeconfigFile tests that t.Fatal is called correctly.
+func TestGenerateKubeconfigFile(t *testing.T) {
+	tests := map[string]struct {
+		setupFunc func(t testing.TB) *envtest.Environment
+		testCtrls []testControl
+		wantFatal bool
+	}{
+		"success - no fatal on valid environment": {
+			setupFunc: func(t testing.TB) *envtest.Environment {
+				env := createEnvtestEnvironment(t)
+				startEnvtest(t, env)
+				return env
+			},
+			testCtrls: nil,
+			wantFatal: false,
+		},
+		"error - AddUser fails": {
+			setupFunc: func(t testing.TB) *envtest.Environment {
+				env := createEnvtestEnvironment(t)
+				startEnvtest(t, env)
+				return env
+			},
+			testCtrls: []testControl{forcedFailureFirst},
+			wantFatal: true,
+		},
+		"error - user.KubeConfig fails": {
+			setupFunc: func(t testing.TB) *envtest.Environment {
+				env := createEnvtestEnvironment(t)
+				startEnvtest(t, env)
+				return env
+			},
+			testCtrls: []testControl{forcedFailureSecond},
+			wantFatal: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockTB{TB: t}
+			env := tc.setupFunc(mock)
+			defer env.Stop()
+
+			kubeconfigPath := generateKubeconfigFile(mock, env, tc.testCtrls...)
+			t.Cleanup(func() {
+				os.RemoveAll(filepath.Dir(kubeconfigPath))
+			})
+
+			if mock.fatalCalled != tc.wantFatal {
+				t.Errorf("fatalCalled = %v, want %v", mock.fatalCalled, tc.wantFatal)
+			}
+
+			if !tc.wantFatal && kubeconfigPath == "" {
+				t.Error("kubeconfigPath should not be empty on success")
+			}
+		})
+	}
+}

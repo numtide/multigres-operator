@@ -1,4 +1,4 @@
-package etcd
+package toposerver
 
 import (
 	"testing"
@@ -13,16 +13,16 @@ import (
 
 func TestBuildContainerPorts(t *testing.T) {
 	tests := map[string]struct {
-		etcd *multigresv1alpha1.Etcd
-		want []corev1.ContainerPort
+		toposerver *multigresv1alpha1.TopoServer
+		want       []corev1.ContainerPort
 	}{
 		"default ports": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			want: []corev1.ContainerPort{
 				{
@@ -41,7 +41,7 @@ func TestBuildContainerPorts(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildContainerPorts(tc.etcd)
+			got := buildContainerPorts(tc.toposerver)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildContainerPorts() mismatch (-want +got):\n%s", diff)
 			}
@@ -51,16 +51,16 @@ func TestBuildContainerPorts(t *testing.T) {
 
 func TestBuildHeadlessServicePorts(t *testing.T) {
 	tests := map[string]struct {
-		etcd *multigresv1alpha1.Etcd
-		want []corev1.ServicePort
+		toposerver *multigresv1alpha1.TopoServer
+		want       []corev1.ServicePort
 	}{
 		"default ports": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			want: []corev1.ServicePort{
 				{
@@ -81,7 +81,7 @@ func TestBuildHeadlessServicePorts(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildHeadlessServicePorts(tc.etcd)
+			got := buildHeadlessServicePorts(tc.toposerver)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildHeadlessServicePorts() mismatch (-want +got):\n%s", diff)
 			}
@@ -91,16 +91,16 @@ func TestBuildHeadlessServicePorts(t *testing.T) {
 
 func TestBuildClientServicePorts(t *testing.T) {
 	tests := map[string]struct {
-		etcd *multigresv1alpha1.Etcd
-		want []corev1.ServicePort
+		toposerver *multigresv1alpha1.TopoServer
+		want       []corev1.ServicePort
 	}{
 		"default port": {
-			etcd: &multigresv1alpha1.Etcd{
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{},
 			},
 			want: []corev1.ServicePort{
 				{
@@ -115,7 +115,7 @@ func TestBuildClientServicePorts(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildClientServicePorts(tc.etcd)
+			got := buildClientServicePorts(tc.toposerver)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildClientServicePorts() mismatch (-want +got):\n%s", diff)
 			}

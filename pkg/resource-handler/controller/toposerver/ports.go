@@ -1,4 +1,4 @@
-package etcd
+package toposerver
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -16,17 +16,17 @@ const (
 )
 
 // buildContainerPorts creates the port definitions for the etcd container.
-// Uses default ports since EtcdSpec doesn't have port configuration yet.
-func buildContainerPorts(etcd *multigresv1alpha1.Etcd) []corev1.ContainerPort {
+// Uses default ports since TopoServerSpec doesn't have port configuration yet.
+func buildContainerPorts(toposerver *multigresv1alpha1.TopoServer) []corev1.ContainerPort {
 	clientPort := ClientPort
 	peerPort := PeerPort
 
-	// TODO: When EtcdSpec has port fields, use them:
-	// if etcd.Spec.ClientPort != 0 {
-	//     clientPort = etcd.Spec.ClientPort
+	// TODO: When TopoServerSpec has port fields, use them:
+	// if toposerver.Spec.ClientPort != 0 {
+	//     clientPort = toposerver.Spec.ClientPort
 	// }
-	// if etcd.Spec.PeerPort != 0 {
-	//     peerPort = etcd.Spec.PeerPort
+	// if toposerver.Spec.PeerPort != 0 {
+	//     peerPort = toposerver.Spec.PeerPort
 	// }
 
 	return []corev1.ContainerPort{
@@ -45,16 +45,16 @@ func buildContainerPorts(etcd *multigresv1alpha1.Etcd) []corev1.ContainerPort {
 
 // buildHeadlessServicePorts creates service ports for the headless service.
 // Includes both client and peer ports for StatefulSet pod discovery.
-func buildHeadlessServicePorts(etcd *multigresv1alpha1.Etcd) []corev1.ServicePort {
+func buildHeadlessServicePorts(toposerver *multigresv1alpha1.TopoServer) []corev1.ServicePort {
 	clientPort := ClientPort
 	peerPort := PeerPort
 
-	// TODO: When EtcdSpec has port fields, use them:
-	// if etcd.Spec.ClientPort != 0 {
-	//     clientPort = etcd.Spec.ClientPort
+	// TODO: When TopoServerSpec has port fields, use them:
+	// if toposerver.Spec.ClientPort != 0 {
+	//     clientPort = toposerver.Spec.ClientPort
 	// }
-	// if etcd.Spec.PeerPort != 0 {
-	//     peerPort = etcd.Spec.PeerPort
+	// if toposerver.Spec.PeerPort != 0 {
+	//     peerPort = toposerver.Spec.PeerPort
 	// }
 
 	return []corev1.ServicePort{
@@ -75,12 +75,12 @@ func buildHeadlessServicePorts(etcd *multigresv1alpha1.Etcd) []corev1.ServicePor
 
 // buildClientServicePorts creates service ports for the client service.
 // Only includes the client port for external access.
-func buildClientServicePorts(etcd *multigresv1alpha1.Etcd) []corev1.ServicePort {
+func buildClientServicePorts(toposerver *multigresv1alpha1.TopoServer) []corev1.ServicePort {
 	clientPort := ClientPort
 
-	// TODO: When EtcdSpec has clientPort field, use it:
-	// if etcd.Spec.ClientPort != 0 {
-	//     clientPort = etcd.Spec.ClientPort
+	// TODO: When TopoServerSpec has clientPort field, use it:
+	// if toposerver.Spec.ClientPort != 0 {
+	//     clientPort = toposerver.Spec.ClientPort
 	// }
 
 	return []corev1.ServicePort{

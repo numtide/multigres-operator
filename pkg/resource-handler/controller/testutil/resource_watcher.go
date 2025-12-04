@@ -311,7 +311,7 @@ func (rw *ResourceWatcher) collectEvents(ctx context.Context) {
 			}
 			rw.mu.Unlock()
 		case <-ctx.Done():
-			// Close all subscriber channels.
+			// Close all subscriber channels to signal waiting functions to stop
 			rw.mu.Lock()
 			for _, subCh := range rw.subscribers {
 				close(subCh)
@@ -476,9 +476,10 @@ func (rw *ResourceWatcher) waitForSingleMatch(
 // WaitForEventType waits for an event with specific kind and type
 // (ADDED, UPDATED, DELETED). Returns the first matching event, or error on
 // timeout.
+//
+// Uses the watcher's configured timeout (set via SetTimeout or WithTimeout).
 func (rw *ResourceWatcher) WaitForEventType(
 	kind, eventType string,
-	timeout time.Duration,
 ) (*ResourceEvent, error) {
 	rw.t.Helper()
 
@@ -499,7 +500,7 @@ func (rw *ResourceWatcher) WaitForEventType(
 	defer rw.unsubscribe(subCh)
 
 	// Step 3: Wait for matching event
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(rw.timeout)
 
 	for {
 		select {
@@ -529,12 +530,17 @@ func (rw *ResourceWatcher) watchResource(
 ) error {
 	rw.t.Helper()
 
+	kind := extractKind(obj)
+
+	// Check if already watching this kind
+	if _, watched := rw.watchedKinds[kind]; watched {
+		return nil // Already watching, skip
+	}
+
 	informer, err := mgr.GetCache().GetInformer(ctx, obj)
 	if err != nil {
 		return fmt.Errorf("failed to get informer: %w", err)
 	}
-
-	kind := extractKind(obj)
 
 	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
@@ -676,15 +682,20 @@ func (rw *ResourceWatcher) unsubscribe(subCh chan ResourceEvent) {
 	rw.t.Helper()
 
 	rw.mu.Lock()
+	defer rw.mu.Unlock()
+
+	// If subscribers is nil, collectEvents already closed all channels
+	if rw.subscribers == nil {
+		return
+	}
+
 	for i, ch := range rw.subscribers {
 		if ch == subCh {
 			rw.subscribers = append(rw.subscribers[:i], rw.subscribers[i+1:]...)
-			break
+			close(subCh)
+			return
 		}
 	}
-	rw.mu.Unlock()
-
-	close(subCh)
 }
 
 // extractKind extracts a clean kind name from a client.Object (internal helper).

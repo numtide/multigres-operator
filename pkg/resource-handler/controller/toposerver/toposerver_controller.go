@@ -1,4 +1,4 @@
-package etcd
+package toposerver
 
 import (
 	"context"
@@ -19,70 +19,73 @@ import (
 )
 
 const (
-	finalizerName = "etcd.multigres.com/finalizer"
+	finalizerName = "toposerver.multigres.com/finalizer"
 )
 
-// EtcdReconciler reconciles an Etcd object.
-type EtcdReconciler struct {
+// TopoServerReconciler reconciles a TopoServer object.
+type TopoServerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=multigres.com,resources=etcds,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=multigres.com,resources=etcds/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=multigres.com,resources=etcds/finalizers,verbs=update
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile handles Etcd resource reconciliation.
-func (r *EtcdReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// Reconcile handles TopoServer resource reconciliation.
+func (r *TopoServerReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Fetch the Etcd instance
-	etcd := &multigresv1alpha1.Etcd{}
-	if err := r.Get(ctx, req.NamespacedName, etcd); err != nil {
+	// Fetch the TopoServer instance
+	toposerver := &multigresv1alpha1.TopoServer{}
+	if err := r.Get(ctx, req.NamespacedName, toposerver); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("Etcd resource not found, ignoring")
+			logger.Info("TopoServer resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get Etcd")
+		logger.Error(err, "Failed to get TopoServer")
 		return ctrl.Result{}, err
 	}
 
 	// Handle deletion
-	if !etcd.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, etcd)
+	if !toposerver.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, toposerver)
 	}
 
 	// Add finalizer if not present
-	if !slices.Contains(etcd.Finalizers, finalizerName) {
-		etcd.Finalizers = append(etcd.Finalizers, finalizerName)
-		if err := r.Update(ctx, etcd); err != nil {
+	if !slices.Contains(toposerver.Finalizers, finalizerName) {
+		toposerver.Finalizers = append(toposerver.Finalizers, finalizerName)
+		if err := r.Update(ctx, toposerver); err != nil {
 			logger.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
 	}
 
 	// Reconcile StatefulSet
-	if err := r.reconcileStatefulSet(ctx, etcd); err != nil {
+	if err := r.reconcileStatefulSet(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile StatefulSet")
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile headless Service
-	if err := r.reconcileHeadlessService(ctx, etcd); err != nil {
+	if err := r.reconcileHeadlessService(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile headless Service")
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile client Service
-	if err := r.reconcileClientService(ctx, etcd); err != nil {
+	if err := r.reconcileClientService(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile client Service")
 		return ctrl.Result{}, err
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, etcd); err != nil {
+	if err := r.updateStatus(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to update status")
 		return ctrl.Result{}, err
 	}
@@ -90,42 +93,22 @@ func (r *EtcdReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return ctrl.Result{}, nil
 }
 
-// handleDeletion handles cleanup when Etcd is being deleted.
-func (r *EtcdReconciler) handleDeletion(
+// reconcileStatefulSet creates or updates the StatefulSet for TopoServer.
+func (r *TopoServerReconciler) reconcileStatefulSet(
 	ctx context.Context,
-	etcd *multigresv1alpha1.Etcd,
-) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	if slices.Contains(etcd.Finalizers, finalizerName) {
-		// Perform cleanup if needed
-		// Currently no special cleanup required - owner references handle resource deletion
-
-		// Remove finalizer
-		etcd.Finalizers = slices.DeleteFunc(etcd.Finalizers, func(s string) bool {
-			return s == finalizerName
-		})
-		if err := r.Update(ctx, etcd); err != nil {
-			logger.Error(err, "Failed to remove finalizer")
-			return ctrl.Result{}, err
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
-// reconcileStatefulSet creates or updates the StatefulSet for Etcd.
-func (r *EtcdReconciler) reconcileStatefulSet(
-	ctx context.Context,
-	etcd *multigresv1alpha1.Etcd,
+	toposerver *multigresv1alpha1.TopoServer,
 ) error {
-	desired, err := BuildStatefulSet(etcd, r.Scheme)
+	desired, err := BuildStatefulSet(toposerver, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build StatefulSet: %w", err)
 	}
 
 	existing := &appsv1.StatefulSet{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: etcd.Namespace, Name: etcd.Name}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new StatefulSet
@@ -147,12 +130,12 @@ func (r *EtcdReconciler) reconcileStatefulSet(
 	return nil
 }
 
-// reconcileHeadlessService creates or updates the headless Service for Etcd.
-func (r *EtcdReconciler) reconcileHeadlessService(
+// reconcileHeadlessService creates or updates the headless Service for TopoServer.
+func (r *TopoServerReconciler) reconcileHeadlessService(
 	ctx context.Context,
-	etcd *multigresv1alpha1.Etcd,
+	toposerver *multigresv1alpha1.TopoServer,
 ) error {
-	desired, err := BuildHeadlessService(etcd, r.Scheme)
+	desired, err := BuildHeadlessService(toposerver, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build headless Service: %w", err)
 	}
@@ -160,7 +143,7 @@ func (r *EtcdReconciler) reconcileHeadlessService(
 	existing := &corev1.Service{}
 	err = r.Get(
 		ctx,
-		client.ObjectKey{Namespace: etcd.Namespace, Name: etcd.Name + "-headless"},
+		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name + "-headless"},
 		existing,
 	)
 	if err != nil {
@@ -185,18 +168,22 @@ func (r *EtcdReconciler) reconcileHeadlessService(
 	return nil
 }
 
-// reconcileClientService creates or updates the client Service for Etcd.
-func (r *EtcdReconciler) reconcileClientService(
+// reconcileClientService creates or updates the client Service for TopoServer.
+func (r *TopoServerReconciler) reconcileClientService(
 	ctx context.Context,
-	etcd *multigresv1alpha1.Etcd,
+	toposerver *multigresv1alpha1.TopoServer,
 ) error {
-	desired, err := BuildClientService(etcd, r.Scheme)
+	desired, err := BuildClientService(toposerver, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build client Service: %w", err)
 	}
 
 	existing := &corev1.Service{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: etcd.Namespace, Name: etcd.Name}, existing)
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name},
+		existing,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create new Service
@@ -219,11 +206,14 @@ func (r *EtcdReconciler) reconcileClientService(
 	return nil
 }
 
-// updateStatus updates the Etcd status based on observed state.
-func (r *EtcdReconciler) updateStatus(ctx context.Context, etcd *multigresv1alpha1.Etcd) error {
+// updateStatus updates the TopoServer status based on observed state.
+func (r *TopoServerReconciler) updateStatus(
+	ctx context.Context,
+	toposerver *multigresv1alpha1.TopoServer,
+) error {
 	// Get the StatefulSet to check status
 	sts := &appsv1.StatefulSet{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: etcd.Namespace, Name: etcd.Name}, sts)
+	err := r.Get(ctx, client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name}, sts)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// StatefulSet not created yet
@@ -233,15 +223,18 @@ func (r *EtcdReconciler) updateStatus(ctx context.Context, etcd *multigresv1alph
 	}
 
 	// Update status fields
-	etcd.Status.Replicas = sts.Status.Replicas
-	etcd.Status.ReadyReplicas = sts.Status.ReadyReplicas
-	etcd.Status.Ready = sts.Status.ReadyReplicas == sts.Status.Replicas && sts.Status.Replicas > 0
-	etcd.Status.ObservedGeneration = etcd.Generation
+	toposerver.Status.Replicas = sts.Status.Replicas
+	toposerver.Status.ReadyReplicas = sts.Status.ReadyReplicas
+	toposerver.Status.ObservedGeneration = toposerver.Generation
+
+	// Set service names
+	toposerver.Status.ClientServiceName = toposerver.Name
+	toposerver.Status.PeerServiceName = toposerver.Name + "-headless"
 
 	// Update conditions
-	etcd.Status.Conditions = r.buildConditions(etcd, sts)
+	toposerver.Status.Conditions = r.buildConditions(toposerver, sts)
 
-	if err := r.Status().Update(ctx, etcd); err != nil {
+	if err := r.Status().Update(ctx, toposerver); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -249,8 +242,8 @@ func (r *EtcdReconciler) updateStatus(ctx context.Context, etcd *multigresv1alph
 }
 
 // buildConditions creates status conditions based on observed state.
-func (r *EtcdReconciler) buildConditions(
-	etcd *multigresv1alpha1.Etcd,
+func (r *TopoServerReconciler) buildConditions(
+	toposerver *multigresv1alpha1.TopoServer,
 	sts *appsv1.StatefulSet,
 ) []metav1.Condition {
 	conditions := []metav1.Condition{}
@@ -258,7 +251,7 @@ func (r *EtcdReconciler) buildConditions(
 	// Ready condition
 	readyCondition := metav1.Condition{
 		Type:               "Ready",
-		ObservedGeneration: etcd.Generation,
+		ObservedGeneration: toposerver.Generation,
 		LastTransitionTime: metav1.Now(),
 	}
 
@@ -276,15 +269,42 @@ func (r *EtcdReconciler) buildConditions(
 	return conditions
 }
 
+// handleDeletion handles cleanup when TopoServer is being deleted.
+func (r *TopoServerReconciler) handleDeletion(
+	ctx context.Context,
+	toposerver *multigresv1alpha1.TopoServer,
+) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	if slices.Contains(toposerver.Finalizers, finalizerName) {
+		// Perform cleanup if needed
+		// Currently no special cleanup required - owner references handle resource deletion
+
+		// Remove finalizer
+		toposerver.Finalizers = slices.DeleteFunc(toposerver.Finalizers, func(s string) bool {
+			return s == finalizerName
+		})
+		if err := r.Update(ctx, toposerver); err != nil {
+			logger.Error(err, "Failed to remove finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
-func (r *EtcdReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.Options) error {
+func (r *TopoServerReconciler) SetupWithManager(
+	mgr ctrl.Manager,
+	opts ...controller.Options,
+) error {
 	controllerOpts := controller.Options{}
 	if len(opts) > 0 {
 		controllerOpts = opts[0]
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&multigresv1alpha1.Etcd{}).
+		For(&multigresv1alpha1.TopoServer{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		WithOptions(controllerOpts).

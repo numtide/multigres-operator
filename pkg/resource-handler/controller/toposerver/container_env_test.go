@@ -1,4 +1,4 @@
-package etcd
+package toposerver
 
 import (
 	"testing"
@@ -36,15 +36,15 @@ func TestBuildPodIdentityEnv(t *testing.T) {
 
 func TestBuildEtcdConfigEnv(t *testing.T) {
 	tests := map[string]struct {
-		etcdName    string
-		serviceName string
-		namespace   string
-		want        []corev1.EnvVar
+		toposerverName string
+		serviceName    string
+		namespace      string
+		want           []corev1.EnvVar
 	}{
 		"basic configuration": {
-			etcdName:    "my-etcd",
-			serviceName: "my-etcd-headless",
-			namespace:   "default",
+			toposerverName: "my-toposerver",
+			serviceName:    "my-toposerver-headless",
+			namespace:      "default",
 			want: []corev1.EnvVar{
 				{Name: "ETCD_NAME", Value: "$(POD_NAME)"},
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
@@ -52,20 +52,20 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
-					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+					Value: "http://$(POD_NAME).my-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
 				},
 				{
 					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
-					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+					Value: "http://$(POD_NAME).my-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
 				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
-				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "my-etcd"},
+				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "my-toposerver"},
 			},
 		},
 		"different namespace": {
-			etcdName:    "test-etcd",
-			serviceName: "test-etcd-headless",
-			namespace:   "production",
+			toposerverName: "test-toposerver",
+			serviceName:    "test-toposerver-headless",
+			namespace:      "production",
 			want: []corev1.EnvVar{
 				{Name: "ETCD_NAME", Value: "$(POD_NAME)"},
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
@@ -73,20 +73,20 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
-					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+					Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
 				},
 				{
 					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
-					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+					Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
 				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
-				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-etcd"},
+				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-toposerver"},
 			},
 		},
 		"long names": {
-			etcdName:    "very-long-etcd-cluster-name",
-			serviceName: "very-long-etcd-cluster-name-headless",
-			namespace:   "kube-system",
+			toposerverName: "very-long-toposerver-cluster-name",
+			serviceName:    "very-long-toposerver-cluster-name-headless",
+			namespace:      "kube-system",
 			want: []corev1.EnvVar{
 				{Name: "ETCD_NAME", Value: "$(POD_NAME)"},
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
@@ -94,21 +94,21 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
-					Value: "http://$(POD_NAME).very-long-etcd-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+					Value: "http://$(POD_NAME).very-long-toposerver-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
 				},
 				{
 					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
-					Value: "http://$(POD_NAME).very-long-etcd-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+					Value: "http://$(POD_NAME).very-long-toposerver-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
 				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
-				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "very-long-etcd-cluster-name"},
+				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "very-long-toposerver-cluster-name"},
 			},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildEtcdConfigEnv(tc.etcdName, tc.serviceName, tc.namespace)
+			got := buildEtcdConfigEnv(tc.toposerverName, tc.serviceName, tc.namespace)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildEtcdConfigEnv() mismatch (-want +got):\n%s", diff)
 			}
@@ -118,59 +118,64 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 
 func TestBuildEtcdClusterPeerList(t *testing.T) {
 	tests := map[string]struct {
-		etcdName    string
-		serviceName string
-		namespace   string
-		replicas    int32
-		want        string
+		toposerverName string
+		serviceName    string
+		namespace      string
+		replicas       int32
+		want           string
 	}{
 		"single replica": {
-			etcdName:    "my-etcd",
-			serviceName: "my-etcd-headless",
-			namespace:   "default",
-			replicas:    1,
-			want:        "my-etcd-0=http://my-etcd-0.my-etcd-headless.default.svc.cluster.local:2380",
+			toposerverName: "my-toposerver",
+			serviceName:    "my-toposerver-headless",
+			namespace:      "default",
+			replicas:       1,
+			want:           "my-toposerver-0=http://my-toposerver-0.my-toposerver-headless.default.svc.cluster.local:2380",
 		},
 		"three replicas (typical HA)": {
-			etcdName:    "my-etcd",
-			serviceName: "my-etcd-headless",
-			namespace:   "default",
-			replicas:    3,
-			want:        "my-etcd-0=http://my-etcd-0.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-1=http://my-etcd-1.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-2=http://my-etcd-2.my-etcd-headless.default.svc.cluster.local:2380",
+			toposerverName: "my-toposerver",
+			serviceName:    "my-toposerver-headless",
+			namespace:      "default",
+			replicas:       3,
+			want:           "my-toposerver-0=http://my-toposerver-0.my-toposerver-headless.default.svc.cluster.local:2380,my-toposerver-1=http://my-toposerver-1.my-toposerver-headless.default.svc.cluster.local:2380,my-toposerver-2=http://my-toposerver-2.my-toposerver-headless.default.svc.cluster.local:2380",
 		},
 		"five replicas": {
-			etcdName:    "etcd-prod",
-			serviceName: "etcd-prod-headless",
-			namespace:   "production",
-			replicas:    5,
-			want:        "etcd-prod-0=http://etcd-prod-0.etcd-prod-headless.production.svc.cluster.local:2380,etcd-prod-1=http://etcd-prod-1.etcd-prod-headless.production.svc.cluster.local:2380,etcd-prod-2=http://etcd-prod-2.etcd-prod-headless.production.svc.cluster.local:2380,etcd-prod-3=http://etcd-prod-3.etcd-prod-headless.production.svc.cluster.local:2380,etcd-prod-4=http://etcd-prod-4.etcd-prod-headless.production.svc.cluster.local:2380",
+			toposerverName: "toposerver-prod",
+			serviceName:    "toposerver-prod-headless",
+			namespace:      "production",
+			replicas:       5,
+			want:           "toposerver-prod-0=http://toposerver-prod-0.toposerver-prod-headless.production.svc.cluster.local:2380,toposerver-prod-1=http://toposerver-prod-1.toposerver-prod-headless.production.svc.cluster.local:2380,toposerver-prod-2=http://toposerver-prod-2.toposerver-prod-headless.production.svc.cluster.local:2380,toposerver-prod-3=http://toposerver-prod-3.toposerver-prod-headless.production.svc.cluster.local:2380,toposerver-prod-4=http://toposerver-prod-4.toposerver-prod-headless.production.svc.cluster.local:2380",
 		},
 		"zero replicas": {
-			etcdName:    "my-etcd",
-			serviceName: "my-etcd-headless",
-			namespace:   "default",
-			replicas:    0,
-			want:        "",
+			toposerverName: "my-toposerver",
+			serviceName:    "my-toposerver-headless",
+			namespace:      "default",
+			replicas:       0,
+			want:           "",
 		},
 		"negative replicas": {
-			etcdName:    "my-etcd",
-			serviceName: "my-etcd-headless",
-			namespace:   "default",
-			replicas:    -1,
-			want:        "",
+			toposerverName: "my-toposerver",
+			serviceName:    "my-toposerver-headless",
+			namespace:      "default",
+			replicas:       -1,
+			want:           "",
 		},
 		"different namespace": {
-			etcdName:    "kube-etcd",
-			serviceName: "kube-etcd-headless",
-			namespace:   "kube-system",
-			replicas:    3,
-			want:        "kube-etcd-0=http://kube-etcd-0.kube-etcd-headless.kube-system.svc.cluster.local:2380,kube-etcd-1=http://kube-etcd-1.kube-etcd-headless.kube-system.svc.cluster.local:2380,kube-etcd-2=http://kube-etcd-2.kube-etcd-headless.kube-system.svc.cluster.local:2380",
+			toposerverName: "kube-toposerver",
+			serviceName:    "kube-toposerver-headless",
+			namespace:      "kube-system",
+			replicas:       3,
+			want:           "kube-toposerver-0=http://kube-toposerver-0.kube-toposerver-headless.kube-system.svc.cluster.local:2380,kube-toposerver-1=http://kube-toposerver-1.kube-toposerver-headless.kube-system.svc.cluster.local:2380,kube-toposerver-2=http://kube-toposerver-2.kube-toposerver-headless.kube-system.svc.cluster.local:2380",
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildEtcdClusterPeerList(tc.etcdName, tc.serviceName, tc.namespace, tc.replicas)
+			got := buildEtcdClusterPeerList(
+				tc.toposerverName,
+				tc.serviceName,
+				tc.namespace,
+				tc.replicas,
+			)
 			if got != tc.want {
 				t.Errorf("buildEtcdClusterPeerList() = %v, want %v", got, tc.want)
 			}
@@ -180,17 +185,17 @@ func TestBuildEtcdClusterPeerList(t *testing.T) {
 
 func TestBuildContainerEnv(t *testing.T) {
 	tests := map[string]struct {
-		etcdName    string
-		namespace   string
-		replicas    int32
-		serviceName string
-		want        []corev1.EnvVar
+		toposerverName string
+		namespace      string
+		replicas       int32
+		serviceName    string
+		want           []corev1.EnvVar
 	}{
 		"complete environment with 3 replicas": {
-			etcdName:    "my-etcd",
-			namespace:   "default",
-			replicas:    3,
-			serviceName: "my-etcd-headless",
+			toposerverName: "my-toposerver",
+			namespace:      "default",
+			replicas:       3,
+			serviceName:    "my-toposerver-headless",
 			want: []corev1.EnvVar{
 				{
 					Name: "POD_NAME",
@@ -214,25 +219,25 @@ func TestBuildContainerEnv(t *testing.T) {
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
-					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+					Value: "http://$(POD_NAME).my-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
 				},
 				{
 					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
-					Value: "http://$(POD_NAME).my-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+					Value: "http://$(POD_NAME).my-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
 				},
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
-				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "my-etcd"},
+				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "my-toposerver"},
 				{
 					Name:  "ETCD_INITIAL_CLUSTER",
-					Value: "my-etcd-0=http://my-etcd-0.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-1=http://my-etcd-1.my-etcd-headless.default.svc.cluster.local:2380,my-etcd-2=http://my-etcd-2.my-etcd-headless.default.svc.cluster.local:2380",
+					Value: "my-toposerver-0=http://my-toposerver-0.my-toposerver-headless.default.svc.cluster.local:2380,my-toposerver-1=http://my-toposerver-1.my-toposerver-headless.default.svc.cluster.local:2380,my-toposerver-2=http://my-toposerver-2.my-toposerver-headless.default.svc.cluster.local:2380",
 				},
 			},
 		},
 		"single replica": {
-			etcdName:    "test-etcd",
-			namespace:   "test",
-			replicas:    1,
-			serviceName: "test-etcd-headless",
+			toposerverName: "test-toposerver",
+			namespace:      "test",
+			replicas:       1,
+			serviceName:    "test-toposerver-headless",
 			want: []corev1.EnvVar{
 				{
 					Name: "POD_NAME",
@@ -256,27 +261,27 @@ func TestBuildContainerEnv(t *testing.T) {
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
-					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+					Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
 				},
 				{
 					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
-					Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+					Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
 				},
 				// Cluster setup won't happen in a single cluster, and these
 				// env variables are only used at startup.
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
-				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-etcd"},
+				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-toposerver"},
 				{
 					Name:  "ETCD_INITIAL_CLUSTER",
-					Value: "test-etcd-0=http://test-etcd-0.test-etcd-headless.test.svc.cluster.local:2380",
+					Value: "test-toposerver-0=http://test-toposerver-0.test-toposerver-headless.test.svc.cluster.local:2380",
 				},
 			},
 		},
 		"zero replicas - no ETCD_INITIAL_CLUSTER": {
-			etcdName:    "empty-etcd",
-			namespace:   "default",
-			replicas:    0,
-			serviceName: "empty-etcd-headless",
+			toposerverName: "empty-toposerver",
+			namespace:      "default",
+			replicas:       0,
+			serviceName:    "empty-toposerver-headless",
 			want: []corev1.EnvVar{
 				{
 					Name: "POD_NAME",
@@ -300,18 +305,18 @@ func TestBuildContainerEnv(t *testing.T) {
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
-					Value: "http://$(POD_NAME).empty-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
+					Value: "http://$(POD_NAME).empty-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
 				},
 				{
 					Name:  "ETCD_INITIAL_ADVERTISE_PEER_URLS",
-					Value: "http://$(POD_NAME).empty-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
+					Value: "http://$(POD_NAME).empty-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380",
 				},
 				// Cluster setup won't happen in a single cluster, and these
 				// env variables are only used at startup. In case of scaling up
 				// from zero replica, the updated env variable will be picked up
 				// correctly, and thus an empty variable like this will be OK.
 				{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
-				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "empty-etcd"},
+				{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "empty-toposerver"},
 				{Name: "ETCD_INITIAL_CLUSTER"},
 			},
 		},
@@ -319,7 +324,7 @@ func TestBuildContainerEnv(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildContainerEnv(tc.etcdName, tc.namespace, tc.replicas, tc.serviceName)
+			got := buildContainerEnv(tc.toposerverName, tc.namespace, tc.replicas, tc.serviceName)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("BuildContainerEnv() mismatch (-want +got):\n%s", diff)
 			}

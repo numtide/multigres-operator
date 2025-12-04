@@ -1,4 +1,4 @@
-package etcd
+package toposerver
 
 import (
 	"context"
@@ -18,27 +18,27 @@ import (
 // This should never happen in production - scheme is properly set up in main.go.
 // Test exists for coverage of defensive error handling.
 func TestReconcileStatefulSet_InvalidScheme(t *testing.T) {
-	// Empty scheme without Etcd type registered
+	// Empty scheme without TopoServer type registered
 	invalidScheme := runtime.NewScheme()
 
-	etcd := &multigresv1alpha1.Etcd{
+	toposerver := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-etcd",
+			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.EtcdSpec{},
+		Spec: multigresv1alpha1.TopoServerChildSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(invalidScheme).
 		Build()
 
-	reconciler := &EtcdReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: invalidScheme,
 	}
 
-	err := reconciler.reconcileStatefulSet(context.Background(), etcd)
+	err := reconciler.reconcileStatefulSet(context.Background(), toposerver)
 	if err == nil {
 		t.Error("reconcileStatefulSet() should error with invalid scheme")
 	}
@@ -48,24 +48,24 @@ func TestReconcileStatefulSet_InvalidScheme(t *testing.T) {
 func TestReconcileHeadlessService_InvalidScheme(t *testing.T) {
 	invalidScheme := runtime.NewScheme()
 
-	etcd := &multigresv1alpha1.Etcd{
+	toposerver := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-etcd",
+			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.EtcdSpec{},
+		Spec: multigresv1alpha1.TopoServerChildSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(invalidScheme).
 		Build()
 
-	reconciler := &EtcdReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: invalidScheme,
 	}
 
-	err := reconciler.reconcileHeadlessService(context.Background(), etcd)
+	err := reconciler.reconcileHeadlessService(context.Background(), toposerver)
 	if err == nil {
 		t.Error("reconcileHeadlessService() should error with invalid scheme")
 	}
@@ -75,24 +75,24 @@ func TestReconcileHeadlessService_InvalidScheme(t *testing.T) {
 func TestReconcileClientService_InvalidScheme(t *testing.T) {
 	invalidScheme := runtime.NewScheme()
 
-	etcd := &multigresv1alpha1.Etcd{
+	toposerver := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-etcd",
+			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.EtcdSpec{},
+		Spec: multigresv1alpha1.TopoServerChildSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(invalidScheme).
 		Build()
 
-	reconciler := &EtcdReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: invalidScheme,
 	}
 
-	err := reconciler.reconcileClientService(context.Background(), etcd)
+	err := reconciler.reconcileClientService(context.Background(), toposerver)
 	if err == nil {
 		t.Error("reconcileClientService() should error with invalid scheme")
 	}
@@ -104,27 +104,27 @@ func TestUpdateStatus_StatefulSetNotFound(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme) // Need StatefulSet type registered for Get to work
 
-	etcd := &multigresv1alpha1.Etcd{
+	toposerver := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-etcd",
+			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.EtcdSpec{},
+		Spec: multigresv1alpha1.TopoServerChildSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(etcd).
-		WithStatusSubresource(&multigresv1alpha1.Etcd{}).
+		WithObjects(toposerver).
+		WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
 		Build()
 
-	reconciler := &EtcdReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
 
 	// Call updateStatus when StatefulSet doesn't exist yet
-	err := reconciler.updateStatus(context.Background(), etcd)
+	err := reconciler.updateStatus(context.Background(), toposerver)
 	if err != nil {
 		t.Errorf("updateStatus() should not error when StatefulSet not found, got: %v", err)
 	}
@@ -135,26 +135,26 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
-	etcd := &multigresv1alpha1.Etcd{
+	toposerver := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-etcd",
+			Name:       "test-toposerver",
 			Namespace:  "default",
 			Finalizers: []string{}, // No finalizer
 		},
-		Spec: multigresv1alpha1.EtcdSpec{},
+		Spec: multigresv1alpha1.TopoServerChildSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(etcd).
+		WithObjects(toposerver).
 		Build()
 
-	reconciler := &EtcdReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
 
-	result, err := reconciler.handleDeletion(context.Background(), etcd)
+	result, err := reconciler.handleDeletion(context.Background(), toposerver)
 	if err != nil {
 		t.Errorf("handleDeletion() should not error when no finalizer, got: %v", err)
 	}
@@ -170,30 +170,30 @@ func TestReconcileClientService_GetError(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	etcd := &multigresv1alpha1.Etcd{
+	toposerver := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-etcd",
+			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.EtcdSpec{},
+		Spec: multigresv1alpha1.TopoServerChildSpec{},
 	}
 
 	// Create client with failure injection
 	baseClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(etcd).
+		WithObjects(toposerver).
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-etcd", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName("test-toposerver", testutil.ErrNetworkTimeout),
 	})
 
-	reconciler := &EtcdReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
 
-	err := reconciler.reconcileClientService(context.Background(), etcd)
+	err := reconciler.reconcileClientService(context.Background(), toposerver)
 	if err == nil {
 		t.Error("reconcileClientService() should error on Get failure")
 	}
@@ -205,30 +205,30 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 
-	etcd := &multigresv1alpha1.Etcd{
+	toposerver := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-etcd",
+			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.EtcdSpec{},
+		Spec: multigresv1alpha1.TopoServerChildSpec{},
 	}
 
 	baseClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(etcd).
-		WithStatusSubresource(&multigresv1alpha1.Etcd{}).
+		WithObjects(toposerver).
+		WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-etcd", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName("test-toposerver", testutil.ErrNetworkTimeout),
 	})
 
-	reconciler := &EtcdReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
 
-	err := reconciler.updateStatus(context.Background(), etcd)
+	err := reconciler.updateStatus(context.Background(), toposerver)
 	if err == nil {
 		t.Error("updateStatus() should error on Get failure")
 	}

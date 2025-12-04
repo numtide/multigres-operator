@@ -1,13 +1,11 @@
 //go:build integration
 // +build integration
 
-package etcd_test
+package toposerver_test
 
 import (
 	"testing"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -18,7 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	etcdcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/etcd"
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
+	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 )
 
 func TestSetupWithManager(t *testing.T) {
@@ -31,15 +31,17 @@ func TestSetupWithManager(t *testing.T) {
 	mgr := testutil.SetUpManager(t, cfg, scheme)
 	testutil.StartManager(t, mgr)
 
-	if err := (&etcdcontroller.EtcdReconciler{
+	if err := (&toposervercontroller.TopoServerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, controller.Options{
+		SkipNameValidation: ptr.To(true),
+	}); err != nil {
 		t.Fatalf("Failed to create controller, %v", err)
 	}
 }
 
-func TestEtcdReconciliation(t *testing.T) {
+func TestTopoServerReconciliation(t *testing.T) {
 	t.Parallel()
 
 	scheme := runtime.NewScheme()
@@ -48,37 +50,41 @@ func TestEtcdReconciliation(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		etcd            *multigresv1alpha1.Etcd
+		toposerver      *multigresv1alpha1.TopoServer
 		existingObjects []client.Object
 		failureConfig   *testutil.FailureConfig
 		wantResources   []client.Object
-		assertFunc      func(t *testing.T, c client.Client, etcd *multigresv1alpha1.Etcd)
+		wantErr         bool
+		wantRequeue     bool
+		assertFunc      func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer)
 	}{
-		"simple etcd input": {
-			etcd: &multigresv1alpha1.Etcd{
+		"simple toposerver input": {
+			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-etcd",
+					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.EtcdSpec{},
+				Spec: multigresv1alpha1.TopoServerChildSpec{
+					RootPath: "/vitess/global",
+				},
 			},
 			wantResources: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-etcd",
+						Name:            "test-toposerver",
 						Namespace:       "default",
-						Labels:          etcdLabels(t, "test-etcd"),
-						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
+						Labels:          toposerverLabels(t, "test-toposerver"),
+						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    ptr.To(int32(3)),
-						ServiceName: "test-etcd-headless",
+						ServiceName: "test-toposerver-headless",
 						Selector: &metav1.LabelSelector{
-							MatchLabels: etcdLabels(t, "test-etcd"),
+							MatchLabels: toposerverLabels(t, "test-toposerver"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: etcdLabels(t, "test-etcd"),
+								Labels: toposerverLabels(t, "test-toposerver"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -112,11 +118,11 @@ func TestEtcdReconciliation(t *testing.T) {
 											{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
 											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
-											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
-											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).test-etcd-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
+											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
 											{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
-											{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-etcd"},
-											{Name: "ETCD_INITIAL_CLUSTER", Value: "test-etcd-0=http://test-etcd-0.test-etcd-headless.default.svc.cluster.local:2380,test-etcd-1=http://test-etcd-1.test-etcd-headless.default.svc.cluster.local:2380,test-etcd-2=http://test-etcd-2.test-etcd-headless.default.svc.cluster.local:2380"},
+											{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "test-toposerver"},
+											{Name: "ETCD_INITIAL_CLUSTER", Value: "test-toposerver-0=http://test-toposerver-0.test-toposerver-headless.default.svc.cluster.local:2380,test-toposerver-1=http://test-toposerver-1.test-toposerver-headless.default.svc.cluster.local:2380,test-toposerver-2=http://test-toposerver-2.test-toposerver-headless.default.svc.cluster.local:2380"},
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "data", MountPath: "/var/lib/etcd"},
@@ -146,25 +152,25 @@ func TestEtcdReconciliation(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-etcd",
+						Name:            "test-toposerver",
 						Namespace:       "default",
-						Labels:          etcdLabels(t, "test-etcd"),
-						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
+						Labels:          toposerverLabels(t, "test-toposerver"),
+						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: corev1.ServiceSpec{
 						Type: corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "client", 2379),
 						},
-						Selector: etcdLabels(t, "test-etcd"),
+						Selector: toposerverLabels(t, "test-toposerver"),
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-etcd-headless",
+						Name:            "test-toposerver-headless",
 						Namespace:       "default",
-						Labels:          etcdLabels(t, "test-etcd"),
-						OwnerReferences: etcdOwnerRefs(t, "test-etcd"),
+						Labels:          toposerverLabels(t, "test-toposerver"),
+						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: corev1.ServiceSpec{
 						Type:      corev1.ServiceTypeClusterIP,
@@ -173,21 +179,12 @@ func TestEtcdReconciliation(t *testing.T) {
 							tcpServicePort(t, "client", 2379),
 							tcpServicePort(t, "peer", 2380),
 						},
-						Selector:                 etcdLabels(t, "test-etcd"),
+						Selector:                 toposerverLabels(t, "test-toposerver"),
 						PublishNotReadyAddresses: true,
 					},
 				},
 			},
 		},
-		// "another test": {
-		// 	etcd: &multigresv1alpha1.Etcd{
-		// 		ObjectMeta: metav1.ObjectMeta{
-		// 			Name:      "test-etcd",
-		// 			Namespace: "default",
-		// 		},
-		// 		Spec: multigresv1alpha1.EtcdSpec{},
-		// 	},
-		// },
 	}
 
 	for name, tc := range tests {
@@ -204,22 +201,22 @@ func TestEtcdReconciliation(t *testing.T) {
 					testutil.IgnorePodSpecDefaults(),
 					testutil.IgnoreStatefulSetSpecDefaults(),
 				),
-				testutil.WithExtraResource(&multigresv1alpha1.Etcd{}),
+				testutil.WithExtraResource(&multigresv1alpha1.TopoServer{}),
 			)
 			client := mgr.GetClient()
 
-			etcdReconciler := &etcdcontroller.EtcdReconciler{
+			toposerverReconciler := &toposervercontroller.TopoServerReconciler{
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 			}
-			if err := etcdReconciler.SetupWithManager(mgr, controller.Options{
+			if err := toposerverReconciler.SetupWithManager(mgr, controller.Options{
 				// Needed for the parallel test runs
 				SkipNameValidation: ptr.To(true),
 			}); err != nil {
 				t.Fatalf("Failed to create controller, %v", err)
 			}
 
-			if err := client.Create(ctx, tc.etcd); err != nil {
+			if err := client.Create(ctx, tc.toposerver); err != nil {
 				t.Fatalf("Failed to create the initial item, %v", err)
 			}
 
@@ -233,26 +230,25 @@ func TestEtcdReconciliation(t *testing.T) {
 
 // Test helpers
 
-// etcdLabels returns standard labels for etcd resources in tests
-func etcdLabels(t testing.TB, instanceName string) map[string]string {
+// toposerverLabels returns standard labels for toposerver resources in tests
+func toposerverLabels(t testing.TB, instanceName string) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"app.kubernetes.io/component":  "etcd",
+		"app.kubernetes.io/component":  "toposerver",
 		"app.kubernetes.io/instance":   instanceName,
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
-		"multigres.com/cell":           "multigres-global-topo",
 	}
 }
 
-// etcdOwnerRefs returns owner references for an Etcd resource
-func etcdOwnerRefs(t testing.TB, etcdName string) []metav1.OwnerReference {
+// toposerverOwnerRefs returns owner references for a TopoServer resource
+func toposerverOwnerRefs(t testing.TB, toposerverName string) []metav1.OwnerReference {
 	t.Helper()
 	return []metav1.OwnerReference{{
 		APIVersion:         "multigres.com/v1alpha1",
-		Kind:               "Etcd",
-		Name:               etcdName,
+		Kind:               "TopoServer",
+		Name:               toposerverName,
 		Controller:         ptr.To(true),
 		BlockOwnerDeletion: ptr.To(true),
 	}}
