@@ -501,32 +501,33 @@ spec:
         memory: "256Mi"
 
   # MAP STRUCTURE: Keyed by pool name for safe targeting.
-  pools:
+pools:
     primary:
       type: "readWrite"
-      # 'cells' can be left empty here or omitted entirely. It MUST be overridden in the 
-      # MultigresCluster CR if left empty or missing.
-      # Alternatively, it can be set to a generic value if this template 
-      # is specific to a region (e.g., "us-east-template").
-      cells: [] 
       replicasPerCell: 2
       storage:
-        class: "standard-gp3"
+        class: "gp3"
         size: "100Gi"
       postgres:
-        requests:
-          cpu: "2"
-          memory: "4Gi"
-        limits:
-          cpu: "4"
-          memory: "8Gi"
-      multipooler:
-        requests:
-          cpu: "1"
-          memory: "512Mi"
-        limits:
-          cpu: "2"
-          memory: "1Gi"
+        resources: { ... }
+      # Affinity is optional.
+      # The Operator automatically applies zone-spreading based on the Cell definition.
+      # This field allows adding EXTRA constraints (e.g., specific node types).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: disktype
+                operator: In
+                values:
+                - ssd
+    replica:
+      type: "readOnly"
+      replicasPerCell: 1
+      storage:
+        class: "gp3"
+        size: "100Gi"
 
     dr-replica:
       type: "readOnly"
@@ -973,16 +974,27 @@ Webhooks are used *only* for fast, synchronous, and semantic validation to preve
 
 -----
 
-### 3\. Asynchronous Controller and Finalizer Logic
+### 3. Scheduling and Placement (Affinity)
+
+The Operator enforces High Availability (HA) by default while allowing user customization.
+
+1.  **Operator-Enforced Placement (Mandatory):**
+    * The Operator automatically injects `nodeSelector` or `nodeAffinity` rules to ensure Pods scheduled for a specific `Cell` land on nodes belonging to that Cell (e.g., `topology.kubernetes.io/zone: us-east-1a`).
+    * The Operator automatically injects `podAntiAffinity` to spread replicas of the same Shard/Pool across different nodes within that Cell to survive node failures.
+
+2.  **User-Defined Constraints (Additive):**
+    * Users can define `affinity` and `tolerations` in the `PoolSpec` (either in the Template or via Overrides).
+    * **Merge Logic:** User constraints are **appended** to the Operator's mandatory constraints. This allows users to restrict scheduling further (e.g., "Only run on nodes with label `disktype=ssd`") but prevents them from violating the fundamental Cell topology (e.g., you cannot schedule a "us-east-1a" pod onto a "us-west-2b" node).
+
+### 4. Asynchronous Controller and Finalizer Logic
 
 Asynchronous logic is used for operations that depend on external state or require blocking deletion, handled by controllers and finalizers.
 
 #### `MultigresCluster`
 
-  * **Deletion Protection (Finalizer):**
-    1.  The `MultigresCluster` controller adds a finalizer (e.g., `multigrescluster.multigres.com/finalizer`) to the CR upon creation.
-    2.  On deletion, the controller ensures all child resources (StatefulSets, Services) are properly terminated before removing the finalizer. NOTE: We should consider optional flag to delete PVCs too, default will be to keep them.
-    3.  *Note:* Since databases are embedded in the cluster CR, deleting the cluster implies deleting all databases. No extra "claim" check is needed here.
+* **Deletion Protection (Finalizer):**
+    1.  The `MultigresCluster` controller adds a finalizer (e.g., `multigres.com/finalizer`) to the CR upon creation.
+    2.  **Logic:** When the user deletes the cluster, the finalizer blocks deletion until all Child CRs (`Cell`, `Shard`, `TopoServer`) have been successfully deleted and confirmed gone by the API server. This ensures no orphaned resources (like expensive cloud load balancers or PVCs) are left behind.
 
 #### `CoreTemplate`, `CellTemplate`, `ShardTemplate`
 
@@ -994,7 +1006,7 @@ Asynchronous logic is used for operations that depend on external state or requi
         * If the query returns any results (meaning the template is in use), the webhook **rejects** the deletion request with a `403 Forbidden` error.
     3.  **Benefit:** This prevents the Template from ever entering a "Terminating" state, ensuring it remains fully editable and active even if a user accidentally tries to delete it.
     4.  **Race Condition Handling (Fail Safe):** In the rare race condition where a template is deleted immediately after a cluster is created (before the controller applies tracking labels), the Cluster Controller handles the missing template gracefully by setting the Cluster Status Condition to `Ready=False` (Reason: `TemplateMissing`) and pausing reconciliation. This ensures no data loss or configuration drift occurs; the operator simply waits for the user to restore the template or update the reference.
-
+  
 ## End-User Examples
 
 ### 1\. The Ultra-Minimalist (Relying on Namespace/Webhook Defaults)
