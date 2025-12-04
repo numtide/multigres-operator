@@ -27,9 +27,7 @@ func TestSetupWithManager(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	cfg := testutil.SetUpEnvtest(t)
-	mgr := testutil.SetUpManager(t, cfg, scheme)
-	testutil.StartManager(t, mgr)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 
 	if err := (&toposervercontroller.TopoServerReconciler{
 		Client: mgr.GetClient(),
