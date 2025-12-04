@@ -182,14 +182,14 @@ spec:
       
       # Optional overrides applied ON TOP of the template.
       overrides:
-        multiGateway:
+        multigateway:
            replicas: 3
 
     # --- CELL 2: Using Inline Spec (No Template) ---
     - name: "us-east-1b"
       zone: "us-east-1b"
       spec:
-         multiGateway:
+         multigateway:
            replicas: 2
            resources:
              requests:
@@ -428,7 +428,7 @@ metadata:
   namespace: example
 spec:
   # Template strictly defines only Cell-scoped components.
-  multiGateway:
+  multigateway:
     replicas: 2
     resources:
       requests:
@@ -637,7 +637,7 @@ spec:
     multigateway: "multigres/multigres:latest"
 
   # Resolved from CellTemplate + Overrides
-  multiGateway:
+  multigateway:
     replicas: 3
     resources:
       requests:
@@ -1114,7 +1114,7 @@ spec:
       zone: "us-west-2a"
       cellTemplate: "standard-gateway"
       overrides:
-        multiGateway:
+        multigateway:
           # Overriding the entire resources block
           resources:
              requests:
