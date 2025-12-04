@@ -254,7 +254,7 @@ spec:
                        cpu: "200m"
                        memory: "256Mi"
                 pools:
-                  primary:
+                  main-app:
                     type: "readWrite"
                     cells: 
                       - "us-east-1b"
@@ -293,7 +293,7 @@ spec:
                        cpu: "200m"
                        memory: "256Mi"
                 pools:
-                  primary:
+                  main-app:
                     type: "readWrite"
                     cells: 
                       - "us-east-1b"
@@ -324,9 +324,9 @@ spec:
               overrides:
                  # MAP STRUCTURE: Keyed by pool name for safe targeting.
                  pools:
-                   # Overriding the pool named 'primary' from the template
+                   # Overriding the pool named 'main-app' from the template
                    # to ensure it lives in a specific cell for this shard.
-                   primary:
+                   main-app:
                      cells: 
                        - "us-east-1a"
                      
@@ -338,7 +338,7 @@ spec:
               # We still must provide overrides for required fields.
               overrides:
                  pools:
-                   primary:
+                   main-app:
                      cells: 
                        - "us-east-1c"
 
@@ -472,7 +472,7 @@ spec:
 * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
 * When created, templates are not reconciled until referenced by a `MultigresCluster`.
 * Similar to `CellTemplate`, this is a pure configuration object. It defines the "shape" of a shard: its orchestration and its data pools.
-* **`pools` is a MAP, keyed by the pool name:** Using a map structure ensures that overrides are resilient to changes in the underlying template; unlike list arrays where inserting or reordering items shifts indices—potentially causing an override targeting "index 1" to accidentally apply to the wrong pool if the template order changes—keyed maps guarantee that an override for a specific pool (e.g., `primary`) always targets that exact logical resource, regardless of how other pools are added or organized in the template.  
+* **`pools` is a MAP, keyed by the pool name:** Using a map structure ensures that overrides are resilient to changes in the underlying template; unlike list arrays where inserting or reordering items shifts indices—potentially causing an override targeting "index 1" to accidentally apply to the wrong pool if the template order changes—keyed maps guarantee that an override for a specific pool (e.g., `main-app`) always targets that exact logical resource, regardless of how other pools are added or organized in the template.  
 * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty or omitted, it defaults to all cells where pools are defined.
 * **Pool Placement:** `pools` uses a `cells` list. For `readWrite` pools, this list typically contains only a few cells rather than using all available cells. For `readOnly` pools, this list can contain multiple cells to apply the same configuration across multiple zones and regions.
 
@@ -502,7 +502,7 @@ spec:
 
   # MAP STRUCTURE: Keyed by pool name for safe targeting.
 pools:
-    primary:
+    main-app:
       type: "readWrite"
       replicasPerCell: 2
       storage:
@@ -749,7 +749,7 @@ spec:
             cpu: "200m"
             memory: "256Mi"
       pools:
-        primary:
+        main-app:
           cells: 
             - "us-east-1a"
           type: "readWrite"
@@ -784,7 +784,7 @@ spec:
             cpu: "200m"
             memory: "256Mi"
       pools:
-        primary:
+        main-app:
           cells: 
             - "us-east-1b"
           type: "readWrite"
@@ -821,7 +821,7 @@ spec:
             cpu: "200m"
             memory: "256Mi"
       pools:
-        primary:
+        main-app:
           cells: 
             - "us-east-1c" # Resolved from override
           type: "readWrite"
@@ -900,7 +900,7 @@ spec:
         memory: "256Mi"
 
   pools:
-    primary:
+    main-app:
       cells: 
         - "us-east-1a" 
       type: "readWrite"
@@ -923,7 +923,8 @@ spec:
              cpu: "2"
              memory: "1Gi"
 status:
-  primaryCell: "us-east-1a"
+  main-appCells: 
+    - "us-east-1a"
   orchReady: True
   poolsReady: True
 ```
@@ -1068,17 +1069,17 @@ spec:
         shards:
           - name: "0"
             # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
-            # We still need to override the 'cell' for the primary pool.
+            # We still need to override the 'cell' for the main-app pool.
             overrides:
               pools:
-                primary:
+                main-app:
                   cells: 
                     - "us-east-1a"
           - name: "1"
             # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
             overrides:
               pools:
-                primary:
+                main-app:
                   cells: 
                     - "us-west-2a"
 ```
@@ -1145,9 +1146,9 @@ spec:
             - name: "0"
               shardTemplate: "geo-distributed-shard"
               overrides:
-                # MAP-BASED OVERRIDE: Safely targeting 'primary' pool
+                # MAP-BASED OVERRIDE: Safely targeting 'main-app' pool
                 pools:
-                  primary:
+                  main-app:
                     # Partial override of a simple field
                     cells: 
                       - "us-east-1a"
@@ -1163,7 +1164,7 @@ spec:
               shardTemplate: "geo-distributed-shard"
               overrides:
                 pools:
-                  primary:
+                  main-app:
                     cells:
                       - "us-west-2a"
 ```
