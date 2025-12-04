@@ -993,6 +993,7 @@ Asynchronous logic is used for operations that depend on external state or requi
         * To make this query efficient, the `MultigresCluster` controller must apply **Tracking Labels** to the Cluster CR whenever a template is referenced (e.g., `multigres.com/cell-template: prod-small`).
         * If the query returns any results (meaning the template is in use), the webhook **rejects** the deletion request with a `403 Forbidden` error.
     3.  **Benefit:** This prevents the Template from ever entering a "Terminating" state, ensuring it remains fully editable and active even if a user accidentally tries to delete it.
+    4.  **Race Condition Handling (Fail Safe):** In the rare race condition where a template is deleted immediately after a cluster is created (before the controller applies tracking labels), the Cluster Controller handles the missing template gracefully by setting the Cluster Status Condition to `Ready=False` (Reason: `TemplateMissing`) and pausing reconciliation. This ensures no data loss or configuration drift occurs; the operator simply waits for the user to restore the template or update the reference.
 
 ## End-User Examples
 
