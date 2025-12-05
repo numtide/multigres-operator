@@ -694,7 +694,7 @@ status:
 #### Child CR: TableGroup
 
   * Owned by `MultigresCluster`.
-  * Acts as the middle-manager for Shards. It MUST contain the full resolved specification for all shards it manages, enabling it to be the single source of truth for creating its child `Shard` CRs.
+  * Acts as the middle-manager for Shards. It MUST contain the fully resolved specification for all shards it manages, enabling it to be the single source of truth for creating its child `Shard` CRs.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
