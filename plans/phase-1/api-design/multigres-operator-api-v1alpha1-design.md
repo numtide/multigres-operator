@@ -522,13 +522,6 @@ spec:
                 operator: In
                 values:
                 - ssd
-    replica:
-      type: "readOnly"
-      replicasPerCell: 1
-      storage:
-        class: "gp3"
-        size: "100Gi"
-
     dr-replica:
       type: "readOnly"
       # This pool will be deployed to all cells listed here.
