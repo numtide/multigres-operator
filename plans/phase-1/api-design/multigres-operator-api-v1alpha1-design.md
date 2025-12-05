@@ -700,7 +700,7 @@ status:
 apiVersion: multigres.com/v1alpha1
 kind: TableGroup
 metadata:
-  name: "production-db-orders-tg"
+  name: "example-cluster-production-db-orders-tg"
   namespace: example
   labels:
     multigres.com/database: "production_db"
@@ -852,7 +852,7 @@ status:
 apiVersion: multigres.com/v1alpha1
 kind: Shard
 metadata:
-  name: "production-db-orders-tg-0"
+  name: "example-cluster-production-db-orders-tg-0"
   namespace: example
   labels:
      multigres.com/shard: "0"
@@ -861,7 +861,7 @@ metadata:
   ownerReferences:
     - apiVersion: multigres.com/v1alpha1
       kind: TableGroup
-      name: "production-db-orders-tg"
+      name: "example-cluster-production-db-orders-tg"
       controller: true
 spec:
   databaseName: "production_db"
