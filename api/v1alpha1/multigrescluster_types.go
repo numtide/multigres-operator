@@ -139,14 +139,14 @@ type CellConfig struct {
 type CellOverrides struct {
 	// MultiGateway overrides.
 	// +optional
-	MultiGateway *StatelessSpec `json:"multiGateway,omitempty"`
+	MultiGateway *StatelessSpec `json:"multigateway,omitempty"`
 }
 
 // CellInlineSpec defines the inline configuration for a Cell.
 type CellInlineSpec struct {
 	// MultiGateway configuration.
 	// +optional
-	MultiGateway StatelessSpec `json:"multiGateway,omitempty"`
+	MultiGateway StatelessSpec `json:"multigateway,omitempty"`
 
 	// LocalTopoServer configuration (optional).
 	// +optional

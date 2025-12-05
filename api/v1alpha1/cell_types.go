@@ -37,7 +37,7 @@ type CellSpec struct {
 	Images CellImages `json:"images"`
 
 	// MultiGateway fully resolved config.
-	MultiGateway StatelessSpec `json:"multiGateway"`
+	MultiGateway StatelessSpec `json:"multigateway"`
 
 	// GlobalTopoServer reference (always populated).
 	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`

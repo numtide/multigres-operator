@@ -147,7 +147,7 @@ spec:
                 x-kubernetes-validations:
                 - message: only one of 'etcd' or 'external' can be set
                   rule: '!(has(self.etcd) && has(self.external))'
-              multiGateway:
+              multigateway:
                 description: MultiGateway configuration.
                 properties:
                   affinity:

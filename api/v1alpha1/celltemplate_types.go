@@ -28,7 +28,7 @@ import (
 type CellTemplateSpec struct {
 	// MultiGateway configuration.
 	// +optional
-	MultiGateway *StatelessSpec `json:"multiGateway,omitempty"`
+	MultiGateway *StatelessSpec `json:"multigateway,omitempty"`
 
 	// LocalTopoServer configuration (optional).
 	// +optional

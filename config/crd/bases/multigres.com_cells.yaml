@@ -73,7 +73,7 @@ spec:
                 required:
                 - multigateway
                 type: object
-              multiGateway:
+              multigateway:
                 description: MultiGateway fully resolved config.
                 properties:
                   affinity:
@@ -1197,7 +1197,7 @@ spec:
             required:
             - globalTopoServer
             - images
-            - multiGateway
+            - multigateway
             - name
             type: object
           status:

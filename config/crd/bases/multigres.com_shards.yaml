@@ -15,9 +15,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.primaryCell
-      name: Primary
-      type: string
     - jsonPath: .status.conditions[?(@.type=='Available')].status
       name: Ready
       type: string
@@ -46,6 +43,8 @@ spec:
           spec:
             description: ShardSpec defines the desired state of Shard.
             properties:
+              databaseName:
+                type: string
               globalTopoServer:
                 description: GlobalTopoServer reference.
                 properties:
@@ -2156,16 +2155,26 @@ spec:
                 type: object
               shardName:
                 type: string
+              tableGroupName:
+                type: string
             required:
+            - databaseName
             - globalTopoServer
             - images
             - multiorch
             - pools
             - shardName
+            - tableGroupName
             type: object
           status:
             description: ShardStatus defines the observed state of Shard.
             properties:
+              cells:
+                description: Cells is a list of cells this shard is currently deployed
+                  to.
+                items:
+                  type: string
+                type: array
               conditions:
                 description: Conditions represent the latest available observations.
                 items:
@@ -2227,8 +2236,6 @@ spec:
                 type: boolean
               poolsReady:
                 type: boolean
-              primaryCell:
-                type: string
             required:
             - orchReady
             - poolsReady

@@ -81,7 +81,9 @@ type PoolSpec struct {
 
 // ShardSpec defines the desired state of Shard.
 type ShardSpec struct {
-	ShardName string `json:"shardName"`
+	DatabaseName   string `json:"databaseName"`
+	TableGroupName string `json:"tableGroupName"`
+	ShardName      string `json:"shardName"`
 
 	// Images required.
 	Images ShardImages `json:"images"`
@@ -113,9 +115,12 @@ type ShardStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	PrimaryCell string `json:"primaryCell,omitempty"`
-	OrchReady   bool   `json:"orchReady"`
-	PoolsReady  bool   `json:"poolsReady"`
+	// Cells is a list of cells this shard is currently deployed to.
+	// +optional
+	Cells []string `json:"cells,omitempty"`
+
+	OrchReady  bool `json:"orchReady"`
+	PoolsReady bool `json:"poolsReady"`
 }
 
 // ============================================================================
@@ -124,7 +129,6 @@ type ShardStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Primary",type="string",JSONPath=".status.primaryCell"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
 // Shard is the Schema for the shards API
