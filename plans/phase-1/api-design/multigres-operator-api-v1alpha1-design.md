@@ -969,6 +969,8 @@ Webhooks are used *only* for fast, synchronous, and semantic validation to preve
           * TableGroup names within a Database.
           * Shard names within a TableGroup.
       * **Topology Integrity:** Verifies that if a Shard is pinned to a specific cell (via overrides), that cell exists in the `spec.cells` list.
+      * **Name Length Safety:** Validates that the combined length of `ClusterName` + `DatabaseName` + `TableGroupName` does not exceed **50 characters**.
+          * *Reasoning:* These names are concatenated to form the TableGroup and Shard names. Kubernetes labels and StatefulSet service names have a strict 63-character limit. Enforcing this limit early prevents downstream deployment failures (e.g., `example-cluster-production-db-orders-tg-0-main-app` must be < 63 chars).
 
 -----
 
