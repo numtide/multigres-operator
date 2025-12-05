@@ -501,7 +501,7 @@ spec:
         memory: "256Mi"
 
   # MAP STRUCTURE: Keyed by pool name for safe targeting.
-pools:
+  pools:
     main-app:
       type: "readWrite"
       replicasPerCell: 2
