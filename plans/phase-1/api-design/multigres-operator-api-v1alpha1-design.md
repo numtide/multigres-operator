@@ -128,6 +128,7 @@ spec:
   globalTopoServer:
     # --- OPTION 1: Inline Etcd Spec ---
     etcd:
+      image: "quay.io/coreos/etcd:v3.5"
       replicas: 3
       storage:
         size: "10Gi"
@@ -202,6 +203,7 @@ spec:
          # If omitted, this cell uses the GlobalTopoServer.
          # localTopoServer:
          #   etcd:
+         #      image: "quay.io/coreos/etcd:v3.5"
          #      replicas: 3
          #      storage:
          #        size: "5Gi"
@@ -383,6 +385,7 @@ spec:
   globalTopoServer:
     # --- OPTION 1: Managed by Operator ---
     etcd:
+      image: "quay.io/coreos/etcd:v3.5"
       replicas: 3
       storage:
         size: "10Gi"
@@ -453,6 +456,7 @@ spec:
   #
   # localTopoServer:
   #   etcd:
+  #     image: "quay.io/coreos/etcd:v3.5"
   #     replicas: 3
   #     storage:
   #       class: "standard-gp3"
