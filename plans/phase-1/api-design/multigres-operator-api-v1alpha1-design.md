@@ -916,7 +916,7 @@ spec:
              cpu: "2"
              memory: "1Gi"
 status:
-  Cells: 
+  cells: 
     - "us-east-1a"
   orchReady: True
   poolsReady: True
