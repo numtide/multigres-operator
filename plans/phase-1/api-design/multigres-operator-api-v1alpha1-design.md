@@ -167,6 +167,16 @@ spec:
         limits:
           cpu: "500m"
           memory: "512Mi"
+      # Affinity can be configured too by user if desired    
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #     - weight: 100
+      #       podAffinityTerm:
+      #         labelSelector:
+      #           matchLabels:
+      #             app.kubernetes.io/component: multiadmin
+      #         topologyKey: "kubernetes.io/hostname"
 
     # --- OPTION 2: Explicit Template Reference ---
     # templateRef: "my-explicit-core-template"
@@ -179,7 +189,7 @@ spec:
     - name: "us-east-1a"
       # Location must be strictly one of: 'zone' OR 'region'
       zone: "us-east-1a" 
-      # region: "us-east-1"
+      # region: "us-east-1" # use instead of zone
       
       cellTemplate: "standard-cell-ha"
       
@@ -267,19 +277,21 @@ spec:
                        size: "100Gi"
                        class: "standard-gp3"
                     postgres:
-                       requests:
-                         cpu: "2"
-                         memory: "4Gi"
-                       limits:
-                         cpu: "4"
-                         memory: "8Gi"
+                       resources:
+                          requests:
+                            cpu: "2"
+                            memory: "4Gi"
+                          limits:
+                            cpu: "4"
+                            memory: "8Gi"
                     multipooler:
-                       requests:
-                         cpu: "500m"
-                         memory: "1Gi"
-                       limits:
-                         cpu: "1"
-                         memory: "2Gi"
+                       resources:
+                          requests:
+                            cpu: "500m"
+                            memory: "1Gi"
+                          limits:
+                            cpu: "1"
+                            memory: "2Gi"
 
         # A custom sharded group for high-volume data
         - name: "orders_tg"
@@ -306,19 +318,21 @@ spec:
                        size: "100Gi"
                        class: "standard-gp3"
                     postgres:
-                       requests:
-                         cpu: "2"
-                         memory: "4Gi"
-                       limits:
-                         cpu: "4"
-                         memory: "8Gi"
+                       resources:
+                          requests:
+                            cpu: "2"
+                            memory: "4Gi"
+                          limits:
+                            cpu: "4"
+                            memory: "8Gi"
                     multipooler:
-                       requests:
-                         cpu: "500m"
-                         memory: "1Gi"
-                       limits:
-                         cpu: "1"
-                         memory: "2Gi"
+                       resources:
+                          requests:
+                            cpu: "500m"
+                            memory: "1Gi"
+                          limits:
+                            cpu: "1"
+                            memory: "2Gi"
 
             # --- SHARD 1: Using an Explicit Template ---
             - name: "1"
@@ -417,6 +431,16 @@ spec:
         limits:
           cpu: "500m"
           memory: "512Mi"
+      # Affinity can be configured too by user if desired    
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #     - weight: 100
+      #       podAffinityTerm:
+      #         labelSelector:
+      #           matchLabels:
+      #             app.kubernetes.io/component: multiadmin
+      #         topologyKey: "kubernetes.io/hostname"
 ```
 
 ### User Managed CR: CellTemplate
@@ -515,7 +539,21 @@ spec:
         class: "gp3"
         size: "100Gi"
       postgres:
-        resources: { ... }
+         resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+      multipooler:
+         resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
       # Affinity is optional.
       # The Operator automatically applies zone-spreading based on the Cell definition.
       # This field allows adding EXTRA constraints (e.g., specific node types).
@@ -538,19 +576,21 @@ spec:
          class: "standard-gp3"
          size: "100Gi"
       postgres:
-         requests:
-           cpu: "1"
-           memory: "2Gi"
-         limits:
-           cpu: "2"
-           memory: "4Gi"
+         resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
       multipooler:
-         requests:
-           cpu: "500m"
-           memory: "512Mi"
-         limits:
-           cpu: "1"
-           memory: "1Gi"
+         resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
 ```
 
 ### The `default` Flag (System Resources)
@@ -630,7 +670,7 @@ metadata:
       controller: true
 spec:
   name: "us-east-1a"
-  zone: "us-east-1a"
+  zone: "us-east-1a" # this would be region if that was chosen instead.
 
   # Image passed down from global configuration
   multigatewayImage: "multigres/multigres:latest"
@@ -645,6 +685,15 @@ spec:
       limits:
         cpu: "1"
         memory: "1Gi"
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+             labelSelector:
+               matchLabels:
+                 app.kubernetes.io/component: multigateway
+             topologyKey: "kubernetes.io/hostname"
   
   # A reference to the GLOBAL TopoServer.
   # Always populated by the parent controller if no local server is used.
@@ -708,6 +757,7 @@ metadata:
   name: "example-cluster-production-db-orders-tg"
   namespace: example
   labels:
+    multigres.com/cluster: "example-cluster"
     multigres.com/database: "production_db"
     multigres.com/tablegroup: "orders_tg"
   ownerReferences:
@@ -757,19 +807,21 @@ spec:
              size: "100Gi"
              class: "standard-gp3"
           postgres:
-              requests:
-                cpu: "2"
-                memory: "4Gi"
-              limits:
-                cpu: "4"
-                memory: "8Gi"
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: "4Gi"
+                limits:
+                  cpu: "4"
+                  memory: "8Gi"
           multipooler:
-              requests:
-                cpu: "1"
-                memory: "512Mi"
-              limits:
-                cpu: "2"
-                memory: "1Gi"
+              resources: 
+                requests:
+                  cpu: "1"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "1Gi"
     
     - name: "1"
       multiorch:
@@ -792,19 +844,21 @@ spec:
              size: "100Gi"
              class: "standard-gp3"
           postgres:
-              requests:
-                cpu: "2"
-                memory: "4Gi"
-              limits:
-                cpu: "4"
-                memory: "8Gi"
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: "4Gi"
+                limits:
+                  cpu: "4"
+                  memory: "8Gi"
           multipooler:
-              requests:
-                cpu: "1"
-                memory: "512Mi"
-              limits:
-                cpu: "2"
-                memory: "1Gi"
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "1Gi"
     
     # This shard's spec is resolved from a template
     # (e.g., "cluster-wide-shard")
@@ -824,24 +878,26 @@ spec:
           cells: 
             - "us-east-1c" # Resolved from override
           type: "readWrite"
-          replicasPerCell: 2 # Assuming '2' from template
+          replicasPerCell: 2 
           storage:
-             size: "100Gi" # Assuming '100Gi' from template
-             class: "standard-gp3" # Assuming 'standard-gp3' from template
+             size: "100Gi" 
+             class: "standard-gp3"
           postgres:
-              requests: # Assuming values from template
-                cpu: "2"
-                memory: "4Gi"
-              limits:
-                cpu: "4"
-                memory: "8Gi"
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: "4Gi"
+                limits:
+                  cpu: "4"
+                  memory: "8Gi"
           multipooler:
-              requests: # Assuming values from template
-                cpu: "1"
-                memory: "512Mi"
-              limits:
-                cpu: "2"
-                memory: "1Gi"
+              resources:
+                requests: 
+                  cpu: "1"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "1Gi"
         
 status:
   readyShards: 3
@@ -861,9 +917,10 @@ metadata:
   name: "example-cluster-production-db-orders-tg-0"
   namespace: example
   labels:
-     multigres.com/shard: "0"
+     multigres.com/cluster: "example-cluster"
      multigres.com/database: "production_db"
      multigres.com/tablegroup: "orders_tg"
+     multigres.com/shard: "0"
   ownerReferences:
     - apiVersion: multigres.com/v1alpha1
       kind: TableGroup
@@ -908,19 +965,21 @@ spec:
          size: "100Gi"
          class: "standard-gp3"
       postgres:
-           requests:
-             cpu: "2"
-             memory: "4Gi"
-           limits:
-             cpu: "4"
-             memory: "8Gi"
+           resources: 
+              requests:
+                cpu: "2"
+                memory: "4Gi"
+              limits:
+                cpu: "4"
+                memory: "8Gi"
       multipooler:
-           requests:
-             cpu: "1"
-             memory: "512Mi"
-           limits:
-             cpu: "2"
-             memory: "1Gi"
+           resources:
+              requests:
+                cpu: "1"
+                memory: "512Mi"
+              limits:
+                cpu: "2"
+                memory: "1Gi"
 status:
   cells: 
     - "us-east-1a"
@@ -1120,6 +1179,15 @@ spec:
         limits:
           cpu: "200m"
           memory: "512Mi"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: multiadmin
+              topologyKey: "kubernetes.io/hostname"
 
   cells:
     - name: "us-east-1a"
@@ -1138,6 +1206,16 @@ spec:
              limits:
                cpu: "1"
                memory: "4Gi"
+          # Affinity can be configured too by user if desired    
+          # affinity:
+          #   podAntiAffinity:
+          #     preferredDuringSchedulingIgnoredDuringExecution:
+          #     - weight: 100
+          #       podAffinityTerm:
+          #           labelSelector:
+          #             matchLabels:
+          #               app.kubernetes.io/component: multiadmin
+          #           topologyKey: "kubernetes.io/hostname"
 
   databases:
     - name: "users_db"
