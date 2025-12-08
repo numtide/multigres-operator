@@ -242,12 +242,15 @@ func startEnvtest(t testing.TB, testEnv *envtest.Environment) *rest.Config {
 	return cfg
 }
 
-func cleanEnvtest(t testing.TB, testEnv *envtest.Environment, testCtrls ...testControl) func() {
+type envtestStopper interface {
+	Stop() error
+}
+
+func cleanEnvtest(t testing.TB, testEnv envtestStopper) func() {
 	t.Helper()
 
 	return func() {
-		err := testEnv.Stop()
-		if err != nil || slices.Contains(testCtrls, forcedFailureFirst) {
+		if err := testEnv.Stop(); err != nil {
 			t.Fatalf("Failed to stop envtest, %v", err)
 		}
 	}

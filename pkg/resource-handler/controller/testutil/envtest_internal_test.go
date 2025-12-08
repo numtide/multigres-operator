@@ -372,26 +372,19 @@ func TestStartManager_Internal(t *testing.T) {
 // TestCleanEnvtest tests that t.Fatal is called correctly.
 func TestCleanEnvtest(t *testing.T) {
 	tests := map[string]struct {
-		setupFunc func(t testing.TB) *envtest.Environment
-		testCtrls []testControl
+		setupFunc func() envtestStopper
 		wantFatal bool
 	}{
 		"success - environment stops cleanly": {
-			setupFunc: func(t testing.TB) *envtest.Environment {
-				env := createEnvtestEnvironment(t)
-				startEnvtest(t, env)
-				return env
+			setupFunc: func() envtestStopper {
+				return &mockEnvtestStopper{err: nil}
 			},
-			testCtrls: nil,
 			wantFatal: false,
 		},
 		"error - Stop fails": {
-			setupFunc: func(t testing.TB) *envtest.Environment {
-				env := createEnvtestEnvironment(t)
-				startEnvtest(t, env)
-				return env
+			setupFunc: func() envtestStopper {
+				return &mockEnvtestStopper{err: fmt.Errorf("stop failed")}
 			},
-			testCtrls: []testControl{forcedFailureFirst},
 			wantFatal: true,
 		},
 	}
@@ -401,9 +394,9 @@ func TestCleanEnvtest(t *testing.T) {
 			t.Parallel()
 
 			mock := &mockTB{TB: t}
-			env := tc.setupFunc(mock)
+			env := tc.setupFunc()
 
-			cleanup := cleanEnvtest(mock, env, tc.testCtrls...)
+			cleanup := cleanEnvtest(mock, env)
 			cleanup()
 
 			if mock.fatalCalled != tc.wantFatal {
@@ -411,6 +404,14 @@ func TestCleanEnvtest(t *testing.T) {
 			}
 		})
 	}
+}
+
+type mockEnvtestStopper struct {
+	err error
+}
+
+func (m *mockEnvtestStopper) Stop() error {
+	return m.err
 }
 
 // TestSetUpManager tests that t.Fatal is called correctly.
