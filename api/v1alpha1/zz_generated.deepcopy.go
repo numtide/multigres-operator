@@ -953,7 +953,7 @@ func (in *ShardStatus) DeepCopyInto(out *ShardStatus) {
 	}
 	if in.Cells != nil {
 		in, out := &in.Cells, &out.Cells
-		*out = make([]string, len(*in))
+		*out = make([]CellName, len(*in))
 		copy(*out, *in)
 	}
 }

@@ -253,6 +253,7 @@ type ShardOverrides struct {
 	// Pools overrides. Keyed by pool name.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
 
@@ -265,6 +266,7 @@ type ShardInlineSpec struct {
 	// Pools configuration. Keyed by pool name.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
 
@@ -281,13 +283,16 @@ type MultigresClusterStatus struct {
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// Cells status summary (map of cell name to status).
+	// Cells status summary.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=100
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="cell names must be < 63 chars"
 	Cells map[string]CellStatusSummary `json:"cells,omitempty"`
 
 	// Databases status summary.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=500
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="database names must be < 63 chars"
 	Databases map[string]DatabaseStatusSummary `json:"databases,omitempty"`
 }
 

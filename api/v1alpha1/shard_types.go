@@ -101,6 +101,7 @@ type ShardSpec struct {
 
 	// Pools fully resolved spec.
 	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools"`
 }
 
@@ -127,7 +128,7 @@ type ShardStatus struct {
 	// Cells is a list of cells this shard is currently deployed to.
 	// +optional
 	// +kubebuilder:validation:MaxItems=100
-	Cells []string `json:"cells,omitempty"`
+	Cells []CellName `json:"cells,omitempty"`
 
 	OrchReady  bool `json:"orchReady"`
 	PoolsReady bool `json:"poolsReady"`

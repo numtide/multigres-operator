@@ -4578,6 +4578,9 @@ spec:
                                         name.
                                       maxProperties: 32
                                       type: object
+                                      x-kubernetes-validations:
+                                      - message: pool names must be < 63 chars
+                                        rule: self.all(key, size(key) < 63)
                                   type: object
                                 shardTemplate:
                                   description: ShardTemplate refers to a ShardTemplate
@@ -6843,6 +6846,9 @@ spec:
                                         name.
                                       maxProperties: 32
                                       type: object
+                                      x-kubernetes-validations:
+                                      - message: pool names must be < 63 chars
+                                        rule: self.all(key, size(key) < 63)
                                   type: object
                               required:
                               - name
@@ -8133,8 +8139,12 @@ spec:
                   - gatewayReplicas
                   - ready
                   type: object
-                description: Cells status summary (map of cell name to status).
+                description: Cells status summary.
+                maxProperties: 100
                 type: object
+                x-kubernetes-validations:
+                - message: cell names must be < 63 chars
+                  rule: self.all(key, size(key) < 63)
               conditions:
                 description: Conditions represent the latest available observations.
                 items:
@@ -8208,7 +8218,11 @@ spec:
                   - totalShards
                   type: object
                 description: Databases status summary.
+                maxProperties: 500
                 type: object
+                x-kubernetes-validations:
+                - message: database names must be < 63 chars
+                  rule: self.all(key, size(key) < 63)
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64

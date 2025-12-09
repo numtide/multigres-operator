@@ -60,6 +60,7 @@ type ShardResolvedSpec struct {
 
 	// Pools fully resolved spec.
 	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools"`
 }
 

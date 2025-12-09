@@ -2149,9 +2149,11 @@ spec:
                       - readOnly
                       type: string
                   type: object
-                description: Pools configuration. Keyed by pool name.
                 maxProperties: 32
                 type: object
+                x-kubernetes-validations:
+                - message: pool names must be < 63 chars
+                  rule: self.all(key, size(key) < 63)
             type: object
         type: object
     served: true

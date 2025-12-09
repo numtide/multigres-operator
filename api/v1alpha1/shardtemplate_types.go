@@ -30,9 +30,9 @@ type ShardTemplateSpec struct {
 	// +optional
 	MultiOrch *MultiOrchSpec `json:"multiorch,omitempty"`
 
-	// Pools configuration. Keyed by pool name.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
 

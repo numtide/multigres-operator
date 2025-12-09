@@ -2195,6 +2195,9 @@ spec:
                 description: Pools fully resolved spec.
                 maxProperties: 32
                 type: object
+                x-kubernetes-validations:
+                - message: pool names must be < 63 chars
+                  rule: self.all(key, size(key) < 63)
               shardName:
                 maxLength: 63
                 type: string
@@ -2217,6 +2220,10 @@ spec:
                 description: Cells is a list of cells this shard is currently deployed
                   to.
                 items:
+                  description: CellName is a string restricted to 63 characters for
+                    strict validation budgeting.
+                  maxLength: 63
+                  minLength: 1
                   type: string
                 maxItems: 100
                 type: array

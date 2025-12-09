@@ -2228,6 +2228,9 @@ spec:
                       description: Pools fully resolved spec.
                       maxProperties: 32
                       type: object
+                      x-kubernetes-validations:
+                      - message: pool names must be < 63 chars
+                        rule: self.all(key, size(key) < 63)
                   required:
                   - multiorch
                   - name
