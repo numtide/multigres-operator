@@ -32,6 +32,7 @@ type ShardTemplateSpec struct {
 
 	// Pools configuration. Keyed by pool name.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=32
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
 

@@ -30,12 +30,15 @@ import (
 // TopoServerSpec defines the desired state of TopoServer.
 type TopoServerSpec struct {
 	// Replicas is the desired number of etcd members.
+	// +kubebuilder:validation:Minimum=1
 	Replicas int32 `json:"replicas"`
 
 	// Storage configuration.
 	Storage StorageSpec `json:"storage"`
 
 	// Image to use for Etcd.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
 	Image string `json:"image"`
 
 	// Resources defines the compute resource requirements.
@@ -71,6 +74,12 @@ type TopoServerStatus struct {
 
 // EtcdSpec defines the configuration for a managed Etcd cluster.
 type EtcdSpec struct {
+	// Image is the Etcd container image.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	Image string `json:"image,omitempty"`
+
 	// Replicas is the desired number of etcd members.
 	// +kubebuilder:validation:Minimum=1
 	// +optional
@@ -87,7 +96,7 @@ type EtcdSpec struct {
 
 // GlobalTopoServerSpec defines the configuration for the global topology server.
 // It can be either an inline Etcd spec, an External reference, or a Template reference.
-// +kubebuilder:validation:XValidation:rule="!((has(self.etcd) && has(self.external)) || (has(self.etcd) && has(self.templateRef)) || (has(self.external) && has(self.templateRef)))",message="only one of 'etcd', 'external', or 'templateRef' can be set"
+// +kubebuilder:validation:XValidation:rule="[has(self.etcd), has(self.external), has(self.templateRef)].filter(x, x).size() == 1",message="must specify exactly one of 'etcd', 'external', or 'templateRef'"
 type GlobalTopoServerSpec struct {
 	// Etcd defines an inline managed Etcd cluster.
 	// +optional
@@ -99,6 +108,8 @@ type GlobalTopoServerSpec struct {
 
 	// TemplateRef refers to a CoreTemplate to load configuration from.
 	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	TemplateRef string `json:"templateRef,omitempty"`
 }
 
@@ -106,18 +117,23 @@ type GlobalTopoServerSpec struct {
 type ExternalTopoServerSpec struct {
 	// Endpoints is a list of client URLs.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=20
+	// +kubebuilder:validation:XValidation:rule="self.all(x, x.matches('^https?://'))",message="endpoints must be http or https URLs"
 	Endpoints []string `json:"endpoints"`
 
 	// CASecret is the name of the secret containing the CA certificate.
 	// +optional
+	// +kubebuilder:validation:MaxLength=253
 	CASecret string `json:"caSecret,omitempty"`
 
 	// ClientCertSecret is the name of the secret containing the client cert/key.
 	// +optional
+	// +kubebuilder:validation:MaxLength=253
 	ClientCertSecret string `json:"clientCertSecret,omitempty"`
 }
 
 // LocalTopoServerSpec defines configuration for Cell-local topology.
+// +kubebuilder:validation:XValidation:rule="has(self.etcd) || has(self.external)",message="must specify either 'etcd' or 'external'"
 // +kubebuilder:validation:XValidation:rule="!(has(self.etcd) && has(self.external))",message="only one of 'etcd' or 'external' can be set"
 type LocalTopoServerSpec struct {
 	// Etcd defines an inline managed Etcd cluster.
@@ -132,8 +148,14 @@ type LocalTopoServerSpec struct {
 // GlobalTopoServerRef defines a reference to the global topo server.
 // Used by Cell, TableGroup, and Shard.
 type GlobalTopoServerRef struct {
-	Address        string `json:"address"`
-	RootPath       string `json:"rootPath"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	Address string `json:"address"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	RootPath string `json:"rootPath"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	Implementation string `json:"implementation"`
 }
 

@@ -45,15 +45,18 @@ type StatelessSpec struct {
 
 	// PodAnnotations are annotations to add to the pods.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=64
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 
 	// PodLabels are additional labels to add to the pods.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=64
 	PodLabels map[string]string `json:"podLabels,omitempty"`
 }
 
 // ComponentConfig is a generic wrapper for components that support
 // inline spec OR template reference.
+// +kubebuilder:validation:XValidation:rule="has(self.spec) || has(self.templateRef)",message="must specify either 'spec' or 'templateRef'"
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.templateRef))",message="cannot specify both 'spec' and 'templateRef'"
 type ComponentConfig struct {
 	// Spec defines the inline configuration.
@@ -62,6 +65,8 @@ type ComponentConfig struct {
 
 	// TemplateRef refers to a CoreTemplate to load configuration from.
 	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	TemplateRef string `json:"templateRef,omitempty"`
 }
 
@@ -69,11 +74,14 @@ type ComponentConfig struct {
 type StorageSpec struct {
 	// Size of the persistent volume.
 	// +kubebuilder:validation:Pattern="^([0-9]+)(.+)$"
+	// +kubebuilder:validation:MaxLength=63
 	// +optional
 	Size string `json:"size,omitempty"`
 
 	// Class is the StorageClass name.
 	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	Class string `json:"class,omitempty"`
 }
 
@@ -81,5 +89,5 @@ type StorageSpec struct {
 type ContainerConfig struct {
 	// Resources defines the compute resource requirements.
 	// +optional
-	corev1.ResourceRequirements `json:",inline"`
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }

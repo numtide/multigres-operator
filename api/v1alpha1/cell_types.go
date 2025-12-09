@@ -27,14 +27,22 @@ import (
 // Cell is a child CR managed by MultigresCluster.
 
 // CellSpec defines the desired state of Cell.
+// +kubebuilder:validation:XValidation:rule="has(self.zone) != has(self.region)",message="must specify either 'zone' or 'region', but not both"
 type CellSpec struct {
 	// Name is the logical name of the cell.
+	// +kubebuilder:validation:MaxLength=63
 	Name string `json:"name"`
 	// Zone indicates the physical availability zone.
+	// +kubebuilder:validation:MaxLength=63
 	Zone string `json:"zone,omitempty"`
+	// Region indicates the physical region.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	Region string `json:"region,omitempty"`
 
-	// Images required for this cell.
-	Images CellImages `json:"images"`
+	// MultiGatewayImage is the image used for the gateway in this cell.
+	// +kubebuilder:validation:MaxLength=512
+	MultiGatewayImage string `json:"multigatewayImage"`
 
 	// MultiGateway fully resolved config.
 	MultiGateway StatelessSpec `json:"multigateway"`
@@ -48,16 +56,12 @@ type CellSpec struct {
 
 	// AllCells list for discovery.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	AllCells []string `json:"allCells,omitempty"`
 
 	// TopologyReconciliation flags.
 	// +optional
 	TopologyReconciliation TopologyReconciliation `json:"topologyReconciliation,omitempty"`
-}
-
-// CellImages defines the images required for a Cell.
-type CellImages struct {
-	MultiGateway string `json:"multigateway"`
 }
 
 // TopologyReconciliation defines flags for the cell controller.
@@ -76,9 +80,10 @@ type CellStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	GatewayReplicas      int32  `json:"gatewayReplicas"`
-	GatewayReadyReplicas int32  `json:"gatewayReadyReplicas"`
-	GatewayServiceName   string `json:"gatewayServiceName,omitempty"`
+	GatewayReplicas      int32 `json:"gatewayReplicas"`
+	GatewayReadyReplicas int32 `json:"gatewayReadyReplicas"`
+	// +kubebuilder:validation:MaxLength=253
+	GatewayServiceName string `json:"gatewayServiceName,omitempty"`
 }
 
 // ============================================================================

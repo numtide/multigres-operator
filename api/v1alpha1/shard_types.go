@@ -36,6 +36,7 @@ type MultiOrchSpec struct {
 	// Cells defines the list of cells where this MultiOrch should be deployed.
 	// If empty, it defaults to all cells where pools are defined.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Cells []string `json:"cells,omitempty"`
 }
 
@@ -48,6 +49,7 @@ type PoolSpec struct {
 
 	// Cells defines the list of cells where this Pool should be deployed.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Cells []string `json:"cells,omitempty"`
 
 	// ReplicasPerCell is the desired number of pods PER CELL in this pool.
@@ -81,9 +83,12 @@ type PoolSpec struct {
 
 // ShardSpec defines the desired state of Shard.
 type ShardSpec struct {
-	DatabaseName   string `json:"databaseName"`
+	// +kubebuilder:validation:MaxLength=63
+	DatabaseName string `json:"databaseName"`
+	// +kubebuilder:validation:MaxLength=63
 	TableGroupName string `json:"tableGroupName"`
-	ShardName      string `json:"shardName"`
+	// +kubebuilder:validation:MaxLength=63
+	ShardName string `json:"shardName"`
 
 	// Images required.
 	Images ShardImages `json:"images"`
@@ -95,14 +100,18 @@ type ShardSpec struct {
 	MultiOrch MultiOrchSpec `json:"multiorch"`
 
 	// Pools fully resolved spec.
+	// +kubebuilder:validation:MaxProperties=32
 	Pools map[string]PoolSpec `json:"pools"`
 }
 
 // ShardImages defines the images required for a Shard.
 type ShardImages struct {
-	MultiOrch   string `json:"multiorch"`
+	// +kubebuilder:validation:MaxLength=512
+	MultiOrch string `json:"multiorch"`
+	// +kubebuilder:validation:MaxLength=512
 	MultiPooler string `json:"multipooler"`
-	Postgres    string `json:"postgres"`
+	// +kubebuilder:validation:MaxLength=512
+	Postgres string `json:"postgres"`
 }
 
 // ============================================================================
@@ -117,6 +126,7 @@ type ShardStatus struct {
 
 	// Cells is a list of cells this shard is currently deployed to.
 	// +optional
+	// +kubebuilder:validation:MaxItems=100
 	Cells []string `json:"cells,omitempty"`
 
 	OrchReady  bool `json:"orchReady"`

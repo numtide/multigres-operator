@@ -45,10 +45,13 @@ spec:
             properties:
               image:
                 description: Image to use for Etcd.
+                maxLength: 512
+                minLength: 1
                 type: string
               replicas:
                 description: Replicas is the desired number of etcd members.
                 format: int32
+                minimum: 1
                 type: integer
               resources:
                 description: Resources defines the compute resource requirements.
@@ -114,9 +117,12 @@ spec:
                 properties:
                   class:
                     description: Class is the StorageClass name.
+                    maxLength: 63
+                    minLength: 1
                     type: string
                   size:
                     description: Size of the persistent volume.
+                    maxLength: 63
                     pattern: ^([0-9]+)(.+)$
                     type: string
                 type: object

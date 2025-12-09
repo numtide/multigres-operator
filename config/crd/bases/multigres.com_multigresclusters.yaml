@@ -54,9 +54,12 @@ spec:
                   properties:
                     cellTemplate:
                       description: CellTemplate refers to a CellTemplate CR.
+                      maxLength: 63
+                      minLength: 1
                       type: string
                     name:
                       description: Name is the logical name of the cell.
+                      maxLength: 63
                       minLength: 1
                       type: string
                     overrides:
@@ -1004,12 +1007,14 @@ spec:
                                 type: string
                               description: PodAnnotations are annotations to add to
                                 the pods.
+                              maxProperties: 64
                               type: object
                             podLabels:
                               additionalProperties:
                                 type: string
                               description: PodLabels are additional labels to add
                                 to the pods.
+                              maxProperties: 64
                               type: object
                             replicas:
                               description: Replicas is the desired number of pods.
@@ -1082,6 +1087,8 @@ spec:
                     region:
                       description: Region indicates the physical region (mutually
                         exclusive with zone typically, but allowed here).
+                      maxLength: 63
+                      minLength: 1
                       type: string
                     spec:
                       description: Spec defines the inline configuration if no template
@@ -1093,6 +1100,11 @@ spec:
                             etcd:
                               description: Etcd defines an inline managed Etcd cluster.
                               properties:
+                                image:
+                                  description: Image is the Etcd container image.
+                                  maxLength: 512
+                                  minLength: 1
+                                  type: string
                                 replicas:
                                   description: Replicas is the desired number of etcd
                                     members.
@@ -1165,9 +1177,12 @@ spec:
                                   properties:
                                     class:
                                       description: Class is the StorageClass name.
+                                      maxLength: 63
+                                      minLength: 1
                                       type: string
                                     size:
                                       description: Size of the persistent volume.
+                                      maxLength: 63
                                       pattern: ^([0-9]+)(.+)$
                                       type: string
                                   type: object
@@ -1179,22 +1194,30 @@ spec:
                                 caSecret:
                                   description: CASecret is the name of the secret
                                     containing the CA certificate.
+                                  maxLength: 253
                                   type: string
                                 clientCertSecret:
                                   description: ClientCertSecret is the name of the
                                     secret containing the client cert/key.
+                                  maxLength: 253
                                   type: string
                                 endpoints:
                                   description: Endpoints is a list of client URLs.
                                   items:
                                     type: string
+                                  maxItems: 20
                                   minItems: 1
                                   type: array
+                                  x-kubernetes-validations:
+                                  - message: endpoints must be http or https URLs
+                                    rule: self.all(x, x.matches('^https?://'))
                               required:
                               - endpoints
                               type: object
                           type: object
                           x-kubernetes-validations:
+                          - message: must specify either 'etcd' or 'external'
+                            rule: has(self.etcd) || has(self.external)
                           - message: only one of 'etcd' or 'external' can be set
                             rule: '!(has(self.etcd) && has(self.external))'
                         multigateway:
@@ -2139,12 +2162,14 @@ spec:
                                 type: string
                               description: PodAnnotations are annotations to add to
                                 the pods.
+                              maxProperties: 64
                               type: object
                             podLabels:
                               additionalProperties:
                                 type: string
                               description: PodLabels are additional labels to add
                                 to the pods.
+                              maxProperties: 64
                               type: object
                             replicas:
                               description: Replicas is the desired number of pods.
@@ -2216,6 +2241,8 @@ spec:
                       type: object
                     zone:
                       description: Zone indicates the physical availability zone.
+                      maxLength: 63
+                      minLength: 1
                       type: string
                   required:
                   - name
@@ -2223,7 +2250,13 @@ spec:
                   x-kubernetes-validations:
                   - message: cannot specify both 'spec' and 'cellTemplate'
                     rule: '!(has(self.spec) && has(self.cellTemplate))'
+                  - message: must specify either 'zone' or 'region', but not both
+                    rule: has(self.zone) != has(self.region)
+                maxItems: 100
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               databases:
                 description: Databases defines the logical databases, table groups,
                   and sharding.
@@ -2236,6 +2269,7 @@ spec:
                       type: boolean
                     name:
                       description: Name is the logical name of the database.
+                      maxLength: 63
                       minLength: 1
                       type: string
                     tablegroups:
@@ -2250,6 +2284,7 @@ spec:
                             type: boolean
                           name:
                             description: Name is the logical name of the table group.
+                            maxLength: 63
                             minLength: 1
                             type: string
                           shards:
@@ -2260,6 +2295,7 @@ spec:
                                 name:
                                   description: Name is the identifier of the shard
                                     (e.g., "0", "1").
+                                  maxLength: 63
                                   minLength: 1
                                   type: string
                                 overrides:
@@ -3249,18 +3285,21 @@ spec:
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
                                             type: string
+                                          maxItems: 100
                                           type: array
                                         podAnnotations:
                                           additionalProperties:
                                             type: string
                                           description: PodAnnotations are annotations
                                             to add to the pods.
+                                          maxProperties: 64
                                           type: object
                                         podLabels:
                                           additionalProperties:
                                             type: string
                                           description: PodLabels are additional labels
                                             to add to the pods.
+                                          maxProperties: 64
                                           type: object
                                         replicas:
                                           description: Replicas is the desired number
@@ -4330,125 +4369,136 @@ spec:
                                               cells where this Pool should be deployed.
                                             items:
                                               type: string
+                                            maxItems: 100
                                             type: array
                                           multipooler:
                                             description: Multipooler container configuration.
                                             properties:
-                                              claims:
-                                                description: |-
-                                                  Claims lists the names of resources, defined in spec.resourceClaims,
-                                                  that are used by this container.
+                                              resources:
+                                                description: Resources defines the
+                                                  compute resource requirements.
+                                                properties:
+                                                  claims:
+                                                    description: |-
+                                                      Claims lists the names of resources, defined in spec.resourceClaims,
+                                                      that are used by this container.
 
-                                                  This field depends on the
-                                                  DynamicResourceAllocation feature gate.
+                                                      This field depends on the
+                                                      DynamicResourceAllocation feature gate.
 
-                                                  This field is immutable. It can only be set for containers.
-                                                items:
-                                                  description: ResourceClaim references
-                                                    one entry in PodSpec.ResourceClaims.
-                                                  properties:
-                                                    name:
-                                                      description: |-
-                                                        Name must match the name of one entry in pod.spec.resourceClaims of
-                                                        the Pod where this field is used. It makes that resource available
-                                                        inside a container.
-                                                      type: string
-                                                    request:
-                                                      description: |-
-                                                        Request is the name chosen for a request in the referenced claim.
-                                                        If empty, everything from the claim is made available, otherwise
-                                                        only the result of this request.
-                                                      type: string
-                                                  required:
-                                                  - name
-                                                  type: object
-                                                type: array
-                                                x-kubernetes-list-map-keys:
-                                                - name
-                                                x-kubernetes-list-type: map
-                                              limits:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Limits describes the maximum amount of compute resources allowed.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                                                type: object
-                                              requests:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Requests describes the minimum amount of compute resources required.
-                                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                      This field is immutable. It can only be set for containers.
+                                                    items:
+                                                      description: ResourceClaim references
+                                                        one entry in PodSpec.ResourceClaims.
+                                                      properties:
+                                                        name:
+                                                          description: |-
+                                                            Name must match the name of one entry in pod.spec.resourceClaims of
+                                                            the Pod where this field is used. It makes that resource available
+                                                            inside a container.
+                                                          type: string
+                                                        request:
+                                                          description: |-
+                                                            Request is the name chosen for a request in the referenced claim.
+                                                            If empty, everything from the claim is made available, otherwise
+                                                            only the result of this request.
+                                                          type: string
+                                                      required:
+                                                      - name
+                                                      type: object
+                                                    type: array
+                                                    x-kubernetes-list-map-keys:
+                                                    - name
+                                                    x-kubernetes-list-type: map
+                                                  limits:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Limits describes the maximum amount of compute resources allowed.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
+                                                  requests:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Requests describes the minimum amount of compute resources required.
+                                                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
                                                 type: object
                                             type: object
                                           postgres:
                                             description: Postgres container configuration.
                                             properties:
-                                              claims:
-                                                description: |-
-                                                  Claims lists the names of resources, defined in spec.resourceClaims,
-                                                  that are used by this container.
+                                              resources:
+                                                description: Resources defines the
+                                                  compute resource requirements.
+                                                properties:
+                                                  claims:
+                                                    description: |-
+                                                      Claims lists the names of resources, defined in spec.resourceClaims,
+                                                      that are used by this container.
 
-                                                  This field depends on the
-                                                  DynamicResourceAllocation feature gate.
+                                                      This field depends on the
+                                                      DynamicResourceAllocation feature gate.
 
-                                                  This field is immutable. It can only be set for containers.
-                                                items:
-                                                  description: ResourceClaim references
-                                                    one entry in PodSpec.ResourceClaims.
-                                                  properties:
-                                                    name:
-                                                      description: |-
-                                                        Name must match the name of one entry in pod.spec.resourceClaims of
-                                                        the Pod where this field is used. It makes that resource available
-                                                        inside a container.
-                                                      type: string
-                                                    request:
-                                                      description: |-
-                                                        Request is the name chosen for a request in the referenced claim.
-                                                        If empty, everything from the claim is made available, otherwise
-                                                        only the result of this request.
-                                                      type: string
-                                                  required:
-                                                  - name
-                                                  type: object
-                                                type: array
-                                                x-kubernetes-list-map-keys:
-                                                - name
-                                                x-kubernetes-list-type: map
-                                              limits:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Limits describes the maximum amount of compute resources allowed.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                                                type: object
-                                              requests:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Requests describes the minimum amount of compute resources required.
-                                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                      This field is immutable. It can only be set for containers.
+                                                    items:
+                                                      description: ResourceClaim references
+                                                        one entry in PodSpec.ResourceClaims.
+                                                      properties:
+                                                        name:
+                                                          description: |-
+                                                            Name must match the name of one entry in pod.spec.resourceClaims of
+                                                            the Pod where this field is used. It makes that resource available
+                                                            inside a container.
+                                                          type: string
+                                                        request:
+                                                          description: |-
+                                                            Request is the name chosen for a request in the referenced claim.
+                                                            If empty, everything from the claim is made available, otherwise
+                                                            only the result of this request.
+                                                          type: string
+                                                      required:
+                                                      - name
+                                                      type: object
+                                                    type: array
+                                                    x-kubernetes-list-map-keys:
+                                                    - name
+                                                    x-kubernetes-list-type: map
+                                                  limits:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Limits describes the maximum amount of compute resources allowed.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
+                                                  requests:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Requests describes the minimum amount of compute resources required.
+                                                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
                                                 type: object
                                             type: object
                                           replicasPerCell:
@@ -4464,10 +4514,13 @@ spec:
                                               class:
                                                 description: Class is the StorageClass
                                                   name.
+                                                maxLength: 63
+                                                minLength: 1
                                                 type: string
                                               size:
                                                 description: Size of the persistent
                                                   volume.
+                                                maxLength: 63
                                                 pattern: ^([0-9]+)(.+)$
                                                 type: string
                                             type: object
@@ -4481,11 +4534,14 @@ spec:
                                         type: object
                                       description: Pools overrides. Keyed by pool
                                         name.
+                                      maxProperties: 32
                                       type: object
                                   type: object
                                 shardTemplate:
                                   description: ShardTemplate refers to a ShardTemplate
                                     CR.
+                                  maxLength: 63
+                                  minLength: 1
                                   type: string
                                 spec:
                                   description: Spec defines the inline configuration
@@ -5474,18 +5530,21 @@ spec:
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
                                             type: string
+                                          maxItems: 100
                                           type: array
                                         podAnnotations:
                                           additionalProperties:
                                             type: string
                                           description: PodAnnotations are annotations
                                             to add to the pods.
+                                          maxProperties: 64
                                           type: object
                                         podLabels:
                                           additionalProperties:
                                             type: string
                                           description: PodLabels are additional labels
                                             to add to the pods.
+                                          maxProperties: 64
                                           type: object
                                         replicas:
                                           description: Replicas is the desired number
@@ -6555,125 +6614,136 @@ spec:
                                               cells where this Pool should be deployed.
                                             items:
                                               type: string
+                                            maxItems: 100
                                             type: array
                                           multipooler:
                                             description: Multipooler container configuration.
                                             properties:
-                                              claims:
-                                                description: |-
-                                                  Claims lists the names of resources, defined in spec.resourceClaims,
-                                                  that are used by this container.
+                                              resources:
+                                                description: Resources defines the
+                                                  compute resource requirements.
+                                                properties:
+                                                  claims:
+                                                    description: |-
+                                                      Claims lists the names of resources, defined in spec.resourceClaims,
+                                                      that are used by this container.
 
-                                                  This field depends on the
-                                                  DynamicResourceAllocation feature gate.
+                                                      This field depends on the
+                                                      DynamicResourceAllocation feature gate.
 
-                                                  This field is immutable. It can only be set for containers.
-                                                items:
-                                                  description: ResourceClaim references
-                                                    one entry in PodSpec.ResourceClaims.
-                                                  properties:
-                                                    name:
-                                                      description: |-
-                                                        Name must match the name of one entry in pod.spec.resourceClaims of
-                                                        the Pod where this field is used. It makes that resource available
-                                                        inside a container.
-                                                      type: string
-                                                    request:
-                                                      description: |-
-                                                        Request is the name chosen for a request in the referenced claim.
-                                                        If empty, everything from the claim is made available, otherwise
-                                                        only the result of this request.
-                                                      type: string
-                                                  required:
-                                                  - name
-                                                  type: object
-                                                type: array
-                                                x-kubernetes-list-map-keys:
-                                                - name
-                                                x-kubernetes-list-type: map
-                                              limits:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Limits describes the maximum amount of compute resources allowed.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                                                type: object
-                                              requests:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Requests describes the minimum amount of compute resources required.
-                                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                      This field is immutable. It can only be set for containers.
+                                                    items:
+                                                      description: ResourceClaim references
+                                                        one entry in PodSpec.ResourceClaims.
+                                                      properties:
+                                                        name:
+                                                          description: |-
+                                                            Name must match the name of one entry in pod.spec.resourceClaims of
+                                                            the Pod where this field is used. It makes that resource available
+                                                            inside a container.
+                                                          type: string
+                                                        request:
+                                                          description: |-
+                                                            Request is the name chosen for a request in the referenced claim.
+                                                            If empty, everything from the claim is made available, otherwise
+                                                            only the result of this request.
+                                                          type: string
+                                                      required:
+                                                      - name
+                                                      type: object
+                                                    type: array
+                                                    x-kubernetes-list-map-keys:
+                                                    - name
+                                                    x-kubernetes-list-type: map
+                                                  limits:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Limits describes the maximum amount of compute resources allowed.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
+                                                  requests:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Requests describes the minimum amount of compute resources required.
+                                                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
                                                 type: object
                                             type: object
                                           postgres:
                                             description: Postgres container configuration.
                                             properties:
-                                              claims:
-                                                description: |-
-                                                  Claims lists the names of resources, defined in spec.resourceClaims,
-                                                  that are used by this container.
+                                              resources:
+                                                description: Resources defines the
+                                                  compute resource requirements.
+                                                properties:
+                                                  claims:
+                                                    description: |-
+                                                      Claims lists the names of resources, defined in spec.resourceClaims,
+                                                      that are used by this container.
 
-                                                  This field depends on the
-                                                  DynamicResourceAllocation feature gate.
+                                                      This field depends on the
+                                                      DynamicResourceAllocation feature gate.
 
-                                                  This field is immutable. It can only be set for containers.
-                                                items:
-                                                  description: ResourceClaim references
-                                                    one entry in PodSpec.ResourceClaims.
-                                                  properties:
-                                                    name:
-                                                      description: |-
-                                                        Name must match the name of one entry in pod.spec.resourceClaims of
-                                                        the Pod where this field is used. It makes that resource available
-                                                        inside a container.
-                                                      type: string
-                                                    request:
-                                                      description: |-
-                                                        Request is the name chosen for a request in the referenced claim.
-                                                        If empty, everything from the claim is made available, otherwise
-                                                        only the result of this request.
-                                                      type: string
-                                                  required:
-                                                  - name
-                                                  type: object
-                                                type: array
-                                                x-kubernetes-list-map-keys:
-                                                - name
-                                                x-kubernetes-list-type: map
-                                              limits:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Limits describes the maximum amount of compute resources allowed.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                                                type: object
-                                              requests:
-                                                additionalProperties:
-                                                  anyOf:
-                                                  - type: integer
-                                                  - type: string
-                                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                                  x-kubernetes-int-or-string: true
-                                                description: |-
-                                                  Requests describes the minimum amount of compute resources required.
-                                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                      This field is immutable. It can only be set for containers.
+                                                    items:
+                                                      description: ResourceClaim references
+                                                        one entry in PodSpec.ResourceClaims.
+                                                      properties:
+                                                        name:
+                                                          description: |-
+                                                            Name must match the name of one entry in pod.spec.resourceClaims of
+                                                            the Pod where this field is used. It makes that resource available
+                                                            inside a container.
+                                                          type: string
+                                                        request:
+                                                          description: |-
+                                                            Request is the name chosen for a request in the referenced claim.
+                                                            If empty, everything from the claim is made available, otherwise
+                                                            only the result of this request.
+                                                          type: string
+                                                      required:
+                                                      - name
+                                                      type: object
+                                                    type: array
+                                                    x-kubernetes-list-map-keys:
+                                                    - name
+                                                    x-kubernetes-list-type: map
+                                                  limits:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Limits describes the maximum amount of compute resources allowed.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
+                                                  requests:
+                                                    additionalProperties:
+                                                      anyOf:
+                                                      - type: integer
+                                                      - type: string
+                                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                                      x-kubernetes-int-or-string: true
+                                                    description: |-
+                                                      Requests describes the minimum amount of compute resources required.
+                                                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                                    type: object
                                                 type: object
                                             type: object
                                           replicasPerCell:
@@ -6689,10 +6759,13 @@ spec:
                                               class:
                                                 description: Class is the StorageClass
                                                   name.
+                                                maxLength: 63
+                                                minLength: 1
                                                 type: string
                                               size:
                                                 description: Size of the persistent
                                                   volume.
+                                                maxLength: 63
                                                 pattern: ^([0-9]+)(.+)$
                                                 type: string
                                             type: object
@@ -6706,6 +6779,7 @@ spec:
                                         type: object
                                       description: Pools configuration. Keyed by pool
                                         name.
+                                      maxProperties: 32
                                       type: object
                                   type: object
                               required:
@@ -6714,15 +6788,34 @@ spec:
                               x-kubernetes-validations:
                               - message: cannot specify both 'spec' and 'shardTemplate'
                                 rule: '!(has(self.spec) && has(self.shardTemplate))'
+                            maxItems: 128
                             type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
                         required:
                         - name
                         type: object
+                      maxItems: 100
                       type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
+                      x-kubernetes-validations:
+                      - message: only one tablegroup can be marked as default
+                        rule: self.filter(x, has(x.default) && x.default).size() <=
+                          1
                   required:
                   - name
                   type: object
+                maxItems: 500
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+                x-kubernetes-validations:
+                - message: only one database can be marked as default
+                  rule: self.filter(x, has(x.default) && x.default).size() <= 1
               globalTopoServer:
                 description: GlobalTopoServer defines the cluster-wide global topology
                   server.
@@ -6730,6 +6823,11 @@ spec:
                   etcd:
                     description: Etcd defines an inline managed Etcd cluster.
                     properties:
+                      image:
+                        description: Image is the Etcd container image.
+                        maxLength: 512
+                        minLength: 1
+                        type: string
                       replicas:
                         description: Replicas is the desired number of etcd members.
                         format: int32
@@ -6799,9 +6897,12 @@ spec:
                         properties:
                           class:
                             description: Class is the StorageClass name.
+                            maxLength: 63
+                            minLength: 1
                             type: string
                           size:
                             description: Size of the persistent volume.
+                            maxLength: 63
                             pattern: ^([0-9]+)(.+)$
                             type: string
                         type: object
@@ -6813,30 +6914,37 @@ spec:
                       caSecret:
                         description: CASecret is the name of the secret containing
                           the CA certificate.
+                        maxLength: 253
                         type: string
                       clientCertSecret:
                         description: ClientCertSecret is the name of the secret containing
                           the client cert/key.
+                        maxLength: 253
                         type: string
                       endpoints:
                         description: Endpoints is a list of client URLs.
                         items:
                           type: string
+                        maxItems: 20
                         minItems: 1
                         type: array
+                        x-kubernetes-validations:
+                        - message: endpoints must be http or https URLs
+                          rule: self.all(x, x.matches('^https?://'))
                     required:
                     - endpoints
                     type: object
                   templateRef:
                     description: TemplateRef refers to a CoreTemplate to load configuration
                       from.
+                    maxLength: 63
+                    minLength: 1
                     type: string
                 type: object
                 x-kubernetes-validations:
-                - message: only one of 'etcd', 'external', or 'templateRef' can be
-                    set
-                  rule: '!((has(self.etcd) && has(self.external)) || (has(self.etcd)
-                    && has(self.templateRef)) || (has(self.external) && has(self.templateRef)))'
+                - message: must specify exactly one of 'etcd', 'external', or 'templateRef'
+                  rule: '[has(self.etcd), has(self.external), has(self.templateRef)].filter(x,
+                    x).size() == 1'
               images:
                 description: Images defines the container images for all components
                   in the cluster.
@@ -6870,15 +6978,25 @@ spec:
                       x-kubernetes-map-type: atomic
                     type: array
                   multiadmin:
+                    maxLength: 512
+                    minLength: 1
                     type: string
                   multigateway:
                     description: Component Images
+                    maxLength: 512
+                    minLength: 1
                     type: string
                   multiorch:
+                    maxLength: 512
+                    minLength: 1
                     type: string
                   multipooler:
+                    maxLength: 512
+                    minLength: 1
                     type: string
                   postgres:
+                    maxLength: 512
+                    minLength: 1
                     type: string
                 type: object
               multiadmin:
@@ -7817,12 +7935,14 @@ spec:
                           type: string
                         description: PodAnnotations are annotations to add to the
                           pods.
+                        maxProperties: 64
                         type: object
                       podLabels:
                         additionalProperties:
                           type: string
                         description: PodLabels are additional labels to add to the
                           pods.
+                        maxProperties: 64
                         type: object
                       replicas:
                         description: Replicas is the desired number of pods.
@@ -7892,9 +8012,13 @@ spec:
                   templateRef:
                     description: TemplateRef refers to a CoreTemplate to load configuration
                       from.
+                    maxLength: 63
+                    minLength: 1
                     type: string
                 type: object
                 x-kubernetes-validations:
+                - message: must specify either 'spec' or 'templateRef'
+                  rule: has(self.spec) || has(self.templateRef)
                 - message: cannot specify both 'spec' and 'templateRef'
                   rule: '!(has(self.spec) && has(self.templateRef))'
               templateDefaults:
@@ -7904,12 +8028,18 @@ spec:
                 properties:
                   cellTemplate:
                     description: CellTemplate is the default template for cells.
+                    maxLength: 63
+                    minLength: 1
                     type: string
                   coreTemplate:
                     description: CoreTemplate is the default template for global components.
+                    maxLength: 63
+                    minLength: 1
                     type: string
                   shardTemplate:
                     description: ShardTemplate is the default template for shards.
+                    maxLength: 63
+                    minLength: 1
                     type: string
                 type: object
             type: object

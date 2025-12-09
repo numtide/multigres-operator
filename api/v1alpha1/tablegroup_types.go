@@ -29,8 +29,14 @@ import (
 
 // TableGroupSpec defines the desired state of TableGroup.
 type TableGroupSpec struct {
-	DatabaseName   string `json:"databaseName"`
+	// +kubebuilder:validation:MaxLength=63
+	DatabaseName string `json:"databaseName"`
+	// +kubebuilder:validation:MaxLength=63
 	TableGroupName string `json:"tableGroupName"`
+
+	// IsDefault indicates if this is the default/unsharded group for the database.
+	// +optional
+	IsDefault bool `json:"default,omitempty"`
 
 	// Images required for child shards.
 	Images ShardImages `json:"images"`
@@ -39,18 +45,21 @@ type TableGroupSpec struct {
 	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`
 
 	// Shards is the list of FULLY RESOLVED shard specifications.
+	// +kubebuilder:validation:MaxItems=128
 	Shards []ShardResolvedSpec `json:"shards"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,
 // pushed down to the TableGroup.
 type ShardResolvedSpec struct {
+	// +kubebuilder:validation:MaxLength=63
 	Name string `json:"name"`
 
 	// MultiOrch fully resolved spec.
 	MultiOrch MultiOrchSpec `json:"multiorch"`
 
 	// Pools fully resolved spec.
+	// +kubebuilder:validation:MaxProperties=32
 	Pools map[string]PoolSpec `json:"pools"`
 }
 
