@@ -48,14 +48,14 @@ func TestDeletionPredicate_NonMatchingEvents(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "svc-update", Namespace: "default"},
 			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
 		}
-		c.Create(ctx, svc1)
+		_ = c.Create(ctx, svc1)
 
 		time.Sleep(80 * time.Millisecond)
 
 		key := client.ObjectKey{Name: "svc-update", Namespace: "default"}
 		if err := c.Get(ctx, key, svc1); err == nil {
 			svc1.Spec.Ports[0].Port = 81
-			c.Update(ctx, svc1)
+			_ = c.Update(ctx, svc1)
 		}
 
 		time.Sleep(80 * time.Millisecond)
@@ -65,9 +65,9 @@ func TestDeletionPredicate_NonMatchingEvents(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "svc-other", Namespace: "default"},
 			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 82}}},
 		}
-		c.Create(ctx, svc2)
+		_ = c.Create(ctx, svc2)
 		time.Sleep(80 * time.Millisecond)
-		c.Delete(ctx, svc2)
+		_ = c.Delete(ctx, svc2)
 	}()
 
 	// Wait for deletion of non-existent service (times out)
@@ -99,7 +99,7 @@ func TestWaitForSingleDeletion_SuccessWithUpdates(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "svc-upd-del", Namespace: "default"},
 			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
 		}
-		c.Create(ctx, svc)
+		_ = c.Create(ctx, svc)
 
 		time.Sleep(80 * time.Millisecond)
 
@@ -108,13 +108,13 @@ func TestWaitForSingleDeletion_SuccessWithUpdates(t *testing.T) {
 			key := client.ObjectKey{Name: "svc-upd-del", Namespace: "default"}
 			if err := c.Get(ctx, key, svc); err == nil {
 				svc.Spec.Ports[0].Port = int32(81 + i)
-				c.Update(ctx, svc)
+				_ = c.Update(ctx, svc)
 				time.Sleep(80 * time.Millisecond)
 			}
 		}
 
 		// Finally delete
-		c.Delete(ctx, svc)
+		_ = c.Delete(ctx, svc)
 	}()
 
 	err := watcher.WaitForDeletion(Obj[corev1.Service]("svc-upd-del", "default"))

@@ -489,7 +489,7 @@ func TestGetKubeconfigFromUserAdder(t *testing.T) {
 		wantError bool
 	}{
 		"success": {
-			adder: &mockUserAdder{},
+			adder:     &mockUserAdder{},
 			wantError: false,
 		},
 		"error - AddUser fails": {

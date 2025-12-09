@@ -227,7 +227,11 @@ func (r *CellReconciler) buildConditions(
 	if mgReady {
 		readyCondition.Status = metav1.ConditionTrue
 		readyCondition.Reason = "MultiGatewayReady"
-		readyCondition.Message = fmt.Sprintf("MultiGateway %d/%d ready", mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
+		readyCondition.Message = fmt.Sprintf(
+			"MultiGateway %d/%d ready",
+			mgDeploy.Status.ReadyReplicas,
+			mgDeploy.Status.Replicas,
+		)
 	} else {
 		readyCondition.Status = metav1.ConditionFalse
 		readyCondition.Reason = "MultiGatewayNotReady"

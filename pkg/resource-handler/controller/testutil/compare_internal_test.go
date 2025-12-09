@@ -31,7 +31,12 @@ func TestFilterByFieldName(t *testing.T) {
 			filter := filterByFieldName(tc.fieldName)
 			got := filter(tc.path)
 			if got != tc.want {
-				t.Errorf("filterByFieldName(%s) with empty path = %v, want %v", tc.fieldName, got, tc.want)
+				t.Errorf(
+					"filterByFieldName(%s) with empty path = %v, want %v",
+					tc.fieldName,
+					got,
+					tc.want,
+				)
 			}
 		})
 	}

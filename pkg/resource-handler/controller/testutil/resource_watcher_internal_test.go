@@ -113,7 +113,10 @@ func TestWithExtraResource(t *testing.T) {
 	option(watcher)
 
 	if len(watcher.extraResources) != 2 {
-		t.Errorf("WithExtraResource() set extraResources length = %d, want 2", len(watcher.extraResources))
+		t.Errorf(
+			"WithExtraResource() set extraResources length = %d, want 2",
+			len(watcher.extraResources),
+		)
 	}
 }
 
@@ -135,7 +138,10 @@ func TestWithExtraResource_Duplicates(t *testing.T) {
 
 	// Both are added to extraResources slice
 	if len(watcher.extraResources) != 2 {
-		t.Errorf("WithExtraResource() called twice set extraResources length = %d, want 2", len(watcher.extraResources))
+		t.Errorf(
+			"WithExtraResource() called twice set extraResources length = %d, want 2",
+			len(watcher.extraResources),
+		)
 	}
 
 	// Note: watchResource() deduplicates by checking watchedKinds map,

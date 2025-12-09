@@ -126,6 +126,9 @@ func TestUnsubscribe_NotFound(t *testing.T) {
 	watcher.unsubscribe(differentCh)
 
 	if len(watcher.subscribers) != 1 {
-		t.Errorf("unsubscribe() should not remove other channels, got %d subscribers", len(watcher.subscribers))
+		t.Errorf(
+			"unsubscribe() should not remove other channels, got %d subscribers",
+			len(watcher.subscribers),
+		)
 	}
 }

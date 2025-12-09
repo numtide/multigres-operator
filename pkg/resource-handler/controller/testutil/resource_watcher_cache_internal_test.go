@@ -132,7 +132,10 @@ func TestCheckLatestEventMatches_NoEvent(t *testing.T) {
 		t.Error("checkLatestEventMatches() should return false when no events exist")
 	}
 	if diff != "" {
-		t.Errorf("checkLatestEventMatches() should return empty diff when no events exist, got: %s", diff)
+		t.Errorf(
+			"checkLatestEventMatches() should return empty diff when no events exist, got: %s",
+			diff,
+		)
 	}
 }
 

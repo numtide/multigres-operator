@@ -255,7 +255,9 @@ func (rw *ResourceWatcher) WaitForEventType(
 
 // eventHandlerRegistrar abstracts the AddEventHandler method for testing.
 type eventHandlerRegistrar interface {
-	AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error)
+	AddEventHandler(
+		handler cache.ResourceEventHandler,
+	) (cache.ResourceEventHandlerRegistration, error)
 }
 
 // addEventHandlerToInformer registers the event handlers to the informer.

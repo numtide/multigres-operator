@@ -26,30 +26,29 @@ func (m *mockTB) Helper() {}
 func (m *mockTB) Fatal(args ...interface{}) {
 	m.fatalCalled = true
 }
+
 func (m *mockTB) Fatalf(format string, args ...interface{}) {
 	m.fatalCalled = true
 }
+
 func (m *mockTB) Error(args ...interface{}) {
 	m.errorCalled = true
 }
+
 func (m *mockTB) Errorf(format string, args ...interface{}) {
 	m.errorCalled = true
 }
+
 func (m *mockTB) Log(args ...interface{}) {
 	m.logCalled = true
 }
+
 func (m *mockTB) Logf(format string, args ...any) {
 	m.logCalled = true
 }
+
 func (m *mockTB) Cleanup(f func()) {
 	m.cleanupFuncs = append(m.cleanupFuncs, f)
-}
-
-// runCleanups executes all registered cleanup functions in reverse order.
-func (m *mockTB) runCleanups() {
-	for i := len(m.cleanupFuncs) - 1; i >= 0; i-- {
-		m.cleanupFuncs[i]()
-	}
 }
 
 // mockManager implements manager.Manager for testing.
@@ -68,7 +67,11 @@ type mockCache struct {
 	getInformerErr error
 }
 
-func (c *mockCache) GetInformer(ctx context.Context, obj client.Object, _ ...ctrlcache.InformerGetOption) (ctrlcache.Informer, error) {
+func (c *mockCache) GetInformer(
+	ctx context.Context,
+	obj client.Object,
+	_ ...ctrlcache.InformerGetOption,
+) (ctrlcache.Informer, error) {
 	return nil, c.getInformerErr
 }
 
@@ -100,7 +103,9 @@ type mockInformer struct {
 	tb                  testing.TB
 }
 
-func (m *mockInformer) AddEventHandler(handler cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
+func (m *mockInformer) AddEventHandler(
+	handler cache.ResourceEventHandler,
+) (cache.ResourceEventHandlerRegistration, error) {
 	if m.addEventHandlerFunc != nil {
 		return m.addEventHandlerFunc(handler)
 	}
@@ -156,7 +161,6 @@ func TestWaitForEvent_Match(t *testing.T) {
 
 	watcher := &ResourceWatcher{t: t}
 	evt, err := watcher.waitForEvent(ch, deadline, predicate)
-
 	if err != nil {
 		t.Errorf("waitForEvent() error = %v, want nil", err)
 	}
