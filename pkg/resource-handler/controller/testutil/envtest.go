@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -32,6 +31,41 @@ func WithKubeconfig() EnvtestOption {
 	}
 }
 
+// KubeConfigProvider abstracts the KubeConfig generation.
+type KubeConfigProvider interface {
+	KubeConfig() ([]byte, error)
+}
+
+// UserAdder abstracts adding a user to the control plane for testing.
+type UserAdder interface {
+	AddUser(user envtest.User, opts *rest.Config) (KubeConfigProvider, error)
+}
+
+// realUserAdder wraps envtest.ControlPlane to implement UserAdder.
+type realUserAdder struct {
+	cp *envtest.ControlPlane
+}
+
+func (r *realUserAdder) AddUser(user envtest.User, opts *rest.Config) (KubeConfigProvider, error) {
+	return r.cp.AddUser(user, opts)
+}
+
+// getKubeconfigFromUserAdder generates a kubeconfig using the provided UserAdder.
+func getKubeconfigFromUserAdder(adder UserAdder) ([]byte, error) {
+	user, err := adder.AddUser(envtest.User{
+		Name:   "envtest-admin",
+		Groups: []string{"system:masters"},
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add envtest user: %w", err)
+	}
+	kc, err := user.KubeConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kubeconfig from user: %w", err)
+	}
+	return kc, nil
+}
+
 // SetUpEnvtest starts Kubernetes API server for testing.
 //
 // This requires the envtest binary to be available. Kubebuilder setup helps
@@ -56,7 +90,11 @@ func SetUpEnvtest(t testing.TB, opts ...EnvtestOption) *rest.Config {
 
 	// If kubeconfig generation is enabled, do not set up cleanup.
 	if cfg.generateKubeconfig {
-		kubeconfigPath := generateKubeconfigFile(t, testEnv)
+		// Use the real control plane for main logic.
+		adder := &realUserAdder{cp: &testEnv.ControlPlane}
+		kubeconfigPath := generateKubeconfigFile(t, func() ([]byte, error) {
+			return getKubeconfigFromUserAdder(adder)
+		})
 		t.Cleanup(func() {
 			fmt.Printf("Kubeconfig written to: %s\n", kubeconfigPath)
 			fmt.Printf("Connect with: export KUBECONFIG=%s\n", kubeconfigPath)
@@ -287,23 +325,12 @@ func writeKubeconfigFile(t testing.TB, kubeconfigPath string, kubeconfig []byte)
 
 // generateKubeconfigFile creates a kubeconfig file for the envtest environment.
 // Extracted for testability. Returns the path to the kubeconfig file.
-//
-// The extra variadic arguments are only to be used for internal testing.
-func generateKubeconfigFile(t testing.TB, testEnv *envtest.Environment, testCtrls ...testControl) string {
+func generateKubeconfigFile(t testing.TB, getKubeconfig func() ([]byte, error)) string {
 	t.Helper()
 
-	user, err := testEnv.ControlPlane.AddUser(envtest.User{
-		Name:   "envtest-admin",
-		Groups: []string{"system:masters"},
-	}, nil)
-	// NOTE: test failure injection logic
-	if err != nil || slices.Contains(testCtrls, forcedFailureFirst) {
-		t.Fatalf("Failed to add envtest user: %v", err)
-	}
-	kubeconfig, err := user.KubeConfig()
-	// NOTE: test failure injection logic
-	if err != nil || slices.Contains(testCtrls, forcedFailureSecond) {
-		t.Fatalf("Failed to get kubeconfig from user: %v", err)
+	kubeconfig, err := getKubeconfig()
+	if err != nil {
+		t.Fatalf("Failed to generate kubeconfig: %v", err)
 	}
 
 	// Use a unique subdirectory for each test to avoid conflicts

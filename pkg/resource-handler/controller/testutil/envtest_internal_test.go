@@ -456,35 +456,19 @@ func TestSetUpManager(t *testing.T) {
 // TestGenerateKubeconfigFile tests that t.Fatal is called correctly.
 func TestGenerateKubeconfigFile(t *testing.T) {
 	tests := map[string]struct {
-		setupFunc func(t testing.TB) *envtest.Environment
-		testCtrls []testControl
-		wantFatal bool
+		getKubeconfig func() ([]byte, error)
+		wantFatal     bool
 	}{
-		"success - no fatal on valid environment": {
-			setupFunc: func(t testing.TB) *envtest.Environment {
-				env := createEnvtestEnvironment(t)
-				startEnvtest(t, env)
-				return env
+		"success - no fatal on valid kubeconfig": {
+			getKubeconfig: func() ([]byte, error) {
+				return []byte("valid kubeconfig"), nil
 			},
-			testCtrls: nil,
 			wantFatal: false,
 		},
-		"error - AddUser fails": {
-			setupFunc: func(t testing.TB) *envtest.Environment {
-				env := createEnvtestEnvironment(t)
-				startEnvtest(t, env)
-				return env
+		"error - getKubeconfig fails": {
+			getKubeconfig: func() ([]byte, error) {
+				return nil, fmt.Errorf("failed to get kubeconfig")
 			},
-			testCtrls: []testControl{forcedFailureFirst},
-			wantFatal: true,
-		},
-		"error - user.KubeConfig fails": {
-			setupFunc: func(t testing.TB) *envtest.Environment {
-				env := createEnvtestEnvironment(t)
-				startEnvtest(t, env)
-				return env
-			},
-			testCtrls: []testControl{forcedFailureSecond},
 			wantFatal: true,
 		},
 	}
@@ -494,12 +478,12 @@ func TestGenerateKubeconfigFile(t *testing.T) {
 			t.Parallel()
 
 			mock := &mockTB{TB: t}
-			env := tc.setupFunc(mock)
-			defer env.Stop()
 
-			kubeconfigPath := generateKubeconfigFile(mock, env, tc.testCtrls...)
+			kubeconfigPath := generateKubeconfigFile(mock, tc.getKubeconfig)
 			t.Cleanup(func() {
-				os.RemoveAll(filepath.Dir(kubeconfigPath))
+				if kubeconfigPath != "" {
+					os.RemoveAll(filepath.Dir(kubeconfigPath))
+				}
 			})
 
 			if mock.fatalCalled != tc.wantFatal {
@@ -508,6 +492,74 @@ func TestGenerateKubeconfigFile(t *testing.T) {
 
 			if !tc.wantFatal && kubeconfigPath == "" {
 				t.Error("kubeconfigPath should not be empty on success")
+			}
+		})
+	}
+}
+
+// mockKubeConfigProvider implements KubeConfigProvider for testing.
+type mockKubeConfigProvider struct {
+	kubeConfigFunc func() ([]byte, error)
+}
+
+func (m *mockKubeConfigProvider) KubeConfig() ([]byte, error) {
+	if m.kubeConfigFunc != nil {
+		return m.kubeConfigFunc()
+	}
+	return []byte("mock-kubeconfig"), nil
+}
+
+// mockUserAdder implements UserAdder for testing.
+type mockUserAdder struct {
+	addUserFunc func(user envtest.User, opts *rest.Config) (KubeConfigProvider, error)
+}
+
+func (m *mockUserAdder) AddUser(user envtest.User, opts *rest.Config) (KubeConfigProvider, error) {
+	if m.addUserFunc != nil {
+		return m.addUserFunc(user, opts)
+	}
+	return &mockKubeConfigProvider{}, nil
+}
+
+// TestGetKubeconfigFromUserAdder tests the helper function directly.
+func TestGetKubeconfigFromUserAdder(t *testing.T) {
+	tests := map[string]struct {
+		adder     UserAdder
+		wantError bool
+	}{
+		"success": {
+			adder: &mockUserAdder{},
+			wantError: false,
+		},
+		"error - AddUser fails": {
+			adder: &mockUserAdder{
+				addUserFunc: func(user envtest.User, opts *rest.Config) (KubeConfigProvider, error) {
+					return nil, fmt.Errorf("AddUser failed")
+				},
+			},
+			wantError: true,
+		},
+		"error - KubeConfig fails": {
+			adder: &mockUserAdder{
+				addUserFunc: func(user envtest.User, opts *rest.Config) (KubeConfigProvider, error) {
+					return &mockKubeConfigProvider{
+						kubeConfigFunc: func() ([]byte, error) {
+							return nil, fmt.Errorf("KubeConfig failed")
+						},
+					}, nil
+				},
+			},
+			wantError: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := getKubeconfigFromUserAdder(tc.adder)
+			if (err != nil) != tc.wantError {
+				t.Errorf("getKubeconfigFromUserAdder() error = %v, wantError %v", err, tc.wantError)
 			}
 		})
 	}
