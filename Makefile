@@ -281,7 +281,7 @@ test-integration: manifests generate fmt vet setup-envtest ## Run integration te
 		echo "==> Integration testing $$mod..."; \
 		(cd $$mod && \
 			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-			GOWORK=off go test -tags=integration $$(go list ./... | grep -v /e2e) -coverprofile=cover.out) || exit 1; \
+			GOWORK=off go test -tags=integration,verbose $$(go list ./... | grep -v /e2e) -coverprofile=cover.out) || exit 1; \
 	done
 
 .PHONY: test-coverage
@@ -295,7 +295,7 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 		echo "==> Coverage for $$mod..."; \
 		(cd $$mod && \
 			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-			GOWORK=off go test -tags=integration ./... -coverprofile=$$project_root/coverage/$$modname.out -covermode=atomic && \
+			GOWORK=off go test -tags=integration,verbose ./... -coverprofile=$$project_root/coverage/$$modname.out -covermode=atomic && \
 			GOWORK=off go tool cover -html=$$project_root/coverage/$$modname.out -o=$$project_root/coverage/$$modname.html) || exit 1; \
 		echo "Generated: coverage/$$modname.html"; \
 	done

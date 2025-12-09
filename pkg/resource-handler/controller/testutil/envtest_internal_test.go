@@ -315,7 +315,6 @@ func TestStartManager_Internal(t *testing.T) {
 			// For success case, cancel context and wait for manager to stop
 			// For error case with cancelled context, done won't be waited on
 			if !mock.fatalCalled {
-				mock.runCleanups()
 				<-done
 			}
 
