@@ -37,7 +37,7 @@ type MultiOrchSpec struct {
 	// If empty, it defaults to all cells where pools are defined.
 	// +optional
 	// +kubebuilder:validation:MaxItems=100
-	Cells []string `json:"cells,omitempty"`
+	Cells []CellName `json:"cells,omitempty"`
 }
 
 // PoolSpec defines the configuration for a data pool (StatefulSet).
@@ -50,7 +50,7 @@ type PoolSpec struct {
 	// Cells defines the list of cells where this Pool should be deployed.
 	// +optional
 	// +kubebuilder:validation:MaxItems=100
-	Cells []string `json:"cells,omitempty"`
+	Cells []CellName `json:"cells,omitempty"`
 
 	// ReplicasPerCell is the desired number of pods PER CELL in this pool.
 	// +kubebuilder:validation:Minimum=0

@@ -27,6 +27,11 @@ import (
 //
 // TopoServer is a child CR managed by MultigresCluster (Global) or Cell (Local).
 
+// EndpointUrl is a string restricted to 2048 characters for strict validation budgeting.
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=2048
+type EndpointUrl string
+
 // TopoServerSpec defines the desired state of TopoServer.
 type TopoServerSpec struct {
 	// Replicas is the desired number of etcd members.
@@ -118,8 +123,8 @@ type ExternalTopoServerSpec struct {
 	// Endpoints is a list of client URLs.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=20
-	// +kubebuilder:validation:XValidation:rule="self.all(x, x.matches('^https?://'))",message="endpoints must be http or https URLs"
-	Endpoints []string `json:"endpoints"`
+	// +kubebuilder:validation:XValidation:rule="self.all(x, x.matches('^https?://'))",message="endpoints must be valid URLs"
+	Endpoints []EndpointUrl `json:"endpoints"`
 
 	// CASecret is the name of the secret containing the CA certificate.
 	// +optional

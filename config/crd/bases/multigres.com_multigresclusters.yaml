@@ -1009,6 +1009,11 @@ spec:
                                 the pods.
                               maxProperties: 64
                               type: object
+                              x-kubernetes-validations:
+                              - message: annotation keys must be <64 chars and values
+                                  <256 chars
+                                rule: self.all(k, size(k) < 64 && size(self[k]) <
+                                  256)
                             podLabels:
                               additionalProperties:
                                 type: string
@@ -1016,6 +1021,10 @@ spec:
                                 to the pods.
                               maxProperties: 64
                               type: object
+                              x-kubernetes-validations:
+                              - message: label keys and values must be <64 chars
+                                rule: self.all(k, size(k) < 64 && size(self[k]) <
+                                  64)
                             replicas:
                               description: Replicas is the desired number of pods.
                               format: int32
@@ -1204,12 +1213,16 @@ spec:
                                 endpoints:
                                   description: Endpoints is a list of client URLs.
                                   items:
+                                    description: EndpointUrl is a string restricted
+                                      to 2048 characters for strict validation budgeting.
+                                    maxLength: 2048
+                                    minLength: 1
                                     type: string
                                   maxItems: 20
                                   minItems: 1
                                   type: array
                                   x-kubernetes-validations:
-                                  - message: endpoints must be http or https URLs
+                                  - message: endpoints must be valid URLs
                                     rule: self.all(x, x.matches('^https?://'))
                               required:
                               - endpoints
@@ -2164,6 +2177,11 @@ spec:
                                 the pods.
                               maxProperties: 64
                               type: object
+                              x-kubernetes-validations:
+                              - message: annotation keys must be <64 chars and values
+                                  <256 chars
+                                rule: self.all(k, size(k) < 64 && size(self[k]) <
+                                  256)
                             podLabels:
                               additionalProperties:
                                 type: string
@@ -2171,6 +2189,10 @@ spec:
                                 to the pods.
                               maxProperties: 64
                               type: object
+                              x-kubernetes-validations:
+                              - message: label keys and values must be <64 chars
+                                rule: self.all(k, size(k) < 64 && size(self[k]) <
+                                  64)
                             replicas:
                               description: Replicas is the desired number of pods.
                               format: int32
@@ -3284,6 +3306,11 @@ spec:
                                             Cells defines the list of cells where this MultiOrch should be deployed.
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
+                                            description: CellName is a string restricted
+                                              to 63 characters for strict validation
+                                              budgeting.
+                                            maxLength: 63
+                                            minLength: 1
                                             type: string
                                           maxItems: 100
                                           type: array
@@ -3294,6 +3321,11 @@ spec:
                                             to add to the pods.
                                           maxProperties: 64
                                           type: object
+                                          x-kubernetes-validations:
+                                          - message: annotation keys must be <64 chars
+                                              and values <256 chars
+                                            rule: self.all(k, size(k) < 64 && size(self[k])
+                                              < 256)
                                         podLabels:
                                           additionalProperties:
                                             type: string
@@ -3301,6 +3333,11 @@ spec:
                                             to add to the pods.
                                           maxProperties: 64
                                           type: object
+                                          x-kubernetes-validations:
+                                          - message: label keys and values must be
+                                              <64 chars
+                                            rule: self.all(k, size(k) < 64 && size(self[k])
+                                              < 64)
                                         replicas:
                                           description: Replicas is the desired number
                                             of pods.
@@ -4368,6 +4405,11 @@ spec:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
                                             items:
+                                              description: CellName is a string restricted
+                                                to 63 characters for strict validation
+                                                budgeting.
+                                              maxLength: 63
+                                              minLength: 1
                                               type: string
                                             maxItems: 100
                                             type: array
@@ -5529,6 +5571,11 @@ spec:
                                             Cells defines the list of cells where this MultiOrch should be deployed.
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
+                                            description: CellName is a string restricted
+                                              to 63 characters for strict validation
+                                              budgeting.
+                                            maxLength: 63
+                                            minLength: 1
                                             type: string
                                           maxItems: 100
                                           type: array
@@ -5539,6 +5586,11 @@ spec:
                                             to add to the pods.
                                           maxProperties: 64
                                           type: object
+                                          x-kubernetes-validations:
+                                          - message: annotation keys must be <64 chars
+                                              and values <256 chars
+                                            rule: self.all(k, size(k) < 64 && size(self[k])
+                                              < 256)
                                         podLabels:
                                           additionalProperties:
                                             type: string
@@ -5546,6 +5598,11 @@ spec:
                                             to add to the pods.
                                           maxProperties: 64
                                           type: object
+                                          x-kubernetes-validations:
+                                          - message: label keys and values must be
+                                              <64 chars
+                                            rule: self.all(k, size(k) < 64 && size(self[k])
+                                              < 64)
                                         replicas:
                                           description: Replicas is the desired number
                                             of pods.
@@ -6613,6 +6670,11 @@ spec:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
                                             items:
+                                              description: CellName is a string restricted
+                                                to 63 characters for strict validation
+                                                budgeting.
+                                              maxLength: 63
+                                              minLength: 1
                                               type: string
                                             maxItems: 100
                                             type: array
@@ -6924,12 +6986,16 @@ spec:
                       endpoints:
                         description: Endpoints is a list of client URLs.
                         items:
+                          description: EndpointUrl is a string restricted to 2048
+                            characters for strict validation budgeting.
+                          maxLength: 2048
+                          minLength: 1
                           type: string
                         maxItems: 20
                         minItems: 1
                         type: array
                         x-kubernetes-validations:
-                        - message: endpoints must be http or https URLs
+                        - message: endpoints must be valid URLs
                           rule: self.all(x, x.matches('^https?://'))
                     required:
                     - endpoints
@@ -7937,6 +8003,10 @@ spec:
                           pods.
                         maxProperties: 64
                         type: object
+                        x-kubernetes-validations:
+                        - message: annotation keys must be <64 chars and values <256
+                            chars
+                          rule: self.all(k, size(k) < 64 && size(self[k]) < 256)
                       podLabels:
                         additionalProperties:
                           type: string
@@ -7944,6 +8014,9 @@ spec:
                           pods.
                         maxProperties: 64
                         type: object
+                        x-kubernetes-validations:
+                        - message: label keys and values must be <64 chars
+                          rule: self.all(k, size(k) < 64 && size(self[k]) < 64)
                       replicas:
                         description: Replicas is the desired number of pods.
                         format: int32

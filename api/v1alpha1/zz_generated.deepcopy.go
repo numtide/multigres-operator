@@ -143,7 +143,7 @@ func (in *CellSpec) DeepCopyInto(out *CellSpec) {
 	in.TopoServer.DeepCopyInto(&out.TopoServer)
 	if in.AllCells != nil {
 		in, out := &in.AllCells, &out.AllCells
-		*out = make([]string, len(*in))
+		*out = make([]CellName, len(*in))
 		copy(*out, *in)
 	}
 	out.TopologyReconciliation = in.TopologyReconciliation
@@ -482,7 +482,7 @@ func (in *ExternalTopoServerSpec) DeepCopyInto(out *ExternalTopoServerSpec) {
 	*out = *in
 	if in.Endpoints != nil {
 		in, out := &in.Endpoints, &out.Endpoints
-		*out = make([]string, len(*in))
+		*out = make([]EndpointUrl, len(*in))
 		copy(*out, *in)
 	}
 }
@@ -568,7 +568,7 @@ func (in *MultiOrchSpec) DeepCopyInto(out *MultiOrchSpec) {
 	in.StatelessSpec.DeepCopyInto(&out.StatelessSpec)
 	if in.Cells != nil {
 		in, out := &in.Cells, &out.Cells
-		*out = make([]string, len(*in))
+		*out = make([]CellName, len(*in))
 		copy(*out, *in)
 	}
 }
@@ -716,7 +716,7 @@ func (in *PoolSpec) DeepCopyInto(out *PoolSpec) {
 	*out = *in
 	if in.Cells != nil {
 		in, out := &in.Cells, &out.Cells
-		*out = make([]string, len(*in))
+		*out = make([]CellName, len(*in))
 		copy(*out, *in)
 	}
 	if in.ReplicasPerCell != nil {

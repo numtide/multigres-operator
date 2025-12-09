@@ -26,6 +26,11 @@ import (
 //
 // Cell is a child CR managed by MultigresCluster.
 
+// CellName is a string restricted to 63 characters for strict validation budgeting.
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=63
+type CellName string
+
 // CellSpec defines the desired state of Cell.
 // +kubebuilder:validation:XValidation:rule="has(self.zone) != has(self.region)",message="must specify either 'zone' or 'region', but not both"
 type CellSpec struct {
@@ -57,7 +62,7 @@ type CellSpec struct {
 	// AllCells list for discovery.
 	// +optional
 	// +kubebuilder:validation:MaxItems=100
-	AllCells []string `json:"allCells,omitempty"`
+	AllCells []CellName `json:"allCells,omitempty"`
 
 	// TopologyReconciliation flags.
 	// +optional
