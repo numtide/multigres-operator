@@ -256,6 +256,13 @@ func (f *failingRunnable) Start(ctx context.Context) error {
 	return fmt.Errorf("failing runnable: intentional test failure")
 }
 
+// runCleanups executes all registered cleanup functions in reverse order.
+func (m *mockTB) runCleanups() {
+	for i := len(m.cleanupFuncs) - 1; i >= 0; i-- {
+		m.cleanupFuncs[i]()
+	}
+}
+
 // TestStartManager_Internal tests the internal startManager function.
 func TestStartManager_Internal(t *testing.T) {
 	tests := map[string]struct {
@@ -315,6 +322,7 @@ func TestStartManager_Internal(t *testing.T) {
 			// For success case, cancel context and wait for manager to stop
 			// For error case with cancelled context, done won't be waited on
 			if !mock.fatalCalled {
+				mock.runCleanups()
 				<-done
 			}
 
