@@ -5,26 +5,29 @@
 # Each module must be tagged with its directory path prefix for Go module resolution
 # Example tags: v0.1.0 (root), api/v0.1.0, pkg/cluster-handler/v0.1.0, etc.
 #
+# Auto-discovered modules: finds all directories with go.mod files
 # Can be overridden: MODULES="./api ./pkg/resource-handler" make test
-#                or: MODULES="$(make changed-modules)" make test
-MODULES ?= . ./api ./pkg/cluster-handler ./pkg/data-handler ./pkg/resource-handler ./pkg/envtestutil
+#                or: MODULES="$(shell make changed-modules)" make test
+MODULES ?= $(shell find . -name go.mod -exec dirname {} \; | sort)
 
 # Detect changed modules compared to origin/main
 # Usage: make test MODULES="$(shell make changed-modules)"
 .PHONY: changed-modules
 changed-modules:
-	@if git rev-parse --verify origin/main >/dev/null 2>&1; then \
+	@changed_files=$$(if git rev-parse --verify origin/main >/dev/null 2>&1; then \
 		git diff --name-only origin/main...HEAD 2>/dev/null; \
 	else \
 		git diff --name-only HEAD 2>/dev/null; \
-	fi | awk -F/ '{ \
-		if ($$1 == "api") print "./api"; \
-		else if ($$1 == "pkg" && $$2 == "cluster-handler") print "./pkg/cluster-handler"; \
-		else if ($$1 == "pkg" && $$2 == "data-handler") print "./pkg/data-handler"; \
-		else if ($$1 == "pkg" && $$2 == "resource-handler") print "./pkg/resource-handler"; \
-		else if ($$1 == "pkg" && $$2 == "envtestutil") print "./pkg/envtestutil"; \
-		else if ($$1 == "cmd" || $$1 == "main.go" || $$1 == "Dockerfile") print "."; \
-	}' | sort -u | tr '\n' ' ' || echo "$(MODULES)"
+	fi); \
+	modules=$$(find . -name go.mod -exec dirname {} \;); \
+	for mod in $$modules; do \
+		modpath=$${mod#./}; \
+		if [ "$$mod" = "." ]; then \
+			echo "$$changed_files" | grep -qE '^[^/]+\.(go|mod|sum)$$|^(cmd|internal)/' && echo "$$mod"; \
+		elif echo "$$changed_files" | grep -q "^$$modpath/"; then \
+			echo "$$mod"; \
+		fi; \
+	done 2>/dev/null | sort -u | tr '\n' ' '
 
 # Version from git tags (for root module - operator binary)
 # Root module uses tags like v0.1.0 (without prefix)
