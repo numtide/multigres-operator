@@ -7,188 +7,165 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// TestFindLatestEventFor_EmptyNamespace tests findLatestEventFor with empty namespace.
-func TestFindLatestEventFor_EmptyNamespace(t *testing.T) {
+func TestFindLatestEventFor(t *testing.T) {
 	t.Parallel()
-
-	watcher := &ResourceWatcher{
-		t: t,
-		events: []ResourceEvent{
-			{Kind: "Service", Name: "svc1", Namespace: "default"},
-			{Kind: "Service", Name: "svc1", Namespace: "kube-system"},
-			{Kind: "Service", Name: "svc2", Namespace: "default"},
-		},
-	}
-
-	// Search with only name (empty namespace should match all)
-	obj := &corev1.Service{}
-	obj.SetName("svc1")
-	obj.SetNamespace("") // Empty namespace
-
-	evt := watcher.findLatestEventFor(obj)
-	if evt == nil {
-		t.Fatal("findLatestEventFor() returned nil, want event")
-	}
-
-	// Should return the latest svc1 event (from kube-system)
-	if evt.Name != "svc1" {
-		t.Errorf("findLatestEventFor() Name = %s, want svc1", evt.Name)
-	}
-	if evt.Namespace != "kube-system" {
-		t.Errorf("findLatestEventFor() Namespace = %s, want kube-system", evt.Namespace)
-	}
-}
-
-// TestFindLatestEventFor_EmptyName tests findLatestEventFor with empty name.
-func TestFindLatestEventFor_EmptyName(t *testing.T) {
-	t.Parallel()
-
-	watcher := &ResourceWatcher{
-		t: t,
-		events: []ResourceEvent{
-			{Kind: "Service", Name: "svc1", Namespace: "default"},
-			{Kind: "Service", Name: "svc2", Namespace: "default"},
-			{Kind: "Deployment", Name: "deploy1", Namespace: "default"},
-		},
-	}
-
-	// Search with only kind and namespace (empty name should match all)
-	obj := &corev1.Service{}
-	obj.SetName("") // Empty name
-	obj.SetNamespace("default")
-
-	evt := watcher.findLatestEventFor(obj)
-	if evt == nil {
-		t.Fatal("findLatestEventFor() returned nil, want event")
-	}
-
-	// Should return the latest Service in default namespace (svc2)
-	if evt.Kind != "Service" {
-		t.Errorf("findLatestEventFor() Kind = %s, want Service", evt.Kind)
-	}
-	if evt.Name != "svc2" {
-		t.Errorf("findLatestEventFor() Name = %s, want svc2", evt.Name)
-	}
-}
-
-// TestFindLatestEvent_NoMatch tests findLatestEvent when no events match.
-func TestFindLatestEvent_NoMatch(t *testing.T) {
-	t.Parallel()
-
-	watcher := &ResourceWatcher{
-		t: t,
-		events: []ResourceEvent{
-			{Kind: "Service", Name: "svc1", Namespace: "default"},
-			{Kind: "Service", Name: "svc2", Namespace: "default"},
-		},
-	}
-
-	evt := watcher.findLatestEvent(func(e ResourceEvent) bool {
-		return e.Name == "nonexistent"
-	})
-
-	if evt != nil {
-		t.Errorf("findLatestEvent() should return nil for no match, got: %+v", evt)
-	}
-}
-
-// TestFindLatestEventFor_KindMismatch tests findLatestEventFor when kind doesn't match.
-func TestFindLatestEventFor_KindMismatch(t *testing.T) {
-	t.Parallel()
-
-	watcher := &ResourceWatcher{
-		t: t,
-		events: []ResourceEvent{
-			{Kind: "Service", Name: "svc1", Namespace: "default"},
-		},
-	}
-
-	// Search for a different kind
-	obj := &corev1.ConfigMap{}
-	obj.SetName("svc1")
-	obj.SetNamespace("default")
-
-	evt := watcher.findLatestEventFor(obj)
-	if evt != nil {
-		t.Errorf("findLatestEventFor() should return nil when kind doesn't match, got: %+v", evt)
-	}
-}
-
-// TestCheckLatestEventMatches_NoEvent tests checkLatestEventMatches when no event exists.
-func TestCheckLatestEventMatches_NoEvent(t *testing.T) {
-	t.Parallel()
-
-	watcher := &ResourceWatcher{
-		t:      t,
-		events: []ResourceEvent{},
-	}
-
-	svc := &corev1.Service{}
-	svc.SetName("nonexistent")
-	svc.SetNamespace("default")
-
-	matched, diff := watcher.checkLatestEventMatches(svc, nil)
-	if matched {
-		t.Error("checkLatestEventMatches() should return false when no events exist")
-	}
-	if diff != "" {
-		t.Errorf(
-			"checkLatestEventMatches() should return empty diff when no events exist, got: %s",
-			diff,
-		)
-	}
-}
-
-// TestFindLatestEventFor_EdgeCases tests all conditional branches in findLatestEventFor.
-func TestFindLatestEventFor_EdgeCases(t *testing.T) {
-	t.Parallel()
-
-	watcher := &ResourceWatcher{
-		t: t,
-		events: []ResourceEvent{
-			{Kind: "Service", Name: "svc-a", Namespace: "ns-a"},
-			{Kind: "Service", Name: "svc-b", Namespace: "ns-b"},
-			{Kind: "Pod", Name: "pod-a", Namespace: "ns-a"},
-		},
-	}
 
 	tests := map[string]struct {
+		events    []ResourceEvent
 		setupObj  func() client.Object
 		wantFound bool
+		wantName  string
+		wantNS    string
+		wantKind  string
 	}{
-		"kind mismatch": {
+		"empty namespace matches all": {
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc1", Namespace: "default"},
+				{Kind: "Service", Name: "svc1", Namespace: "kube-system"},
+				{Kind: "Service", Name: "svc2", Namespace: "default"},
+			},
 			setupObj: func() client.Object {
-				o := &corev1.ConfigMap{}
-				o.SetName("svc-a")
-				o.SetNamespace("ns-a")
-				return o
+				obj := &corev1.Service{}
+				obj.SetName("svc1")
+				obj.SetNamespace("") // Empty namespace
+				return obj
+			},
+			wantFound: true,
+			wantName:  "svc1",
+			wantNS:    "kube-system", // Should return the latest svc1 event
+			wantKind:  "Service",
+		},
+		"empty name matches all in namespace": {
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc1", Namespace: "default"},
+				{Kind: "Service", Name: "svc2", Namespace: "default"},
+				{Kind: "Deployment", Name: "deploy1", Namespace: "default"},
+			},
+			setupObj: func() client.Object {
+				obj := &corev1.Service{}
+				obj.SetName("") // Empty name
+				obj.SetNamespace("default")
+				return obj
+			},
+			wantFound: true,
+			wantKind:  "Service",
+			wantName:  "svc2", // Should return the latest Service in default namespace
+			wantNS:    "default",
+		},
+		"kind mismatch returns nil": {
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc1", Namespace: "default"},
+			},
+			setupObj: func() client.Object {
+				obj := &corev1.ConfigMap{}
+				obj.SetName("svc1")
+				obj.SetNamespace("default")
+				return obj
 			},
 			wantFound: false,
 		},
-		"name mismatch": {
+		"name mismatch returns nil": {
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc-a", Namespace: "ns-a"},
+				{Kind: "Service", Name: "svc-b", Namespace: "ns-b"},
+			},
 			setupObj: func() client.Object {
-				o := &corev1.Service{}
-				o.SetName("svc-nonexist")
-				o.SetNamespace("ns-a")
-				return o
+				obj := &corev1.Service{}
+				obj.SetName("svc-nonexist")
+				obj.SetNamespace("ns-a")
+				return obj
 			},
 			wantFound: false,
 		},
-		"namespace mismatch": {
+		"namespace mismatch returns nil": {
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc-a", Namespace: "ns-a"},
+				{Kind: "Service", Name: "svc-b", Namespace: "ns-b"},
+			},
 			setupObj: func() client.Object {
-				o := &corev1.Service{}
-				o.SetName("svc-a")
-				o.SetNamespace("ns-nonexist")
-				return o
+				obj := &corev1.Service{}
+				obj.SetName("svc-a")
+				obj.SetNamespace("ns-nonexist")
+				return obj
+			},
+			wantFound: false,
+		},
+		"exact match found": {
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc-a", Namespace: "ns-a"},
+				{Kind: "Service", Name: "svc-b", Namespace: "ns-b"},
+				{Kind: "Pod", Name: "pod-a", Namespace: "ns-a"},
+			},
+			setupObj: func() client.Object {
+				obj := &corev1.Service{}
+				obj.SetName("svc-b")
+				obj.SetNamespace("ns-b")
+				return obj
+			},
+			wantFound: true,
+			wantName:  "svc-b",
+			wantNS:    "ns-b",
+			wantKind:  "Service",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			watcher := &ResourceWatcher{
+				t:      t,
+				events: tc.events,
+			}
+
+			evt := watcher.findLatestEventFor(tc.setupObj())
+
+			if (evt != nil) != tc.wantFound {
+				t.Fatalf("findLatestEventFor() found=%v, want=%v", evt != nil, tc.wantFound)
+			}
+
+			if !tc.wantFound {
+				return
+			}
+
+			if evt.Name != tc.wantName {
+				t.Errorf("findLatestEventFor() Name = %s, want %s", evt.Name, tc.wantName)
+			}
+			if evt.Namespace != tc.wantNS {
+				t.Errorf("findLatestEventFor() Namespace = %s, want %s", evt.Namespace, tc.wantNS)
+			}
+			if evt.Kind != tc.wantKind {
+				t.Errorf("findLatestEventFor() Kind = %s, want %s", evt.Kind, tc.wantKind)
+			}
+		})
+	}
+}
+
+func TestFindLatestEvent(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		events    []ResourceEvent
+		matchFunc func(e ResourceEvent) bool
+		wantFound bool
+	}{
+		"no match returns nil": {
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc1", Namespace: "default"},
+				{Kind: "Service", Name: "svc2", Namespace: "default"},
+			},
+			matchFunc: func(e ResourceEvent) bool {
+				return e.Name == "nonexistent"
 			},
 			wantFound: false,
 		},
 		"match found": {
-			setupObj: func() client.Object {
-				o := &corev1.Service{}
-				o.SetName("svc-b")
-				o.SetNamespace("ns-b")
-				return o
+			events: []ResourceEvent{
+				{Kind: "Service", Name: "svc1", Namespace: "default"},
+				{Kind: "Service", Name: "svc2", Namespace: "default"},
+			},
+			matchFunc: func(e ResourceEvent) bool {
+				return e.Name == "svc1"
 			},
 			wantFound: true,
 		},
@@ -198,9 +175,62 @@ func TestFindLatestEventFor_EdgeCases(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			evt := watcher.findLatestEventFor(tc.setupObj())
+			watcher := &ResourceWatcher{
+				t:      t,
+				events: tc.events,
+			}
+
+			evt := watcher.findLatestEvent(tc.matchFunc)
+
 			if (evt != nil) != tc.wantFound {
-				t.Errorf("findLatestEventFor() found=%v, want=%v", evt != nil, tc.wantFound)
+				t.Errorf("findLatestEvent() found=%v, want=%v", evt != nil, tc.wantFound)
+			}
+		})
+	}
+}
+
+func TestCheckLatestEventMatches(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		events      []ResourceEvent
+		setupObj    func() client.Object
+		wantMatched bool
+		wantDiff    string
+	}{
+		"no event exists": {
+			events: []ResourceEvent{},
+			setupObj: func() client.Object {
+				svc := &corev1.Service{}
+				svc.SetName("nonexistent")
+				svc.SetNamespace("default")
+				return svc
+			},
+			wantMatched: false,
+			wantDiff:    "",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			watcher := &ResourceWatcher{
+				t:      t,
+				events: tc.events,
+			}
+
+			matched, diff := watcher.checkLatestEventMatches(tc.setupObj(), nil)
+
+			if matched != tc.wantMatched {
+				t.Errorf("checkLatestEventMatches() matched = %v, want %v", matched, tc.wantMatched)
+			}
+			if diff != tc.wantDiff {
+				t.Errorf(
+					"checkLatestEventMatches() diff = %s, want %s",
+					diff,
+					tc.wantDiff,
+				)
 			}
 		})
 	}
