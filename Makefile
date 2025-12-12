@@ -22,6 +22,7 @@ changed-modules:
 		else if ($$1 == "pkg" && $$2 == "cluster-handler") print "./pkg/cluster-handler"; \
 		else if ($$1 == "pkg" && $$2 == "data-handler") print "./pkg/data-handler"; \
 		else if ($$1 == "pkg" && $$2 == "resource-handler") print "./pkg/resource-handler"; \
+		else if ($$1 == "pkg" && $$2 == "envtestutil") print "./pkg/envtestutil"; \
 		else if ($$1 == "cmd" || $$1 == "main.go" || $$1 == "Dockerfile") print "."; \
 	}' | sort -u | tr '\n' ' ' || echo "$(MODULES)"
 
