@@ -1,4 +1,4 @@
-package envtestutil_test
+package testutil_test
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/numtide/multigres-operator/pkg/envtestutil"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 func TestComparisonOptions(t *testing.T) {
@@ -47,7 +47,7 @@ func TestComparisonOptions(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP, // Must match
 				},
 			},
-			options: envtestutil.IgnoreMetaRuntimeFields(),
+			options: testutil.IgnoreMetaRuntimeFields(),
 		},
 		"IgnoreStatus": {
 			obj1: &corev1.Service{
@@ -68,7 +68,7 @@ func TestComparisonOptions(t *testing.T) {
 					},
 				},
 			},
-			options: cmp.Options{envtestutil.IgnoreStatus()},
+			options: cmp.Options{testutil.IgnoreStatus()},
 		},
 		"IgnoreObjectMetaCompletely": {
 			obj1: &corev1.Service{
@@ -89,7 +89,7 @@ func TestComparisonOptions(t *testing.T) {
 				},
 				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
 			},
-			options: cmp.Options{envtestutil.IgnoreObjectMetaCompletely()},
+			options: cmp.Options{testutil.IgnoreObjectMetaCompletely()},
 		},
 		"CompareOptions": {
 			obj1: &corev1.Service{
@@ -120,7 +120,7 @@ func TestComparisonOptions(t *testing.T) {
 					},
 				},
 			},
-			options: envtestutil.CompareOptions(),
+			options: testutil.CompareOptions(),
 		},
 		"CompareSpecOnly": {
 			obj1: &corev1.Service{
@@ -155,7 +155,7 @@ func TestComparisonOptions(t *testing.T) {
 					},
 				},
 			},
-			options: envtestutil.CompareSpecOnly(),
+			options: testutil.CompareSpecOnly(),
 		},
 	}
 

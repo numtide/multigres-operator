@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package envtestutil_test
+package testutil_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/numtide/multigres-operator/pkg/envtestutil"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 // TestResourceWatcher_UnwatchedKinds tests error for unwatched resource kinds.
@@ -27,8 +27,8 @@ func TestResourceWatcher_UnwatchedKinds(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := t.Context()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 	// Try to wait for ConfigMap which is not watched by default
 	err := watcher.WaitForMatch(&corev1.ConfigMap{
@@ -39,7 +39,7 @@ func TestResourceWatcher_UnwatchedKinds(t *testing.T) {
 		t.Error("WaitForMatch() should error for unwatched kind")
 	}
 
-	var unwatchedErr *envtestutil.ErrUnwatchedKinds
+	var unwatchedErr *testutil.ErrUnwatchedKinds
 	if !errors.As(err, &unwatchedErr) {
 		t.Errorf("Error should be ErrUnwatchedKinds, got: %T", err)
 	}
@@ -58,12 +58,12 @@ func TestResourceWatcher_WatchDuplicateKind(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := t.Context()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 
 	// Create watcher with ConfigMap as extra resource twice
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr,
-		envtestutil.WithExtraResource(&corev1.ConfigMap{}),
-		envtestutil.WithExtraResource(&corev1.ConfigMap{}), // Duplicate
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr,
+		testutil.WithExtraResource(&corev1.ConfigMap{}),
+		testutil.WithExtraResource(&corev1.ConfigMap{}), // Duplicate
 	)
 
 	c := mgr.GetClient()
@@ -78,7 +78,7 @@ func TestResourceWatcher_WatchDuplicateKind(t *testing.T) {
 	}
 
 	// Wait for the event
-	watcher.SetCmpOpts(envtestutil.IgnoreMetaRuntimeFields())
+	watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields())
 	if err := watcher.WaitForMatch(cm); err != nil {
 		t.Errorf("Failed to wait for ConfigMap: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestResourceWatcher_NonMatchingUpdate(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := t.Context()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 	c := mgr.GetClient()
 
 	// Create a Service with port 80
@@ -113,8 +113,8 @@ func TestResourceWatcher_NonMatchingUpdate(t *testing.T) {
 	}
 
 	// Start watcher after creation
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr,
-		envtestutil.WithTimeout(100*time.Millisecond),
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr,
+		testutil.WithTimeout(100*time.Millisecond),
 	)
 
 	// Try to wait for port 8080 (which doesn't exist)
@@ -133,7 +133,7 @@ func TestResourceWatcher_NonMatchingUpdate(t *testing.T) {
 		},
 	}
 
-	watcher.SetCmpOpts(envtestutil.IgnoreMetaRuntimeFields(), envtestutil.IgnoreServiceRuntimeFields())
+	watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
 
 	// This should timeout because the service has port 80, not 8080
 	err := watcher.WaitForMatch(expected)
@@ -157,10 +157,10 @@ func TestResourceWatcher_NoEventsTimeout(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := t.Context()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr,
-		envtestutil.WithTimeout(100*time.Millisecond),
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr,
+		testutil.WithTimeout(100*time.Millisecond),
 	)
 
 	// Try to wait for a Service that never gets created
@@ -187,10 +187,10 @@ func TestWaitForEventType_ExistingEvent(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := t.Context()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 	c := mgr.GetClient()
 
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 	// Create a service
 	svc := &corev1.Service{
@@ -224,10 +224,10 @@ func TestWaitForEventType_Timeout(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := t.Context()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr,
-		envtestutil.WithTimeout(50*time.Millisecond),
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr,
+		testutil.WithTimeout(50*time.Millisecond),
 	)
 
 	// Wait for an event type that won't happen
@@ -248,9 +248,9 @@ func TestWaitForMatch_ContextCanceled(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 	// Cancel context immediately
 	cancel()

@@ -3,7 +3,7 @@
 
 // Edge case tests for match functions that require the verbose build tag.
 
-package envtestutil
+package testutil
 
 import (
 	"errors"

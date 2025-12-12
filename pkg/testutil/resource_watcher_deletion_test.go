@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package envtestutil_test
+package testutil_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numtide/multigres-operator/pkg/envtestutil"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 // TestObj tests the generic Obj helper function.
@@ -27,7 +27,7 @@ func TestObj(t *testing.T) {
 		expected client.Object
 	}{
 		"Service": {
-			obj: envtestutil.Obj[corev1.Service]("my-service", "my-namespace"),
+			obj: testutil.Obj[corev1.Service]("my-service", "my-namespace"),
 			expected: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-service",
@@ -36,7 +36,7 @@ func TestObj(t *testing.T) {
 			},
 		},
 		"StatefulSet": {
-			obj: envtestutil.Obj[appsv1.StatefulSet]("my-sts", "default"),
+			obj: testutil.Obj[appsv1.StatefulSet]("my-sts", "default"),
 			expected: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-sts",
@@ -45,7 +45,7 @@ func TestObj(t *testing.T) {
 			},
 		},
 		"Deployment": {
-			obj: envtestutil.Obj[appsv1.Deployment]("my-deploy", "kube-system"),
+			obj: testutil.Obj[appsv1.Deployment]("my-deploy", "kube-system"),
 			expected: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-deploy",
@@ -54,7 +54,7 @@ func TestObj(t *testing.T) {
 			},
 		},
 		"ConfigMap": {
-			obj: envtestutil.Obj[corev1.ConfigMap]("my-cm", "default"),
+			obj: testutil.Obj[corev1.ConfigMap]("my-cm", "default"),
 			expected: &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-cm",
@@ -63,7 +63,7 @@ func TestObj(t *testing.T) {
 			},
 		},
 		"Secret": {
-			obj: envtestutil.Obj[corev1.Secret]("my-secret", "default"),
+			obj: testutil.Obj[corev1.Secret]("my-secret", "default"),
 			expected: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-secret",
@@ -72,7 +72,7 @@ func TestObj(t *testing.T) {
 			},
 		},
 		"Pod": {
-			obj: envtestutil.Obj[corev1.Pod]("my-pod", "default"),
+			obj: testutil.Obj[corev1.Pod]("my-pod", "default"),
 			expected: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-pod",
@@ -81,7 +81,7 @@ func TestObj(t *testing.T) {
 			},
 		},
 		"DaemonSet": {
-			obj: envtestutil.Obj[appsv1.DaemonSet]("my-ds", "default"),
+			obj: testutil.Obj[appsv1.DaemonSet]("my-ds", "default"),
 			expected: &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-ds",
@@ -90,7 +90,7 @@ func TestObj(t *testing.T) {
 			},
 		},
 		"ReplicaSet": {
-			obj: envtestutil.Obj[appsv1.ReplicaSet]("my-rs", "default"),
+			obj: testutil.Obj[appsv1.ReplicaSet]("my-rs", "default"),
 			expected: &appsv1.ReplicaSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-rs",
@@ -116,12 +116,12 @@ func TestWaitForDeletion(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		setup      func(ctx context.Context, c client.Client, watcher *envtestutil.ResourceWatcher) error
+		setup      func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error
 		delete     func(ctx context.Context, c client.Client) error
-		assertFunc func(t *testing.T, watcher *envtestutil.ResourceWatcher)
+		assertFunc func(t *testing.T, watcher *testutil.ResourceWatcher)
 	}{
 		"single service deletion": {
-			setup: func(ctx context.Context, c client.Client, watcher *envtestutil.ResourceWatcher) error {
+			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
 				svc := &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-svc",
@@ -136,23 +136,23 @@ func TestWaitForDeletion(t *testing.T) {
 				}
 				// Wait for creation to be observed
 				watcher.SetCmpOpts(
-					envtestutil.IgnoreMetaRuntimeFields(),
-					envtestutil.IgnoreServiceRuntimeFields(),
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreServiceRuntimeFields(),
 				)
 				return watcher.WaitForMatch(svc)
 			},
 			delete: func(ctx context.Context, c client.Client) error {
-				return c.Delete(ctx, envtestutil.Obj[corev1.Service]("test-svc", "default"))
+				return c.Delete(ctx, testutil.Obj[corev1.Service]("test-svc", "default"))
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
-				err := watcher.WaitForDeletion(envtestutil.Obj[corev1.Service]("test-svc", "default"))
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
+				err := watcher.WaitForDeletion(testutil.Obj[corev1.Service]("test-svc", "default"))
 				if err != nil {
 					t.Errorf("Failed to wait for deletion: %v", err)
 				}
 			},
 		},
 		"multiple services deletion": {
-			setup: func(ctx context.Context, c client.Client, watcher *envtestutil.ResourceWatcher) error {
+			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
 				svc1 := &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
@@ -178,21 +178,21 @@ func TestWaitForDeletion(t *testing.T) {
 					return err
 				}
 				watcher.SetCmpOpts(
-					envtestutil.IgnoreMetaRuntimeFields(),
-					envtestutil.IgnoreServiceRuntimeFields(),
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreServiceRuntimeFields(),
 				)
 				return watcher.WaitForMatch(svc1, svc2)
 			},
 			delete: func(ctx context.Context, c client.Client) error {
-				if err := c.Delete(ctx, envtestutil.Obj[corev1.Service]("svc-1", "default")); err != nil {
+				if err := c.Delete(ctx, testutil.Obj[corev1.Service]("svc-1", "default")); err != nil {
 					return err
 				}
-				return c.Delete(ctx, envtestutil.Obj[corev1.Service]("svc-2", "default"))
+				return c.Delete(ctx, testutil.Obj[corev1.Service]("svc-2", "default"))
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				err := watcher.WaitForDeletion(
-					envtestutil.Obj[corev1.Service]("svc-1", "default"),
-					envtestutil.Obj[corev1.Service]("svc-2", "default"),
+					testutil.Obj[corev1.Service]("svc-1", "default"),
+					testutil.Obj[corev1.Service]("svc-2", "default"),
 				)
 				if err != nil {
 					t.Errorf("Failed to wait for multiple deletions: %v", err)
@@ -200,7 +200,7 @@ func TestWaitForDeletion(t *testing.T) {
 			},
 		},
 		"mixed resource types deletion": {
-			setup: func(ctx context.Context, c client.Client, watcher *envtestutil.ResourceWatcher) error {
+			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
 				svc := &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "my-svc",
@@ -237,26 +237,26 @@ func TestWaitForDeletion(t *testing.T) {
 					return err
 				}
 				watcher.SetCmpOpts(
-					envtestutil.IgnoreMetaRuntimeFields(),
-					envtestutil.IgnoreServiceRuntimeFields(),
-					envtestutil.IgnoreDeploymentRuntimeFields(),
-					envtestutil.IgnoreDeploymentSpecDefaults(),
-					envtestutil.IgnorePodSpecDefaults(),
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreServiceRuntimeFields(),
+					testutil.IgnoreDeploymentRuntimeFields(),
+					testutil.IgnoreDeploymentSpecDefaults(),
+					testutil.IgnorePodSpecDefaults(),
 				)
 
 				// Make sure that the resource is created beforehand.
 				return watcher.WaitForMatch(svc, deploy)
 			},
 			delete: func(ctx context.Context, c client.Client) error {
-				if err := c.Delete(ctx, envtestutil.Obj[corev1.Service]("my-svc", "default")); err != nil {
+				if err := c.Delete(ctx, testutil.Obj[corev1.Service]("my-svc", "default")); err != nil {
 					return err
 				}
-				return c.Delete(ctx, envtestutil.Obj[appsv1.Deployment]("my-deploy", "default"))
+				return c.Delete(ctx, testutil.Obj[appsv1.Deployment]("my-deploy", "default"))
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				err := watcher.WaitForDeletion(
-					envtestutil.Obj[corev1.Service]("my-svc", "default"),
-					envtestutil.Obj[appsv1.Deployment]("my-deploy", "default"),
+					testutil.Obj[corev1.Service]("my-svc", "default"),
+					testutil.Obj[appsv1.Deployment]("my-deploy", "default"),
 				)
 				if err != nil {
 					t.Errorf("Failed to wait for mixed type deletions: %v", err)
@@ -275,9 +275,9 @@ func TestWaitForDeletion(t *testing.T) {
 			_ = appsv1.AddToScheme(scheme)
 
 			ctx := context.Background()
-			mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
 			c := mgr.GetClient()
-			watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+			watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 			if err := tc.setup(ctx, c, watcher); err != nil {
 				t.Fatalf("Setup failed: %v", err)
@@ -302,10 +302,10 @@ func TestWaitForDeletion_ExistingDeletedEvent(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := context.Background()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 	c := mgr.GetClient()
 
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 	// Create and delete a service
 	svc := &corev1.Service{
@@ -317,7 +317,7 @@ func TestWaitForDeletion_ExistingDeletedEvent(t *testing.T) {
 	}
 
 	// Wait for creation
-	watcher.SetCmpOpts(envtestutil.IgnoreMetaRuntimeFields(), envtestutil.IgnoreServiceRuntimeFields())
+	watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
 	if err := watcher.WaitForMatch(svc); err != nil {
 		t.Fatalf("Failed to wait for Service creation: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestWaitForDeletion_ExistingDeletedEvent(t *testing.T) {
 	}
 
 	// Now wait for deletion again - should find existing event
-	err = watcher.WaitForDeletion(envtestutil.Obj[corev1.Service]("to-delete", "default"))
+	err = watcher.WaitForDeletion(testutil.Obj[corev1.Service]("to-delete", "default"))
 	if err != nil {
 		t.Errorf("WaitForDeletion() error = %v, want nil (should find existing event)", err)
 	}
@@ -352,15 +352,15 @@ func TestWaitForDeletion_ContextCanceled(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 	// Cancel context immediately
 	cancel()
 
 	// Try to wait for deletion - should fail with watcher stopped
-	err := watcher.WaitForDeletion(envtestutil.Obj[corev1.Service]("test", "default"))
+	err := watcher.WaitForDeletion(testutil.Obj[corev1.Service]("test", "default"))
 	if err == nil {
 		t.Error("Expected error when context is canceled")
 	}
@@ -397,9 +397,9 @@ func TestWaitForDeletion_CascadingDelete(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := context.Background()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 	c := mgr.GetClient()
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 	owner := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "owner", Namespace: "default"},
@@ -429,7 +429,7 @@ func TestWaitForDeletion_CascadingDelete(t *testing.T) {
 	}
 
 	// Wait for service to be created
-	watcher.SetCmpOpts(envtestutil.IgnoreMetaRuntimeFields(), envtestutil.IgnoreServiceRuntimeFields())
+	watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
 	if err := watcher.WaitForMatch(svc); err != nil {
 		t.Fatalf("Failed to wait for service creation: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestWaitForDeletion_CascadingDelete(t *testing.T) {
 	}
 
 	// Wait for cascading deletion
-	if err := watcher.WaitForDeletion(envtestutil.Obj[corev1.Service]("owned-svc", "default")); err != nil {
+	if err := watcher.WaitForDeletion(testutil.Obj[corev1.Service]("owned-svc", "default")); err != nil {
 		t.Errorf("Cascading deletion failed: %v", err)
 	}
 }

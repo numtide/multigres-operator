@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package envtestutil_test
+package testutil_test
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numtide/multigres-operator/pkg/envtestutil"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 // TestResourceWatcher_BeforeCreation tests that watcher can subscribe to events
@@ -28,7 +28,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 
 	tests := map[string]struct {
 		setup      func(ctx context.Context, c client.Client) error
-		assertFunc func(t *testing.T, watcher *envtestutil.ResourceWatcher)
+		assertFunc func(t *testing.T, watcher *testutil.ResourceWatcher)
 	}{
 		"single service created": {
 			setup: func(ctx context.Context, c client.Client) error {
@@ -43,7 +43,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				}
 				return c.Create(ctx, svc)
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				// Expected object with Kubernetes defaults explicitly set
 				expected := &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
@@ -65,9 +65,9 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 
 				// Configure watcher with comparison options
 				opts := append(
-					envtestutil.IgnoreMetaRuntimeFields(),
-					envtestutil.IgnoreStatus(),
-					envtestutil.IgnoreServiceRuntimeFields(),
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreStatus(),
+					testutil.IgnoreServiceRuntimeFields(),
 				)
 				watcher.SetCmpOpts(opts...)
 
@@ -106,7 +106,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				}
 				return c.Create(ctx, sts)
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				expected := &appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-sts",
@@ -134,10 +134,10 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				}
 
 				opts := append(
-					envtestutil.IgnoreMetaRuntimeFields(),
-					envtestutil.IgnoreStatefulSetRuntimeFields(),
-					envtestutil.IgnorePodSpecDefaults(),
-					envtestutil.IgnoreStatefulSetSpecDefaults(),
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreStatefulSetRuntimeFields(),
+					testutil.IgnorePodSpecDefaults(),
+					testutil.IgnoreStatefulSetSpecDefaults(),
 				)
 				watcher.SetCmpOpts(opts...)
 
@@ -176,7 +176,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				}
 				return c.Create(ctx, deploy)
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				expected := &appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-deploy",
@@ -205,10 +205,10 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				}
 
 				opts := append(
-					envtestutil.IgnoreMetaRuntimeFields(),
-					envtestutil.IgnoreDeploymentRuntimeFields(),
-					envtestutil.IgnorePodSpecDefaultsExceptPullPolicy(), // Keep ImagePullPolicy for verification
-					envtestutil.IgnoreDeploymentSpecDefaults(),
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreDeploymentRuntimeFields(),
+					testutil.IgnorePodSpecDefaultsExceptPullPolicy(), // Keep ImagePullPolicy for verification
+					testutil.IgnoreDeploymentSpecDefaults(),
 				)
 				watcher.SetCmpOpts(opts...)
 
@@ -223,7 +223,7 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 				// No setup needed - we're testing validation before waiting
 				return nil
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				// Try to wait for ConfigMap and Secret which are not being watched
 				err := watcher.WaitForMatch(&corev1.ConfigMap{}, &corev1.Secret{})
 				if err == nil {
@@ -231,8 +231,8 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 					return
 				}
 
-				want := &envtestutil.ErrUnwatchedKinds{Kinds: []string{"ConfigMap", "Secret"}}
-				var got *envtestutil.ErrUnwatchedKinds
+				want := &testutil.ErrUnwatchedKinds{Kinds: []string{"ConfigMap", "Secret"}}
+				var got *testutil.ErrUnwatchedKinds
 				if !errors.As(err, &got) {
 					t.Errorf("Expected ErrUnwatchedKinds, got: %T - %v", err, err)
 					return
@@ -255,9 +255,9 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 			_ = appsv1.AddToScheme(scheme)
 
 			ctx := t.Context()
-			mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
 
-			watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+			watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 			c := mgr.GetClient()
 
 			// Start assertion in background FIRST
@@ -286,7 +286,7 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 	tests := map[string]struct {
 		setup      func(ctx context.Context, c client.Client) error
 		update     func(ctx context.Context, c client.Client) error
-		assertFunc func(t *testing.T, watcher *envtestutil.ResourceWatcher)
+		assertFunc func(t *testing.T, watcher *testutil.ResourceWatcher)
 	}{
 		"service updated after watcher starts": {
 			setup: func(ctx context.Context, c client.Client) error {
@@ -313,7 +313,7 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 				svc.Spec.Ports[0].Port = 8080
 				return c.Update(ctx, svc)
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				// Expected object with Kubernetes defaults and updated port
 				expected := &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
@@ -334,9 +334,9 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 				}
 
 				opts := append(
-					envtestutil.IgnoreMetaRuntimeFields(),
-					envtestutil.IgnoreStatus(),
-					envtestutil.IgnoreServiceRuntimeFields(),
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreStatus(),
+					testutil.IgnoreServiceRuntimeFields(),
 				)
 				watcher.SetCmpOpts(opts...)
 
@@ -369,7 +369,7 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 				}
 				return c.Delete(ctx, svc)
 			},
-			assertFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) {
+			assertFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) {
 				// Wait specifically for DELETED event
 				evt, err := watcher.WaitForEventType("Service", "DELETED")
 				if err != nil {
@@ -395,7 +395,7 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 			_ = appsv1.AddToScheme(scheme)
 
 			ctx := context.Background()
-			mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
 			c := mgr.GetClient()
 
 			// Create resources FIRST
@@ -404,7 +404,7 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 			}
 
 			// THEN start watcher (won't see initial creation)
-			watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+			watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 			// Start assertion in background
 			done := make(chan error, 1)
@@ -433,10 +433,10 @@ func TestResourceWatcherEventUtilities(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	ctx := context.Background()
-	mgr := envtestutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme)
 
-	watcher := envtestutil.NewResourceWatcher(t, ctx, mgr,
-		envtestutil.WithExtraResource(&corev1.ConfigMap{}),
+	watcher := testutil.NewResourceWatcher(t, ctx, mgr,
+		testutil.WithExtraResource(&corev1.ConfigMap{}),
 	)
 
 	c := mgr.GetClient()
@@ -474,11 +474,11 @@ func TestResourceWatcherEventUtilities(t *testing.T) {
 
 	// Wait for all resources
 	watcher.SetCmpOpts(
-		envtestutil.IgnoreMetaRuntimeFields(),
-		envtestutil.IgnoreServiceRuntimeFields(),
-		envtestutil.IgnoreDeploymentRuntimeFields(),
-		envtestutil.IgnoreDeploymentSpecDefaults(),
-		envtestutil.IgnorePodSpecDefaults(),
+		testutil.IgnoreMetaRuntimeFields(),
+		testutil.IgnoreServiceRuntimeFields(),
+		testutil.IgnoreDeploymentRuntimeFields(),
+		testutil.IgnoreDeploymentSpecDefaults(),
+		testutil.IgnorePodSpecDefaults(),
 	)
 	if err := watcher.WaitForMatch(svc1, svc2, deploy); err != nil {
 		t.Fatalf("Failed to wait for resources: %v", err)
@@ -576,7 +576,7 @@ func TestResourceWatcherEventUtilities(t *testing.T) {
 	}
 
 	// Wait for event to be collected
-	watcher.SetCmpOpts(envtestutil.IgnoreMetaRuntimeFields(), envtestutil.IgnoreServiceRuntimeFields())
+	watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
 	if err := watcher.WaitForMatch(svc3); err != nil {
 		t.Fatalf("Failed to wait for svc-3: %v", err)
 	}
@@ -602,7 +602,7 @@ func TestResourceWatcherEventUtilities(t *testing.T) {
 
 // TestErrUnwatchedKinds_Error tests the Error() method.
 func TestErrUnwatchedKinds_Error(t *testing.T) {
-	err := &envtestutil.ErrUnwatchedKinds{
+	err := &testutil.ErrUnwatchedKinds{
 		Kinds: []string{"ConfigMap", "Secret"},
 	}
 
@@ -623,10 +623,10 @@ func TestResourceWatcher_ContextCancellation(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		testFunc func(t *testing.T, watcher *envtestutil.ResourceWatcher) error
+		testFunc func(t *testing.T, watcher *testutil.ResourceWatcher) error
 	}{
 		"WaitForMatch": {
-			testFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) error {
+			testFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) error {
 				expected := &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 					Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
@@ -635,12 +635,12 @@ func TestResourceWatcher_ContextCancellation(t *testing.T) {
 			},
 		},
 		"WaitForDeletion": {
-			testFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) error {
-				return watcher.WaitForDeletion(envtestutil.Obj[corev1.Service]("test", "default"))
+			testFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) error {
+				return watcher.WaitForDeletion(testutil.Obj[corev1.Service]("test", "default"))
 			},
 		},
 		"WaitForEventType": {
-			testFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) error {
+			testFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) error {
 				_, err := watcher.WaitForEventType("Service", "DELETED")
 				return err
 			},
@@ -652,8 +652,8 @@ func TestResourceWatcher_ContextCancellation(t *testing.T) {
 			t.Parallel()
 
 			ctx, cancel := context.WithCancel(t.Context())
-			mgr := envtestutil.SetUpEnvtestManager(t, scheme)
-			watcher := envtestutil.NewResourceWatcher(t, ctx, mgr)
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
+			watcher := testutil.NewResourceWatcher(t, ctx, mgr)
 
 			cancel() // Cancel context to trigger error paths
 
@@ -674,10 +674,10 @@ func TestResourceWatcher_Timeouts(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		testFunc func(t *testing.T, watcher *envtestutil.ResourceWatcher) error
+		testFunc func(t *testing.T, watcher *testutil.ResourceWatcher) error
 	}{
 		"WaitForMatch timeout": {
-			testFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) error {
+			testFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) error {
 				expected := &corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{Name: "nonexistent", Namespace: "default"},
 					Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeNodePort},
@@ -686,12 +686,12 @@ func TestResourceWatcher_Timeouts(t *testing.T) {
 			},
 		},
 		"WaitForDeletion timeout": {
-			testFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) error {
-				return watcher.WaitForDeletion(envtestutil.Obj[corev1.Service]("nonexistent", "default"))
+			testFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) error {
+				return watcher.WaitForDeletion(testutil.Obj[corev1.Service]("nonexistent", "default"))
 			},
 		},
 		"WaitForEventType timeout": {
-			testFunc: func(t *testing.T, watcher *envtestutil.ResourceWatcher) error {
+			testFunc: func(t *testing.T, watcher *testutil.ResourceWatcher) error {
 				_, err := watcher.WaitForEventType("Service", "DELETED")
 				return err
 			},
@@ -703,9 +703,9 @@ func TestResourceWatcher_Timeouts(t *testing.T) {
 			t.Parallel()
 
 			ctx := t.Context()
-			mgr := envtestutil.SetUpEnvtestManager(t, scheme)
-			watcher := envtestutil.NewResourceWatcher(t, ctx, mgr,
-				envtestutil.WithTimeout(1*time.Millisecond), // 1ms timeout
+			mgr := testutil.SetUpEnvtestManager(t, scheme)
+			watcher := testutil.NewResourceWatcher(t, ctx, mgr,
+				testutil.WithTimeout(1*time.Millisecond), // 1ms timeout
 			)
 
 			err := tc.testFunc(t, watcher)

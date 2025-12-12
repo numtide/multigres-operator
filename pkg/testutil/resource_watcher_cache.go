@@ -1,4 +1,4 @@
-package envtestutil
+package testutil
 
 import (
 	"github.com/google/go-cmp/cmp"

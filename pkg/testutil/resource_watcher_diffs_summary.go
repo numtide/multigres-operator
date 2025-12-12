@@ -1,6 +1,6 @@
 //go:build !verbose
 
-package envtestutil
+package testutil
 
 // showDiffs controls whether detailed diffs are logged when resources don't match.
 // By default, only summary messages are shown.

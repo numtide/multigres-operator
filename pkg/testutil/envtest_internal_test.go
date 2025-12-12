@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package envtestutil
+package testutil
 
 import (
 	"context"

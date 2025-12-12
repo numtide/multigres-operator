@@ -1,4 +1,4 @@
-module github.com/numtide/multigres-operator/pkg/envtestutil
+module github.com/numtide/multigres-operator/pkg/testutil
 
 go 1.25.0
 

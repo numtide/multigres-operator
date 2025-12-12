@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package envtestutil_test
+package testutil_test
 
 import (
 	"path/filepath"
@@ -12,23 +12,23 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
-	"github.com/numtide/multigres-operator/pkg/envtestutil"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 func TestSetUpEnvTest(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		opts []envtestutil.EnvtestOption
+		opts []testutil.EnvtestOption
 	}{
 		"default - with cleanup": {
 			opts: nil,
 		},
 		"with kubeconfig": {
-			opts: []envtestutil.EnvtestOption{envtestutil.WithKubeconfig()},
+			opts: []testutil.EnvtestOption{testutil.WithKubeconfig()},
 		},
 		"with CRD path": {
-			opts: []envtestutil.EnvtestOption{envtestutil.WithCRDPaths(
+			opts: []testutil.EnvtestOption{testutil.WithCRDPaths(
 				filepath.Join("../../", "config", "crd", "bases"),
 			)},
 		},
@@ -41,8 +41,8 @@ func TestSetUpEnvTest(t *testing.T) {
 			scheme := runtime.NewScheme()
 			_ = corev1.AddToScheme(scheme)
 
-			cfg := envtestutil.SetUpEnvtest(t, tc.opts...)
-			mgr := envtestutil.SetUpManager(t, cfg, scheme)
+			cfg := testutil.SetUpEnvtest(t, tc.opts...)
+			mgr := testutil.SetUpManager(t, cfg, scheme)
 
 			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 				t.Fatalf("Failed to set up health check, %v", err)
@@ -51,7 +51,7 @@ func TestSetUpEnvTest(t *testing.T) {
 				t.Fatalf("Failed to set up ready check, %v", err)
 			}
 
-			envtestutil.StartManager(t, mgr)
+			testutil.StartManager(t, mgr)
 		})
 	}
 }
@@ -62,8 +62,8 @@ func TestSetUpClient(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	cfg := envtestutil.SetUpEnvtest(t)
-	client := envtestutil.SetUpClient(t, cfg, scheme)
+	cfg := testutil.SetUpEnvtest(t)
+	client := testutil.SetUpClient(t, cfg, scheme)
 
 	if client == nil {
 		t.Fatal("SetUpClient() returned nil")
@@ -77,7 +77,7 @@ func TestSetUpClient(t *testing.T) {
 
 	// Create and retrieve a service (tests direct API server access without cache)
 	svc := &corev1.Service{
-		ObjectMeta: envtestutil.Obj[corev1.Service]("test-svc", "default").ObjectMeta,
+		ObjectMeta: testutil.Obj[corev1.Service]("test-svc", "default").ObjectMeta,
 		Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
 	}
 	if err := client.Create(t.Context(), svc); err != nil {

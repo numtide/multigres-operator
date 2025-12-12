@@ -1,4 +1,4 @@
-package envtestutil
+package testutil
 
 import (
 	"context"
@@ -266,9 +266,12 @@ func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme) manager.Manager {
 func createEnvtestEnvironment(t testing.TB, crdPaths []string) *envtest.Environment {
 	t.Helper()
 
+	// Only error on missing CRD paths if paths are actually specified
+	errorIfMissing := len(crdPaths) > 0
+
 	return &envtest.Environment{
 		CRDDirectoryPaths:     crdPaths,
-		ErrorIfCRDPathMissing: true,
+		ErrorIfCRDPathMissing: errorIfMissing,
 		// Increase timeout to handle resource contention when many tests run in parallel
 		ControlPlaneStartTimeout: 60 * time.Second,
 		ControlPlaneStopTimeout:  60 * time.Second,

@@ -1,5 +1,5 @@
 // Package testutil provides testing utilities for controller tests.
-package envtestutil
+package testutil
 
 import (
 	"context"

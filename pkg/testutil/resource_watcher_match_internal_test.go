@@ -1,4 +1,4 @@
-package envtestutil
+package testutil
 
 import (
 	"context"
