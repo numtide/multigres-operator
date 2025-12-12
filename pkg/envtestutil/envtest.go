@@ -22,12 +22,20 @@ type EnvtestOption func(*envtestConfig)
 
 type envtestConfig struct {
 	generateKubeconfig bool
+	crdPaths           []string
 }
 
 // WithKubeconfig generates a kubeconfig file for debugging and keeps envtest running.
 func WithKubeconfig() EnvtestOption {
 	return func(cfg *envtestConfig) {
 		cfg.generateKubeconfig = true
+	}
+}
+
+// WithCRDPaths sets the CRD directory paths for envtest.
+func WithCRDPaths(paths ...string) EnvtestOption {
+	return func(cfg *envtestConfig) {
+		cfg.crdPaths = paths
 	}
 }
 
@@ -75,6 +83,7 @@ func getKubeconfigFromUserAdder(adder UserAdder) ([]byte, error) {
 //
 // Options:
 //   - WithKubeconfig(): Generates kubeconfig for debugging and keeps envtest running
+//   - WithCRDPaths(paths...): Sets CRD directory paths (required)
 func SetUpEnvtest(t testing.TB, opts ...EnvtestOption) *rest.Config {
 	t.Helper()
 
@@ -85,7 +94,7 @@ func SetUpEnvtest(t testing.TB, opts ...EnvtestOption) *rest.Config {
 		opt(cfg)
 	}
 
-	testEnv := createEnvtestEnvironment(t)
+	testEnv := createEnvtestEnvironment(t, cfg.crdPaths)
 	restCfg := startEnvtest(t, testEnv)
 
 	// If kubeconfig generation is enabled, do not set up cleanup.
@@ -254,14 +263,11 @@ func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme) manager.Manager {
 
 // createEnvtestEnvironment creates an envtest.Environment with CRD paths.
 // Extracted for testability.
-func createEnvtestEnvironment(t testing.TB) *envtest.Environment {
+func createEnvtestEnvironment(t testing.TB, crdPaths []string) *envtest.Environment {
 	t.Helper()
 
 	return &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join(
-			// Go back up to repo root
-			"../../../../",
-			"config", "crd", "bases")},
+		CRDDirectoryPaths:     crdPaths,
 		ErrorIfCRDPathMissing: true,
 		// Increase timeout to handle resource contention when many tests run in parallel
 		ControlPlaneStartTimeout: 60 * time.Second,

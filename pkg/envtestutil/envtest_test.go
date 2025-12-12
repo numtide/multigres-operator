@@ -4,6 +4,7 @@
 package envtestutil_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,11 @@ func TestSetUpEnvTest(t *testing.T) {
 		},
 		"with kubeconfig": {
 			opts: []envtestutil.EnvtestOption{envtestutil.WithKubeconfig()},
+		},
+		"with CRD path": {
+			opts: []envtestutil.EnvtestOption{envtestutil.WithCRDPaths(
+				filepath.Join("../../", "config", "crd", "bases"),
+			)},
 		},
 	}
 

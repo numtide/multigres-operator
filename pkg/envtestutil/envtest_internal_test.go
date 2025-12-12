@@ -20,19 +20,23 @@ import (
 func TestCreateEnvtestEnvironment(t *testing.T) {
 	t.Parallel()
 
-	env := createEnvtestEnvironment(t)
+	testPaths := []string{"/test/path1", "/test/path2"}
+	env := createEnvtestEnvironment(t, testPaths)
 
 	if env == nil {
 		t.Fatal("createEnvtestEnvironment() returned nil")
 	}
 
-	if len(env.CRDDirectoryPaths) != 1 {
-		t.Errorf("CRDDirectoryPaths length = %d, want 1", len(env.CRDDirectoryPaths))
+	if len(env.CRDDirectoryPaths) != 2 {
+		t.Errorf("CRDDirectoryPaths length = %d, want 2", len(env.CRDDirectoryPaths))
 	}
 
-	expectedPath := filepath.Join("../../../../", "config", "crd", "bases")
-	if env.CRDDirectoryPaths[0] != expectedPath {
-		t.Errorf("CRDDirectoryPaths[0] = %s, want %s", env.CRDDirectoryPaths[0], expectedPath)
+	if env.CRDDirectoryPaths[0] != testPaths[0] {
+		t.Errorf("CRDDirectoryPaths[0] = %s, want %s", env.CRDDirectoryPaths[0], testPaths[0])
+	}
+
+	if env.CRDDirectoryPaths[1] != testPaths[1] {
+		t.Errorf("CRDDirectoryPaths[1] = %s, want %s", env.CRDDirectoryPaths[1], testPaths[1])
 	}
 
 	if !env.ErrorIfCRDPathMissing {
@@ -50,7 +54,8 @@ func TestStartEnvtest(t *testing.T) {
 	}{
 		"success - valid environment": {
 			setupFunc: func(t testing.TB) *envtest.Environment {
-				return createEnvtestEnvironment(t)
+				crdPath := filepath.Join("../../", "config", "crd", "bases")
+				return createEnvtestEnvironment(t, []string{crdPath})
 			},
 			wantFatal: false,
 		},
