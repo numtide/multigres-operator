@@ -123,14 +123,22 @@ func TestWaitForDeletion(t *testing.T) {
 		"single service deletion": {
 			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-svc", Namespace: "default"},
-					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-svc",
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 80}},
+					},
 				}
 				if err := c.Create(ctx, svc); err != nil {
 					return err
 				}
 				// Wait for creation to be observed
-				watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
+				watcher.SetCmpOpts(
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreServiceRuntimeFields(),
+				)
 				return watcher.WaitForMatch(svc)
 			},
 			delete: func(ctx context.Context, c client.Client) error {
@@ -146,12 +154,22 @@ func TestWaitForDeletion(t *testing.T) {
 		"multiple services deletion": {
 			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
 				svc1 := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "svc-1", Namespace: "default"},
-					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 80}},
+					},
 				}
 				svc2 := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "svc-2", Namespace: "default"},
-					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 80}},
+					},
 				}
 				if err := c.Create(ctx, svc1); err != nil {
 					return err
@@ -159,7 +177,10 @@ func TestWaitForDeletion(t *testing.T) {
 				if err := c.Create(ctx, svc2); err != nil {
 					return err
 				}
-				watcher.SetCmpOpts(testutil.IgnoreMetaRuntimeFields(), testutil.IgnoreServiceRuntimeFields())
+				watcher.SetCmpOpts(
+					testutil.IgnoreMetaRuntimeFields(),
+					testutil.IgnoreServiceRuntimeFields(),
+				)
 				return watcher.WaitForMatch(svc1, svc2)
 			},
 			delete: func(ctx context.Context, c client.Client) error {
@@ -181,17 +202,31 @@ func TestWaitForDeletion(t *testing.T) {
 		"mixed resource types deletion": {
 			setup: func(ctx context.Context, c client.Client, watcher *testutil.ResourceWatcher) error {
 				svc := &corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "my-svc", Namespace: "default"},
-					Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-svc",
+						Namespace: "default",
+					},
+					Spec: corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Port: 80}},
+					},
 				}
 				deploy := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{Name: "my-deploy", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-deploy",
+						Namespace: "default",
+					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(1)),
-						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"app": "test"},
+						},
 						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
-							Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "nginx", Image: "nginx"}}},
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{"app": "test"},
+							},
+							Spec: corev1.PodSpec{Containers: []corev1.Container{
+								{Name: "nginx", Image: "nginx"},
+							}},
 						},
 					},
 				}
@@ -208,6 +243,8 @@ func TestWaitForDeletion(t *testing.T) {
 					testutil.IgnoreDeploymentSpecDefaults(),
 					testutil.IgnorePodSpecDefaults(),
 				)
+
+				// Make sure that the resource is created beforehand.
 				return watcher.WaitForMatch(svc, deploy)
 			},
 			delete: func(ctx context.Context, c client.Client) error {
@@ -255,7 +292,8 @@ func TestWaitForDeletion(t *testing.T) {
 	}
 }
 
-// TestWaitForDeletion_ExistingDeletedEvent tests WaitForDeletion finding existing DELETED event.
+// TestWaitForDeletion_ExistingDeletedEvent tests WaitForDeletion finding
+// existing DELETED event.
 func TestWaitForDeletion_ExistingDeletedEvent(t *testing.T) {
 	t.Parallel()
 
@@ -304,7 +342,8 @@ func TestWaitForDeletion_ExistingDeletedEvent(t *testing.T) {
 	t.Logf("Successfully found existing DELETED event: %+v", evt)
 }
 
-// TestWaitForDeletion_ContextCanceled tests WaitForDeletion when context is canceled.
+// TestWaitForDeletion_ContextCanceled tests WaitForDeletion when context is
+// canceled.
 func TestWaitForDeletion_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
@@ -329,20 +368,23 @@ func TestWaitForDeletion_ContextCanceled(t *testing.T) {
 	t.Logf("Got expected error: %v", err)
 }
 
-// TestWaitForDeletion_CascadingDelete tests cascading deletion with garbage collector.
+// TestWaitForDeletion_CascadingDelete tests cascading deletion with garbage
+// collector.
 //
-// This test is currently skipped because envtest does not support garbage collection.
-// Envtest only runs kube-apiserver and etcd, not kube-controller-manager where the
-// garbage collector controller actually runs. As a result, cascading deletion via
-// owner references does not work in envtest.
+// This test is currently skipped because envtest does not support garbage
+// collection. Envtest only runs kube-apiserver and etcd, not
+// kube-controller-manager where the garbage collector controller actually runs.
+// As a result, cascading deletion via owner references does not work in
+// envtest.
 //
 // To test cascading deletion properly, this test should be moved to a separate
-// test suite that uses kind. That will be implemented in a future PR with kind-based
-// integration tests.
+// test suite that uses kind. That will be implemented in a future PR with
+// kind-based integration tests.
 //
-// For now, we test that owner references are set correctly (which is our controller's
-// responsibility), and trust that Kubernetes GC will handle the actual deletion
-// (which is Kubernetes's responsibility and is well-tested upstream).
+// For now, we test that owner references are set correctly (which is our
+// controller's responsibility), and trust that Kubernetes GC will handle the
+// actual deletion (which is Kubernetes's responsibility and is well-tested
+// upstream).
 func TestWaitForDeletion_CascadingDelete(t *testing.T) {
 	t.Skip("Cascading deletion not supported in envtest (requires kube-controller-manager). " +
 		"This test will be moved to kind-based integration tests in a future PR. " +

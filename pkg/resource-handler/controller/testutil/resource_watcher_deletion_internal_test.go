@@ -27,7 +27,8 @@ func TestWaitForDeletion_EmptySlice(t *testing.T) {
 	}
 }
 
-// TestDeletionPredicate_NonMatchingEvents tests deletion predicate with various event types.
+// TestDeletionPredicate_NonMatchingEvents tests deletion predicate with various
+// event types.
 func TestDeletionPredicate_NonMatchingEvents(t *testing.T) {
 	t.Parallel()
 
@@ -80,7 +81,8 @@ func TestDeletionPredicate_NonMatchingEvents(t *testing.T) {
 	}
 }
 
-// TestWaitForSingleDeletion_SuccessWithUpdates tests deletion success after seeing UPDATED events.
+// TestWaitForSingleDeletion_SuccessWithUpdates tests deletion success after
+// seeing UPDATED events.
 func TestWaitForSingleDeletion_SuccessWithUpdates(t *testing.T) {
 	t.Parallel()
 
