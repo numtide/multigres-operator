@@ -18,7 +18,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 func TestSetupWithManager(t *testing.T) {

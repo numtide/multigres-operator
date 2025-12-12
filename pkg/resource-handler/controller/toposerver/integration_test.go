@@ -17,8 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 func TestSetupWithManager(t *testing.T) {
