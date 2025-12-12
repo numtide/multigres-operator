@@ -7,7 +7,7 @@
 #
 # Can be overridden: MODULES="./api ./pkg/resource-handler" make test
 #                or: MODULES="$(make changed-modules)" make test
-MODULES ?= . ./api ./pkg/cluster-handler ./pkg/data-handler ./pkg/resource-handler
+MODULES ?= . ./api ./pkg/cluster-handler ./pkg/data-handler ./pkg/resource-handler ./pkg/envtestutil
 
 # Detect changed modules compared to origin/main
 # Usage: make test MODULES="$(shell make changed-modules)"
