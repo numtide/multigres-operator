@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths-ignore:
-      - '**/*.md'
-      - '**/*.txt'
+      - "**/*.md"
+      - "**/*.txt"
 
 permissions:
   contents: write
@@ -14,6 +14,10 @@ permissions:
   security-events: write
 
 jobs:
+  build:
+    name: Build
+    uses: ./.github/workflows/_reusable-build-changed.yaml
+
   run:
     uses: ./.github/workflows/build-and-release.yaml
     with:
