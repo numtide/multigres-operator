@@ -1,0 +1,94 @@
+apiVersion: multigres.com/v1alpha1
+kind: Shard
+metadata:
+  name: kind-shard-sample
+  namespace: default
+spec:
+  # Container images for shard components
+  images:
+    postgres: postgres:16-alpine
+    multipooler: ghcr.io/multigres/multipooler:latest
+
+  # MultiOrch configuration for shard orchestration
+  multiOrch:
+    cells:
+      - zone-a
+    image: ghcr.io/multigres/multiorch:latest
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # Shard pools - different types of PostgreSQL replicas
+  pools:
+    # Primary replica pool
+    primary:
+      type: replica
+      cell: zone-a
+      database: mydb
+      tableGroup: users
+      replicas: 1
+
+      # Storage configuration - kind uses local storage provisioner
+      dataVolumeClaimTemplate:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+
+      # PostgreSQL container configuration - lower resources for kind
+      postgres:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+      # MultiPooler container configuration
+      multipooler:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+
+    # Read replica pool
+    replica:
+      type: replica
+      cell: zone-a
+      database: mydb
+      tableGroup: users
+      replicas: 1
+
+      dataVolumeClaimTemplate:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+
+      postgres:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+      multipooler:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi

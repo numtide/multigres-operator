@@ -32,8 +32,9 @@ rules:
 - apiGroups:
   - multigres.com
   resources:
-  - etcds
-  - multigateways
+  - cells
+  - shards
+  - toposervers
   verbs:
   - create
   - delete
@@ -45,15 +46,17 @@ rules:
 - apiGroups:
   - multigres.com
   resources:
-  - etcds/finalizers
-  - multigateways/finalizers
+  - cells/finalizers
+  - shards/finalizers
+  - toposervers/finalizers
   verbs:
   - update
 - apiGroups:
   - multigres.com
   resources:
-  - etcds/status
-  - multigateways/status
+  - cells/status
+  - shards/status
+  - toposervers/status
   verbs:
   - get
   - patch
