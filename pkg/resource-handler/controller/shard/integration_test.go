@@ -4,6 +4,7 @@
 package shard_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,12 +23,18 @@ import (
 )
 
 func TestSetupWithManager(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	mgr := testutil.SetUpEnvtestManager(t, scheme)
+	mgr := testutil.SetUpEnvtestManager(t, scheme,
+		testutil.WithCRDPaths(
+			filepath.Join("../../../../", "config", "crd", "bases"),
+		),
+	)
 
 	if err := (&shardcontroller.ShardReconciler{
 		Client: mgr.GetClient(),
@@ -260,7 +267,11 @@ func TestShardReconciliation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
-			mgr := testutil.SetUpEnvtestManager(t, scheme)
+			mgr := testutil.SetUpEnvtestManager(t, scheme,
+				testutil.WithCRDPaths(
+					filepath.Join("../../../../", "config", "crd", "bases"),
+				),
+			)
 
 			watcher := testutil.NewResourceWatcher(t, ctx, mgr,
 				testutil.WithCmpOpts(
