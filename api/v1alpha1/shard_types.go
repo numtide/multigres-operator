@@ -158,6 +158,12 @@ type ShardStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyPods",description="Ready pods"
 // +kubebuilder:printcolumn:name="Total",type="string",JSONPath=".status.totalPods",description="Total pods"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=shards/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=shards/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Shard is the Schema for the Shards API
 type Shard struct {
