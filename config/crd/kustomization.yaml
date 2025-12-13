@@ -2,10 +2,13 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
+- bases/multigres.com_cells.yaml
 - bases/multigres.com_etcds.yaml
 - bases/multigres.com_multigateways.yaml
 - bases/multigres.com_multiorches.yaml
 - bases/multigres.com_multipoolers.yaml
+- bases/multigres.com_shards.yaml
+- bases/multigres.com_toposervers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
