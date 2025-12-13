@@ -251,7 +251,11 @@ func startManager(t testing.TB, ctx context.Context, mgr manager.Manager) <-chan
 // cascading deletion, use kind based testing instead.
 //
 // Also, for more control, you can use the individual functions separately.
-func SetUpEnvtestManager(t testing.TB, scheme *runtime.Scheme, opts ...EnvtestOption) manager.Manager {
+func SetUpEnvtestManager(
+	t testing.TB,
+	scheme *runtime.Scheme,
+	opts ...EnvtestOption,
+) manager.Manager {
 	t.Helper()
 
 	cfg := SetUpEnvtest(t, opts...)
