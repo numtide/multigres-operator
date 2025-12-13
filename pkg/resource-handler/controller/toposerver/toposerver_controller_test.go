@@ -15,8 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/testutil"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 func TestTopoServerReconciler_Reconcile(t *testing.T) {
