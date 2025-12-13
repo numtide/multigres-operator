@@ -96,6 +96,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/numtide/multigres-operator/api v0.0.0-20251017131141-82054a1fba38 h1:lnbvut73JAp/InnhXngVP2+mWsSpeBAXBbFPs2bNfiA=
 github.com/numtide/multigres-operator/api v0.0.0-20251017131141-82054a1fba38/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
+github.com/numtide/multigres-operator/api v0.0.0-20251213015258-2919bb5e88f9 h1:Z2zMSUfdjqdvFlUgf769dOjNqp4CKNsqNzoi8mdgCag=
+github.com/numtide/multigres-operator/api v0.0.0-20251213015258-2919bb5e88f9/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20251017133246-cdcb92ad886a h1:pm0AFAymf3Dh/nbR9j8e+IGRJs9IUDPWzeGx0vkmN04=
 github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20251017133246-cdcb92ad886a/go.mod h1:AteHsDYBiIW0s9kilqQcyW9xRSYyybP/s0LGeoGH+SM=
 github.com/onsi/ginkgo/v2 v2.22.0 h1:Yed107/8DjTr0lKCNt7Dn8yQ6ybuDRQoMGrNFKzMfHg=
