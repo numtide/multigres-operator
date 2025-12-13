@@ -33,6 +33,7 @@ func BuildMultiOrchDeployment(
 
 	name := shard.Name + "-multiorch"
 	// MultiOrch doesn't have a specific cell, use default
+	// TODO: This label setup needs to be further reviewed, it probably needs more.
 	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
 
 	deployment := &appsv1.Deployment{
