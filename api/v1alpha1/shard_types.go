@@ -108,6 +108,7 @@ type MultiPoolerSpec struct {
 // MultiOrchSpec defines the configuration for the MultiPooler container.
 type MultiOrchSpec struct {
 	// Cells is the name of the cells MultiOrch needs to be deployed to.
+	// TODO: This must have at least one item, otherwise deployment won't work.
 	Cells []string `json:"cells,omitempty"`
 
 	// Image is the MultiOrch container image to use.
