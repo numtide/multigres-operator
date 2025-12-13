@@ -28,12 +28,6 @@ type CellReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=multigres.com,resources=cells,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=multigres.com,resources=cells/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=multigres.com,resources=cells/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
-
 // Reconcile handles Cell resource reconciliation.
 func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)

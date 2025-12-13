@@ -28,12 +28,6 @@ type TopoServerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=multigres.com,resources=toposervers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
-
 // Reconcile handles TopoServer resource reconciliation.
 func (r *TopoServerReconciler) Reconcile(
 	ctx context.Context,
