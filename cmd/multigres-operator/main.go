@@ -36,8 +36,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	etcdcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/etcd"
-	multigatewaycontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/multigateway"
+	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
+	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
+	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -243,18 +244,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&etcdcontroller.EtcdReconciler{
+	if err := (&shardcontroller.ShardReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Etcd")
+		setupLog.Error(err, "unable to create controller", "controller", "Shard")
 		os.Exit(1)
 	}
-	if err := (&multigatewaycontroller.MultiGatewayReconciler{
+	if err := (&cellcontroller.CellReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MultiGateway")
+		setupLog.Error(err, "unable to create controller", "controller", "Cell")
+		os.Exit(1)
+	}
+	if err := (&toposervercontroller.TopoServerReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TopoServer")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
