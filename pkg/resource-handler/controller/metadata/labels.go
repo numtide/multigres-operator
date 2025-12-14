@@ -40,6 +40,18 @@ const (
 	// LabelMultigresCell identifies which cell a resource belongs to.
 	LabelMultigresCell = "multigres.com/cell"
 
+	// LabelMultigresCluster identifies which cluster a resource belongs to.
+	LabelMultigresCluster = "multigres.com/cluster"
+
+	// LabelMultigresShard identifies which shard a resource belongs to.
+	LabelMultigresShard = "multigres.com/shard"
+
+	// LabelMultigresDatabase identifies which database a resource belongs to.
+	LabelMultigresDatabase = "multigres.com/database"
+
+	// LabelMultigresTableGroup identifies which table group a resource belongs to.
+	LabelMultigresTableGroup = "multigres.com/tablegroup"
+
 	// DefaultCellName is the default cell name when none is specified.
 	DefaultCellName = "multigres-global-topo"
 )
@@ -50,7 +62,6 @@ const (
 // Parameters:
 //   - resourceName: The name of the custom resource instance (e.g., "my-etcd-cluster")
 //   - componentName: The component type (e.g., "etcd", "gateway", "orch", "pooler")
-//   - cellName: Optional cell name. If empty, no cell label is added.
 //
 // Standard labels include:
 //   - app.kubernetes.io/name: "multigres"
@@ -58,34 +69,56 @@ const (
 //   - app.kubernetes.io/component: <componentName>
 //   - app.kubernetes.io/part-of: "multigres"
 //   - app.kubernetes.io/managed-by: "multigres-operator"
-//   - multigres.com/cell: <cellName> (uses "multigres-global-topo" if empty)
 //
 // Example usage:
 //
-//	labels := BuildStandardLabels("my-etcd", "etcd", "cell-1")
+//	labels := BuildStandardLabels("my-etcd", "etcd")
 //	// Returns: {
 //	//   "app.kubernetes.io/name": "multigres",
 //	//   "app.kubernetes.io/instance": "my-etcd",
 //	//   "app.kubernetes.io/component": "etcd",
 //	//   "app.kubernetes.io/part-of": "multigres",
 //	//   "app.kubernetes.io/managed-by": "multigres-operator",
-//	//   "multigres.com/cell": "cell-1"
 //	// }
-func BuildStandardLabels(resourceName, componentName, cellName string) map[string]string {
-	// Use default cell name if not provided
-	if cellName == "" {
-		cellName = DefaultCellName
-	}
-
+func BuildStandardLabels(resourceName, componentName string) map[string]string {
 	labels := map[string]string{
-		LabelAppName:       AppNameMultigres,
-		LabelAppInstance:   resourceName,
-		LabelAppComponent:  componentName,
-		LabelAppPartOf:     AppNameMultigres,
-		LabelAppManagedBy:  ManagedByMultigres,
-		LabelMultigresCell: cellName,
+		LabelAppName:      AppNameMultigres,
+		LabelAppInstance:  resourceName,
+		LabelAppComponent: componentName,
+		LabelAppPartOf:    AppNameMultigres,
+		LabelAppManagedBy: ManagedByMultigres,
 	}
 
+	return labels
+}
+
+// AddCellLabel adds the cell label to the provided labels map.
+func AddCellLabel(labels map[string]string, cellName string) map[string]string {
+	labels[LabelMultigresCell] = cellName
+	return labels
+}
+
+// AddClusterLabel adds the cluster label to the provided labels map.
+func AddClusterLabel(labels map[string]string, clusterName string) map[string]string {
+	labels[LabelMultigresCluster] = clusterName
+	return labels
+}
+
+// AddShardLabel adds the shard label to the provided labels map.
+func AddShardLabel(labels map[string]string, shardName string) map[string]string {
+	labels[LabelMultigresShard] = shardName
+	return labels
+}
+
+// AddDatabaseLabel adds the database label to the provided labels map.
+func AddDatabaseLabel(labels map[string]string, databaseName string) map[string]string {
+	labels[LabelMultigresDatabase] = databaseName
+	return labels
+}
+
+// AddTableGroupLabel adds the table group label to the provided labels map.
+func AddTableGroupLabel(labels map[string]string, tableGroupName string) map[string]string {
+	labels[LabelMultigresTableGroup] = tableGroupName
 	return labels
 }
 
