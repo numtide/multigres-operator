@@ -733,7 +733,7 @@ spec:
   # Topology flags for the Cell controller to act on.
   topologyReconciliation:
     registerCell: true
-    pruneTablets: true
+    prunePoolers: true
 
 status:
   conditions:
