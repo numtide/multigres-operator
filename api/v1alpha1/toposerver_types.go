@@ -22,46 +22,31 @@ import (
 )
 
 // ============================================================================
-// TopoServerSpec Spec (Read-only API)
+// TopoServer Spec (Read-only API)
 // ============================================================================
+//
+// TopoServer is a child CR managed by MultigresCluster (Global) or Cell (Local).
 
-// TopoServerChildSpec defines the desired state of TopoServer
-// This spec is populated by the MultigresCluster (or MultiCell) controller.
-// NOTE: Maybe the RootPath can be included with TopoServerSpec
-type TopoServerChildSpec struct {
-	// RootPath is the root path to use within the etcd cluster.
-	// +kubebuilder:validation:MinLength=1
-	RootPath string `json:"rootPath"`
+// EndpointUrl is a string restricted to 2048 characters for strict validation budgeting.
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=2048
+type EndpointUrl string
 
-	// TopoServerSpec contains the reusable spec for deploying an etcd cluster.
-	TopoServerSpec `json:",inline"`
-}
-
-// TopoServerSpec defines the desired state of a managed etcd cluster.
-// This is reusable for both Global and Local TopoServers.
-// +kubebuilder:validation:XValidation:rule="!has(self.replicas) || self.replicas % 2 == 1",message="etcd cluster replicas should be an odd number (1, 3, 5, etc.)"
-// TODO: Re-enable storage validation after adding StorageSize/StorageClassName fields for simpler configuration
+// TopoServerSpec defines the desired state of TopoServer.
 type TopoServerSpec struct {
-	// Image is the etcd container image to use.
-	// +kubebuilder:validation:MinLength=1
-	// +optional
-	Image string `json:"image,omitempty"`
-
-	// Replicas is the desired number of etcd pods.
+	// Replicas is the desired number of etcd members.
 	// +kubebuilder:validation:Minimum=1
-	// +optional
-	Replicas *int32 `json:"replicas,omitempty"`
+	Replicas int32 `json:"replicas"`
 
-	// Affinity defines the pod's scheduling constraints.
-	// +optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// Storage configuration.
+	Storage StorageSpec `json:"storage"`
 
-	// DataVolumeClaimTemplate provides a spec for the PersistentVolumeClaim
-	// that will be created for each etcd replica.
-	// +optional
-	DataVolumeClaimTemplate corev1.PersistentVolumeClaimSpec `json:"dataVolumeClaimTemplate,omitempty"`
+	// Image to use for Etcd.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	Image string `json:"image"`
 
-	// Resources defines the compute resource requirements for the etcd container.
+	// Resources defines the compute resource requirements.
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
@@ -70,31 +55,113 @@ type TopoServerSpec struct {
 // CR Controller Status Specs
 // ============================================================================
 
-// TopoServerStatus defines the observed state of TopoServer
+// TopoServerStatus defines the observed state of TopoServer.
 type TopoServerStatus struct {
-	// ObservedGeneration is the most recent generation observed by the controller.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Conditions represent the latest available observations of the TopoServer's state.
+	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// Replicas is the current number of etcd pods.
+	// ClientService is the name of the service for clients.
 	// +optional
-	Replicas int32 `json:"replicas,omitempty"`
+	ClientService string `json:"clientService,omitempty"`
 
-	// ReadyReplicas is the number of etcd pods ready to serve requests.
+	// PeerService is the name of the service for peers.
 	// +optional
-	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+	PeerService string `json:"peerService,omitempty"`
+}
 
-	// ClientServiceName is the name of the service for etcd clients.
-	// +optional
-	ClientServiceName string `json:"clientServiceName,omitempty"`
+// ============================================================================
+// TopoServer Component Specs
+// ============================================================================
+//
+// These components are not directly used in the formation of this child CR,
+// but they are used to configure the toposerver via the MultigresCluster
 
-	// PeerServiceName is the name of the service for etcd peer communication.
+// EtcdSpec defines the configuration for a managed Etcd cluster.
+type EtcdSpec struct {
+	// Image is the Etcd container image.
 	// +optional
-	PeerServiceName string `json:"peerServiceName,omitempty"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	Image string `json:"image,omitempty"`
+
+	// Replicas is the desired number of etcd members.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Storage configuration for Etcd data.
+	// +optional
+	Storage StorageSpec `json:"storage,omitempty"`
+
+	// Resources defines the compute resource requirements.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// GlobalTopoServerSpec defines the configuration for the global topology server.
+// It can be either an inline Etcd spec, an External reference, or a Template reference.
+// +kubebuilder:validation:XValidation:rule="[has(self.etcd), has(self.external), has(self.templateRef)].filter(x, x).size() == 1",message="must specify exactly one of 'etcd', 'external', or 'templateRef'"
+type GlobalTopoServerSpec struct {
+	// Etcd defines an inline managed Etcd cluster.
+	// +optional
+	Etcd *EtcdSpec `json:"etcd,omitempty"`
+
+	// External defines connection details for an unmanaged, external topo server.
+	// +optional
+	External *ExternalTopoServerSpec `json:"external,omitempty"`
+
+	// TemplateRef refers to a CoreTemplate to load configuration from.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	TemplateRef string `json:"templateRef,omitempty"`
+}
+
+// ExternalTopoServerSpec defines connection details for an external system.
+type ExternalTopoServerSpec struct {
+	// Endpoints is a list of client URLs.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=20
+	// +kubebuilder:validation:XValidation:rule="self.all(x, x.matches('^https?://'))",message="endpoints must be valid URLs"
+	Endpoints []EndpointUrl `json:"endpoints"`
+
+	// CASecret is the name of the secret containing the CA certificate.
+	// +optional
+	// +kubebuilder:validation:MaxLength=253
+	CASecret string `json:"caSecret,omitempty"`
+
+	// ClientCertSecret is the name of the secret containing the client cert/key.
+	// +optional
+	// +kubebuilder:validation:MaxLength=253
+	ClientCertSecret string `json:"clientCertSecret,omitempty"`
+}
+
+// LocalTopoServerSpec defines configuration for Cell-local topology.
+// +kubebuilder:validation:XValidation:rule="has(self.etcd) || has(self.external)",message="must specify either 'etcd' or 'external'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.etcd) && has(self.external))",message="only one of 'etcd' or 'external' can be set"
+type LocalTopoServerSpec struct {
+	// Etcd defines an inline managed Etcd cluster.
+	// +optional
+	Etcd *EtcdSpec `json:"etcd,omitempty"`
+
+	// External defines connection details for an unmanaged, external topo server.
+	// +optional
+	External *ExternalTopoServerSpec `json:"external,omitempty"`
+}
+
+// GlobalTopoServerRef defines a reference to the global topo server.
+// Used by Cell, TableGroup, and Shard.
+type GlobalTopoServerRef struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	Address string `json:"address"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	RootPath string `json:"rootPath"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Implementation string `json:"implementation"`
 }
 
 // ============================================================================
@@ -103,32 +170,23 @@ type TopoServerStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status",description="Current availability status"
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.readyReplicas",description="Ready replicas"
-// +kubebuilder:printcolumn:name="Total",type="string",JSONPath=".status.replicas",description="Total replicas"
-// +kubebuilder:printcolumn:name="Service",type="string",JSONPath=".status.clientServiceName",description="Client Service"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:rbac:groups=multigres.com,resources=toposervers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
 // TopoServer is the Schema for the toposervers API
 type TopoServer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TopoServerChildSpec `json:"spec,omitempty"`
-	Status TopoServerStatus    `json:"status,omitempty"`
+	Spec   TopoServerSpec   `json:"spec,omitempty"`
+	Status TopoServerStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
 // TopoServerList contains a list of TopoServer
 type TopoServerList struct {
-	metav1.TypeMeta `             json:",inline"`
-	metav1.ListMeta `             json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TopoServer `json:"items"`
 }
 
