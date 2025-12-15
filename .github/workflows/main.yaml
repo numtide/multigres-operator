@@ -22,3 +22,12 @@ jobs:
     uses: ./.github/workflows/build-and-release.yaml
     with:
       push-container-image: true
+
+  coverage:
+    name: Coverage
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/_reusable-test-coverage.yaml
+    with:
+      COVERAGE_THRESHOLD: 0 # Because there is no test, setting threshold to 0
