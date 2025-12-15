@@ -67,32 +67,29 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	// Reconcile Logic
 	resolver := &TemplateResolver{
 		Client:    r.Client,
 		Namespace: cluster.Namespace,
 		Defaults:  cluster.Spec.TemplateDefaults,
 	}
 
-	// 1. Reconcile Global Components (TopoServer & MultiAdmin)
+	// Reconcile Global Components (TopoServer & MultiAdmin)
 	if err := r.reconcileGlobalComponents(ctx, cluster, resolver); err != nil {
 		l.Error(err, "Failed to reconcile global components")
 		return ctrl.Result{}, err
 	}
 
-	// 2. Reconcile Cells
 	if err := r.reconcileCells(ctx, cluster, resolver); err != nil {
 		l.Error(err, "Failed to reconcile cells")
 		return ctrl.Result{}, err
 	}
 
-	// 3. Reconcile TableGroups (and implicitly Shards)
+	// Reconcile TableGroups (and implicitly Shards)
 	if err := r.reconcileDatabases(ctx, cluster, resolver); err != nil {
 		l.Error(err, "Failed to reconcile databases")
 		return ctrl.Result{}, err
 	}
 
-	// 4. Update Status
 	if err := r.updateStatus(ctx, cluster); err != nil {
 		l.Error(err, "Failed to update status")
 		return ctrl.Result{}, err
@@ -102,7 +99,7 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) error {
-	// Check Cells
+
 	cells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return err
@@ -111,7 +108,6 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 		return fmt.Errorf("cells still exist")
 	}
 
-	// Check TableGroups
 	tgs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, tgs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return err
@@ -120,7 +116,6 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 		return fmt.Errorf("tablegroups still exist")
 	}
 
-	// Check TopoServers
 	ts := &multigresv1alpha1.TopoServerList{}
 	if err := r.List(ctx, ts, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return err
@@ -133,7 +128,6 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 }
 
 func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
-	// CoreTemplate
 	var coreTpl *multigresv1alpha1.CoreTemplate
 	var err error
 
@@ -149,7 +143,6 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 		return err
 	}
 
-	// 1. Global Topo Server
 	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, coreTpl)
 	if topoSpec.Etcd != nil {
 		// Create Child TopoServer
@@ -175,7 +168,6 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 		}
 	}
 
-	// 2. MultiAdmin Deployment
 	multiAdminSpec := ResolveMultiAdmin(&cluster.Spec.MultiAdmin, coreTpl)
 	if multiAdminSpec != nil {
 		deploy := &appsv1.Deployment{
@@ -226,7 +218,6 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 
 	activeCellNames := make(map[string]bool)
 
-	// Collect all cell names for the AllCells field
 	allCellNames := []multigresv1alpha1.CellName{}
 	for _, cellCfg := range cluster.Spec.Cells {
 		allCellNames = append(allCellNames, multigresv1alpha1.CellName(cellCfg.Name))
@@ -258,14 +249,12 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 			cellCR.Spec.MultiGateway = gatewaySpec
 			cellCR.Spec.AllCells = allCellNames
 
-			// Global Topo Ref
 			cellCR.Spec.GlobalTopoServer = r.getGlobalTopoRef(cluster)
 
 			if localTopoSpec != nil {
 				cellCR.Spec.TopoServer = *localTopoSpec
 			}
 
-			// Topology Flags (defaults)
 			cellCR.Spec.TopologyReconciliation = multigresv1alpha1.TopologyReconciliation{
 				RegisterCell: true,
 				PruneTablets: true,
@@ -277,7 +266,6 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 		}
 	}
 
-	// Prune orphan cells
 	for _, item := range existingCells.Items {
 		if !activeCellNames[item.Spec.Name] {
 			if err := r.Delete(ctx, &item); err != nil {
@@ -301,7 +289,6 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 		for _, tg := range db.TableGroups {
 			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, db.Name, tg.Name)
 			if len(tgNameFull) > 63 {
-				// Prevent long names from breaking k8s
 				l := log.FromContext(ctx)
 				l.Info("TableGroup name too long", "name", tgNameFull)
 			} else {
@@ -390,7 +377,6 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 	cluster.Status.Cells = make(map[string]multigresv1alpha1.CellStatusSummary)
 	cluster.Status.Databases = make(map[string]multigresv1alpha1.DatabaseStatusSummary)
 
-	// Cells
 	cells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return err
@@ -410,7 +396,6 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 		}
 	}
 
-	// TableGroups
 	tgs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, tgs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return err

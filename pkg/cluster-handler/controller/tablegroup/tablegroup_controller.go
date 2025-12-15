@@ -17,7 +17,6 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
-// TableGroupReconciler reconciles a TableGroup object
 type TableGroupReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -41,7 +40,6 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	activeShardNames := make(map[string]bool)
 
-	// Reconcile Shards
 	for _, shardSpec := range tg.Spec.Shards {
 		shardNameFull := fmt.Sprintf("%s-%s", tg.Name, shardSpec.Name)
 		activeShardNames[shardNameFull] = true
@@ -112,7 +110,6 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 	} else {
-		// FIX: Return error instead of swallowing it
 		return ctrl.Result{}, err
 	}
 
