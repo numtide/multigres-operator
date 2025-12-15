@@ -23,6 +23,17 @@ spec:
         cpu: 200m
         memory: 256Mi
 
+  # MultiOrch deployment - cell orchestration
+  multiorch:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
   # Reference to the global topology server
   globalTopoServer:
     rootPath: /multigres
