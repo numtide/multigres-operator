@@ -108,6 +108,11 @@ type TopoServerStatus struct {
 // +kubebuilder:printcolumn:name="Total",type="string",JSONPath=".status.replicas",description="Total replicas"
 // +kubebuilder:printcolumn:name="Service",type="string",JSONPath=".status.clientServiceName",description="Client Service"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // TopoServer is the Schema for the toposervers API
 type TopoServer struct {

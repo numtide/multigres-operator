@@ -173,6 +173,11 @@ type CellStatus struct {
 // +kubebuilder:printcolumn:name="Orch Ready",type="string",JSONPath=".status.multiorchAvailable",description="Orchestrator status"
 // +kubebuilder:printcolumn:name="Topo Ready",type="string",JSONPath=".status.topoServerAvailable",description="Topo server status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:rbac:groups=multigres.com,resources=cells,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=cells/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=cells/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 
 // Cell is the Schema for the Cells API
 type Cell struct {
