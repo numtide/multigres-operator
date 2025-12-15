@@ -97,10 +97,3 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-// replace github.com/numtide/multigres-operator/api => ./api
-
-// replace github.com/numtide/multigres-operator/pkg/cluster-handler => ./pkg/cluster-handler
-
-// replace github.com/numtide/multigres-operator/pkg/resource-handler => ./pkg/resource-handler
-
-// replace github.com/numtide/multigres-operator/pkg/data-handler => ./pkg/data-handler
