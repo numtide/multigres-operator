@@ -3,8 +3,8 @@ module github.com/numtide/multigres-operator
 go 1.25.0
 
 require (
-	github.com/numtide/multigres-operator/api v0.0.0-20251017131141-82054a1fba38
-	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20251017133246-cdcb92ad886a
+	github.com/numtide/multigres-operator/api v0.0.0-20251121230214-7690ea02d33a
+	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20251122024957-4d8b69ea475b
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
 	sigs.k8s.io/controller-runtime v0.22.3
@@ -43,6 +43,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20251122024957-4d8b69ea475b // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
@@ -95,3 +96,11 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+// replace github.com/numtide/multigres-operator/api => ./api
+
+// replace github.com/numtide/multigres-operator/pkg/cluster-handler => ./pkg/cluster-handler
+
+// replace github.com/numtide/multigres-operator/pkg/resource-handler => ./pkg/resource-handler
+
+// replace github.com/numtide/multigres-operator/pkg/data-handler => ./pkg/data-handler
