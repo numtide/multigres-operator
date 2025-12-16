@@ -80,8 +80,9 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 
 	baseCluster := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName,
-			Namespace: namespace,
+			Name:       clusterName,
+			Namespace:  namespace,
+			Finalizers: []string{finalizerName}, // Pre-populate finalizer to allow tests to reach reconcile logic
 		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			Images: multigresv1alpha1.ClusterImages{
@@ -131,6 +132,24 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		// Success Scenarios
 		// ---------------------------------------------------------------------
 		{
+			name: "Create: Adds Finalizer",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Finalizers = nil // Explicitly remove finalizer to test addition
+				return c
+			}(),
+			existingObjects: []client.Object{},
+			expectError:     false,
+			validate: func(t *testing.T, c client.Client) {
+				ctx := context.Background()
+				updatedCluster := &multigresv1alpha1.MultigresCluster{}
+				_ = c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)
+				if !controllerutil.ContainsFinalizer(updatedCluster, finalizerName) {
+					t.Error("Finalizer was not added to Cluster")
+				}
+			},
+		},
+		{
 			name:            "Create: Full Cluster Creation with Templates",
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
@@ -162,6 +181,69 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				deploy := &appsv1.Deployment{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
 					t.Fatal("MultiAdmin not created")
+				}
+			},
+		},
+		{
+			name: "Create: Inline Etcd",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				// Use inline Etcd for GlobalTopoServer to test getGlobalTopoRef branch
+				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd:inline"},
+				}
+				c.Spec.TemplateDefaults.CoreTemplate = ""
+				return c
+			}(),
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			expectError:     false,
+			validate: func(t *testing.T, c client.Client) {
+				ctx := context.Background()
+				ts := &multigresv1alpha1.TopoServer{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
+					t.Fatal("Global TopoServer not created")
+				}
+				if ts.Spec.Etcd.Image != "etcd:inline" {
+					t.Errorf("Unexpected image: %s", ts.Spec.Etcd.Image)
+				}
+			},
+		},
+		{
+			name: "Create: Defaults and Optional Components",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.CoreTemplate = "minimal-core"
+				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{} // Use defaults
+				// Remove MultiAdmin to test skip logic
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}
+				return c
+			}(),
+			existingObjects: []client.Object{
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "minimal-core", Namespace: namespace},
+					Spec: multigresv1alpha1.CoreTemplateSpec{
+						GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+							Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd:v1"}, // Replicas nil
+						},
+					},
+				},
+				cellTpl, shardTpl,
+			},
+			expectError: false,
+			validate: func(t *testing.T, c client.Client) {
+				ctx := context.Background()
+				// Verify TopoServer created with default replicas (3)
+				ts := &multigresv1alpha1.TopoServer{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
+					t.Fatal("Global TopoServer not created")
+				}
+				if *ts.Spec.Etcd.Replicas != 3 {
+					t.Errorf("Expected default replicas 3, got %d", *ts.Spec.Etcd.Replicas)
+				}
+				// Verify MultiAdmin NOT created
+				deploy := &appsv1.Deployment{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); !apierrors.IsNotFound(err) {
+					t.Error("MultiAdmin should not have been created")
 				}
 			},
 		},
@@ -400,8 +482,12 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			expectError:     true,
 		},
 		{
-			name:            "Error: Add Finalizer Failed",
-			cluster:         baseCluster.DeepCopy(),
+			name: "Error: Add Finalizer Failed",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Finalizers = nil // Ensure we trigger the AddFinalizer path
+				return c
+			}(),
 			existingObjects: []client.Object{},
 			failureConfig:   &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
 			expectError:     true,
@@ -909,6 +995,13 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		if res2.Etcd.Image != "inline" {
 			t.Error("Failed to fallback to inline when core template nil")
 		}
+
+		// New case: Empty spec (defaults), should use core template
+		spec3 := &multigresv1alpha1.GlobalTopoServerSpec{}
+		res3 := ResolveGlobalTopo(spec3, core)
+		if res3.Etcd.Image != "resolved" {
+			t.Error("Failed to use default core template when spec is empty")
+		}
 	})
 
 	t.Run("ResolveMultiAdmin", func(t *testing.T) {
@@ -930,6 +1023,13 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		res3 := ResolveMultiAdmin(&multigresv1alpha1.MultiAdminConfig{}, nil)
 		if res3 != nil {
 			t.Error("Expected nil for empty config")
+		}
+
+		// New case: Empty spec (defaults), should use core template
+		spec4 := &multigresv1alpha1.MultiAdminConfig{}
+		res4 := ResolveMultiAdmin(spec4, core)
+		if *res4.Replicas != 10 {
+			t.Error("Failed to use default core template when spec is empty")
 		}
 	})
 }

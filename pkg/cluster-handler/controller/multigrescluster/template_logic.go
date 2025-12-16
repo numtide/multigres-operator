@@ -203,24 +203,31 @@ func mergePoolSpec(base multigresv1alpha1.PoolSpec, override multigresv1alpha1.P
 }
 
 func ResolveGlobalTopo(spec *multigresv1alpha1.GlobalTopoServerSpec, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.GlobalTopoServerSpec {
-	if spec.TemplateRef != "" {
-		if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
-			return &multigresv1alpha1.GlobalTopoServerSpec{
-				Etcd: coreTemplate.Spec.GlobalTopoServer.Etcd,
-			}
+	// If inline config is present, use it.
+	if spec.Etcd != nil || spec.External != nil {
+		return spec
+	}
+
+	// Otherwise, use the template (loaded by caller based on TemplateRef or Defaults)
+	if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
+		return &multigresv1alpha1.GlobalTopoServerSpec{
+			Etcd: coreTemplate.Spec.GlobalTopoServer.Etcd,
 		}
 	}
+
 	return spec
 }
 
 func ResolveMultiAdmin(spec *multigresv1alpha1.MultiAdminConfig, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.StatelessSpec {
-	if spec.TemplateRef != "" {
-		if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil {
-			return coreTemplate.Spec.MultiAdmin
-		}
-	}
+	// If inline spec is present, use it.
 	if spec.Spec != nil {
 		return spec.Spec
 	}
+
+	// Otherwise, use the template (loaded by caller based on TemplateRef or Defaults)
+	if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil {
+		return coreTemplate.Spec.MultiAdmin
+	}
+
 	return nil
 }
