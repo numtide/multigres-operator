@@ -3,11 +3,11 @@ module github.com/numtide/multigres-operator
 go 1.25.0
 
 require (
-	github.com/numtide/multigres-operator/api v0.0.0-20251121230214-7690ea02d33a
+	github.com/numtide/multigres-operator/api v0.0.0-20251216141048-5b96bd549d06
 	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20251122024957-4d8b69ea475b
-	k8s.io/apimachinery v0.34.1
-	k8s.io/client-go v0.34.1
-	sigs.k8s.io/controller-runtime v0.22.3
+	k8s.io/apimachinery v0.34.3
+	k8s.io/client-go v0.34.3
+	sigs.k8s.io/controller-runtime v0.22.4
 )
 
 require (
@@ -43,7 +43,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20251122024957-4d8b69ea475b // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
@@ -83,13 +82,13 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/api v0.34.1 // indirect
+	k8s.io/api v0.34.3 // indirect
 	k8s.io/apiextensions-apiserver v0.34.1 // indirect
 	k8s.io/apiserver v0.34.1 // indirect
 	k8s.io/component-base v0.34.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
-	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
+	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
@@ -97,3 +96,10 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
+// replace github.com/numtide/multigres-operator/api => ./api
+
+replace github.com/numtide/multigres-operator/pkg/cluster-handler => ./pkg/cluster-handler
+
+// replace github.com/numtide/multigres-operator/pkg/resource-handler => ./pkg/resource-handler
+
+// replace github.com/numtide/multigres-operator/pkg/data-handler => ./pkg/data-handler

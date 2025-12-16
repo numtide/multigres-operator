@@ -141,14 +141,14 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 fmt: ## Run go fmt against code in all modules
 	@for mod in $(MODULES); do \
 		echo "==> Formatting $$mod..."; \
-		(cd $$mod && GOWORK=off go fmt ./...) || exit 1; \
+		(cd $$mod go fmt ./...) || exit 1; \
 	done
 
 .PHONY: vet
 vet: ## Run go vet against code in all modules
 	@for mod in $(MODULES); do \
 		echo "==> Vetting $$mod..."; \
-		(cd $$mod && GOWORK=off go vet ./...) || exit 1; \
+		(cd $$mod go vet ./...) || exit 1; \
 	done
 
 .PHONY: lint

@@ -154,14 +154,17 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 			},
 		}
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
-			ts.Spec.Image = topoSpec.Etcd.Image
+			replicas := int32(3)
 			if topoSpec.Etcd.Replicas != nil {
-				ts.Spec.Replicas = *topoSpec.Etcd.Replicas
-			} else {
-				ts.Spec.Replicas = 3 // Default
+				replicas = *topoSpec.Etcd.Replicas
 			}
-			ts.Spec.Storage = topoSpec.Etcd.Storage
-			ts.Spec.Resources = topoSpec.Etcd.Resources
+
+			ts.Spec.Etcd = &multigresv1alpha1.EtcdSpec{
+				Image:     topoSpec.Etcd.Image,
+				Replicas:  &replicas,
+				Storage:   topoSpec.Etcd.Storage,
+				Resources: topoSpec.Etcd.Resources,
+			}
 			return controllerutil.SetControllerReference(cluster, ts, r.Scheme)
 		}); err != nil {
 			return err
@@ -257,7 +260,7 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 
 			cellCR.Spec.TopologyReconciliation = multigresv1alpha1.TopologyReconciliation{
 				RegisterCell: true,
-				PruneTablets: true,
+				PrunePoolers: true,
 			}
 
 			return controllerutil.SetControllerReference(cluster, cellCR, r.Scheme)

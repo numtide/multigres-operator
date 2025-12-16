@@ -205,16 +205,18 @@ func mergePoolSpec(base multigresv1alpha1.PoolSpec, override multigresv1alpha1.P
 func ResolveGlobalTopo(spec *multigresv1alpha1.GlobalTopoServerSpec, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.GlobalTopoServerSpec {
 	if spec.TemplateRef != "" {
 		if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
-			return coreTemplate.Spec.GlobalTopoServer
+			return &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: coreTemplate.Spec.GlobalTopoServer.Etcd,
+			}
 		}
 	}
 	return spec
 }
 
-func ResolveMultiAdmin(spec *multigresv1alpha1.ComponentConfig, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.StatelessSpec {
+func ResolveMultiAdmin(spec *multigresv1alpha1.MultiAdminConfig, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.StatelessSpec {
 	if spec.TemplateRef != "" {
-		if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil && coreTemplate.Spec.MultiAdmin.Spec != nil {
-			return coreTemplate.Spec.MultiAdmin.Spec
+		if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil {
+			return coreTemplate.Spec.MultiAdmin
 		}
 	}
 	if spec.Spec != nil {

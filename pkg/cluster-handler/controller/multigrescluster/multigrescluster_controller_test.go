@@ -37,18 +37,16 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 	coreTpl := &multigresv1alpha1.CoreTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-core", Namespace: namespace},
 		Spec: multigresv1alpha1.CoreTemplateSpec{
-			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+			GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:    "etcd:v1",
 					Replicas: ptr.To(int32(3)),
 				},
 			},
-			MultiAdmin: &multigresv1alpha1.ComponentConfig{
-				Spec: &multigresv1alpha1.StatelessSpec{
-					Replicas: ptr.To(int32(1)),
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("100m")},
-					},
+			MultiAdmin: &multigresv1alpha1.StatelessSpec{
+				Replicas: ptr.To(int32(1)),
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("100m")},
 				},
 			},
 		},
@@ -101,7 +99,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
 				TemplateRef: "default-core",
 			},
-			MultiAdmin: multigresv1alpha1.ComponentConfig{
+			MultiAdmin: multigresv1alpha1.MultiAdminConfig{
 				TemplateRef: "default-core",
 			},
 			Cells: []multigresv1alpha1.CellConfig{
@@ -153,7 +151,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{
 					External: &multigresv1alpha1.ExternalTopoServerSpec{Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"}},
 				}
-				c.Spec.MultiAdmin = multigresv1alpha1.ComponentConfig{TemplateRef: "default-core"}
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{TemplateRef: "default-core"}
 				c.Spec.TemplateDefaults.CoreTemplate = ""
 				return c
 			}(),
@@ -227,7 +225,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{External: &multigresv1alpha1.ExternalTopoServerSpec{Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"}}}
-				c.Spec.MultiAdmin = multigresv1alpha1.ComponentConfig{Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
 				c.Spec.Cells[0].Spec = &multigresv1alpha1.CellInlineSpec{MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(4))}}
 				c.Spec.Databases[0].TableGroups[0].Shards[0].Spec = &multigresv1alpha1.ShardInlineSpec{
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))}},
@@ -899,7 +897,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		spec := &multigresv1alpha1.GlobalTopoServerSpec{TemplateRef: "t1"}
 		core := &multigresv1alpha1.CoreTemplate{
 			Spec: multigresv1alpha1.CoreTemplateSpec{
-				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{Etcd: &multigresv1alpha1.EtcdSpec{Image: "resolved"}},
+				GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{Etcd: &multigresv1alpha1.EtcdSpec{Image: "resolved"}},
 			},
 		}
 		res := ResolveGlobalTopo(spec, core)
@@ -914,24 +912,22 @@ func TestTemplateLogic_Unit(t *testing.T) {
 	})
 
 	t.Run("ResolveMultiAdmin", func(t *testing.T) {
-		spec := &multigresv1alpha1.ComponentConfig{TemplateRef: "t1"}
+		spec := &multigresv1alpha1.MultiAdminConfig{TemplateRef: "t1"}
 		core := &multigresv1alpha1.CoreTemplate{
 			Spec: multigresv1alpha1.CoreTemplateSpec{
-				MultiAdmin: &multigresv1alpha1.ComponentConfig{
-					Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(10))},
-				},
+				MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(10))},
 			},
 		}
 		res := ResolveMultiAdmin(spec, core)
 		if *res.Replicas != 10 {
 			t.Error("Failed to resolve MultiAdmin from template")
 		}
-		spec2 := &multigresv1alpha1.ComponentConfig{TemplateRef: "t1", Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
+		spec2 := &multigresv1alpha1.MultiAdminConfig{TemplateRef: "t1", Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
 		res2 := ResolveMultiAdmin(spec2, nil)
 		if *res2.Replicas != 5 {
 			t.Error("Failed to fallback to inline MultiAdmin")
 		}
-		res3 := ResolveMultiAdmin(&multigresv1alpha1.ComponentConfig{}, nil)
+		res3 := ResolveMultiAdmin(&multigresv1alpha1.MultiAdminConfig{}, nil)
 		if res3 != nil {
 			t.Error("Expected nil for empty config")
 		}
