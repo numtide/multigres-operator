@@ -42,7 +42,7 @@ type MultigresClusterSpec struct {
 
 	// MultiAdmin defines the configuration for the MultiAdmin component.
 	// +optional
-	MultiAdmin ComponentConfig `json:"multiadmin,omitempty"`
+	MultiAdmin MultiAdminConfig `json:"multiadmin,omitempty"`
 
 	// Cells defines the list of cells (failure domains) in the cluster.
 	// +optional
@@ -119,6 +119,26 @@ type TemplateDefaults struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	ShardTemplate string `json:"shardTemplate,omitempty"`
+}
+
+// ============================================================================
+// MultiAdmin Config Section Specs
+// ============================================================================
+
+// MultiAdminConfig defines the configuration for MultiAdmin in the Cluster.
+// It allows either an inline spec OR a reference to a CoreTemplate.
+// +kubebuilder:validation:XValidation:rule="has(self.spec) || has(self.templateRef)",message="must specify either 'spec' or 'templateRef'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.templateRef))",message="cannot specify both 'spec' and 'templateRef'"
+type MultiAdminConfig struct {
+	// Spec defines the inline configuration.
+	// +optional
+	Spec *StatelessSpec `json:"spec,omitempty"`
+
+	// TemplateRef refers to a CoreTemplate to load configuration from.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	TemplateRef string `json:"templateRef,omitempty"`
 }
 
 // ============================================================================
