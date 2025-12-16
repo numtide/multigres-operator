@@ -41,96 +41,100 @@ spec:
           metadata:
             type: object
           spec:
-            description: TopoServerSpec defines the desired state of TopoServer.
+            description: TopoServerSpec defines the desired state of TopoServer (Child
+              CR).
             properties:
-              image:
-                description: Image to use for Etcd.
-                maxLength: 512
-                minLength: 1
-                type: string
-              replicas:
-                description: Replicas is the desired number of etcd members.
-                format: int32
-                minimum: 1
-                type: integer
-              resources:
-                description: Resources defines the compute resource requirements.
+              etcd:
+                description: Etcd defines the configuration if using Etcd.
                 properties:
-                  claims:
-                    description: |-
-                      Claims lists the names of resources, defined in spec.resourceClaims,
-                      that are used by this container.
-
-                      This field depends on the
-                      DynamicResourceAllocation feature gate.
-
-                      This field is immutable. It can only be set for containers.
-                    items:
-                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                      properties:
-                        name:
-                          description: |-
-                            Name must match the name of one entry in pod.spec.resourceClaims of
-                            the Pod where this field is used. It makes that resource available
-                            inside a container.
-                          type: string
-                        request:
-                          description: |-
-                            Request is the name chosen for a request in the referenced claim.
-                            If empty, everything from the claim is made available, otherwise
-                            only the result of this request.
-                          type: string
-                      required:
-                      - name
-                      type: object
-                    type: array
-                    x-kubernetes-list-map-keys:
-                    - name
-                    x-kubernetes-list-type: map
-                  limits:
-                    additionalProperties:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                    description: |-
-                      Limits describes the maximum amount of compute resources allowed.
-                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                    type: object
-                  requests:
-                    additionalProperties:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                    description: |-
-                      Requests describes the minimum amount of compute resources required.
-                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                    type: object
-                type: object
-              storage:
-                description: Storage configuration.
-                properties:
-                  class:
-                    description: Class is the StorageClass name.
-                    maxLength: 63
+                  image:
+                    description: Image is the Etcd container image.
+                    maxLength: 512
                     minLength: 1
                     type: string
-                  size:
-                    description: Size of the persistent volume.
-                    maxLength: 63
-                    pattern: ^([0-9]+)(.+)$
-                    type: string
+                  replicas:
+                    description: Replicas is the desired number of etcd members.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  resources:
+                    description: Resources defines the compute resource requirements.
+                    properties:
+                      claims:
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+
+                          This field depends on the
+                          DynamicResourceAllocation feature gate.
+
+                          This field is immutable. It can only be set for containers.
+                        items:
+                          description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                          properties:
+                            name:
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
+                              type: string
+                            request:
+                              description: |-
+                                Request is the name chosen for a request in the referenced claim.
+                                If empty, everything from the claim is made available, otherwise
+                                only the result of this request.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        type: object
+                    type: object
+                  storage:
+                    description: Storage configuration for Etcd data.
+                    properties:
+                      class:
+                        description: Class is the StorageClass name.
+                        maxLength: 63
+                        minLength: 1
+                        type: string
+                      size:
+                        description: Size of the persistent volume.
+                        maxLength: 63
+                        pattern: ^([0-9]+)(.+)$
+                        type: string
+                    type: object
                 type: object
-            required:
-            - image
-            - replicas
-            - storage
             type: object
+            x-kubernetes-validations:
+            - message: must specify 'etcd' configuration
+              rule: has(self.etcd)
           status:
             description: TopoServerStatus defines the observed state of TopoServer.
             properties:

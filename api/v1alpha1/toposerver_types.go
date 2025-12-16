@@ -32,23 +32,11 @@ import (
 // +kubebuilder:validation:MaxLength=2048
 type EndpointUrl string
 
-// TopoServerSpec defines the desired state of TopoServer.
+// TopoServerSpec defines the desired state of TopoServer (Child CR).
+// +kubebuilder:validation:XValidation:rule="has(self.etcd)",message="must specify 'etcd' configuration"
 type TopoServerSpec struct {
-	// Replicas is the desired number of etcd members.
-	// +kubebuilder:validation:Minimum=1
-	Replicas int32 `json:"replicas"`
-
-	// Storage configuration.
-	Storage StorageSpec `json:"storage"`
-
-	// Image to use for Etcd.
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=512
-	Image string `json:"image"`
-
-	// Resources defines the compute resource requirements.
-	// +optional
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Etcd defines the configuration if using Etcd.
+	Etcd *EtcdSpec `json:"etcd,omitempty"`
 }
 
 // ============================================================================
