@@ -927,6 +927,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 			Pools: map[string]multigresv1alpha1.PoolSpec{
 				"p1": {
+					Type:            "readWrite", // Added Type override here to hit coverage
 					ReplicasPerCell: ptr.To(int32(2)),
 					Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
 					Postgres: multigresv1alpha1.ContainerConfig{
@@ -951,8 +952,8 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		if *p1.ReplicasPerCell != 2 {
 			t.Error("Pool p1 replicas not updated")
 		}
-		if p1.Type != "readOnly" {
-			t.Error("Pool p1 type should be preserved")
+		if p1.Type != "readWrite" { // Updated verification
+			t.Error("Pool p1 type should be updated")
 		}
 		if p1.Storage.Size != "10Gi" {
 			t.Error("Storage size not updated")
@@ -996,11 +997,11 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			t.Error("Failed to fallback to inline when core template nil")
 		}
 
-		// New case: Empty spec (defaults), should use core template
-		spec3 := &multigresv1alpha1.GlobalTopoServerSpec{}
-		res3 := ResolveGlobalTopo(spec3, core)
-		if res3.Etcd.Image != "resolved" {
-			t.Error("Failed to use default core template when spec is empty")
+		// New Case: Missing everything (should return passed spec)
+		spec4 := &multigresv1alpha1.GlobalTopoServerSpec{}
+		res4 := ResolveGlobalTopo(spec4, nil)
+		if res4 != spec4 {
+			t.Error("Expected to return original spec when no inline config and no template")
 		}
 	})
 
@@ -1025,11 +1026,11 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			t.Error("Expected nil for empty config")
 		}
 
-		// New case: Empty spec (defaults), should use core template
-		spec4 := &multigresv1alpha1.MultiAdminConfig{}
-		res4 := ResolveMultiAdmin(spec4, core)
-		if *res4.Replicas != 10 {
-			t.Error("Failed to use default core template when spec is empty")
+		// New Case: Missing everything (should return nil)
+		spec5 := &multigresv1alpha1.MultiAdminConfig{}
+		res5 := ResolveMultiAdmin(spec5, nil)
+		if res5 != nil {
+			t.Error("Expected nil when no config and no template")
 		}
 	})
 }
