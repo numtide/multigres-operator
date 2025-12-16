@@ -178,24 +178,33 @@ jobs:
 
       # Exit with non-zero value if the test coverage has decreased or not
       # reached the threshold.
-      - name: Check coverage status
+- name: Check coverage status
         run: |
           echo "Coverage Threshold:     ${{ inputs.COVERAGE_THRESHOLD }}%"
           echo "Previous test coverage: ${{ env.PREV_COVERAGE || 'Unknown' }}%"
           echo "New test coverage:      ${{ env.NEW_COVERAGE }}%"
           echo
 
-          isBelowThreshold=$(bc <<< "${{ inputs.COVERAGE_THRESHOLD }} > ${{ env.NEW_COVERAGE }}")
-          if (( $isBelowThreshold )); then
-          echo "ERROR: The test coverage is below the threshold, exiting as failed."
-          exit 1
+          if (( $(echo "${{ inputs.COVERAGE_THRESHOLD }} > ${{ env.NEW_COVERAGE }}" | bc -l) )); then
+            echo "❌ ERROR: The test coverage (${{ env.NEW_COVERAGE }}%) is below the threshold (${{ inputs.COVERAGE_THRESHOLD }}%)."
+            exit 1
           fi
 
-          isNewWorse=$(bc <<< "${{ env.PREV_COVERAGE || '0' }} > ${{ env.NEW_COVERAGE }}")
-          if (( $isNewWorse )); then
-          echo "ERROR: The new coverage is worse than the previous coverage, exiting as failed."
-          exit 1
+          PREV_VAL="${{ env.PREV_COVERAGE }}"
+          
+          # If PREV_VAL is empty or "Unknown", treat it as 0 for safety
+          if [[ "$PREV_VAL" == "Unknown" ]] || [[ -z "$PREV_VAL" ]]; then
+             PREV_VAL="0"
           fi
+
+          if (( $(echo "$PREV_VAL > 0" | bc -l) )); then
+              if (( $(echo "$PREV_VAL > ${{ env.NEW_COVERAGE }}" | bc -l) )); then
+                  echo "❌ ERROR: The new coverage is worse than the previous coverage ($PREV_VAL% vs ${{ env.NEW_COVERAGE }}%)."
+                  exit 1
+              fi
+          fi
+
+          echo "✅ PASS: The new coverage meets the threshold and has not regressed."
 
           echo "The new coverage is greater or equal to the previous coverage, and passes the threshold."
 
