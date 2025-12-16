@@ -417,7 +417,6 @@ spec:
           memory: "2Gi"
 
   # Defines the MultiAdmin component.
-  # Note: The 'spec' nesting is removed here (Flattened) compared to the Cluster CR.
   multiadmin:
     replicas: 2
     resources:
