@@ -1,0 +1,230 @@
+###========================================
+##  Go CI/CD Test Coverage
+#==========================================
+# This adds support for the test coverage report in Pull Request.
+#
+# Ref: https://github.com/rytswd/go-cicd-template
+#
+# Also, this mirrors most of the setup from _reusable-build-changed.yaml
+
+name: Test coverage check for changed module
+run-name: Run Go CI/CD for `${{ github.ref }}`, triggered by @${{ github.actor }}
+
+# This is "reusable workflow", meaning the whole job definitions can be used
+# without copying the code. In order to use this workflow, refer to this job
+# with something like the following
+#
+# jobs:
+#   build:
+#     uses: rytswd/go-cicd-template/.github/workflows/reusable-go-cicd-for-pr.yaml@main
+#     with:
+#       COVERAGE_THRESHOLD: 10
+#     secrets: inherit
+#
+# Ref: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+on:
+  workflow_call:
+    inputs:
+      COVERAGE_THRESHOLD:
+        required: true
+        type: number
+
+jobs:
+  build-test-coverage:
+    name: Build, Test, and Check Test Coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Initial setup
+      - name: Check out
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0 # Fetch all history for changed-modules detection
+
+      - name: Fetch base branch for comparison
+         run: |
+          TARGET_BRANCH="${{ github.base_ref || 'main' }}"
+          echo "Fetching comparison target: $TARGET_BRANCH"
+          git fetch origin ${TARGET_BRANCH}:refs/remotes/origin/${TARGET_BRANCH}
+
+      - name: Install Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: ./go.mod
+          cache: false # Manual cache control below
+
+      # Restore cache
+      # Note that this also restores "~/.cache/coverage.txt" to check the
+      # coverage diff.
+      - name: Restore build cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/coverage.txt
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            bin
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum', 'Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
+
+      - name: Build
+        run: MODULES="$(make changed-modules)" make build
+
+      # Based on the Makefile definition, this runs the combined coverage at:
+      #
+      #   coverage/combined.out
+      - name: Test and generate coverage report
+        run: MODULES="$(make changed-modules)" make test-coverage
+
+      # Get test coverage from cache and coverage.out -- at this point, only
+      # work out the summary files, and some environment variables for more
+      # checks and steps to take place.
+      - name: Get test coverage
+        run: |
+          ## Step 1. Check previous coverage
+          if [[ -f ~/.cache/coverage.txt ]]; then
+          prevCoverage=$(cat ~/.cache/coverage.txt | grep total | grep -Eo '[0-9]+\.[0-9]+' || echo "unknown")
+          # When it reports "unknown %", it means cache contained malformed data.
+          echo "Previous test coverage: ${prevCoverage}% (taken from the cache)"
+          else
+          echo "Previous test coverage: Not found"
+          fi
+
+          ## Step 2. Check new coverage
+          # Get into directory so that go tool cover can work
+          go tool cover -func=coverage/combined.out > /tmp/coverage.txt
+          newCoverage=$(cat /tmp/coverage.txt | grep total | grep -Eo '[0-9]+\.[0-9]+')
+          echo "New test coverage:      ${newCoverage}%"
+
+          ## Step 3. Set environment variables
+          echo "PREV_COVERAGE=$prevCoverage" >> $GITHUB_ENV
+          echo "NEW_COVERAGE=$newCoverage" >> $GITHUB_ENV
+
+      # Create a PR comment when run against PR -- this makes sure the code
+      # coverage becomes visible in the comment section, and also, whenever new
+      # change is made, the previous test reports will be minimised, leaving the
+      # only relevant comment.
+      - name: Check and report
+        uses: actions/github-script@v6 # Based on Node.js v16
+        if: always() &&
+          github.event_name == 'pull_request'
+        with:
+          retries: 3
+          script: |
+            const fs = require('fs/promises')
+
+            // 1. Retrieve existing bot comments for the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+            });
+            const botComments = comments.filter(comment => {
+              return comment.user.type === 'Bot' &&
+                comment.body.includes('Go Test Coverage Report')
+            });
+
+            // 2. Prepare comment
+            const report = await fs.readFile('/tmp/coverage.txt')
+            const overallStatus =
+              ${{ inputs.COVERAGE_THRESHOLD }} > ${{ env.NEW_COVERAGE }} ?
+                "❌ FAIL: Coverage less than threshold of `${{ inputs.COVERAGE_THRESHOLD }}`" :
+              ${{ env.PREV_COVERAGE || '0' }} > ${{ env.NEW_COVERAGE }} ?
+                "❌ FAIL: Coverage less than the previous run" :
+                  "✅ PASS"
+            const comment = `### 🔬 Go Test Coverage Report
+
+            #### Summary
+
+            | Coverage Type          | Result                                 |
+            | ---------------------- | -------------------------------------- |
+            | Threshold              | ${{ inputs.COVERAGE_THRESHOLD }}%      |
+            | Previous Test Coverage | ${{ env.PREV_COVERAGE || 'Unknown' }}% |
+            | New Test Coverage      | ${{ env.NEW_COVERAGE }}%               |
+
+            #### Status
+
+            ${overallStatus}
+
+            #### Detail
+
+            <details><summary>Show New Coverage</summary>
+
+            \`\`\`
+            ${report}\`\`\`
+
+            </details>
+            `;
+
+            // 3. If there are any old comments, minimize all of them first.
+            for (const botComment of botComments) {
+              core.notice("There was an old comment found in the PR, minimizing it.")
+              const query = `mutation {
+                minimizeComment(input: {classifier: OUTDATED, subjectId: "${botComment.node_id}"}) {
+                  clientMutationId
+                }
+              }`
+              await github.graphql(query)
+            }
+
+            // 4. Create a comment with the coverage report
+            github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: comment
+            })
+
+      # Exit with non-zero value if the test coverage has decreased or not
+      # reached the threshold.
+- name: Check coverage status
+        run: |
+          echo "Coverage Threshold:     ${{ inputs.COVERAGE_THRESHOLD }}%"
+          echo "Previous test coverage: ${{ env.PREV_COVERAGE || 'Unknown' }}%"
+          echo "New test coverage:      ${{ env.NEW_COVERAGE }}%"
+          echo
+
+          if (( $(echo "${{ inputs.COVERAGE_THRESHOLD }} > ${{ env.NEW_COVERAGE }}" | bc -l) )); then
+            echo "❌ ERROR: The test coverage (${{ env.NEW_COVERAGE }}%) is below the threshold (${{ inputs.COVERAGE_THRESHOLD }}%)."
+            exit 1
+          fi
+
+          PREV_VAL="${{ env.PREV_COVERAGE }}"
+          
+          # If PREV_VAL is empty or "Unknown", treat it as 0 for safety
+          if [[ "$PREV_VAL" == "Unknown" ]] || [[ -z "$PREV_VAL" ]]; then
+             PREV_VAL="0"
+          fi
+
+          if (( $(echo "$PREV_VAL > 0" | bc -l) )); then
+              if (( $(echo "$PREV_VAL > ${{ env.NEW_COVERAGE }}" | bc -l) )); then
+                  echo "❌ ERROR: The new coverage is worse than the previous coverage ($PREV_VAL% vs ${{ env.NEW_COVERAGE }}%)."
+                  exit 1
+              fi
+          fi
+
+          echo "✅ PASS: The new coverage meets the threshold and has not regressed."
+
+          echo "The new coverage is greater or equal to the previous coverage, and passes the threshold."
+
+      # If triggered from non-PR setup, copy the new coverage as the new cached data.
+      - name: Copy coverage information for cache
+        if: always() &&
+          github.event_name != 'pull_request'
+        run: |
+          cp /tmp/coverage.txt ~/.cache/coverage.txt
+
+      # If triggered from non-PR setup, save the cache.
+      - name: Save cache
+        if: always() &&
+          github.event_name != 'pull_request'
+        uses: actions/cache/save@v3
+        with:
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+          # Any location that we generate the test coverage report in
+          path: |
+            ~/.cache/coverage.txt
+            ~/.cache/go-build
+            ~/go/pkg/mod
+
