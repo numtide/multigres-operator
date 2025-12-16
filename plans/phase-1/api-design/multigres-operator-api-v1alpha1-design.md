@@ -389,6 +389,7 @@ status:
   * This CR is NOT a child resource. It is purely a configuration object.
   * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
   * It defines the shape of the cluster's core control plane, which comprises Global Topo Server and MultiAdmin. A `CoreTemplate` can contain definitions for *both* components. When a component (e.g., `globalTopoServer`) references this template, the controller will extract the relevant section.
+  * **Note:** To prevent recursive definitions, `CoreTemplate` fields are strictly defined inline and cannot reference other templates. `multiadmin` uses a flattened spec structure here, unlike the `MultigresCluster` parent which nests it under `spec`.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -397,9 +398,10 @@ metadata:
   name: "standard-core-ha"
   namespace: example
 spec:
-  # Defines the Global TopoServer component
+  # Defines the Global TopoServer component.
+  # RESTRICTION: Templates only support Managed Etcd configurations.
+  # External topology servers must be defined in the Cluster CR directly.
   globalTopoServer:
-    # --- OPTION 1: Managed by Operator ---
     etcd:
       image: "quay.io/coreos/etcd:v3.5"
       replicas: 3
@@ -413,34 +415,28 @@ spec:
         limits:
           cpu: "1"
           memory: "2Gi"
-    # --- ALTERNATIVE OPTION 2: External Etcd ---
-    # external:
-    #   endpoints: 
-    #     - "https://etcd-1.infra.local:2379"
-    #   caSecret: "etcd-ca-secret"
-    #   clientCertSecret: "etcd-client-cert-secret"
 
-  # Defines the MultiAdmin component
+  # Defines the MultiAdmin component.
+  # Note: The 'spec' nesting is removed here (Flattened) compared to the Cluster CR.
   multiadmin:
-    spec:
-      replicas: 2
-      resources:
-        requests: 
-          cpu: "200m"
-          memory: "256Mi"
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
-      # Affinity can be configured too by user if desired    
-      # affinity:
-      #   podAntiAffinity:
-      #     preferredDuringSchedulingIgnoredDuringExecution:
-      #     - weight: 100
-      #       podAffinityTerm:
-      #         labelSelector:
-      #           matchLabels:
-      #             app.kubernetes.io/component: multiadmin
-      #         topologyKey: "kubernetes.io/hostname"
+    replicas: 2
+    resources:
+      requests: 
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    # Affinity can be configured too by user if desired    
+    # affinity:
+    #   podAntiAffinity:
+    #     preferredDuringSchedulingIgnoredDuringExecution:
+    #     - weight: 100
+    #       podAffinityTerm:
+    #         labelSelector:
+    #           matchLabels:
+    #             app.kubernetes.io/component: multiadmin
+    #         topologyKey: "kubernetes.io/hostname"
 ```
 
 ### User Managed CR: CellTemplate
@@ -612,6 +608,7 @@ These resources are created and reconciled by the `MultigresCluster` controller.
 
   * Applies to both Global (owned by `MultigresCluster`) and Local (owned by `Cell`) topology servers.
   * This CR does *not* exist if a separate, `external` etcd definition is used in the parent (e.g. using etcd-operator to provision one).
+  * Configurations are wrapped under their implementation key (e.g., `etcd`) to allow future extensibility (e.g., `consul`).
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -625,19 +622,20 @@ metadata:
       name: "example-cluster"
       controller: true
 spec:
-  # Resolved from MultigresCluster.
-  replicas: 3
-  storage:
-    size: "10Gi"
-    class: "standard-gp3"
-  image: "quay.io/coreos/etcd:v3.5"
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "1Gi"
-    limits:
-      cpu: "1"
-      memory: "2Gi"
+  # Configuration is wrapped to allow for future polymorphic types (e.g. Consul).
+  etcd:
+    replicas: 3
+    storage:
+      size: "10Gi"
+      class: "standard-gp3"
+    image: "quay.io/coreos/etcd:v3.5"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
 status:
   conditions:
     - type: Available
