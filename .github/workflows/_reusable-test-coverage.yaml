@@ -43,9 +43,11 @@ jobs:
         with:
           fetch-depth: 0 # Fetch all history for changed-modules detection
 
-      - name: Fetch main branch for comparison
-        run: |
-          git fetch origin main:refs/remotes/origin/main
+      - name: Fetch base branch for comparison
+         run: |
+          TARGET_BRANCH="${{ github.base_ref || 'main' }}"
+          echo "Fetching comparison target: $TARGET_BRANCH"
+          git fetch origin ${TARGET_BRANCH}:refs/remotes/origin/${TARGET_BRANCH}
 
       - name: Install Go
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
