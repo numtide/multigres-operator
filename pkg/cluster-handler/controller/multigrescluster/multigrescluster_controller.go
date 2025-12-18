@@ -227,7 +227,6 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 		return err
 	}
 
-	// Resolve Global Topo Reference ONCE for all cells
 	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
 	if err != nil {
 		return err
@@ -300,7 +299,6 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 		return err
 	}
 
-	// Resolve Global Topo Reference ONCE for all databases/shards
 	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
 	if err != nil {
 		return err
@@ -311,13 +309,8 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 	for _, db := range cluster.Spec.Databases {
 		for _, tg := range db.TableGroups {
 			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, db.Name, tg.Name)
-			if len(tgNameFull) > 63 {
-				l := log.FromContext(ctx)
-				l.Info("TableGroup name too long", "name", tgNameFull)
-			} else {
-				// Added logging to ensure coverage tools register this else block as visited
-				l := log.FromContext(ctx)
-				l.Info("TableGroup name length ok", "name", tgNameFull)
+			if len(tgNameFull) > 50 {
+				return fmt.Errorf("TableGroup name '%s' exceeds 50 characters; limit required to allow for shard resource suffixing", tgNameFull)
 			}
 
 			activeTGNames[tgNameFull] = true
@@ -370,7 +363,6 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 		}
 	}
 
-	// Prune orphan TableGroups
 	for _, item := range existingTGs.Items {
 		if !activeTGNames[item.Name] {
 			if err := r.Delete(ctx, &item); err != nil {
@@ -383,22 +375,18 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 }
 
 func (r *MultigresClusterReconciler) getGlobalTopoRef(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) (multigresv1alpha1.GlobalTopoServerRef, error) {
-	// 1. Determine Template Name
 	topoTplName := cluster.Spec.TemplateDefaults.CoreTemplate
 	if cluster.Spec.GlobalTopoServer.TemplateRef != "" {
 		topoTplName = cluster.Spec.GlobalTopoServer.TemplateRef
 	}
 
-	// 2. Resolve Template
 	topoTpl, err := resolver.ResolveCoreTemplate(ctx, topoTplName)
 	if err != nil {
 		return multigresv1alpha1.GlobalTopoServerRef{}, err
 	}
 
-	// 3. Resolve Final Spec (Inline vs Template)
 	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
 
-	// 4. Construct Reference based on resolved spec
 	address := ""
 	if topoSpec.Etcd != nil {
 		address = fmt.Sprintf("%s-global-topo-client.%s.svc:2379", cluster.Name, cluster.Namespace)
@@ -461,7 +449,6 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 		}
 	}
 
-	// Aggregate Cluster Condition
 	allCellsReady := true
 	for _, c := range cluster.Status.Cells {
 		if !c.Ready {

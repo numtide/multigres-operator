@@ -83,7 +83,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       clusterName,
 			Namespace:  namespace,
-			Finalizers: []string{finalizerName}, // Pre-populate finalizer to allow tests to reach reconcile logic
+			Finalizers: []string{finalizerName},
 		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			Images: multigresv1alpha1.ClusterImages{
@@ -168,7 +168,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			name: "Create: Independent Templates (Topo vs Admin)",
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
-				c.Spec.TemplateDefaults.CoreTemplate = "" // clear default
+				c.Spec.TemplateDefaults.CoreTemplate = ""
 				c.Spec.GlobalTopoServer.TemplateRef = "topo-core"
 				c.Spec.MultiAdmin.TemplateRef = "admin-core"
 				return c
@@ -212,8 +212,6 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 					t.Errorf("MultiAdmin did not use admin-core template, got replicas: %d", *deploy.Spec.Replicas)
 				}
 
-				// VERIFY FIX: Check that Child Cell received the correct Global Topo Address from the template
-				// This confirms getGlobalTopoRef resolved the template correctly
 				cell := &multigresv1alpha1.Cell{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
 					t.Fatal(err)
@@ -408,7 +406,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				return c
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			expectError:     true, // FIXED: Now expects error
+			expectError:     true,
 			validate:        func(t *testing.T, c client.Client) {},
 		},
 		{
@@ -1042,7 +1040,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		if *p1.ReplicasPerCell != 2 {
 			t.Error("Pool p1 replicas not updated")
 		}
-		if p1.Type != "readWrite" { // Updated verification
+		if p1.Type != "readWrite" {
 			t.Error("Pool p1 type should be updated")
 		}
 		if p1.Storage.Size != "10Gi" {
@@ -1087,7 +1085,6 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			t.Error("Failed to fallback to inline when core template nil")
 		}
 
-		// New Case: Missing everything (should return passed spec)
 		spec4 := &multigresv1alpha1.GlobalTopoServerSpec{}
 		res4 := ResolveGlobalTopo(spec4, nil)
 		if res4 != spec4 {
@@ -1116,7 +1113,6 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			t.Error("Expected nil for empty config")
 		}
 
-		// New Case: Missing everything (should return nil)
 		spec5 := &multigresv1alpha1.MultiAdminConfig{}
 		res5 := ResolveMultiAdmin(spec5, nil)
 		if res5 != nil {
