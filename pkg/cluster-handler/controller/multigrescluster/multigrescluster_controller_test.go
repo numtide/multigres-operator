@@ -3,6 +3,7 @@ package multigrescluster
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -210,6 +211,17 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if *deploy.Spec.Replicas != 5 {
 					t.Errorf("MultiAdmin did not use admin-core template, got replicas: %d", *deploy.Spec.Replicas)
 				}
+
+				// VERIFY FIX: Check that Child Cell received the correct Global Topo Address from the template
+				// This confirms getGlobalTopoRef resolved the template correctly
+				cell := &multigresv1alpha1.Cell{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
+					t.Fatal(err)
+				}
+				expectedAddr := fmt.Sprintf("%s-global-topo-client.%s.svc:2379", clusterName, namespace)
+				if cell.Spec.GlobalTopoServer.Address != expectedAddr {
+					t.Errorf("Cell GlobalTopo address mismatch. Got %s, Want %s", cell.Spec.GlobalTopoServer.Address, expectedAddr)
+				}
 			},
 		},
 		{
@@ -230,6 +242,14 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				deploy := &appsv1.Deployment{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
 					t.Fatal("MultiAdmin not created")
+				}
+				// Verify External Topo Propagated
+				cell := &multigresv1alpha1.Cell{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
+					t.Fatal(err)
+				}
+				if cell.Spec.GlobalTopoServer.Address != "http://ext:2379" {
+					t.Errorf("External address not propagated. Got %s", cell.Spec.GlobalTopoServer.Address)
 				}
 			},
 		},
@@ -331,6 +351,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			name: "Create: External Topo with Empty Endpoints",
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.CoreTemplate = ""
 				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{
 					External: &multigresv1alpha1.ExternalTopoServerSpec{
 						Endpoints: []multigresv1alpha1.EndpointUrl{},
@@ -387,7 +408,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				return c
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			expectError:     false,
+			expectError:     true, // FIXED: Now expects error
 			validate:        func(t *testing.T, c client.Client) {},
 		},
 		{

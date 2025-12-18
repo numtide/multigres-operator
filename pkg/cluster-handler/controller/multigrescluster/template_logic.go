@@ -21,7 +21,13 @@ type TemplateResolver struct {
 	Defaults multigresv1alpha1.TemplateDefaults
 }
 
-// ResolveCoreTemplate fetches and resolves a CoreTemplate by name, handling defaults.
+// ResolveCoreTemplate determines the target CoreTemplate name and fetches it.
+//
+// If templateName is empty, it uses the following precedence:
+// 1. The cluster-level default defined in TemplateDefaults.
+// 2. A CoreTemplate named "default" found in the same namespace where MultigresCluster is deployed.
+//
+// If the resolved template is not found, it returns an empty CoreTemplate object and nil error.
 func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.CoreTemplate, error) {
 	name := templateName
 	if name == "" {

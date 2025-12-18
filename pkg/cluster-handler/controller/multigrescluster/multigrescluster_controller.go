@@ -227,6 +227,12 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 		return err
 	}
 
+	// Resolve Global Topo Reference ONCE for all cells
+	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
+	if err != nil {
+		return err
+	}
+
 	activeCellNames := make(map[string]bool)
 
 	allCellNames := []multigresv1alpha1.CellName{}
@@ -260,7 +266,7 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 			cellCR.Spec.MultiGateway = gatewaySpec
 			cellCR.Spec.AllCells = allCellNames
 
-			cellCR.Spec.GlobalTopoServer = r.getGlobalTopoRef(cluster)
+			cellCR.Spec.GlobalTopoServer = globalTopoRef
 
 			if localTopoSpec != nil {
 				cellCR.Spec.TopoServer = *localTopoSpec
@@ -291,6 +297,12 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
 	existingTGs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, existingTGs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
+		return err
+	}
+
+	// Resolve Global Topo Reference ONCE for all databases/shards
+	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
+	if err != nil {
 		return err
 	}
 
@@ -348,7 +360,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 					MultiPooler: cluster.Spec.Images.MultiPooler,
 					Postgres:    cluster.Spec.Images.Postgres,
 				}
-				tgCR.Spec.GlobalTopoServer = r.getGlobalTopoRef(cluster)
+				tgCR.Spec.GlobalTopoServer = globalTopoRef
 				tgCR.Spec.Shards = resolvedShards
 
 				return controllerutil.SetControllerReference(cluster, tgCR, r.Scheme)
@@ -370,19 +382,35 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 	return nil
 }
 
-func (r *MultigresClusterReconciler) getGlobalTopoRef(cluster *multigresv1alpha1.MultigresCluster) multigresv1alpha1.GlobalTopoServerRef {
+func (r *MultigresClusterReconciler) getGlobalTopoRef(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) (multigresv1alpha1.GlobalTopoServerRef, error) {
+	// 1. Determine Template Name
+	topoTplName := cluster.Spec.TemplateDefaults.CoreTemplate
+	if cluster.Spec.GlobalTopoServer.TemplateRef != "" {
+		topoTplName = cluster.Spec.GlobalTopoServer.TemplateRef
+	}
+
+	// 2. Resolve Template
+	topoTpl, err := resolver.ResolveCoreTemplate(ctx, topoTplName)
+	if err != nil {
+		return multigresv1alpha1.GlobalTopoServerRef{}, err
+	}
+
+	// 3. Resolve Final Spec (Inline vs Template)
+	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
+
+	// 4. Construct Reference based on resolved spec
 	address := ""
-	if cluster.Spec.GlobalTopoServer.Etcd != nil {
+	if topoSpec.Etcd != nil {
 		address = fmt.Sprintf("%s-global-topo-client.%s.svc:2379", cluster.Name, cluster.Namespace)
-	} else if cluster.Spec.GlobalTopoServer.External != nil && len(cluster.Spec.GlobalTopoServer.External.Endpoints) > 0 {
-		address = string(cluster.Spec.GlobalTopoServer.External.Endpoints[0])
+	} else if topoSpec.External != nil && len(topoSpec.External.Endpoints) > 0 {
+		address = string(topoSpec.External.Endpoints[0])
 	}
 
 	return multigresv1alpha1.GlobalTopoServerRef{
 		Address:        address,
 		RootPath:       "/multigres/global",
 		Implementation: "etcd2",
-	}
+	}, nil
 }
 
 func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) error {
