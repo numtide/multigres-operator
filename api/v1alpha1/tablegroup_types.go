@@ -29,8 +29,11 @@ import (
 
 // TableGroupSpec defines the desired state of TableGroup.
 type TableGroupSpec struct {
+	// DatabaseName is the name of the logical database.
 	// +kubebuilder:validation:MaxLength=63
 	DatabaseName string `json:"databaseName"`
+
+	// TableGroupName is the name of this table group.
 	// +kubebuilder:validation:MaxLength=63
 	TableGroupName string `json:"tableGroupName"`
 
@@ -38,10 +41,10 @@ type TableGroupSpec struct {
 	// +optional
 	IsDefault bool `json:"default,omitempty"`
 
-	// Images required for child shards.
+	// Images defines the container images used for child shards - defined globally in MultigresCluster.
 	Images ShardImages `json:"images"`
 
-	// GlobalTopoServer reference.
+	// GlobalTopoServer is a reference to the global topology server.
 	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`
 
 	// Shards is the list of FULLY RESOLVED shard specifications.
@@ -52,13 +55,14 @@ type TableGroupSpec struct {
 // ShardResolvedSpec represents the fully calculated spec for a shard,
 // pushed down to the TableGroup.
 type ShardResolvedSpec struct {
+	// Name is the identifier of the shard.
 	// +kubebuilder:validation:MaxLength=63
 	Name string `json:"name"`
 
-	// MultiOrch fully resolved spec.
+	// MultiOrch is the fully resolved configuration for the orchestrator.
 	MultiOrch MultiOrchSpec `json:"multiorch"`
 
-	// Pools fully resolved spec.
+	// Pools is the map of fully resolved data pool configurations.
 	// +kubebuilder:validation:MaxProperties=32
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools"`
