@@ -23,18 +23,21 @@ const (
 	finalizerName = "multigres.com/finalizer"
 )
 
+// MultigresClusterReconciler reconciles a MultigresCluster object.
 type MultigresClusterReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
+// Reconcile reads that state of the cluster for a MultigresCluster object and makes changes based on the state read
+// and what is in the MultigresCluster.Spec.
+//
 // +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters/finalizers,verbs=update
 // +kubebuilder:rbac:groups=multigres.com,resources=coretemplates;celltemplates;shardtemplates,verbs=get;list;watch
 // +kubebuilder:rbac:groups=multigres.com,resources=cells;tablegroups;toposervers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-
 func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
@@ -455,6 +458,7 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 	return r.Status().Update(ctx, cluster)
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *MultigresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.MultigresCluster{}).

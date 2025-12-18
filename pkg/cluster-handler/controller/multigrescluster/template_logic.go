@@ -11,13 +11,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// TemplateResolver handles the logic for fetching and merging templates
+// TemplateResolver handles the logic for fetching and merging templates.
 type TemplateResolver struct {
-	Client    client.Client
+	// Client is the kubernetes client used to fetch templates.
+	Client client.Client
+	// Namespace is the namespace where templates are expected to exist.
 	Namespace string
-	Defaults  multigresv1alpha1.TemplateDefaults
+	// Defaults contains the cluster-level template references to use when explicit ones are missing.
+	Defaults multigresv1alpha1.TemplateDefaults
 }
 
+// ResolveCoreTemplate fetches and resolves a CoreTemplate by name, handling defaults.
 func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.CoreTemplate, error) {
 	name := templateName
 	if name == "" {
@@ -38,6 +42,7 @@ func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName
 	return tpl, nil
 }
 
+// ResolveCellTemplate fetches and resolves a CellTemplate by name, handling defaults.
 func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.CellTemplate, error) {
 	name := templateName
 	if name == "" {
@@ -58,6 +63,7 @@ func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName
 	return tpl, nil
 }
 
+// ResolveShardTemplate fetches and resolves a ShardTemplate by name, handling defaults.
 func (r *TemplateResolver) ResolveShardTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.ShardTemplate, error) {
 	name := templateName
 	if name == "" {
@@ -78,7 +84,7 @@ func (r *TemplateResolver) ResolveShardTemplate(ctx context.Context, templateNam
 	return tpl, nil
 }
 
-// MergeCellConfig merges template spec with overrides
+// MergeCellConfig merges a template spec with overrides and an inline spec to produce the final configuration.
 func MergeCellConfig(template *multigresv1alpha1.CellTemplate, overrides *multigresv1alpha1.CellOverrides, inline *multigresv1alpha1.CellInlineSpec) (multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec) {
 	var gateway multigresv1alpha1.StatelessSpec
 	var localTopo *multigresv1alpha1.LocalTopoServerSpec
@@ -105,7 +111,7 @@ func MergeCellConfig(template *multigresv1alpha1.CellTemplate, overrides *multig
 	return gateway, localTopo
 }
 
-// MergeShardConfig merges template spec with overrides
+// MergeShardConfig merges a template spec with overrides and an inline spec to produce the final configuration.
 func MergeShardConfig(template *multigresv1alpha1.ShardTemplate, overrides *multigresv1alpha1.ShardOverrides, inline *multigresv1alpha1.ShardInlineSpec) (multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec) {
 	if inline != nil {
 		return inline.MultiOrch, inline.Pools
@@ -202,6 +208,7 @@ func mergePoolSpec(base multigresv1alpha1.PoolSpec, override multigresv1alpha1.P
 	return out
 }
 
+// ResolveGlobalTopo determines the final GlobalTopoServer configuration by preferring inline config over templates.
 func ResolveGlobalTopo(spec *multigresv1alpha1.GlobalTopoServerSpec, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.GlobalTopoServerSpec {
 	// If inline config is present, use it.
 	if spec.Etcd != nil || spec.External != nil {
@@ -218,6 +225,7 @@ func ResolveGlobalTopo(spec *multigresv1alpha1.GlobalTopoServerSpec, coreTemplat
 	return spec
 }
 
+// ResolveMultiAdmin determines the final MultiAdmin configuration by preferring inline config over templates.
 func ResolveMultiAdmin(spec *multigresv1alpha1.MultiAdminConfig, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.StatelessSpec {
 	// If inline spec is present, use it.
 	if spec.Spec != nil {

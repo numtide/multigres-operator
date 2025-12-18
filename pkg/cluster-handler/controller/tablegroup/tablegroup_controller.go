@@ -17,15 +17,17 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
+// TableGroupReconciler reconciles a TableGroup object.
 type TableGroupReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
+// Reconcile reads the state of the TableGroup and ensures its child Shards are in the desired state.
+//
 // +kubebuilder:rbac:groups=multigres.com,resources=tablegroups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=tablegroups/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
-
 func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
@@ -138,6 +140,7 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *TableGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.TableGroup{}).
