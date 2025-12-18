@@ -71,7 +71,10 @@ type CellSpec struct {
 
 // TopologyReconciliation defines flags for the cell controller.
 type TopologyReconciliation struct {
+	// RegisterCell indicates if the cell should register itself in the topology.
 	RegisterCell bool `json:"registerCell"`
+
+	// PrunePoolers indicates if unused poolers should be removed.
 	PrunePoolers bool `json:"prunePoolers"`
 }
 
@@ -85,8 +88,13 @@ type CellStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	GatewayReplicas      int32 `json:"gatewayReplicas"`
+	// GatewayReplicas is the total number of gateway pods.
+	GatewayReplicas int32 `json:"gatewayReplicas"`
+
+	// GatewayReadyReplicas is the number of gateway pods that are ready.
 	GatewayReadyReplicas int32 `json:"gatewayReadyReplicas"`
+
+	// GatewayServiceName is the DNS name of the gateway service.
 	// +kubebuilder:validation:MaxLength=253
 	GatewayServiceName string `json:"gatewayServiceName,omitempty"`
 }

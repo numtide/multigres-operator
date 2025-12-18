@@ -83,23 +83,28 @@ type PoolSpec struct {
 
 // ShardSpec defines the desired state of Shard.
 type ShardSpec struct {
+	// DatabaseName is the name of the logical database this shard belongs to.
 	// +kubebuilder:validation:MaxLength=63
 	DatabaseName string `json:"databaseName"`
+
+	// TableGroupName is the name of the table group this shard belongs to.
 	// +kubebuilder:validation:MaxLength=63
 	TableGroupName string `json:"tableGroupName"`
+
+	// ShardName is the specific identifier for this shard (e.g. "0").
 	// +kubebuilder:validation:MaxLength=63
 	ShardName string `json:"shardName"`
 
-	// Images required.
+	// Images defines the container images to be used by this shard (defined globally at MultigresCluster).
 	Images ShardImages `json:"images"`
 
-	// GlobalTopoServer reference.
+	// GlobalTopoServer is a reference to the global topology server.
 	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`
 
-	// MultiOrch fully resolved spec.
+	// MultiOrch is the fully resolved configuration for the shard orchestrator.
 	MultiOrch MultiOrchSpec `json:"multiorch"`
 
-	// Pools fully resolved spec.
+	// Pools is the map of fully resolved data pool configurations.
 	// +kubebuilder:validation:MaxProperties=32
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools"`
@@ -107,10 +112,15 @@ type ShardSpec struct {
 
 // ShardImages defines the images required for a Shard.
 type ShardImages struct {
+	// MultiOrch is the image for the shard orchestrator.
 	// +kubebuilder:validation:MaxLength=512
 	MultiOrch string `json:"multiorch"`
+
+	// MultiPooler is the image for the connection pooler sidecar.
 	// +kubebuilder:validation:MaxLength=512
 	MultiPooler string `json:"multipooler"`
+
+	// Postgres is the image for the postgres database.
 	// +kubebuilder:validation:MaxLength=512
 	Postgres string `json:"postgres"`
 }
@@ -130,7 +140,10 @@ type ShardStatus struct {
 	// +kubebuilder:validation:MaxItems=100
 	Cells []CellName `json:"cells,omitempty"`
 
-	OrchReady  bool `json:"orchReady"`
+	// OrchReady indicates if the MultiOrch component is ready.
+	OrchReady bool `json:"orchReady"`
+
+	// PoolsReady indicates if all data pools are ready.
 	PoolsReady bool `json:"poolsReady"`
 }
 
