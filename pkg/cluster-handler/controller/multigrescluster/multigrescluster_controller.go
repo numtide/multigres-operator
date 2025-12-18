@@ -127,22 +127,29 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 }
 
 func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
-	var coreTpl *multigresv1alpha1.CoreTemplate
 	var err error
 
-	tplName := cluster.Spec.TemplateDefaults.CoreTemplate
+	topoTplName := cluster.Spec.TemplateDefaults.CoreTemplate
 	if cluster.Spec.GlobalTopoServer.TemplateRef != "" {
-		tplName = cluster.Spec.GlobalTopoServer.TemplateRef
-	} else if cluster.Spec.MultiAdmin.TemplateRef != "" {
-		tplName = cluster.Spec.MultiAdmin.TemplateRef
+		topoTplName = cluster.Spec.GlobalTopoServer.TemplateRef
 	}
 
-	coreTpl, err = resolver.ResolveCoreTemplate(ctx, tplName)
+	topoTpl, err := resolver.ResolveCoreTemplate(ctx, topoTplName)
 	if err != nil {
 		return err
 	}
 
-	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, coreTpl)
+	adminTplName := cluster.Spec.TemplateDefaults.CoreTemplate
+	if cluster.Spec.MultiAdmin.TemplateRef != "" {
+		adminTplName = cluster.Spec.MultiAdmin.TemplateRef
+	}
+
+	adminTpl, err := resolver.ResolveCoreTemplate(ctx, adminTplName)
+	if err != nil {
+		return err
+	}
+
+	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
 	if topoSpec.Etcd != nil {
 		ts := &multigresv1alpha1.TopoServer{
 			ObjectMeta: metav1.ObjectMeta{
@@ -169,7 +176,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 		}
 	}
 
-	multiAdminSpec := ResolveMultiAdmin(&cluster.Spec.MultiAdmin, coreTpl)
+	multiAdminSpec := ResolveMultiAdmin(&cluster.Spec.MultiAdmin, adminTpl)
 	if multiAdminSpec != nil {
 		deploy := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{

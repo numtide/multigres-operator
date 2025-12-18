@@ -164,6 +164,55 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "Create: Independent Templates (Topo vs Admin)",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.CoreTemplate = "" // clear default
+				c.Spec.GlobalTopoServer.TemplateRef = "topo-core"
+				c.Spec.MultiAdmin.TemplateRef = "admin-core"
+				return c
+			}(),
+			existingObjects: []client.Object{
+				cellTpl, shardTpl,
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "topo-core", Namespace: namespace},
+					Spec: multigresv1alpha1.CoreTemplateSpec{
+						GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+							Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd:topo"},
+						},
+					},
+				},
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "admin-core", Namespace: namespace},
+					Spec: multigresv1alpha1.CoreTemplateSpec{
+						MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+					},
+				},
+			},
+			expectError: false,
+			validate: func(t *testing.T, c client.Client) {
+				ctx := context.Background()
+
+				// Check Topo uses topo-core
+				ts := &multigresv1alpha1.TopoServer{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
+					t.Fatal(err)
+				}
+				if ts.Spec.Etcd.Image != "etcd:topo" {
+					t.Errorf("TopoServer did not use topo-core template, got image: %s", ts.Spec.Etcd.Image)
+				}
+
+				// Check Admin uses admin-core
+				deploy := &appsv1.Deployment{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
+					t.Fatal(err)
+				}
+				if *deploy.Spec.Replicas != 5 {
+					t.Errorf("MultiAdmin did not use admin-core template, got replicas: %d", *deploy.Spec.Replicas)
+				}
+			},
+		},
+		{
 			name: "Create: MultiAdmin TemplateRef Only",
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
@@ -603,6 +652,26 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{coreTpl},
 			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-core", errBoom)},
 			expectError:     true,
+		},
+		{
+			name: "Error: Resolve Admin Template Failed (Second Call)",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.CoreTemplate = ""
+				c.Spec.GlobalTopoServer.TemplateRef = "topo-core"
+				c.Spec.MultiAdmin.TemplateRef = "admin-core-fail"
+				return c
+			}(),
+			existingObjects: []client.Object{
+				cellTpl, shardTpl,
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "topo-core", Namespace: namespace},
+					// Minimal valid spec
+					Spec: multigresv1alpha1.CoreTemplateSpec{},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("admin-core-fail", errBoom)},
+			expectError:   true,
 		},
 		{
 			name:            "Error: Create GlobalTopo Failed",
