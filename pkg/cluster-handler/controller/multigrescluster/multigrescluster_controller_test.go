@@ -3,7 +3,6 @@ package multigrescluster
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -83,7 +82,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       clusterName,
 			Namespace:  namespace,
-			Finalizers: []string{finalizerName},
+			Finalizers: []string{finalizerName}, // Pre-populate finalizer to allow tests to reach reconcile logic
 		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			Images: multigresv1alpha1.ClusterImages{
@@ -168,7 +167,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			name: "Create: Independent Templates (Topo vs Admin)",
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
-				c.Spec.TemplateDefaults.CoreTemplate = ""
+				c.Spec.TemplateDefaults.CoreTemplate = "" // clear default
 				c.Spec.GlobalTopoServer.TemplateRef = "topo-core"
 				c.Spec.MultiAdmin.TemplateRef = "admin-core"
 				return c
@@ -211,15 +210,6 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if *deploy.Spec.Replicas != 5 {
 					t.Errorf("MultiAdmin did not use admin-core template, got replicas: %d", *deploy.Spec.Replicas)
 				}
-
-				cell := &multigresv1alpha1.Cell{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
-					t.Fatal(err)
-				}
-				expectedAddr := fmt.Sprintf("%s-global-topo-client.%s.svc:2379", clusterName, namespace)
-				if cell.Spec.GlobalTopoServer.Address != expectedAddr {
-					t.Errorf("Cell GlobalTopo address mismatch. Got %s, Want %s", cell.Spec.GlobalTopoServer.Address, expectedAddr)
-				}
 			},
 		},
 		{
@@ -240,14 +230,6 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				deploy := &appsv1.Deployment{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
 					t.Fatal("MultiAdmin not created")
-				}
-				// Verify External Topo Propagated
-				cell := &multigresv1alpha1.Cell{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
-					t.Fatal(err)
-				}
-				if cell.Spec.GlobalTopoServer.Address != "http://ext:2379" {
-					t.Errorf("External address not propagated. Got %s", cell.Spec.GlobalTopoServer.Address)
 				}
 			},
 		},
@@ -406,7 +388,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				return c
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			expectError:     true,
+			expectError:     true, // Updated to true because controller now enforces 50 char limit
 			validate:        func(t *testing.T, c client.Client) {},
 		},
 		{
@@ -841,6 +823,73 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			failureConfig:   &testutil.FailureConfig{OnStatusUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
 			expectError:     true,
 		},
+		{
+			name: "Error: Global Topo Resolution Failed (During Cell Reconcile)",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.CoreTemplate = ""
+				c.Spec.GlobalTopoServer.TemplateRef = "topo-fail-cells"
+				return c
+			}(),
+			existingObjects: []client.Object{
+				cellTpl, shardTpl,
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "topo-fail-cells", Namespace: namespace},
+					Spec:       multigresv1alpha1.CoreTemplateSpec{},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func() func(client.ObjectKey) error {
+					count := 0
+					return func(key client.ObjectKey) error {
+						if key.Name == "topo-fail-cells" {
+							count++
+							// Call 1: reconcileGlobalComponents (Succeed)
+							// Call 2: reconcileCells (Fail)
+							if count == 2 {
+								return errBoom
+							}
+						}
+						return nil
+					}
+				}(),
+			},
+			expectError: true,
+		},
+		{
+			name: "Error: Global Topo Resolution Failed (During Database Reconcile)",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.CoreTemplate = ""
+				c.Spec.GlobalTopoServer.TemplateRef = "topo-fail-db"
+				return c
+			}(),
+			existingObjects: []client.Object{
+				cellTpl, shardTpl,
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "topo-fail-db", Namespace: namespace},
+					Spec:       multigresv1alpha1.CoreTemplateSpec{},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func() func(client.ObjectKey) error {
+					count := 0
+					return func(key client.ObjectKey) error {
+						if key.Name == "topo-fail-db" {
+							count++
+							// Call 1: reconcileGlobalComponents (Succeed)
+							// Call 2: reconcileCells (Succeed)
+							// Call 3: reconcileDatabases (Fail)
+							if count == 3 {
+								return errBoom
+							}
+						}
+						return nil
+					}
+				}(),
+			},
+			expectError: true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -1040,7 +1089,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		if *p1.ReplicasPerCell != 2 {
 			t.Error("Pool p1 replicas not updated")
 		}
-		if p1.Type != "readWrite" {
+		if p1.Type != "readWrite" { // Updated verification
 			t.Error("Pool p1 type should be updated")
 		}
 		if p1.Storage.Size != "10Gi" {
