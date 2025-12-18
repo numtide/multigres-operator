@@ -157,9 +157,23 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			validate: func(t *testing.T, c client.Client) {
 				ctx := context.Background()
 				updatedCluster := &multigresv1alpha1.MultigresCluster{}
-				_ = c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster); err != nil {
+					t.Fatal(err)
+				}
 				if !controllerutil.ContainsFinalizer(updatedCluster, finalizerName) {
 					t.Error("Finalizer was not added to Cluster")
+				}
+
+				// Verify Wiring: Ensure getGlobalTopoRef correctly resolved the template and passed it to the Cell
+				cell := &multigresv1alpha1.Cell{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
+					t.Fatal("Expected Cell 'zone-a' to exist")
+				}
+
+				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
+				if cell.Spec.GlobalTopoServer.Address != expectedAddr {
+					t.Errorf("Wiring Bug! Cell has wrong Topo Address.\nGot:  %q\nWant: %q",
+						cell.Spec.GlobalTopoServer.Address, expectedAddr)
 				}
 			},
 		},
@@ -209,6 +223,17 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 				if *deploy.Spec.Replicas != 5 {
 					t.Errorf("MultiAdmin did not use admin-core template, got replicas: %d", *deploy.Spec.Replicas)
+				}
+
+				// Verify Wiring for independent template
+				cell := &multigresv1alpha1.Cell{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
+					t.Fatal("Expected Cell 'zone-a' to exist")
+				}
+				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
+				if cell.Spec.GlobalTopoServer.Address != expectedAddr {
+					t.Errorf("Wiring Bug (Independent)! Cell has wrong Topo Address.\nGot:  %q\nWant: %q",
+						cell.Spec.GlobalTopoServer.Address, expectedAddr)
 				}
 			},
 		},
