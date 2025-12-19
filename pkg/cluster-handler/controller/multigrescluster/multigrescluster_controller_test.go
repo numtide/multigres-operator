@@ -318,6 +318,26 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "Create: MultiAdmin with ImagePullSecrets",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Images.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "my-secret"}}
+				return c
+			}(),
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			expectError:     false,
+			validate: func(t *testing.T, c client.Client) {
+				ctx := context.Background()
+				deploy := &appsv1.Deployment{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
+					t.Fatal("MultiAdmin not created")
+				}
+				if len(deploy.Spec.Template.Spec.ImagePullSecrets) != 1 || deploy.Spec.Template.Spec.ImagePullSecrets[0].Name != "my-secret" {
+					t.Errorf("ImagePullSecrets not propagated. Got %v", deploy.Spec.Template.Spec.ImagePullSecrets)
+				}
+			},
+		},
+		{
 			name: "Create: Inline Etcd",
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
@@ -476,6 +496,26 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			validate:        func(t *testing.T, c client.Client) {},
 		},
 		{
+			name: "Create: No Global Topo Config",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{} // Empty
+				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{}     // Empty
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}           // Empty
+				return c
+			}(),
+			existingObjects: []client.Object{cellTpl, shardTpl}, // No Core Template
+			expectError:     false,
+			validate: func(t *testing.T, c client.Client) {
+				// Verify Cell got empty topo address
+				cell := &multigresv1alpha1.Cell{}
+				_ = c.Get(context.Background(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
+				if cell.Spec.GlobalTopoServer.Address != "" {
+					t.Errorf("Expected empty topo address, got %q", cell.Spec.GlobalTopoServer.Address)
+				}
+			},
+		},
+		{
 			name: "Status: Aggregation Logic",
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
@@ -602,6 +642,37 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		// ---------------------------------------------------------------------
 		// Error Injection Scenarios
 		// ---------------------------------------------------------------------
+		{
+			name: "Error: Explicit Template Missing (Should Fail)",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.CoreTemplate = "non-existent-template"
+				return c
+			}(),
+			existingObjects: []client.Object{}, // No templates exist
+			failureConfig:   nil,               // No API failure, just logical failure
+			expectError:     true,              // MUST ERROR NOW
+		},
+		{
+			name: "Error: Explicit Cell Template Missing",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Cells[0].CellTemplate = "missing-cell-tpl"
+				return c
+			}(),
+			existingObjects: []client.Object{coreTpl, shardTpl}, // Missing cellTpl
+			expectError:     true,
+		},
+		{
+			name: "Error: Explicit Shard Template Missing",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Databases[0].TableGroups[0].Shards[0].ShardTemplate = "missing-shard-tpl"
+				return c
+			}(),
+			existingObjects: []client.Object{coreTpl, cellTpl}, // Missing shardTpl
+			expectError:     true,
+		},
 		{
 			name:            "Error: Object Not Found (Clean Exit)",
 			cluster:         baseCluster.DeepCopy(),
@@ -913,6 +984,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = ""
 				c.Spec.GlobalTopoServer.TemplateRef = "topo-fail-cells"
+				// Clear MultiAdmin to ensure predictable call counts
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}
 				return c
 			}(),
 			existingObjects: []client.Object{
@@ -928,8 +1001,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 					return func(key client.ObjectKey) error {
 						if key.Name == "topo-fail-cells" {
 							count++
-							// Call 1: reconcileGlobalComponents (Succeed)
-							// Call 2: reconcileCells (Fail)
+							// Call 1: reconcileGlobalComponents -> ResolveCoreTemplate (Succeeds to proceed)
+							// Call 2: reconcileCells -> getGlobalTopoRef -> ResolveCoreTemplate (Fails)
 							if count == 2 {
 								return errBoom
 							}
@@ -946,6 +1019,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = ""
 				c.Spec.GlobalTopoServer.TemplateRef = "topo-fail-db"
+				// Clear MultiAdmin to ensure predictable call counts
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}
 				return c
 			}(),
 			existingObjects: []client.Object{
@@ -961,9 +1036,9 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 					return func(key client.ObjectKey) error {
 						if key.Name == "topo-fail-db" {
 							count++
-							// Call 1: reconcileGlobalComponents (Succeed)
-							// Call 2: reconcileCells (Succeed)
-							// Call 3: reconcileDatabases (Fail)
+							// Call 1: reconcileGlobalComponents (Succeeds)
+							// Call 2: reconcileCells (Succeeds)
+							// Call 3: reconcileDatabases -> getGlobalTopoRef (Fails)
 							if count == 3 {
 								return errBoom
 							}

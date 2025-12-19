@@ -2,6 +2,7 @@ package multigrescluster
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -27,21 +28,31 @@ type TemplateResolver struct {
 // 1. The cluster-level default defined in TemplateDefaults.
 // 2. A CoreTemplate named "default" found in the same namespace where MultigresCluster is deployed.
 //
-// If the resolved template is not found, it returns an empty CoreTemplate object and nil error.
+// If an explicit template (param or cluster default) is not found, it returns an error.
+// If the implicit "default" template is not found, it returns an empty object (safe fallback).
+// In this case the default would be applied by the operator via mutating webhook.
 func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.CoreTemplate, error) {
 	name := templateName
+	isImplicitFallback := false
+
 	if name == "" {
 		name = r.Defaults.CoreTemplate
 	}
 	if name == "" {
 		name = "default"
+		isImplicitFallback = true
 	}
 
 	tpl := &multigresv1alpha1.CoreTemplate{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return &multigresv1alpha1.CoreTemplate{}, nil
+			if isImplicitFallback {
+				// It is safe to ignore a missing "default" template
+				return &multigresv1alpha1.CoreTemplate{}, nil
+			}
+			// It is NOT safe to ignore a missing template requested by the user
+			return nil, fmt.Errorf("referenced CoreTemplate '%s' not found", name)
 		}
 		return nil, err
 	}
@@ -51,18 +62,24 @@ func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName
 // ResolveCellTemplate fetches and resolves a CellTemplate by name, handling defaults.
 func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.CellTemplate, error) {
 	name := templateName
+	isImplicitFallback := false
+
 	if name == "" {
 		name = r.Defaults.CellTemplate
 	}
 	if name == "" {
 		name = "default"
+		isImplicitFallback = true
 	}
 
 	tpl := &multigresv1alpha1.CellTemplate{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return &multigresv1alpha1.CellTemplate{}, nil
+			if isImplicitFallback {
+				return &multigresv1alpha1.CellTemplate{}, nil
+			}
+			return nil, fmt.Errorf("referenced CellTemplate '%s' not found", name)
 		}
 		return nil, err
 	}
@@ -72,18 +89,24 @@ func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName
 // ResolveShardTemplate fetches and resolves a ShardTemplate by name, handling defaults.
 func (r *TemplateResolver) ResolveShardTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.ShardTemplate, error) {
 	name := templateName
+	isImplicitFallback := false
+
 	if name == "" {
 		name = r.Defaults.ShardTemplate
 	}
 	if name == "" {
 		name = "default"
+		isImplicitFallback = true
 	}
 
 	tpl := &multigresv1alpha1.ShardTemplate{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return &multigresv1alpha1.ShardTemplate{}, nil
+			if isImplicitFallback {
+				return &multigresv1alpha1.ShardTemplate{}, nil
+			}
+			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found", name)
 		}
 		return nil, err
 	}
