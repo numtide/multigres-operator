@@ -37,10 +37,10 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get TableGroup: %w", err)
 	}
 
-	activeShardNames := make(map[string]bool)
+	activeShardNames := make(map[string]bool, len(tg.Spec.Shards))
 
 	for _, shardSpec := range tg.Spec.Shards {
 		shardNameFull := fmt.Sprintf("%s-%s", tg.Name, shardSpec.Name)
@@ -71,7 +71,7 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return controllerutil.SetControllerReference(tg, shardCR, r.Scheme)
 		}); err != nil {
 			l.Error(err, "Failed to create/update shard", "shard", shardNameFull)
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to create/update shard: %w", err)
 		}
 	}
 
@@ -81,16 +81,16 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
 		"multigres.com/database":   tg.Spec.DatabaseName,
 		"multigres.com/tablegroup": tg.Spec.TableGroupName,
-	}); err == nil {
-		for _, s := range existingShards.Items {
-			if !activeShardNames[s.Name] {
-				if err := r.Delete(ctx, &s); err != nil {
-					return ctrl.Result{}, err
-				}
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list shards for pruning: %w", err)
+	}
+
+	for _, s := range existingShards.Items {
+		if !activeShardNames[s.Name] {
+			if err := r.Delete(ctx, &s); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete orphan shard '%s': %w", s.Name, err)
 			}
 		}
-	} else {
-		return ctrl.Result{}, err
 	}
 
 	// Update Status
@@ -102,17 +102,17 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
 		"multigres.com/database":   tg.Spec.DatabaseName,
 		"multigres.com/tablegroup": tg.Spec.TableGroupName,
-	}); err == nil {
-		for _, s := range existingShards.Items {
-			for _, cond := range s.Status.Conditions {
-				if cond.Type == "Available" && cond.Status == "True" {
-					ready++
-					break
-				}
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list shards for status: %w", err)
+	}
+
+	for _, s := range existingShards.Items {
+		for _, cond := range s.Status.Conditions {
+			if cond.Type == "Available" && cond.Status == "True" {
+				ready++
+				break
 			}
 		}
-	} else {
-		return ctrl.Result{}, err
 	}
 
 	tg.Status.TotalShards = total
@@ -134,7 +134,7 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	})
 
 	if err := r.Status().Update(ctx, tg); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil

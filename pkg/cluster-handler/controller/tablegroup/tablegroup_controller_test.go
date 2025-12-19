@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -88,14 +89,14 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			expectError:     false,
 			validate: func(t *testing.T, c client.Client) {
-				ctx := context.Background()
+				ctx := t.Context()
 				shardNameFull := fmt.Sprintf("%s-%s", tgName, "shard-0")
 				shard := &multigresv1alpha1.Shard{}
 				if err := c.Get(ctx, types.NamespacedName{Name: shardNameFull, Namespace: namespace}, shard); err != nil {
 					t.Fatalf("Shard %s not created: %v", shardNameFull, err)
 				}
-				if shard.Spec.DatabaseName != dbName {
-					t.Errorf("Shard DB name mismatch: got %s, want %s", shard.Spec.DatabaseName, dbName)
+				if diff := cmp.Diff(dbName, shard.Spec.DatabaseName); diff != "" {
+					t.Errorf("Shard DB name mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -129,7 +130,7 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: false,
 			validate: func(t *testing.T, c client.Client) {
-				ctx := context.Background()
+				ctx := t.Context()
 				newShard := &multigresv1alpha1.Shard{}
 				if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-1"), Namespace: namespace}, newShard); err != nil {
 					t.Error("New shard-1 not created")
@@ -167,9 +168,9 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 			expectError: false,
 			validate: func(t *testing.T, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				_ = c.Get(context.Background(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
-				if updatedTG.Status.ReadyShards != 1 {
-					t.Errorf("ReadyShards mismatch: got %d, want 1", updatedTG.Status.ReadyShards)
+				_ = c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
+				if diff := cmp.Diff(int32(1), updatedTG.Status.ReadyShards); diff != "" {
+					t.Errorf("ReadyShards mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -196,12 +197,12 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 			expectError: false,
 			validate: func(t *testing.T, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				_ = c.Get(context.Background(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
-				if updatedTG.Status.ReadyShards != 0 {
-					t.Errorf("ReadyShards mismatch: got %d, want 0", updatedTG.Status.ReadyShards)
+				_ = c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
+				if diff := cmp.Diff(int32(0), updatedTG.Status.ReadyShards); diff != "" {
+					t.Errorf("ReadyShards mismatch (-want +got):\n%s", diff)
 				}
-				if meta.IsStatusConditionTrue(updatedTG.Status.Conditions, "Available") {
-					t.Error("TableGroup should NOT be Available")
+				if diff := cmp.Diff(false, meta.IsStatusConditionTrue(updatedTG.Status.Conditions, "Available")); diff != "" {
+					t.Errorf("TableGroup Available condition mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -216,9 +217,9 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 			expectError:     false,
 			validate: func(t *testing.T, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				_ = c.Get(context.Background(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
-				if !meta.IsStatusConditionTrue(updatedTG.Status.Conditions, "Available") {
-					t.Error("Zero shard TableGroup should be Available")
+				_ = c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
+				if diff := cmp.Diff(true, meta.IsStatusConditionTrue(updatedTG.Status.Conditions, "Available")); diff != "" {
+					t.Errorf("Zero shard TableGroup Available condition mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},

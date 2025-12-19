@@ -48,13 +48,12 @@ func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
-				// It is safe to ignore a missing "default" template
+
 				return &multigresv1alpha1.CoreTemplate{}, nil
 			}
-			// It is NOT safe to ignore a missing template requested by the user
 			return nil, fmt.Errorf("referenced CoreTemplate '%s' not found", name)
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get CoreTemplate: %w", err)
 	}
 	return tpl, nil
 }
@@ -81,7 +80,7 @@ func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName
 			}
 			return nil, fmt.Errorf("referenced CellTemplate '%s' not found", name)
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get CellTemplate: %w", err)
 	}
 	return tpl, nil
 }
@@ -108,7 +107,7 @@ func (r *TemplateResolver) ResolveShardTemplate(ctx context.Context, templateNam
 			}
 			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found", name)
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get ShardTemplate: %w", err)
 	}
 	return tpl, nil
 }
@@ -186,21 +185,18 @@ func mergeStatelessSpec(base *multigresv1alpha1.StatelessSpec, override *multigr
 	if override.Affinity != nil {
 		base.Affinity = override.Affinity
 	}
-	if len(override.PodAnnotations) > 0 {
+
+	for k, v := range override.PodAnnotations {
 		if base.PodAnnotations == nil {
 			base.PodAnnotations = make(map[string]string)
 		}
-		for k, v := range override.PodAnnotations {
-			base.PodAnnotations[k] = v
-		}
+		base.PodAnnotations[k] = v
 	}
-	if len(override.PodLabels) > 0 {
+	for k, v := range override.PodLabels {
 		if base.PodLabels == nil {
 			base.PodLabels = make(map[string]string)
 		}
-		for k, v := range override.PodLabels {
-			base.PodLabels[k] = v
-		}
+		base.PodLabels[k] = v
 	}
 }
 

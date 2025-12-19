@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -171,9 +173,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 
 				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
-				if cell.Spec.GlobalTopoServer.Address != expectedAddr {
-					t.Errorf("Wiring Bug! Cell has wrong Topo Address.\nGot:  %q\nWant: %q",
-						cell.Spec.GlobalTopoServer.Address, expectedAddr)
+				if diff := cmp.Diff(expectedAddr, cell.Spec.GlobalTopoServer.Address); diff != "" {
+					t.Errorf("Wiring Bug! Cell has wrong Topo Address mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -212,8 +213,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal(err)
 				}
-				if ts.Spec.Etcd.Image != "etcd:topo" {
-					t.Errorf("TopoServer did not use topo-core template, got image: %s", ts.Spec.Etcd.Image)
+				if diff := cmp.Diff("etcd:topo", ts.Spec.Etcd.Image); diff != "" {
+					t.Errorf("TopoServer image mismatch (-want +got):\n%s", diff)
 				}
 
 				// Check Admin uses admin-core
@@ -221,8 +222,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
 					t.Fatal(err)
 				}
-				if *deploy.Spec.Replicas != 5 {
-					t.Errorf("MultiAdmin did not use admin-core template, got replicas: %d", *deploy.Spec.Replicas)
+				if diff := cmp.Diff(int32(5), *deploy.Spec.Replicas); diff != "" {
+					t.Errorf("MultiAdmin replicas mismatch (-want +got):\n%s", diff)
 				}
 
 				// Verify Wiring for independent template
@@ -231,9 +232,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 					t.Fatal("Expected Cell 'zone-a' to exist")
 				}
 				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
-				if cell.Spec.GlobalTopoServer.Address != expectedAddr {
-					t.Errorf("Wiring Bug (Independent)! Cell has wrong Topo Address.\nGot:  %q\nWant: %q",
-						cell.Spec.GlobalTopoServer.Address, expectedAddr)
+				if diff := cmp.Diff(expectedAddr, cell.Spec.GlobalTopoServer.Address); diff != "" {
+					t.Errorf("Wiring Bug (Independent)! Cell has wrong Topo Address mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -302,18 +302,14 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if len(tg.Spec.Shards) != 1 {
-					t.Fatalf("Expected 1 shard, got %d", len(tg.Spec.Shards))
+				if diff := cmp.Diff(1, len(tg.Spec.Shards)); diff != "" {
+					t.Fatalf("Shard count mismatch (-want +got):\n%s", diff)
 				}
 
 				orchCells := tg.Spec.Shards[0].MultiOrch.Cells
-				if len(orchCells) != 2 {
-					t.Errorf("MultiOrch should default to 2 cells, got %d: %v", len(orchCells), orchCells)
-				}
-
-				// Check content (order is sorted by controller)
-				if string(orchCells[0]) != "zone-a" || string(orchCells[1]) != "zone-b" {
-					t.Errorf("MultiOrch cells mismatch. Got %v, Want [zone-a zone-b]", orchCells)
+				wantCells := []multigresv1alpha1.CellName{"zone-a", "zone-b"}
+				if diff := cmp.Diff(wantCells, orchCells); diff != "" {
+					t.Errorf("MultiOrch cells mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -332,8 +328,9 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
 					t.Fatal("MultiAdmin not created")
 				}
-				if len(deploy.Spec.Template.Spec.ImagePullSecrets) != 1 || deploy.Spec.Template.Spec.ImagePullSecrets[0].Name != "my-secret" {
-					t.Errorf("ImagePullSecrets not propagated. Got %v", deploy.Spec.Template.Spec.ImagePullSecrets)
+				want := []corev1.LocalObjectReference{{Name: "my-secret"}}
+				if diff := cmp.Diff(want, deploy.Spec.Template.Spec.ImagePullSecrets); diff != "" {
+					t.Errorf("ImagePullSecrets mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -356,8 +353,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal("Global TopoServer not created")
 				}
-				if ts.Spec.Etcd.Image != "etcd:inline" {
-					t.Errorf("Unexpected image: %s", ts.Spec.Etcd.Image)
+				if diff := cmp.Diff("etcd:inline", ts.Spec.Etcd.Image); diff != "" {
+					t.Errorf("TopoServer image mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -390,8 +387,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal("Global TopoServer not created")
 				}
-				if *ts.Spec.Etcd.Replicas != 3 {
-					t.Errorf("Expected default replicas 3, got %d", *ts.Spec.Etcd.Replicas)
+				if diff := cmp.Diff(int32(3), *ts.Spec.Etcd.Replicas); diff != "" {
+					t.Errorf("Expected default replicas mismatch (-want +got):\n%s", diff)
 				}
 				// Verify MultiAdmin NOT created
 				deploy := &appsv1.Deployment{}
@@ -451,8 +448,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
 					t.Fatal(err)
 				}
-				if cell.Spec.GlobalTopoServer.Address != "" {
-					t.Errorf("Expected empty address, got %s", cell.Spec.GlobalTopoServer.Address)
+				if diff := cmp.Diff("", cell.Spec.GlobalTopoServer.Address); diff != "" {
+					t.Errorf("Address mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -477,8 +474,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
 					t.Fatal(err)
 				}
-				if *cell.Spec.MultiGateway.Replicas != 4 {
-					t.Errorf("Cell inline spec ignored")
+				if diff := cmp.Diff(int32(4), *cell.Spec.MultiGateway.Replicas); diff != "" {
+					t.Errorf("Cell inline spec ignored (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -510,8 +507,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				// Verify Cell got empty topo address
 				cell := &multigresv1alpha1.Cell{}
 				_ = c.Get(context.Background(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
-				if cell.Spec.GlobalTopoServer.Address != "" {
-					t.Errorf("Expected empty topo address, got %q", cell.Spec.GlobalTopoServer.Address)
+				if diff := cmp.Diff("", cell.Spec.GlobalTopoServer.Address); diff != "" {
+					t.Errorf("Expected empty topo address mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -1154,36 +1151,42 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		}
 
 		gw, topo := MergeCellConfig(tpl, overrides, nil)
-		if *gw.Replicas != 2 {
-			t.Errorf("Replicas merge failed")
+
+		wantGw := multigresv1alpha1.StatelessSpec{
+			Replicas:       ptr.To(int32(2)),
+			PodAnnotations: map[string]string{"foo": "bar", "baz": "qux"},
+			PodLabels:      map[string]string{"l1": "v1", "l2": "v2"},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceMemory: parseQty("1Gi")},
+			},
+			Affinity: &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{},
+			},
 		}
-		if gw.PodAnnotations["foo"] != "bar" || gw.PodAnnotations["baz"] != "qux" {
-			t.Errorf("Annotations merge failed")
+
+		// Use IgnoreUnexported to handle resource.Quantity fields
+		if diff := cmp.Diff(wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			t.Errorf("MergeCellConfig gateway mismatch (-want +got):\n%s", diff)
 		}
-		if gw.PodLabels["l1"] != "v1" || gw.PodLabels["l2"] != "v2" {
-			t.Errorf("Labels merge failed")
+
+		wantTopo := &multigresv1alpha1.LocalTopoServerSpec{
+			Etcd: &multigresv1alpha1.EtcdSpec{Image: "base"},
 		}
-		if !gw.Resources.Requests.Cpu().IsZero() {
-			t.Error("Resources should have been replaced by override")
-		}
-		if gw.Affinity.PodAntiAffinity == nil {
-			t.Error("Affinity should be replaced")
-		}
-		if topo.Etcd.Image != "base" {
-			t.Error("Topo lost")
+		if diff := cmp.Diff(wantTopo, topo); diff != "" {
+			t.Errorf("MergeCellConfig topo mismatch (-want +got):\n%s", diff)
 		}
 
 		inline := &multigresv1alpha1.CellInlineSpec{
 			MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(99))},
 		}
 		gw, _ = MergeCellConfig(tpl, overrides, inline)
-		if *gw.Replicas != 99 {
-			t.Errorf("Inline should take precedence")
+		if diff := cmp.Diff(int32(99), *gw.Replicas); diff != "" {
+			t.Errorf("MergeCellConfig inline priority mismatch (-want +got):\n%s", diff)
 		}
 
 		gw, _ = MergeCellConfig(nil, overrides, nil)
-		if *gw.Replicas != 2 {
-			t.Error("Should work with nil template")
+		if diff := cmp.Diff(int32(2), *gw.Replicas); diff != "" {
+			t.Errorf("MergeCellConfig nil template mismatch (-want +got):\n%s", diff)
 		}
 
 		tplNil := &multigresv1alpha1.CellTemplate{
@@ -1192,8 +1195,8 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 		gw, _ = MergeCellConfig(tplNil, overrides, nil)
-		if gw.PodAnnotations["baz"] != "qux" {
-			t.Error("Failed to initialize and merge Annotations")
+		if diff := cmp.Diff("qux", gw.PodAnnotations["baz"]); diff != "" {
+			t.Errorf("MergeCellConfig nil map init mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -1240,39 +1243,38 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		}
 
 		orch, pools := MergeShardConfig(tpl, overrides, nil)
-		if len(orch.Cells) != 1 || orch.Cells[0] != "b" {
-			t.Error("MultiOrch cells should be replaced")
+
+		wantOrchCells := []multigresv1alpha1.CellName{"b"}
+		if diff := cmp.Diff(wantOrchCells, orch.Cells); diff != "" {
+			t.Errorf("MergeShardConfig MultiOrch cells mismatch (-want +got):\n%s", diff)
 		}
 
 		p1 := pools["p1"]
-		if *p1.ReplicasPerCell != 2 {
-			t.Error("Pool p1 replicas not updated")
+		wantP1 := multigresv1alpha1.PoolSpec{
+			Type:            "readWrite",
+			ReplicasPerCell: ptr.To(int32(2)),
+			Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
+			Postgres: multigresv1alpha1.ContainerConfig{
+				Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")}},
+			},
+			Multipooler: multigresv1alpha1.ContainerConfig{
+				Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")}},
+			},
+			Affinity: &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{}},
+			Cells:    []multigresv1alpha1.CellName{"c2"},
 		}
-		if p1.Type != "readWrite" { // Updated verification
-			t.Error("Pool p1 type should be updated")
-		}
-		if p1.Storage.Size != "10Gi" {
-			t.Error("Storage size not updated")
-		}
-		if p1.Postgres.Resources.Requests.Cpu().String() != "1" {
-			t.Error("Postgres resources not updated")
-		}
-		if p1.Multipooler.Resources.Requests.Cpu().String() != "1" {
-			t.Error("Multipooler resources not updated")
-		}
-		if p1.Affinity.PodAntiAffinity == nil {
-			t.Error("Pool Affinity not replaced")
-		}
-		if len(p1.Cells) != 1 || p1.Cells[0] != "c2" {
-			t.Error("Pool Cells not replaced")
+
+		if diff := cmp.Diff(wantP1, p1, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			t.Errorf("MergeShardConfig Pool p1 mismatch (-want +got):\n%s", diff)
 		}
 
 		inline := &multigresv1alpha1.ShardInlineSpec{
 			MultiOrch: multigresv1alpha1.MultiOrchSpec{Cells: []multigresv1alpha1.CellName{"inline"}},
 		}
 		orch, _ = MergeShardConfig(tpl, overrides, inline)
-		if orch.Cells[0] != "inline" {
-			t.Error("Inline precedence failed")
+		wantInlineCells := []multigresv1alpha1.CellName{"inline"}
+		if diff := cmp.Diff(wantInlineCells, orch.Cells); diff != "" {
+			t.Errorf("MergeShardConfig inline priority mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -1284,19 +1286,20 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 		res := ResolveGlobalTopo(spec, core)
-		if res.Etcd.Image != "resolved" {
-			t.Error("Failed to resolve from template")
+		if diff := cmp.Diff("resolved", res.Etcd.Image); diff != "" {
+			t.Errorf("ResolveGlobalTopo template mismatch (-want +got):\n%s", diff)
 		}
+
 		spec2 := &multigresv1alpha1.GlobalTopoServerSpec{TemplateRef: "t1", Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"}}
 		res2 := ResolveGlobalTopo(spec2, nil)
-		if res2.Etcd.Image != "inline" {
-			t.Error("Failed to fallback to inline when core template nil")
+		if diff := cmp.Diff("inline", res2.Etcd.Image); diff != "" {
+			t.Errorf("ResolveGlobalTopo inline fallback mismatch (-want +got):\n%s", diff)
 		}
 
 		spec4 := &multigresv1alpha1.GlobalTopoServerSpec{}
 		res4 := ResolveGlobalTopo(spec4, nil)
-		if res4 != spec4 {
-			t.Error("Expected to return original spec when no inline config and no template")
+		if diff := cmp.Diff(spec4, res4); diff != "" {
+			t.Errorf("ResolveGlobalTopo no-op mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -1308,23 +1311,25 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 		res := ResolveMultiAdmin(spec, core)
-		if *res.Replicas != 10 {
-			t.Error("Failed to resolve MultiAdmin from template")
+		if diff := cmp.Diff(int32(10), *res.Replicas); diff != "" {
+			t.Errorf("ResolveMultiAdmin template mismatch (-want +got):\n%s", diff)
 		}
+
 		spec2 := &multigresv1alpha1.MultiAdminConfig{TemplateRef: "t1", Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
 		res2 := ResolveMultiAdmin(spec2, nil)
-		if *res2.Replicas != 5 {
-			t.Error("Failed to fallback to inline MultiAdmin")
+		if diff := cmp.Diff(int32(5), *res2.Replicas); diff != "" {
+			t.Errorf("ResolveMultiAdmin inline fallback mismatch (-want +got):\n%s", diff)
 		}
+
 		res3 := ResolveMultiAdmin(&multigresv1alpha1.MultiAdminConfig{}, nil)
 		if res3 != nil {
-			t.Error("Expected nil for empty config")
+			t.Error("ResolveMultiAdmin expected nil for empty config")
 		}
 
 		spec5 := &multigresv1alpha1.MultiAdminConfig{}
 		res5 := ResolveMultiAdmin(spec5, nil)
 		if res5 != nil {
-			t.Error("Expected nil when no config and no template")
+			t.Error("ResolveMultiAdmin expected nil when no config and no template")
 		}
 	})
 }

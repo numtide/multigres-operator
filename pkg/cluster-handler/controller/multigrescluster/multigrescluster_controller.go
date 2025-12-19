@@ -48,7 +48,7 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get MultigresCluster: %w", err)
 	}
 
 	if !cluster.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -58,7 +58,7 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			}
 			controllerutil.RemoveFinalizer(cluster, finalizerName)
 			if err := r.Update(ctx, cluster); err != nil {
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
 			}
 		}
 		return ctrl.Result{}, nil
@@ -67,7 +67,7 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if !controllerutil.ContainsFinalizer(cluster, finalizerName) {
 		controllerutil.AddFinalizer(cluster, finalizerName)
 		if err := r.Update(ctx, cluster); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -105,7 +105,7 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 
 	cells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return err
+		return fmt.Errorf("failed to list cells: %w", err)
 	}
 	if len(cells.Items) > 0 {
 		return fmt.Errorf("cells still exist")
@@ -113,7 +113,7 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 
 	tgs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, tgs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return err
+		return fmt.Errorf("failed to list tablegroups: %w", err)
 	}
 	if len(tgs.Items) > 0 {
 		return fmt.Errorf("tablegroups still exist")
@@ -121,7 +121,7 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 
 	ts := &multigresv1alpha1.TopoServerList{}
 	if err := r.List(ctx, ts, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return err
+		return fmt.Errorf("failed to list toposervers: %w", err)
 	}
 	if len(ts.Items) > 0 {
 		return fmt.Errorf("toposervers still exist")
@@ -140,7 +140,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 
 	topoTpl, err := resolver.ResolveCoreTemplate(ctx, topoTplName)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to resolve topo template: %w", err)
 	}
 
 	adminTplName := cluster.Spec.TemplateDefaults.CoreTemplate
@@ -150,7 +150,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 
 	adminTpl, err := resolver.ResolveCoreTemplate(ctx, adminTplName)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to resolve admin template: %w", err)
 	}
 
 	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
@@ -176,7 +176,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 			}
 			return controllerutil.SetControllerReference(cluster, ts, r.Scheme)
 		}); err != nil {
-			return err
+			return fmt.Errorf("failed to create/update global topo: %w", err)
 		}
 	}
 
@@ -216,7 +216,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 			}
 			return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
 		}); err != nil {
-			return err
+			return fmt.Errorf("failed to create/update multiadmin: %w", err)
 		}
 	}
 
@@ -226,15 +226,15 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
 	existingCells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, existingCells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return err
+		return fmt.Errorf("failed to list existing cells: %w", err)
 	}
 
 	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get global topo ref: %w", err)
 	}
 
-	activeCellNames := make(map[string]bool)
+	activeCellNames := make(map[string]bool, len(cluster.Spec.Cells))
 
 	allCellNames := []multigresv1alpha1.CellName{}
 	for _, cellCfg := range cluster.Spec.Cells {
@@ -246,7 +246,7 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 
 		tpl, err := resolver.ResolveCellTemplate(ctx, cellCfg.CellTemplate)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to resolve cell template '%s': %w", cellCfg.CellTemplate, err)
 		}
 
 		gatewaySpec, localTopoSpec := MergeCellConfig(tpl, cellCfg.Overrides, cellCfg.Spec)
@@ -280,14 +280,14 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 
 			return controllerutil.SetControllerReference(cluster, cellCR, r.Scheme)
 		}); err != nil {
-			return err
+			return fmt.Errorf("failed to create/update cell '%s': %w", cellCfg.Name, err)
 		}
 	}
 
 	for _, item := range existingCells.Items {
 		if !activeCellNames[item.Spec.Name] {
 			if err := r.Delete(ctx, &item); err != nil {
-				return err
+				return fmt.Errorf("failed to delete orphaned cell '%s': %w", item.Name, err)
 			}
 		}
 	}
@@ -298,12 +298,12 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
 	existingTGs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, existingTGs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return err
+		return fmt.Errorf("failed to list existing tablegroups: %w", err)
 	}
 
 	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get global topo ref: %w", err)
 	}
 
 	activeTGNames := make(map[string]bool)
@@ -322,7 +322,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 			for _, shard := range tg.Shards {
 				tpl, err := resolver.ResolveShardTemplate(ctx, shard.ShardTemplate)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to resolve shard template '%s': %w", shard.ShardTemplate, err)
 				}
 
 				orch, pools := MergeShardConfig(tpl, shard.Overrides, shard.Spec)
@@ -378,7 +378,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 
 				return controllerutil.SetControllerReference(cluster, tgCR, r.Scheme)
 			}); err != nil {
-				return err
+				return fmt.Errorf("failed to create/update tablegroup '%s': %w", tgNameFull, err)
 			}
 		}
 	}
@@ -386,7 +386,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 	for _, item := range existingTGs.Items {
 		if !activeTGNames[item.Name] {
 			if err := r.Delete(ctx, &item); err != nil {
-				return err
+				return fmt.Errorf("failed to delete orphaned tablegroup '%s': %w", item.Name, err)
 			}
 		}
 	}
@@ -402,7 +402,7 @@ func (r *MultigresClusterReconciler) getGlobalTopoRef(ctx context.Context, clust
 
 	topoTpl, err := resolver.ResolveCoreTemplate(ctx, topoTplName)
 	if err != nil {
-		return multigresv1alpha1.GlobalTopoServerRef{}, err
+		return multigresv1alpha1.GlobalTopoServerRef{}, fmt.Errorf("failed to resolve global topo template: %w", err)
 	}
 
 	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
@@ -428,7 +428,7 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 
 	cells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return err
+		return fmt.Errorf("failed to list cells for status: %w", err)
 	}
 
 	for _, c := range cells.Items {
@@ -447,7 +447,7 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 
 	tgs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, tgs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return err
+		return fmt.Errorf("failed to list tablegroups for status: %w", err)
 	}
 
 	dbShards := make(map[string]struct {
@@ -490,7 +490,11 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 		LastTransitionTime: metav1.Now(),
 	})
 
-	return r.Status().Update(ctx, cluster)
+	if err := r.Status().Update(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to update cluster status: %w", err)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
