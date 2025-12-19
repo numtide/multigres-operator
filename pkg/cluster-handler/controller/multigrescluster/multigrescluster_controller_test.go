@@ -259,6 +259,65 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "Create: MultiOrch Placement Defaulting",
+			cluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.TemplateDefaults.ShardTemplate = "" // Ensure no default template interferes
+				// Define a database with explicit pools containing cells
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{
+					{
+						Name: "db-defaulting",
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Name: "tg1",
+								Shards: []multigresv1alpha1.ShardConfig{
+									{
+										Name: "0",
+										Spec: &multigresv1alpha1.ShardInlineSpec{
+											// MultiOrch Cells explicitly EMPTY
+											MultiOrch: multigresv1alpha1.MultiOrchSpec{
+												StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+											},
+											Pools: map[string]multigresv1alpha1.PoolSpec{
+												"pool-a": {Cells: []multigresv1alpha1.CellName{"zone-a"}},
+												"pool-b": {Cells: []multigresv1alpha1.CellName{"zone-b"}},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+				return c
+			}(),
+			existingObjects: []client.Object{coreTpl, cellTpl},
+			expectError:     false,
+			validate: func(t *testing.T, c client.Client) {
+				ctx := context.Background()
+				// Fetch the child TableGroup (which holds the resolved shard spec)
+				tgName := clusterName + "-db-defaulting-tg1"
+				tg := &multigresv1alpha1.TableGroup{}
+				if err := c.Get(ctx, types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
+					t.Fatal(err)
+				}
+
+				if len(tg.Spec.Shards) != 1 {
+					t.Fatalf("Expected 1 shard, got %d", len(tg.Spec.Shards))
+				}
+
+				orchCells := tg.Spec.Shards[0].MultiOrch.Cells
+				if len(orchCells) != 2 {
+					t.Errorf("MultiOrch should default to 2 cells, got %d: %v", len(orchCells), orchCells)
+				}
+
+				// Check content (order is sorted by controller)
+				if string(orchCells[0]) != "zone-a" || string(orchCells[1]) != "zone-b" {
+					t.Errorf("MultiOrch cells mismatch. Got %v, Want [zone-a zone-b]", orchCells)
+				}
+			},
+		},
+		{
 			name: "Create: Inline Etcd",
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()

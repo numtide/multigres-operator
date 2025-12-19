@@ -3,6 +3,7 @@ package multigrescluster
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -202,6 +203,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 					Labels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
 				},
 				Spec: corev1.PodSpec{
+					ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
 							Name:      "multiadmin",
@@ -324,6 +326,24 @@ func (r *MultigresClusterReconciler) reconcileDatabases(ctx context.Context, clu
 				}
 
 				orch, pools := MergeShardConfig(tpl, shard.Overrides, shard.Spec)
+
+				// Default MultiOrch Cells if empty (Consensus safety)
+				// If 'cells' is empty, it defaults to all cells where pools are defined.
+				if len(orch.Cells) == 0 {
+					uniqueCells := make(map[string]bool)
+					for _, pool := range pools {
+						for _, cell := range pool.Cells {
+							uniqueCells[string(cell)] = true
+						}
+					}
+					for c := range uniqueCells {
+						orch.Cells = append(orch.Cells, multigresv1alpha1.CellName(c))
+					}
+					// Sort for deterministic output
+					sort.Slice(orch.Cells, func(i, j int) bool {
+						return string(orch.Cells[i]) < string(orch.Cells[j])
+					})
+				}
 
 				resolvedShards = append(resolvedShards, multigresv1alpha1.ShardResolvedSpec{
 					Name:      shard.Name,
