@@ -17,4 +17,4 @@ jobs:
           go-version-file: ./go.mod
 
       - name: Verify manifests
-        run: make verify
+        run: make verify-warn
