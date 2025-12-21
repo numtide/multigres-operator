@@ -163,7 +163,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 			},
 		}
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
-			replicas := int32(3)
+			replicas := DefaultEtcdReplicas
 			if topoSpec.Etcd.Replicas != nil {
 				replicas = *topoSpec.Etcd.Replicas
 			}
@@ -190,7 +190,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 			},
 		}
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			replicas := int32(1)
+			replicas := DefaultAdminReplicas
 			if multiAdminSpec.Replicas != nil {
 				replicas = *multiAdminSpec.Replicas
 			}

@@ -39,7 +39,7 @@ func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName
 		name = r.Defaults.CoreTemplate
 	}
 	if name == "" {
-		name = "default"
+		name = FallbackCoreTemplate
 		isImplicitFallback = true
 	}
 
@@ -67,7 +67,7 @@ func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName
 		name = r.Defaults.CellTemplate
 	}
 	if name == "" {
-		name = "default"
+		name = FallbackCellTemplate
 		isImplicitFallback = true
 	}
 
@@ -94,7 +94,7 @@ func (r *TemplateResolver) ResolveShardTemplate(ctx context.Context, templateNam
 		name = r.Defaults.ShardTemplate
 	}
 	if name == "" {
-		name = "default"
+		name = FallbackShardTemplate
 		isImplicitFallback = true
 	}
 
