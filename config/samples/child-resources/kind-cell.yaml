@@ -9,8 +9,8 @@ spec:
 
   # Container images for cell components
   images:
-    multigateway: ghcr.io/multigres/multigateway:latest
-    multiorch: ghcr.io/multigres/multiorch:latest
+    multigateway: ghcr.io/multigres/multigres:main
+    multiorch: ghcr.io/multigres/multigres:main
 
   # MultiGateway deployment - query routing
   multigateway:

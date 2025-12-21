@@ -7,13 +7,14 @@ spec:
   # Container images for shard components
   images:
     postgres: postgres:16-alpine
-    multipooler: ghcr.io/multigres/multipooler:latest
+    # multiorch: ghcr.io/multigres/multigres:main
+    multipooler: ghcr.io/multigres/multigres:main
 
   # MultiOrch configuration for shard orchestration
   multiOrch:
     cells:
       - zone-a
-    image: ghcr.io/multigres/multiorch:latest
+    image: ghcr.io/multigres/multigres:main
     resources:
       requests:
         cpu: 50m
