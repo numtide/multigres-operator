@@ -283,9 +283,7 @@ func (r *MultigresClusterReconciler) reconcileCells(ctx context.Context, cluster
 
 			cellCR.Spec.GlobalTopoServer = globalTopoRef
 
-			if localTopoSpec != nil {
-				cellCR.Spec.TopoServer = *localTopoSpec
-			}
+			cellCR.Spec.TopoServer = localTopoSpec
 
 			cellCR.Spec.TopologyReconciliation = multigresv1alpha1.TopologyReconciliation{
 				RegisterCell: true,

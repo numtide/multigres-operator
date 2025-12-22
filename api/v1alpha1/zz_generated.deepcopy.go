@@ -140,7 +140,11 @@ func (in *CellSpec) DeepCopyInto(out *CellSpec) {
 	*out = *in
 	in.MultiGateway.DeepCopyInto(&out.MultiGateway)
 	out.GlobalTopoServer = in.GlobalTopoServer
-	in.TopoServer.DeepCopyInto(&out.TopoServer)
+	if in.TopoServer != nil {
+		in, out := &in.TopoServer, &out.TopoServer
+		*out = new(LocalTopoServerSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.AllCells != nil {
 		in, out := &in.AllCells, &out.AllCells
 		*out = make([]CellName, len(*in))

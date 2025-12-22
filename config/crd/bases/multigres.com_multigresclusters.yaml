@@ -1007,7 +1007,7 @@ spec:
                                 type: string
                               description: PodAnnotations are annotations to add to
                                 the pods.
-                              maxProperties: 64
+                              maxProperties: 48
                               type: object
                               x-kubernetes-validations:
                               - message: annotation keys must be <64 chars and values
@@ -1019,7 +1019,7 @@ spec:
                                 type: string
                               description: PodLabels are additional labels to add
                                 to the pods.
-                              maxProperties: 64
+                              maxProperties: 48
                               type: object
                               x-kubernetes-validations:
                               - message: label keys and values must be <64 chars
@@ -2175,7 +2175,7 @@ spec:
                                 type: string
                               description: PodAnnotations are annotations to add to
                                 the pods.
-                              maxProperties: 64
+                              maxProperties: 48
                               type: object
                               x-kubernetes-validations:
                               - message: annotation keys must be <64 chars and values
@@ -2187,7 +2187,7 @@ spec:
                                 type: string
                               description: PodLabels are additional labels to add
                                 to the pods.
-                              maxProperties: 64
+                              maxProperties: 48
                               type: object
                               x-kubernetes-validations:
                               - message: label keys and values must be <64 chars
@@ -2274,7 +2274,7 @@ spec:
                     rule: '!(has(self.spec) && has(self.cellTemplate))'
                   - message: must specify either 'zone' or 'region', but not both
                     rule: has(self.zone) != has(self.region)
-                maxItems: 100
+                maxItems: 50
                 type: array
                 x-kubernetes-list-map-keys:
                 - name
@@ -3312,14 +3312,14 @@ spec:
                                             maxLength: 63
                                             minLength: 1
                                             type: string
-                                          maxItems: 100
+                                          maxItems: 50
                                           type: array
                                         podAnnotations:
                                           additionalProperties:
                                             type: string
                                           description: PodAnnotations are annotations
                                             to add to the pods.
-                                          maxProperties: 64
+                                          maxProperties: 48
                                           type: object
                                           x-kubernetes-validations:
                                           - message: annotation keys must be <64 chars
@@ -3331,7 +3331,7 @@ spec:
                                             type: string
                                           description: PodLabels are additional labels
                                             to add to the pods.
-                                          maxProperties: 64
+                                          maxProperties: 48
                                           type: object
                                           x-kubernetes-validations:
                                           - message: label keys and values must be
@@ -4411,7 +4411,7 @@ spec:
                                               maxLength: 63
                                               minLength: 1
                                               type: string
-                                            maxItems: 100
+                                            maxItems: 50
                                             type: array
                                           multipooler:
                                             description: Multipooler container configuration.
@@ -4576,7 +4576,7 @@ spec:
                                         type: object
                                       description: Pools overrides. Keyed by pool
                                         name.
-                                      maxProperties: 32
+                                      maxProperties: 8
                                       type: object
                                       x-kubernetes-validations:
                                       - message: pool names must be < 63 chars
@@ -5580,14 +5580,14 @@ spec:
                                             maxLength: 63
                                             minLength: 1
                                             type: string
-                                          maxItems: 100
+                                          maxItems: 50
                                           type: array
                                         podAnnotations:
                                           additionalProperties:
                                             type: string
                                           description: PodAnnotations are annotations
                                             to add to the pods.
-                                          maxProperties: 64
+                                          maxProperties: 48
                                           type: object
                                           x-kubernetes-validations:
                                           - message: annotation keys must be <64 chars
@@ -5599,7 +5599,7 @@ spec:
                                             type: string
                                           description: PodLabels are additional labels
                                             to add to the pods.
-                                          maxProperties: 64
+                                          maxProperties: 48
                                           type: object
                                           x-kubernetes-validations:
                                           - message: label keys and values must be
@@ -6679,7 +6679,7 @@ spec:
                                               maxLength: 63
                                               minLength: 1
                                               type: string
-                                            maxItems: 100
+                                            maxItems: 50
                                             type: array
                                           multipooler:
                                             description: Multipooler container configuration.
@@ -6844,7 +6844,7 @@ spec:
                                         type: object
                                       description: Pools configuration. Keyed by pool
                                         name.
-                                      maxProperties: 32
+                                      maxProperties: 8
                                       type: object
                                       x-kubernetes-validations:
                                       - message: pool names must be < 63 chars
@@ -6856,7 +6856,7 @@ spec:
                               x-kubernetes-validations:
                               - message: cannot specify both 'spec' and 'shardTemplate'
                                 rule: '!(has(self.spec) && has(self.shardTemplate))'
-                            maxItems: 128
+                            maxItems: 32
                             type: array
                             x-kubernetes-list-map-keys:
                             - name
@@ -6864,7 +6864,7 @@ spec:
                         required:
                         - name
                         type: object
-                      maxItems: 100
+                      maxItems: 20
                       type: array
                       x-kubernetes-list-map-keys:
                       - name
@@ -6876,7 +6876,7 @@ spec:
                   required:
                   - name
                   type: object
-                maxItems: 500
+                maxItems: 50
                 type: array
                 x-kubernetes-list-map-keys:
                 - name
@@ -8007,7 +8007,7 @@ spec:
                           type: string
                         description: PodAnnotations are annotations to add to the
                           pods.
-                        maxProperties: 64
+                        maxProperties: 48
                         type: object
                         x-kubernetes-validations:
                         - message: annotation keys must be <64 chars and values <256
@@ -8018,7 +8018,7 @@ spec:
                           type: string
                         description: PodLabels are additional labels to add to the
                           pods.
-                        maxProperties: 64
+                        maxProperties: 48
                         type: object
                         x-kubernetes-validations:
                         - message: label keys and values must be <64 chars
@@ -8140,7 +8140,7 @@ spec:
                   - ready
                   type: object
                 description: Cells status summary.
-                maxProperties: 100
+                maxProperties: 50
                 type: object
                 x-kubernetes-validations:
                 - message: cell names must be < 63 chars
@@ -8218,7 +8218,7 @@ spec:
                   - totalShards
                   type: object
                 description: Databases status summary.
-                maxProperties: 500
+                maxProperties: 50
                 type: object
                 x-kubernetes-validations:
                 - message: database names must be < 63 chars

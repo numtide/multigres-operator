@@ -407,7 +407,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
 					t.Fatal(err)
 				}
-				if cell.Spec.TopoServer.Etcd == nil || cell.Spec.TopoServer.Etcd.Image != "local-etcd:v1" {
+				// Updated to handle pointer dereference safety
+				if cell.Spec.TopoServer == nil || cell.Spec.TopoServer.Etcd == nil || cell.Spec.TopoServer.Etcd.Image != "local-etcd:v1" {
 					t.Error("LocalTopoServer not propagated to Cell")
 				}
 			},

@@ -54,20 +54,24 @@ spec:
                   maxLength: 63
                   minLength: 1
                   type: string
-                maxItems: 100
+                maxItems: 50
                 type: array
               globalTopoServer:
                 description: GlobalTopoServer reference (always populated).
                 properties:
                   address:
+                    description: Address is the DNS address of the topology server.
                     maxLength: 512
                     minLength: 1
                     type: string
                   implementation:
+                    description: Implementation defines the client implementation
+                      (e.g. "etcd").
                     maxLength: 63
                     minLength: 1
                     type: string
                   rootPath:
+                    description: RootPath is the etcd prefix for this cluster.
                     maxLength: 512
                     minLength: 1
                     type: string
@@ -1002,7 +1006,7 @@ spec:
                     additionalProperties:
                       type: string
                     description: PodAnnotations are annotations to add to the pods.
-                    maxProperties: 64
+                    maxProperties: 48
                     type: object
                     x-kubernetes-validations:
                     - message: annotation keys must be <64 chars and values <256 chars
@@ -1011,7 +1015,7 @@ spec:
                     additionalProperties:
                       type: string
                     description: PodLabels are additional labels to add to the pods.
-                    maxProperties: 64
+                    maxProperties: 48
                     type: object
                     x-kubernetes-validations:
                     - message: label keys and values must be <64 chars
@@ -1225,8 +1229,12 @@ spec:
                 description: TopologyReconciliation flags.
                 properties:
                   prunePoolers:
+                    description: PrunePoolers indicates if unused poolers should be
+                      removed.
                     type: boolean
                   registerCell:
+                    description: RegisterCell indicates if the cell should register
+                      itself in the topology.
                     type: boolean
                 required:
                 - prunePoolers
@@ -1306,12 +1314,16 @@ spec:
                   type: object
                 type: array
               gatewayReadyReplicas:
+                description: GatewayReadyReplicas is the number of gateway pods that
+                  are ready.
                 format: int32
                 type: integer
               gatewayReplicas:
+                description: GatewayReplicas is the total number of gateway pods.
                 format: int32
                 type: integer
               gatewayServiceName:
+                description: GatewayServiceName is the DNS name of the gateway service.
                 maxLength: 253
                 type: string
             required:

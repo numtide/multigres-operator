@@ -48,7 +48,7 @@ type TableGroupSpec struct {
 	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`
 
 	// Shards is the list of FULLY RESOLVED shard specifications.
-	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:MaxItems=32
 	Shards []ShardResolvedSpec `json:"shards"`
 }
 
@@ -63,7 +63,7 @@ type ShardResolvedSpec struct {
 	MultiOrch MultiOrchSpec `json:"multiorch"`
 
 	// Pools is the map of fully resolved data pool configurations.
-	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools"`
 }
