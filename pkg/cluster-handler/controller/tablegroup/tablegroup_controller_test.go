@@ -1,10 +1,8 @@
 package tablegroup
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -22,10 +20,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
-func TestTableGroupReconciler_Reconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-
+func setupFixtures() (*multigresv1alpha1.TableGroup, string, string, string, string, string) {
 	tgName := "test-tg"
 	namespace := "default"
 	clusterName := "test-cluster"
@@ -68,27 +63,28 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 			},
 		},
 	}
+	return baseTG, tgName, namespace, clusterName, dbName, tgLabelName
+}
 
-	errBoom := errors.New("boom")
+func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
+	t.Parallel()
 
-	tests := []struct {
-		name            string
-		tg              *multigresv1alpha1.TableGroup
-		existingObjects []client.Object
-		failureConfig   *testutil.FailureConfig
-		setupFunc       func(client.Client)
-		expectError     bool
-		validate        func(t *testing.T, c client.Client)
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	baseTG, tgName, namespace, clusterName, dbName, tgLabelName := setupFixtures()
+
+	tests := map[string]struct {
+		tableGroup         *multigresv1alpha1.TableGroup
+		existingObjects    []client.Object
+		preReconcileUpdate func(testing.TB, *multigresv1alpha1.TableGroup)
+		skipCreate         bool // If true, the object won't be created in the fake client (simulates Not Found)
+		validate           func(testing.TB, client.Client)
 	}{
-		// ---------------------------------------------------------------------
-		// Success Scenarios
-		// ---------------------------------------------------------------------
-		{
-			name:            "Create: Shard Creation",
-			tg:              baseTG.DeepCopy(),
+		"Create: Shard Creation": {
+			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
-			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				shardNameFull := fmt.Sprintf("%s-%s", tgName, "shard-0")
 				shard := &multigresv1alpha1.Shard{}
@@ -100,11 +96,10 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Update: Apply Changes and Prune Orphans",
-			tg: func() *multigresv1alpha1.TableGroup {
-				t := baseTG.DeepCopy()
-				t.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{
+		"Update: Apply Changes and Prune Orphans": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{
 					{
 						Name: "shard-1", // New shard
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
@@ -112,8 +107,7 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 						},
 					},
 				}
-				return t
-			}(),
+			},
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
@@ -128,8 +122,7 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
 				},
 			},
-			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				newShard := &multigresv1alpha1.Shard{}
 				if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-1"), Namespace: namespace}, newShard); err != nil {
@@ -141,15 +134,12 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name:            "Status: Update Ready Count",
-			tg:              baseTG.DeepCopy(),
-			existingObjects: []client.Object{},
-			setupFunc: func(c client.Client) {
-				shardNameFull := fmt.Sprintf("%s-%s", tgName, "shard-0")
-				shard := &multigresv1alpha1.Shard{
+		"Status: Update Ready Count": {
+			tableGroup: baseTG.DeepCopy(),
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      shardNameFull,
+						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
 						Namespace: namespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    clusterName,
@@ -158,31 +148,29 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 						},
 					},
 					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
-				}
-				_ = c.Create(context.Background(), shard)
-				shard.Status.Conditions = []metav1.Condition{
-					{Type: "Available", Status: metav1.ConditionTrue, LastTransitionTime: metav1.Now()},
-				}
-				_ = c.Status().Update(context.Background(), shard)
+					Status: multigresv1alpha1.ShardStatus{
+						Conditions: []metav1.Condition{
+							{Type: "Available", Status: metav1.ConditionTrue, LastTransitionTime: metav1.Now()},
+						},
+					},
+				},
 			},
-			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				_ = c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
+				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+					t.Fatalf("failed to get tablegroup: %v", err)
+				}
 				if diff := cmp.Diff(int32(1), updatedTG.Status.ReadyShards); diff != "" {
 					t.Errorf("ReadyShards mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
-		{
-			name:            "Status: Partial Ready (Not all shards ready)",
-			tg:              baseTG.DeepCopy(),
-			existingObjects: []client.Object{},
-			setupFunc: func(c client.Client) {
-				shardNameFull := fmt.Sprintf("%s-%s", tgName, "shard-0")
-				shard := &multigresv1alpha1.Shard{
+		"Status: Partial Ready (Not all shards ready)": {
+			tableGroup: baseTG.DeepCopy(),
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      shardNameFull,
+						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
 						Namespace: namespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    clusterName,
@@ -191,13 +179,14 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 						},
 					},
 					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
-				}
-				_ = c.Create(context.Background(), shard)
+					// No status, so not ready
+				},
 			},
-			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				_ = c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
+				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+					t.Fatalf("failed to get tablegroup: %v", err)
+				}
 				if diff := cmp.Diff(int32(0), updatedTG.Status.ReadyShards); diff != "" {
 					t.Errorf("ReadyShards mismatch (-want +got):\n%s", diff)
 				}
@@ -206,50 +195,107 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Status: Zero Shards (Vacuously True)",
-			tg: func() *multigresv1alpha1.TableGroup {
-				t := baseTG.DeepCopy()
-				t.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
-				return t
-			}(),
+		"Status: Zero Shards (Vacuously True)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
+			},
 			existingObjects: []client.Object{},
-			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				_ = c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG)
+				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+					t.Fatalf("failed to get tablegroup: %v", err)
+				}
 				if diff := cmp.Diff(true, meta.IsStatusConditionTrue(updatedTG.Status.Conditions, "Available")); diff != "" {
 					t.Errorf("Zero shard TableGroup Available condition mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
-
-		// ---------------------------------------------------------------------
-		// Error Scenarios
-		// ---------------------------------------------------------------------
-		{
-			name:            "Error: Object Not Found (Clean Exit)",
-			tg:              baseTG.DeepCopy(),
+		"Error: Object Not Found (Clean Exit)": {
+			tableGroup:      baseTG.DeepCopy(),
+			skipCreate:      true,
 			existingObjects: []client.Object{},
-			expectError:     false,
 		},
-		{
-			name:            "Error: Get TableGroup Failed",
-			tg:              baseTG.DeepCopy(),
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			clientBuilder := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tc.existingObjects...).
+				WithStatusSubresource(&multigresv1alpha1.TableGroup{}, &multigresv1alpha1.Shard{})
+			baseClient := clientBuilder.Build()
+
+			// Apply pre-reconcile updates if defined
+			if tc.preReconcileUpdate != nil {
+				tc.preReconcileUpdate(t, tc.tableGroup)
+			}
+
+			// Initialize client state
+			if !tc.skipCreate {
+				check := &multigresv1alpha1.TableGroup{}
+				err := baseClient.Get(t.Context(), types.NamespacedName{Name: tc.tableGroup.Name, Namespace: tc.tableGroup.Namespace}, check)
+				if apierrors.IsNotFound(err) {
+					if err := baseClient.Create(t.Context(), tc.tableGroup); err != nil {
+						t.Fatalf("failed to create initial tablegroup: %v", err)
+					}
+				}
+			}
+
+			reconciler := &TableGroupReconciler{
+				Client: baseClient,
+				Scheme: scheme,
+			}
+
+			req := ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tc.tableGroup.Name,
+					Namespace: tc.tableGroup.Namespace,
+				},
+			}
+
+			_, err := reconciler.Reconcile(t.Context(), req)
+
+			if err != nil {
+				t.Errorf("Unexpected error from Reconcile: %v", err)
+			}
+
+			if tc.validate != nil {
+				tc.validate(t, baseClient)
+			}
+		})
+	}
+}
+
+func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	baseTG, tgName, namespace, clusterName, dbName, tgLabelName := setupFixtures()
+	errBoom := errors.New("boom")
+
+	tests := map[string]struct {
+		tableGroup         *multigresv1alpha1.TableGroup
+		existingObjects    []client.Object
+		preReconcileUpdate func(testing.TB, *multigresv1alpha1.TableGroup)
+		failureConfig      *testutil.FailureConfig
+	}{
+		"Error: Get TableGroup Failed": {
+			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName(tgName, errBoom)},
-			expectError:     true,
 		},
-		{
-			name:            "Error: Create/Update Shard Failed",
-			tg:              baseTG.DeepCopy(),
+		"Error: Create/Update Shard Failed": {
+			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(fmt.Sprintf("%s-%s", tgName, "shard-0"), errBoom)},
-			expectError:     true,
 		},
-		{
-			name:            "Error: List Shards Failed (during pruning)",
-			tg:              baseTG.DeepCopy(),
+		"Error: List Shards Failed (during pruning)": {
+			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
@@ -259,24 +305,19 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 					return nil
 				},
 			},
-			expectError: true,
 		},
-		{
-			name:            "Error: List Shards Failed (during status check)",
-			tg:              baseTG.DeepCopy(),
+		"Error: List Shards Failed (during status check)": {
+			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnList: testutil.FailObjListAfterNCalls(1, errBoom),
 			},
-			expectError: true,
 		},
-		{
-			name: "Error: Delete Orphan Shard Failed",
-			tg: func() *multigresv1alpha1.TableGroup {
-				t := baseTG.DeepCopy()
-				t.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
-				return t
-			}(),
+		"Error: Delete Orphan Shard Failed": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
+			},
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
@@ -291,19 +332,18 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(fmt.Sprintf("%s-%s", tgName, "shard-0"), errBoom)},
-			expectError:   true,
 		},
-		{
-			name:            "Error: Update Status Failed",
-			tg:              baseTG.DeepCopy(),
+		"Error: Update Status Failed": {
+			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig:   &testutil.FailureConfig{OnStatusUpdate: testutil.FailOnObjectName(tgName, errBoom)},
-			expectError:     true,
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			clientBuilder := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
@@ -311,20 +351,21 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 			baseClient := clientBuilder.Build()
 
 			var finalClient client.Client
+			finalClient = baseClient
 			if tc.failureConfig != nil {
 				finalClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
-			} else {
-				finalClient = baseClient
 			}
 
-			if tc.setupFunc != nil {
-				tc.setupFunc(baseClient)
+			// Apply pre-reconcile updates if defined
+			if tc.preReconcileUpdate != nil {
+				tc.preReconcileUpdate(t, tc.tableGroup)
 			}
 
-			if !strings.Contains(tc.name, "Object Not Found") {
-				check := &multigresv1alpha1.TableGroup{}
-				if err := baseClient.Get(context.Background(), types.NamespacedName{Name: tc.tg.Name, Namespace: tc.tg.Namespace}, check); apierrors.IsNotFound(err) {
-					_ = baseClient.Create(context.Background(), tc.tg)
+			check := &multigresv1alpha1.TableGroup{}
+			err := baseClient.Get(t.Context(), types.NamespacedName{Name: tc.tableGroup.Name, Namespace: tc.tableGroup.Namespace}, check)
+			if apierrors.IsNotFound(err) {
+				if err := baseClient.Create(t.Context(), tc.tableGroup); err != nil {
+					t.Fatalf("failed to create initial tablegroup: %v", err)
 				}
 			}
 
@@ -335,31 +376,23 @@ func TestTableGroupReconciler_Reconcile(t *testing.T) {
 
 			req := ctrl.Request{
 				NamespacedName: types.NamespacedName{
-					Name:      tc.tg.Name,
-					Namespace: tc.tg.Namespace,
+					Name:      tc.tableGroup.Name,
+					Namespace: tc.tableGroup.Namespace,
 				},
 			}
 
-			_, err := reconciler.Reconcile(context.Background(), req)
+			_, err = reconciler.Reconcile(t.Context(), req)
 
-			if tc.expectError {
-				if err == nil {
-					t.Error("Expected error, got nil")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-			}
-
-			if tc.validate != nil {
-				tc.validate(t, baseClient)
+			if err == nil {
+				t.Error("Expected error from Reconcile, got nil")
 			}
 		})
 	}
 }
 
 func TestSetupWithManager_Coverage(t *testing.T) {
+	t.Parallel()
+
 	defer func() {
 		if r := recover(); r != nil {
 			// Expected panic
