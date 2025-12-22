@@ -126,9 +126,9 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		cluster         *multigresv1alpha1.MultigresCluster
 		existingObjects []client.Object
 		failureConfig   *testutil.FailureConfig
-		setupFunc       func(*testing.T, client.Client)
+		setupFunc       func(testing.TB, client.Client)
 		expectError     bool
-		validate        func(t *testing.T, c client.Client)
+		validate        func(testing.TB, client.Client)
 	}{
 		// ---------------------------------------------------------------------
 		// Success Scenarios
@@ -141,7 +141,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				updatedCluster := &multigresv1alpha1.MultigresCluster{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster); err != nil {
@@ -156,7 +156,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				updatedCluster := &multigresv1alpha1.MultigresCluster{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster); err != nil {
@@ -204,7 +204,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 
 				// Check Topo uses topo-core
@@ -248,7 +248,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				deploy := &appsv1.Deployment{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
@@ -290,7 +290,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				// Fetch the child TableGroup (which holds the resolved shard spec)
 				tgName := clusterName + "-db-defaulting-tg1"
@@ -318,7 +318,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				deploy := &appsv1.Deployment{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
@@ -342,7 +342,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				ts := &multigresv1alpha1.TopoServer{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
@@ -374,7 +374,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				cellTpl, shardTpl,
 			},
 			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				// Verify TopoServer created with default replicas (3)
 				ts := &multigresv1alpha1.TopoServer{}
@@ -410,7 +410,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				cell := &multigresv1alpha1.Cell{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
@@ -434,7 +434,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				cell := &multigresv1alpha1.Cell{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
@@ -459,7 +459,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{},
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				cell := &multigresv1alpha1.Cell{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
@@ -480,7 +480,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			expectError:     true, // Updated to true because controller now enforces 50 char limit
-			validate:        func(t *testing.T, c client.Client) {},
+			validate:        func(t testing.TB, c client.Client) {},
 		},
 		"Create: No Global Topo Config": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
@@ -492,7 +492,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			}(),
 			existingObjects: []client.Object{cellTpl, shardTpl}, // No Core Template
 			expectError:     false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				// Verify Cell got empty topo address
 				cell := &multigresv1alpha1.Cell{}
 				_ = c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
@@ -508,7 +508,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				return c
 			}(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			setupFunc: func(t *testing.T, c client.Client) {
+			setupFunc: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				cell := &multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}},
@@ -523,7 +523,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				cluster := &multigresv1alpha1.MultigresCluster{}
 				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster); err != nil {
 					t.Fatalf("failed to get cluster: %v", err)
@@ -615,7 +615,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}(),
 			},
 			expectError: false,
-			validate: func(t *testing.T, c client.Client) {
+			validate: func(t testing.TB, c client.Client) {
 				updated := &multigresv1alpha1.MultigresCluster{}
 				err := c.Get(t.Context(), types.NamespacedName{Name: clusterName, Namespace: namespace}, updated)
 				if err == nil {
