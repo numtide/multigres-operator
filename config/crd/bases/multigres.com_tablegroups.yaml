@@ -44,6 +44,7 @@ spec:
             description: TableGroupSpec defines the desired state of TableGroup.
             properties:
               databaseName:
+                description: DatabaseName is the name of the logical database.
                 maxLength: 63
                 type: string
               default:
@@ -51,17 +52,22 @@ spec:
                   group for the database.
                 type: boolean
               globalTopoServer:
-                description: GlobalTopoServer reference.
+                description: GlobalTopoServer is a reference to the global topology
+                  server.
                 properties:
                   address:
+                    description: Address is the DNS address of the topology server.
                     maxLength: 512
                     minLength: 1
                     type: string
                   implementation:
+                    description: Implementation defines the client implementation
+                      (e.g. "etcd").
                     maxLength: 63
                     minLength: 1
                     type: string
                   rootPath:
+                    description: RootPath is the etcd prefix for this cluster.
                     maxLength: 512
                     minLength: 1
                     type: string
@@ -71,15 +77,20 @@ spec:
                 - rootPath
                 type: object
               images:
-                description: Images required for child shards.
+                description: Images defines the container images used for child shards
+                  - defined globally in MultigresCluster.
                 properties:
                   multiorch:
+                    description: MultiOrch is the image for the shard orchestrator.
                     maxLength: 512
                     type: string
                   multipooler:
+                    description: MultiPooler is the image for the connection pooler
+                      sidecar.
                     maxLength: 512
                     type: string
                   postgres:
+                    description: Postgres is the image for the postgres database.
                     maxLength: 512
                     type: string
                 required:
@@ -95,7 +106,8 @@ spec:
                     pushed down to the TableGroup.
                   properties:
                     multiorch:
-                      description: MultiOrch fully resolved spec.
+                      description: MultiOrch is the fully resolved configuration for
+                        the orchestrator.
                       properties:
                         affinity:
                           description: Affinity defines the pod's scheduling constraints.
@@ -1031,14 +1043,14 @@ spec:
                             maxLength: 63
                             minLength: 1
                             type: string
-                          maxItems: 100
+                          maxItems: 50
                           type: array
                         podAnnotations:
                           additionalProperties:
                             type: string
                           description: PodAnnotations are annotations to add to the
                             pods.
-                          maxProperties: 64
+                          maxProperties: 48
                           type: object
                           x-kubernetes-validations:
                           - message: annotation keys must be <64 chars and values
@@ -1049,7 +1061,7 @@ spec:
                             type: string
                           description: PodLabels are additional labels to add to the
                             pods.
-                          maxProperties: 64
+                          maxProperties: 48
                           type: object
                           x-kubernetes-validations:
                           - message: label keys and values must be <64 chars
@@ -1121,6 +1133,7 @@ spec:
                           type: object
                       type: object
                     name:
+                      description: Name is the identifier of the shard.
                       maxLength: 63
                       type: string
                     pools:
@@ -2065,7 +2078,7 @@ spec:
                               maxLength: 63
                               minLength: 1
                               type: string
-                            maxItems: 100
+                            maxItems: 50
                             type: array
                           multipooler:
                             description: Multipooler container configuration.
@@ -2225,8 +2238,8 @@ spec:
                             - readOnly
                             type: string
                         type: object
-                      description: Pools fully resolved spec.
-                      maxProperties: 32
+                      description: Pools is the map of fully resolved data pool configurations.
+                      maxProperties: 8
                       type: object
                       x-kubernetes-validations:
                       - message: pool names must be < 63 chars
@@ -2236,9 +2249,10 @@ spec:
                   - name
                   - pools
                   type: object
-                maxItems: 128
+                maxItems: 32
                 type: array
               tableGroupName:
+                description: TableGroupName is the name of this table group.
                 maxLength: 63
                 type: string
             required:
