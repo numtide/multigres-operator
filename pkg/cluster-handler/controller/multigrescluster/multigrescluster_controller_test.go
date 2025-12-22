@@ -174,8 +174,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 
 				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
-				if got, want := cell.Spec.GlobalTopoServer.Address, expectedAddr; got != want {
-					t.Errorf("Wiring Bug! Cell has wrong Topo Address got %q, want %q", got, want)
+				if diff := cmp.Diff(expectedAddr, cell.Spec.GlobalTopoServer.Address); diff != "" {
+					t.Errorf("Wiring Bug! Cell has wrong Topo Address mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -446,6 +446,22 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
+		"Create: No Global Topo Config": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{} // Empty
+				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{}     // Empty
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}           // Empty
+			},
+			// Using defaults (coreTpl presence doesn't hurt)
+			validate: func(t testing.TB, c client.Client) {
+				// Verify Cell got empty topo address
+				cell := &multigresv1alpha1.Cell{}
+				_ = c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
+				if got, want := cell.Spec.GlobalTopoServer.Address, ""; got != want {
+					t.Errorf("Expected empty topo address mismatch got %q, want %q", got, want)
+				}
+			},
+		},
 		"Status: Aggregation Logic": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = append(c.Spec.Databases, multigresv1alpha1.DatabaseConfig{Name: "db2", TableGroups: []multigresv1alpha1.TableGroupConfig{}})
@@ -489,7 +505,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
-		"Error: Object Not Found (Clean Exit)": {
+		"Object Not Found (Clean Exit)": {
 			existingObjects: []client.Object{},
 		},
 	}
@@ -656,7 +672,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		},
 		"Error: Add Finalizer Failed": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Finalizers = nil // Ensure we trigger the AddFinalizer path
+				c.Finalizers = nil // Ensure we trigger the Add Finalizer path
 			},
 			existingObjects: []client.Object{},
 			failureConfig:   &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
