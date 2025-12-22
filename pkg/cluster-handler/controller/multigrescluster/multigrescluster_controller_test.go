@@ -491,15 +491,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				c.DeletionTimestamp = &now
 				c.Finalizers = []string{finalizerName}
 			},
-			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
-			},
+			existingObjects: []client.Object{},
 			validate: func(t testing.TB, c client.Client) {
 				updated := &multigresv1alpha1.MultigresCluster{}
 				err := c.Get(t.Context(), types.NamespacedName{Name: clusterName, Namespace: namespace}, updated)
@@ -539,12 +531,31 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				tc.preReconcileUpdate(t, cluster)
 			}
 
+			// Capture if deletion is intended BEFORE calling Create,
+			// because Create strips DeletionTimestamp from the local struct in some client implementations (or API logic mimics it).
+			shouldDelete := false
+			if cluster.GetDeletionTimestamp() != nil && !cluster.GetDeletionTimestamp().IsZero() {
+				shouldDelete = true
+			}
+
 			if !strings.Contains(name, "Object Not Found") {
 				check := &multigresv1alpha1.MultigresCluster{}
 				err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, check)
 				if apierrors.IsNotFound(err) {
 					if err := baseClient.Create(t.Context(), cluster); err != nil {
 						t.Fatalf("failed to create initial cluster: %v", err)
+					}
+
+					// Ensure DeletionTimestamp is set in the API if the test requires it.
+					// client.Create strips this field, so we must invoke Delete() to re-apply it.
+					if shouldDelete {
+						if err := baseClient.Delete(t.Context(), cluster); err != nil {
+							t.Fatalf("failed to set deletion timestamp: %v", err)
+						}
+						// Refresh our local object to match the client state
+						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
+							t.Fatalf("failed to refresh cluster after deletion: %v", err)
+						}
 					}
 				}
 			}
@@ -599,13 +610,6 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Finalizers = []string{finalizerName}
 			},
 			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
 				&multigresv1alpha1.Cell{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
 			},
 		},
@@ -616,13 +620,6 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Finalizers = []string{finalizerName}
 			},
 			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
 				&multigresv1alpha1.TableGroup{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-db1-tg1", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
 			},
 		},
@@ -633,13 +630,6 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Finalizers = []string{finalizerName}
 			},
 			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
 				&multigresv1alpha1.TopoServer{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-global-topo", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
 			},
 		},
@@ -679,16 +669,8 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.DeletionTimestamp = &now
 				c.Finalizers = []string{finalizerName}
 			},
-			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
-			},
-			failureConfig: &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
+			existingObjects: []client.Object{},
+			failureConfig:   &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
 		},
 		"Error: CheckChildrenDeleted (List Cells Failed)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -696,15 +678,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.DeletionTimestamp = &now
 				c.Finalizers = []string{finalizerName}
 			},
-			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
-			},
+			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.CellList); ok {
@@ -720,15 +694,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.DeletionTimestamp = &now
 				c.Finalizers = []string{finalizerName}
 			},
-			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
-			},
+			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.TableGroupList); ok {
@@ -744,15 +710,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.DeletionTimestamp = &now
 				c.Finalizers = []string{finalizerName}
 			},
-			existingObjects: []client.Object{
-				func() *multigresv1alpha1.MultigresCluster {
-					c := baseCluster.DeepCopy()
-					now := metav1.Now()
-					c.DeletionTimestamp = &now
-					c.Finalizers = []string{finalizerName}
-					return c
-				}(),
-			},
+			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.TopoServerList); ok {
@@ -980,12 +938,31 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				tc.preReconcileUpdate(t, cluster)
 			}
 
+			// Capture if deletion is intended BEFORE calling Create,
+			// because Create strips DeletionTimestamp from the local struct in some client implementations (or API logic mimics it).
+			shouldDelete := false
+			if cluster.GetDeletionTimestamp() != nil && !cluster.GetDeletionTimestamp().IsZero() {
+				shouldDelete = true
+			}
+
 			if !strings.Contains(name, "Object Not Found") {
 				check := &multigresv1alpha1.MultigresCluster{}
 				err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, check)
 				if apierrors.IsNotFound(err) {
 					if err := baseClient.Create(t.Context(), cluster); err != nil {
 						t.Fatalf("failed to create initial cluster: %v", err)
+					}
+
+					// Ensure DeletionTimestamp is set in the API if the test requires it.
+					// client.Create strips this field, so we must invoke Delete() to re-apply it.
+					if shouldDelete {
+						if err := baseClient.Delete(t.Context(), cluster); err != nil {
+							t.Fatalf("failed to set deletion timestamp: %v", err)
+						}
+						// Refresh our local object to match the client state
+						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
+							t.Fatalf("failed to refresh cluster after deletion: %v", err)
+						}
 					}
 				}
 			}
