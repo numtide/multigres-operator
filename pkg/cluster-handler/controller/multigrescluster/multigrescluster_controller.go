@@ -52,16 +52,7 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if !cluster.ObjectMeta.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(cluster, finalizerName) {
-			if err := r.checkChildrenDeleted(ctx, cluster); err != nil {
-				return ctrl.Result{}, err
-			}
-			controllerutil.RemoveFinalizer(cluster, finalizerName)
-			if err := r.Update(ctx, cluster); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
-			}
-		}
-		return ctrl.Result{}, nil
+		return r.handleDelete(ctx, cluster)
 	}
 
 	if !controllerutil.ContainsFinalizer(cluster, finalizerName) {
@@ -99,6 +90,19 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+}
+
+func (r *MultigresClusterReconciler) handleDelete(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) (ctrl.Result, error) {
+	if controllerutil.ContainsFinalizer(cluster, finalizerName) {
+		if err := r.checkChildrenDeleted(ctx, cluster); err != nil {
+			return ctrl.Result{}, err
+		}
+		controllerutil.RemoveFinalizer(cluster, finalizerName)
+		if err := r.Update(ctx, cluster); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
+		}
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) error {
