@@ -131,30 +131,28 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(ctx context.Context, c
 }
 
 func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
-	var err error
+	if err := r.reconcileGlobalTopoServer(ctx, cluster, resolver); err != nil {
+		return err
+	}
+	if err := r.reconcileMultiAdmin(ctx, cluster, resolver); err != nil {
+		return err
+	}
+	return nil
+}
 
-	topoTplName := cluster.Spec.TemplateDefaults.CoreTemplate
+func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
+	tplName := cluster.Spec.TemplateDefaults.CoreTemplate
 	if cluster.Spec.GlobalTopoServer.TemplateRef != "" {
-		topoTplName = cluster.Spec.GlobalTopoServer.TemplateRef
+		tplName = cluster.Spec.GlobalTopoServer.TemplateRef
 	}
 
-	topoTpl, err := resolver.ResolveCoreTemplate(ctx, topoTplName)
+	tpl, err := resolver.ResolveCoreTemplate(ctx, tplName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve topo template: %w", err)
 	}
 
-	adminTplName := cluster.Spec.TemplateDefaults.CoreTemplate
-	if cluster.Spec.MultiAdmin.TemplateRef != "" {
-		adminTplName = cluster.Spec.MultiAdmin.TemplateRef
-	}
-
-	adminTpl, err := resolver.ResolveCoreTemplate(ctx, adminTplName)
-	if err != nil {
-		return fmt.Errorf("failed to resolve admin template: %w", err)
-	}
-
-	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
-	if topoSpec.Etcd != nil {
+	spec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, tpl)
+	if spec.Etcd != nil {
 		ts := &multigresv1alpha1.TopoServer{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cluster.Name + "-global-topo",
@@ -164,24 +162,37 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 		}
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
 			replicas := DefaultEtcdReplicas
-			if topoSpec.Etcd.Replicas != nil {
-				replicas = *topoSpec.Etcd.Replicas
+			if spec.Etcd.Replicas != nil {
+				replicas = *spec.Etcd.Replicas
 			}
 
 			ts.Spec.Etcd = &multigresv1alpha1.EtcdSpec{
-				Image:     topoSpec.Etcd.Image,
+				Image:     spec.Etcd.Image,
 				Replicas:  &replicas,
-				Storage:   topoSpec.Etcd.Storage,
-				Resources: topoSpec.Etcd.Resources,
+				Storage:   spec.Etcd.Storage,
+				Resources: spec.Etcd.Resources,
 			}
 			return controllerutil.SetControllerReference(cluster, ts, r.Scheme)
 		}); err != nil {
 			return fmt.Errorf("failed to create/update global topo: %w", err)
 		}
 	}
+	return nil
+}
 
-	multiAdminSpec := ResolveMultiAdmin(&cluster.Spec.MultiAdmin, adminTpl)
-	if multiAdminSpec != nil {
+func (r *MultigresClusterReconciler) reconcileMultiAdmin(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, resolver *TemplateResolver) error {
+	tplName := cluster.Spec.TemplateDefaults.CoreTemplate
+	if cluster.Spec.MultiAdmin.TemplateRef != "" {
+		tplName = cluster.Spec.MultiAdmin.TemplateRef
+	}
+
+	tpl, err := resolver.ResolveCoreTemplate(ctx, tplName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve admin template: %w", err)
+	}
+
+	spec := ResolveMultiAdmin(&cluster.Spec.MultiAdmin, tpl)
+	if spec != nil {
 		deploy := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cluster.Name + "-multiadmin",
@@ -191,8 +202,8 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 		}
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			replicas := DefaultAdminReplicas
-			if multiAdminSpec.Replicas != nil {
-				replicas = *multiAdminSpec.Replicas
+			if spec.Replicas != nil {
+				replicas = *spec.Replicas
 			}
 			deploy.Spec.Replicas = &replicas
 			deploy.Spec.Selector = &metav1.LabelSelector{
@@ -208,10 +219,10 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 						{
 							Name:      "multiadmin",
 							Image:     cluster.Spec.Images.MultiAdmin,
-							Resources: multiAdminSpec.Resources,
+							Resources: spec.Resources,
 						},
 					},
-					Affinity: multiAdminSpec.Affinity,
+					Affinity: spec.Affinity,
 				},
 			}
 			return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
@@ -219,7 +230,6 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(ctx context.Conte
 			return fmt.Errorf("failed to create/update multiadmin: %w", err)
 		}
 	}
-
 	return nil
 }
 
