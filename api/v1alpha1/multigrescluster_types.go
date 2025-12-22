@@ -48,7 +48,7 @@ type MultigresClusterSpec struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=name
-	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:MaxItems=50
 	Cells []CellConfig `json:"cells,omitempty"`
 
 	// Databases defines the logical databases, table groups, and sharding.
@@ -56,7 +56,7 @@ type MultigresClusterSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:XValidation:rule="self.filter(x, has(x.default) && x.default).size() <= 1",message="only one database can be marked as default"
-	// +kubebuilder:validation:MaxItems=500
+	// +kubebuilder:validation:MaxItems=50
 	Databases []DatabaseConfig `json:"databases,omitempty"`
 }
 
@@ -218,7 +218,7 @@ type DatabaseConfig struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:XValidation:rule="self.filter(x, has(x.default) && x.default).size() <= 1",message="only one tablegroup can be marked as default"
-	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:MaxItems=20
 	TableGroups []TableGroupConfig `json:"tablegroups,omitempty"`
 }
 
@@ -237,7 +237,7 @@ type TableGroupConfig struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=name
-	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:MaxItems=32
 	Shards []ShardConfig `json:"shards,omitempty"`
 }
 
@@ -272,7 +272,7 @@ type ShardOverrides struct {
 
 	// Pools overrides. Keyed by pool name.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
@@ -285,7 +285,7 @@ type ShardInlineSpec struct {
 
 	// Pools configuration. Keyed by pool name.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
@@ -305,13 +305,13 @@ type MultigresClusterStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// Cells status summary.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=100
+	// +kubebuilder:validation:MaxProperties=50
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="cell names must be < 63 chars"
 	Cells map[string]CellStatusSummary `json:"cells,omitempty"`
 
 	// Databases status summary.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=500
+	// +kubebuilder:validation:MaxProperties=50
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="database names must be < 63 chars"
 	Databases map[string]DatabaseStatusSummary `json:"databases,omitempty"`
 }

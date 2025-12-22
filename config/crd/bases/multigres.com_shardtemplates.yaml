@@ -972,13 +972,13 @@ spec:
                       maxLength: 63
                       minLength: 1
                       type: string
-                    maxItems: 100
+                    maxItems: 50
                     type: array
                   podAnnotations:
                     additionalProperties:
                       type: string
                     description: PodAnnotations are annotations to add to the pods.
-                    maxProperties: 64
+                    maxProperties: 48
                     type: object
                     x-kubernetes-validations:
                     - message: annotation keys must be <64 chars and values <256 chars
@@ -987,7 +987,7 @@ spec:
                     additionalProperties:
                       type: string
                     description: PodLabels are additional labels to add to the pods.
-                    maxProperties: 64
+                    maxProperties: 48
                     type: object
                     x-kubernetes-validations:
                     - message: label keys and values must be <64 chars
@@ -1991,7 +1991,7 @@ spec:
                         maxLength: 63
                         minLength: 1
                         type: string
-                      maxItems: 100
+                      maxItems: 50
                       type: array
                     multipooler:
                       description: Multipooler container configuration.
@@ -2149,7 +2149,7 @@ spec:
                       - readOnly
                       type: string
                   type: object
-                maxProperties: 32
+                maxProperties: 8
                 type: object
                 x-kubernetes-validations:
                 - message: pool names must be < 63 chars

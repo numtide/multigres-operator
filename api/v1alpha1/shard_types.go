@@ -36,7 +36,7 @@ type MultiOrchSpec struct {
 	// Cells defines the list of cells where this MultiOrch should be deployed.
 	// If empty, it defaults to all cells where pools are defined.
 	// +optional
-	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:MaxItems=50
 	Cells []CellName `json:"cells,omitempty"`
 }
 
@@ -49,7 +49,7 @@ type PoolSpec struct {
 
 	// Cells defines the list of cells where this Pool should be deployed.
 	// +optional
-	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:MaxItems=50
 	Cells []CellName `json:"cells,omitempty"`
 
 	// ReplicasPerCell is the desired number of pods PER CELL in this pool.
@@ -105,7 +105,7 @@ type ShardSpec struct {
 	MultiOrch MultiOrchSpec `json:"multiorch"`
 
 	// Pools is the map of fully resolved data pool configurations.
-	// +kubebuilder:validation:MaxProperties=32
+	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[string]PoolSpec `json:"pools"`
 }
@@ -137,7 +137,7 @@ type ShardStatus struct {
 
 	// Cells is a list of cells this shard is currently deployed to.
 	// +optional
-	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:MaxItems=50
 	Cells []CellName `json:"cells,omitempty"`
 
 	// OrchReady indicates if the MultiOrch component is ready.

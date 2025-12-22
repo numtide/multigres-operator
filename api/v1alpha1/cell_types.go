@@ -57,11 +57,11 @@ type CellSpec struct {
 
 	// TopoServer defines the local topology config.
 	// +optional
-	TopoServer LocalTopoServerSpec `json:"topoServer,omitempty"`
+	TopoServer *LocalTopoServerSpec `json:"topoServer,omitempty"`
 
 	// AllCells list for discovery.
 	// +optional
-	// +kubebuilder:validation:MaxItems=100
+	// +kubebuilder:validation:MaxItems=50
 	AllCells []CellName `json:"allCells,omitempty"`
 
 	// TopologyReconciliation flags.
