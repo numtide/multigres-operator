@@ -174,8 +174,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 
 				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
-				if diff := cmp.Diff(expectedAddr, cell.Spec.GlobalTopoServer.Address); diff != "" {
-					t.Errorf("Wiring Bug! Cell has wrong Topo Address mismatch (-want +got):\n%s", diff)
+				if got, want := cell.Spec.GlobalTopoServer.Address, expectedAddr; got != want {
+					t.Errorf("Wiring Bug! Cell has wrong Topo Address got %q, want %q", got, want)
 				}
 			},
 		},
@@ -211,8 +211,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal(err)
 				}
-				if diff := cmp.Diff("etcd:topo", ts.Spec.Etcd.Image); diff != "" {
-					t.Errorf("TopoServer image mismatch (-want +got):\n%s", diff)
+				if got, want := ts.Spec.Etcd.Image, "etcd:topo"; got != want {
+					t.Errorf("TopoServer image mismatch got %q, want %q", got, want)
 				}
 
 				// Check Admin uses admin-core
@@ -220,8 +220,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
 					t.Fatal(err)
 				}
-				if diff := cmp.Diff(int32(5), *deploy.Spec.Replicas); diff != "" {
-					t.Errorf("MultiAdmin replicas mismatch (-want +got):\n%s", diff)
+				if got, want := *deploy.Spec.Replicas, int32(5); got != want {
+					t.Errorf("MultiAdmin replicas mismatch got %d, want %d", got, want)
 				}
 
 				// Verify Wiring for independent template
@@ -230,8 +230,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 					t.Fatal("Expected Cell 'zone-a' to exist")
 				}
 				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
-				if diff := cmp.Diff(expectedAddr, cell.Spec.GlobalTopoServer.Address); diff != "" {
-					t.Errorf("Wiring Bug (Independent)! Cell has wrong Topo Address mismatch (-want +got):\n%s", diff)
+				if got, want := cell.Spec.GlobalTopoServer.Address, expectedAddr; got != want {
+					t.Errorf("Wiring Bug (Independent)! Cell has wrong Topo Address got %q, want %q", got, want)
 				}
 			},
 		},
@@ -243,7 +243,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{TemplateRef: "default-core"}
 				c.Spec.TemplateDefaults.CoreTemplate = ""
 			},
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				deploy := &appsv1.Deployment{}
@@ -292,8 +292,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if diff := cmp.Diff(1, len(tg.Spec.Shards)); diff != "" {
-					t.Fatalf("Shard count mismatch (-want +got):\n%s", diff)
+				if got, want := len(tg.Spec.Shards), 1; got != want {
+					t.Fatalf("Shard count mismatch got %d, want %d", got, want)
 				}
 
 				orchCells := tg.Spec.Shards[0].MultiOrch.Cells
@@ -307,7 +307,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Images.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "my-secret"}}
 			},
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				deploy := &appsv1.Deployment{}
@@ -328,15 +328,15 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 				c.Spec.TemplateDefaults.CoreTemplate = ""
 			},
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				ts := &multigresv1alpha1.TopoServer{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal("Global TopoServer not created")
 				}
-				if diff := cmp.Diff("etcd:inline", ts.Spec.Etcd.Image); diff != "" {
-					t.Errorf("TopoServer image mismatch (-want +got):\n%s", diff)
+				if got, want := ts.Spec.Etcd.Image, "etcd:inline"; got != want {
+					t.Errorf("TopoServer image mismatch got %q, want %q", got, want)
 				}
 			},
 		},
@@ -365,8 +365,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal("Global TopoServer not created")
 				}
-				if diff := cmp.Diff(DefaultEtcdReplicas, *ts.Spec.Etcd.Replicas); diff != "" {
-					t.Errorf("Expected default replicas mismatch (-want +got):\n%s", diff)
+				if got, want := *ts.Spec.Etcd.Replicas, DefaultEtcdReplicas; got != want {
+					t.Errorf("Expected default replicas mismatch got %d, want %d", got, want)
 				}
 				// Verify MultiAdmin NOT created
 				deploy := &appsv1.Deployment{}
@@ -412,15 +412,15 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 					},
 				}
 			},
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				cell := &multigresv1alpha1.Cell{}
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
 					t.Fatal(err)
 				}
-				if diff := cmp.Diff("", cell.Spec.GlobalTopoServer.Address); diff != "" {
-					t.Errorf("Address mismatch (-want +got):\n%s", diff)
+				if got, want := cell.Spec.GlobalTopoServer.Address, ""; got != want {
+					t.Errorf("Address mismatch got %q, want %q", got, want)
 				}
 			},
 		},
@@ -441,8 +441,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
 					t.Fatal(err)
 				}
-				if diff := cmp.Diff(int32(4), *cell.Spec.MultiGateway.Replicas); diff != "" {
-					t.Errorf("Cell inline spec ignored (-want +got):\n%s", diff)
+				if got, want := *cell.Spec.MultiGateway.Replicas, int32(4); got != want {
+					t.Errorf("Cell inline spec ignored got %d, want %d", got, want)
 				}
 			},
 		},
@@ -452,13 +452,13 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{}     // Empty
 				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}           // Empty
 			},
-			existingObjects: []client.Object{cellTpl, shardTpl}, // No Core Template
+			// Using defaults (coreTpl presence doesn't hurt)
 			validate: func(t testing.TB, c client.Client) {
 				// Verify Cell got empty topo address
 				cell := &multigresv1alpha1.Cell{}
 				_ = c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
-				if diff := cmp.Diff("", cell.Spec.GlobalTopoServer.Address); diff != "" {
-					t.Errorf("Expected empty topo address mismatch (-want +got):\n%s", diff)
+				if got, want := cell.Spec.GlobalTopoServer.Address, ""; got != want {
+					t.Errorf("Expected empty topo address mismatch got %q, want %q", got, want)
 				}
 			},
 		},
@@ -755,19 +755,19 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("admin-core-fail", errBoom)},
 		},
 		"Error: Create GlobalTopo Failed": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errBoom)},
+			// Using defaults
+			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errBoom)},
 		},
 		"Error: Create MultiAdmin Failed": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errBoom)},
+			// Using defaults
+			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errBoom)},
 		},
 		"Error: Resolve CellTemplate Failed": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-cell", errBoom)},
+			// Using defaults
+			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-cell", errBoom)},
 		},
 		"Error: List Existing Cells Failed (Reconcile Loop)": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.CellList); ok {
@@ -778,8 +778,8 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 		},
 		"Error: Create Cell Failed": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errBoom)},
+			// Using defaults
+			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errBoom)},
 		},
 		"Error: Prune Cell Failed": {
 			existingObjects: []client.Object{
@@ -789,7 +789,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(clusterName+"-zone-b", errBoom)},
 		},
 		"Error: List Existing TableGroups Failed": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.TableGroupList); ok {
@@ -800,12 +800,12 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 		},
 		"Error: Resolve ShardTemplate Failed": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-shard", errBoom)},
+			// Using defaults
+			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-shard", errBoom)},
 		},
 		"Error: Create TableGroup Failed": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errBoom)},
+			// Using defaults
+			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errBoom)},
 		},
 		"Error: Prune TableGroup Failed": {
 			existingObjects: []client.Object{
@@ -815,7 +815,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(clusterName+"-orphan-tg", errBoom)},
 		},
 		"Error: UpdateStatus (List Cells Failed)": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			failureConfig: &testutil.FailureConfig{
 				OnList: func() func(client.ObjectList) error {
 					count := 0
@@ -832,7 +832,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 		},
 		"Error: UpdateStatus (List TableGroups Failed)": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			failureConfig: &testutil.FailureConfig{
 				OnList: func() func(client.ObjectList) error {
 					count := 0
@@ -849,8 +849,8 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 		},
 		"Error: Update Status Failed (API Error)": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			failureConfig:   &testutil.FailureConfig{OnStatusUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
+			// Using defaults
+			failureConfig: &testutil.FailureConfig{OnStatusUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
 		},
 		"Error: Global Topo Resolution Failed (During Cell Reconcile)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -921,7 +921,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Spec.Databases[0].Name = longName
 				c.Spec.Databases[0].TableGroups[0].Name = longName
 			},
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 		},
 	}
 
@@ -1097,13 +1097,13 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(99))},
 		}
 		gw, _ = MergeCellConfig(tpl, overrides, inline)
-		if diff := cmp.Diff(int32(99), *gw.Replicas); diff != "" {
-			t.Errorf("MergeCellConfig inline priority mismatch (-want +got):\n%s", diff)
+		if got, want := *gw.Replicas, int32(99); got != want {
+			t.Errorf("MergeCellConfig inline priority mismatch got %d, want %d", got, want)
 		}
 
 		gw, _ = MergeCellConfig(nil, overrides, nil)
-		if diff := cmp.Diff(int32(2), *gw.Replicas); diff != "" {
-			t.Errorf("MergeCellConfig nil template mismatch (-want +got):\n%s", diff)
+		if got, want := *gw.Replicas, int32(2); got != want {
+			t.Errorf("MergeCellConfig nil template mismatch got %d, want %d", got, want)
 		}
 
 		tplNil := &multigresv1alpha1.CellTemplate{
@@ -1112,8 +1112,8 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 		gw, _ = MergeCellConfig(tplNil, overrides, nil)
-		if diff := cmp.Diff("qux", gw.PodAnnotations["baz"]); diff != "" {
-			t.Errorf("MergeCellConfig nil map init mismatch (-want +got):\n%s", diff)
+		if got, want := gw.PodAnnotations["baz"], "qux"; got != want {
+			t.Errorf("MergeCellConfig nil map init mismatch got %q, want %q", got, want)
 		}
 	})
 
@@ -1207,14 +1207,14 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 		res := ResolveGlobalTopo(spec, core)
-		if diff := cmp.Diff("resolved", res.Etcd.Image); diff != "" {
-			t.Errorf("ResolveGlobalTopo template mismatch (-want +got):\n%s", diff)
+		if got, want := res.Etcd.Image, "resolved"; got != want {
+			t.Errorf("ResolveGlobalTopo template mismatch got %q, want %q", got, want)
 		}
 
 		spec2 := &multigresv1alpha1.GlobalTopoServerSpec{TemplateRef: "t1", Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"}}
 		res2 := ResolveGlobalTopo(spec2, nil)
-		if diff := cmp.Diff("inline", res2.Etcd.Image); diff != "" {
-			t.Errorf("ResolveGlobalTopo inline fallback mismatch (-want +got):\n%s", diff)
+		if got, want := res2.Etcd.Image, "inline"; got != want {
+			t.Errorf("ResolveGlobalTopo inline fallback mismatch got %q, want %q", got, want)
 		}
 
 		spec4 := &multigresv1alpha1.GlobalTopoServerSpec{}
@@ -1234,14 +1234,14 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 		res := ResolveMultiAdmin(spec, core)
-		if diff := cmp.Diff(int32(10), *res.Replicas); diff != "" {
-			t.Errorf("ResolveMultiAdmin template mismatch (-want +got):\n%s", diff)
+		if got, want := *res.Replicas, int32(10); got != want {
+			t.Errorf("ResolveMultiAdmin template mismatch got %d, want %d", got, want)
 		}
 
 		spec2 := &multigresv1alpha1.MultiAdminConfig{TemplateRef: "t1", Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
 		res2 := ResolveMultiAdmin(spec2, nil)
-		if diff := cmp.Diff(int32(5), *res2.Replicas); diff != "" {
-			t.Errorf("ResolveMultiAdmin inline fallback mismatch (-want +got):\n%s", diff)
+		if got, want := *res2.Replicas, int32(5); got != want {
+			t.Errorf("ResolveMultiAdmin inline fallback mismatch got %d, want %d", got, want)
 		}
 
 		res3 := ResolveMultiAdmin(&multigresv1alpha1.MultiAdminConfig{}, nil)
