@@ -137,7 +137,6 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 		multigrescluster   *multigresv1alpha1.MultigresCluster
 		existingObjects    []client.Object
 		preReconcileUpdate func(testing.TB, *multigresv1alpha1.MultigresCluster)
-		setupFunc          func(testing.TB, client.Client)
 		validate           func(testing.TB, client.Client)
 	}{
 		"Create: Adds Finalizer": {
@@ -182,7 +181,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 		},
 		"Create: Independent Templates (Topo vs Admin)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.TemplateDefaults.CoreTemplate = "" // clear default
+				c.Spec.TemplateDefaults.CoreTemplate = ""
 				c.Spec.GlobalTopoServer.TemplateRef = "topo-core"
 				c.Spec.MultiAdmin.TemplateRef = "admin-core"
 			},
@@ -466,20 +465,15 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = append(c.Spec.Databases, multigresv1alpha1.DatabaseConfig{Name: "db2", TableGroups: []multigresv1alpha1.TableGroupConfig{}})
 			},
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			setupFunc: func(t testing.TB, c client.Client) {
-				ctx := t.Context()
-				cell := &multigresv1alpha1.Cell{
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}},
 					Spec:       multigresv1alpha1.CellSpec{Name: "zone-a"},
-				}
-				if err := c.Create(ctx, cell); err != nil {
-					t.Fatalf("failed to create cell: %v", err)
-				}
-				cell.Status.Conditions = []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}}
-				if err := c.Status().Update(ctx, cell); err != nil {
-					t.Fatalf("failed to update cell status: %v", err)
-				}
+					Status: multigresv1alpha1.CellStatus{
+						Conditions: []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}},
+					},
+				},
 			},
 			validate: func(t testing.TB, c client.Client) {
 				cluster := &multigresv1alpha1.MultigresCluster{}
@@ -533,10 +527,6 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 
 			var finalClient client.Client
 			finalClient = baseClient
-
-			if tc.setupFunc != nil {
-				tc.setupFunc(t, baseClient)
-			}
 
 			// Apply defaults if no specific cluster is provided
 			cluster := tc.multigrescluster
