@@ -45,13 +45,13 @@ type StatelessSpec struct {
 
 	// PodAnnotations are annotations to add to the pods.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=48
+	// +kubebuilder:validation:MaxProperties=20
 	// +kubebuilder:validation:XValidation:rule="self.all(k, size(k) < 64 && size(self[k]) < 256)",message="annotation keys must be <64 chars and values <256 chars"
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 
 	// PodLabels are additional labels to add to the pods.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=48
+	// +kubebuilder:validation:MaxProperties=20
 	// +kubebuilder:validation:XValidation:rule="self.all(k, size(k) < 64 && size(self[k]) < 64)",message="label keys and values must be <64 chars"
 	PodLabels map[string]string `json:"podLabels,omitempty"`
 }

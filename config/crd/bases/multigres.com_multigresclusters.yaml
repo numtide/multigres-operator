@@ -1007,7 +1007,7 @@ spec:
                                 type: string
                               description: PodAnnotations are annotations to add to
                                 the pods.
-                              maxProperties: 48
+                              maxProperties: 20
                               type: object
                               x-kubernetes-validations:
                               - message: annotation keys must be <64 chars and values
@@ -1019,7 +1019,7 @@ spec:
                                 type: string
                               description: PodLabels are additional labels to add
                                 to the pods.
-                              maxProperties: 48
+                              maxProperties: 20
                               type: object
                               x-kubernetes-validations:
                               - message: label keys and values must be <64 chars
@@ -2175,7 +2175,7 @@ spec:
                                 type: string
                               description: PodAnnotations are annotations to add to
                                 the pods.
-                              maxProperties: 48
+                              maxProperties: 20
                               type: object
                               x-kubernetes-validations:
                               - message: annotation keys must be <64 chars and values
@@ -2187,7 +2187,7 @@ spec:
                                 type: string
                               description: PodLabels are additional labels to add
                                 to the pods.
-                              maxProperties: 48
+                              maxProperties: 20
                               type: object
                               x-kubernetes-validations:
                               - message: label keys and values must be <64 chars
@@ -3319,7 +3319,7 @@ spec:
                                             type: string
                                           description: PodAnnotations are annotations
                                             to add to the pods.
-                                          maxProperties: 48
+                                          maxProperties: 20
                                           type: object
                                           x-kubernetes-validations:
                                           - message: annotation keys must be <64 chars
@@ -3331,7 +3331,7 @@ spec:
                                             type: string
                                           description: PodLabels are additional labels
                                             to add to the pods.
-                                          maxProperties: 48
+                                          maxProperties: 20
                                           type: object
                                           x-kubernetes-validations:
                                           - message: label keys and values must be
@@ -5587,7 +5587,7 @@ spec:
                                             type: string
                                           description: PodAnnotations are annotations
                                             to add to the pods.
-                                          maxProperties: 48
+                                          maxProperties: 20
                                           type: object
                                           x-kubernetes-validations:
                                           - message: annotation keys must be <64 chars
@@ -5599,7 +5599,7 @@ spec:
                                             type: string
                                           description: PodLabels are additional labels
                                             to add to the pods.
-                                          maxProperties: 48
+                                          maxProperties: 20
                                           type: object
                                           x-kubernetes-validations:
                                           - message: label keys and values must be
@@ -8007,7 +8007,7 @@ spec:
                           type: string
                         description: PodAnnotations are annotations to add to the
                           pods.
-                        maxProperties: 48
+                        maxProperties: 20
                         type: object
                         x-kubernetes-validations:
                         - message: annotation keys must be <64 chars and values <256
@@ -8018,7 +8018,7 @@ spec:
                           type: string
                         description: PodLabels are additional labels to add to the
                           pods.
-                        maxProperties: 48
+                        maxProperties: 20
                         type: object
                         x-kubernetes-validations:
                         - message: label keys and values must be <64 chars
