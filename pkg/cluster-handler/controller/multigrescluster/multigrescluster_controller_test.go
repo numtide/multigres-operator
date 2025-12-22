@@ -144,7 +144,9 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			validate: func(t *testing.T, c client.Client) {
 				ctx := t.Context()
 				updatedCluster := &multigresv1alpha1.MultigresCluster{}
-				_ = c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster)
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster); err != nil {
+					t.Fatalf("failed to get updated cluster: %v", err)
+				}
 				if !controllerutil.ContainsFinalizer(updatedCluster, finalizerName) {
 					t.Error("Finalizer was not added to Cluster")
 				}
@@ -512,14 +514,20 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}},
 					Spec:       multigresv1alpha1.CellSpec{Name: "zone-a"},
 				}
-				_ = c.Create(ctx, cell)
+				if err := c.Create(ctx, cell); err != nil {
+					t.Fatalf("failed to create cell: %v", err)
+				}
 				cell.Status.Conditions = []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}}
-				_ = c.Status().Update(ctx, cell)
+				if err := c.Status().Update(ctx, cell); err != nil {
+					t.Fatalf("failed to update cell status: %v", err)
+				}
 			},
 			expectError: false,
 			validate: func(t *testing.T, c client.Client) {
 				cluster := &multigresv1alpha1.MultigresCluster{}
-				_ = c.Get(t.Context(), types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster)
+				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster); err != nil {
+					t.Fatalf("failed to get cluster: %v", err)
+				}
 				if !meta.IsStatusConditionTrue(cluster.Status.Conditions, "Available") {
 					t.Error("Cluster should be available")
 				}
@@ -1028,7 +1036,9 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				check := &multigresv1alpha1.MultigresCluster{}
 				err := baseClient.Get(t.Context(), types.NamespacedName{Name: tc.cluster.Name, Namespace: tc.cluster.Namespace}, check)
 				if apierrors.IsNotFound(err) {
-					_ = baseClient.Create(t.Context(), tc.cluster)
+					if err := baseClient.Create(t.Context(), tc.cluster); err != nil {
+						t.Fatalf("failed to create initial cluster: %v", err)
+					}
 				}
 			}
 
