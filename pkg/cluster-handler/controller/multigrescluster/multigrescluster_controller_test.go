@@ -156,7 +156,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			},
 		},
 		"Create: Full Cluster Creation with Templates": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Using defaults
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				updatedCluster := &multigresv1alpha1.MultigresCluster{}
@@ -180,8 +180,9 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			},
 		},
 		"Create: Independent Templates (Topo vs Admin)": {
+			// Using preReconcileUpdate instead of an explicit object to leverage defaults
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.TemplateDefaults.CoreTemplate = ""
+				c.Spec.TemplateDefaults.CoreTemplate = "" // clear default
 				c.Spec.GlobalTopoServer.TemplateRef = "topo-core"
 				c.Spec.MultiAdmin.TemplateRef = "admin-core"
 			},
@@ -465,6 +466,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = append(c.Spec.Databases, multigresv1alpha1.DatabaseConfig{Name: "db2", TableGroups: []multigresv1alpha1.TableGroupConfig{}})
 			},
+			// Here we insert the Cell WITH STATUS directly into existingObjects.
+			// The fake client will respect this state.
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.Cell{
@@ -511,9 +514,15 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			// Default to all standard templates if existingObjects is nil
+			objects := tc.existingObjects
+			if objects == nil {
+				objects = []client.Object{coreTpl, cellTpl, shardTpl}
+			}
+
 			clientBuilder := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(tc.existingObjects...).
+				WithObjects(objects...).
 				WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}, &multigresv1alpha1.Cell{}, &multigresv1alpha1.TableGroup{})
 			baseClient := clientBuilder.Build()
 
@@ -549,10 +558,15 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 					// Ensure DeletionTimestamp is set in the API if the test requires it.
 					// client.Create strips this field, so we must invoke Delete() to re-apply it.
 					if shouldDelete {
+						// 1. Refresh object to avoid ResourceVersion conflict
+						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
+							t.Fatalf("failed to refresh cluster before delete: %v", err)
+						}
+						// 2. Delete it
 						if err := baseClient.Delete(t.Context(), cluster); err != nil {
 							t.Fatalf("failed to set deletion timestamp: %v", err)
 						}
-						// Refresh our local object to match the client state
+						// 3. Refresh again to ensure the controller sees the deletion timestamp
 						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
 							t.Fatalf("failed to refresh cluster after deletion: %v", err)
 						}
@@ -915,9 +929,15 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			// Default to all standard templates if existingObjects is nil
+			objects := tc.existingObjects
+			if objects == nil {
+				objects = []client.Object{coreTpl, cellTpl, shardTpl}
+			}
+
 			clientBuilder := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(tc.existingObjects...).
+				WithObjects(objects...).
 				WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}, &multigresv1alpha1.Cell{}, &multigresv1alpha1.TableGroup{})
 			baseClient := clientBuilder.Build()
 
@@ -956,10 +976,15 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 					// Ensure DeletionTimestamp is set in the API if the test requires it.
 					// client.Create strips this field, so we must invoke Delete() to re-apply it.
 					if shouldDelete {
+						// 1. Refresh object to avoid ResourceVersion conflict
+						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
+							t.Fatalf("failed to refresh cluster before delete: %v", err)
+						}
+						// 2. Delete it
 						if err := baseClient.Delete(t.Context(), cluster); err != nil {
 							t.Fatalf("failed to set deletion timestamp: %v", err)
 						}
-						// Refresh our local object to match the client state
+						// 3. Refresh again to ensure the controller sees the deletion timestamp
 						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
 							t.Fatalf("failed to refresh cluster after deletion: %v", err)
 						}
