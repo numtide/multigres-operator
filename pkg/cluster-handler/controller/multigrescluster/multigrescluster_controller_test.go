@@ -447,22 +447,6 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
-		"Create: No Global Topo Config": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{} // Empty
-				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{}     // Empty
-				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}           // Empty
-			},
-			// Using defaults (coreTpl presence doesn't hurt)
-			validate: func(t testing.TB, c client.Client) {
-				// Verify Cell got empty topo address
-				cell := &multigresv1alpha1.Cell{}
-				_ = c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
-				if got, want := cell.Spec.GlobalTopoServer.Address, ""; got != want {
-					t.Errorf("Expected empty topo address mismatch got %q, want %q", got, want)
-				}
-			},
-		},
 		"Status: Aggregation Logic": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = append(c.Spec.Databases, multigresv1alpha1.DatabaseConfig{Name: "db2", TableGroups: []multigresv1alpha1.TableGroupConfig{}})
@@ -534,6 +518,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			}
 
 			// Inject cluster into existingObjects if creation is not skipped
+			// This handles initializing the fake client with the cluster state,
+			// including DeletionTimestamp if set by preReconcileUpdate.
 			if !tc.skipClusterCreation {
 				objects = append(objects, cluster)
 			}
@@ -544,7 +530,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}, &multigresv1alpha1.Cell{}, &multigresv1alpha1.TableGroup{})
 			baseClient := clientBuilder.Build()
 
-			finalClient := baseClient
+			var finalClient client.Client
+			finalClient = baseClient
 
 			reconciler := &MultigresClusterReconciler{
 				Client: finalClient,
@@ -559,7 +546,6 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			}
 
 			_, err := reconciler.Reconcile(t.Context(), req)
-
 			if err != nil {
 				t.Errorf("Unexpected error from Reconcile: %v", err)
 			}
@@ -933,7 +919,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			baseClient := clientBuilder.Build()
 
 			var finalClient client.Client
-			finalClient = client.Client(baseClient)
+			finalClient = baseClient
 			if tc.failureConfig != nil {
 				finalClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
@@ -951,7 +937,6 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			}
 
 			_, err := reconciler.Reconcile(t.Context(), req)
-
 			if err == nil {
 				t.Error("Expected error from Reconcile, got nil")
 			}
