@@ -137,7 +137,6 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 		multigrescluster   *multigresv1alpha1.MultigresCluster
 		existingObjects    []client.Object
 		preReconcileUpdate func(testing.TB, *multigresv1alpha1.MultigresCluster)
-		setupFunc          func(testing.TB, client.Client)
 		validate           func(testing.TB, client.Client)
 	}{
 		"Create: Adds Finalizer": {
@@ -183,12 +182,13 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			},
 		},
 		"Create: Independent Templates (Topo vs Admin)": {
-			multigrescluster: baseCluster.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+			multigrescluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = "" // clear default
 				c.Spec.GlobalTopoServer.TemplateRef = "topo-core"
 				c.Spec.MultiAdmin.TemplateRef = "admin-core"
-			},
+				return c
+			}(),
 			existingObjects: []client.Object{
 				cellTpl, shardTpl,
 				&multigresv1alpha1.CoreTemplate{
@@ -478,20 +478,15 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = append(c.Spec.Databases, multigresv1alpha1.DatabaseConfig{Name: "db2", TableGroups: []multigresv1alpha1.TableGroupConfig{}})
 			},
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			setupFunc: func(t testing.TB, c client.Client) {
-				ctx := t.Context()
-				cell := &multigresv1alpha1.Cell{
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}},
 					Spec:       multigresv1alpha1.CellSpec{Name: "zone-a"},
-				}
-				if err := c.Create(ctx, cell); err != nil {
-					t.Fatalf("failed to create cell: %v", err)
-				}
-				cell.Status.Conditions = []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}}
-				if err := c.Status().Update(ctx, cell); err != nil {
-					t.Fatalf("failed to update cell status: %v", err)
-				}
+					Status: multigresv1alpha1.CellStatus{
+						Conditions: []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}},
+					},
+				},
 			},
 			validate: func(t testing.TB, c client.Client) {
 				cluster := &multigresv1alpha1.MultigresCluster{}
@@ -546,13 +541,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			baseClient := clientBuilder.Build()
 
 			var finalClient client.Client
-			// Use failureConfig only if it were in the struct, but this is Success suite.
-			// Success suite implies no failures injected.
 			finalClient = baseClient
-
-			if tc.setupFunc != nil {
-				tc.setupFunc(t, baseClient)
-			}
 
 			// Apply pre-reconcile updates if defined
 			if tc.preReconcileUpdate != nil {
@@ -610,7 +599,6 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		existingObjects    []client.Object
 		failureConfig      *testutil.FailureConfig
 		preReconcileUpdate func(testing.TB, *multigresv1alpha1.MultigresCluster)
-		setupFunc          func(testing.TB, client.Client)
 		validate           func(testing.TB, client.Client)
 	}{
 		"Delete: Block Finalization if Cells Exist": {
@@ -851,7 +839,10 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig:    &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errBoom)},
 		},
 		"Error: Prune Cell Failed": {
-			multigrescluster: baseCluster.DeepCopy(),
+			multigrescluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				return c
+			}(),
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.Cell{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-b", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
@@ -881,7 +872,10 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig:    &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errBoom)},
 		},
 		"Error: Prune TableGroup Failed": {
-			multigrescluster: baseCluster.DeepCopy(),
+			multigrescluster: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				return c
+			}(),
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.TableGroup{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-orphan-tg", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
@@ -1020,10 +1014,6 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				finalClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			} else {
 				finalClient = baseClient
-			}
-
-			if tc.setupFunc != nil {
-				tc.setupFunc(t, baseClient)
 			}
 
 			// Apply pre-reconcile updates if defined
