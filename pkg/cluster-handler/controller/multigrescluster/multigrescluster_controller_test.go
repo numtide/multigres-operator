@@ -27,6 +27,8 @@ import (
 )
 
 func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
+	t.Parallel()
+
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -1004,6 +1006,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			clientBuilder := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
@@ -1061,6 +1065,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 }
 
 func TestSetupWithManager_Coverage(t *testing.T) {
+	t.Parallel()
+
 	defer func() {
 		if r := recover(); r != nil {
 			// Expected panic
@@ -1071,7 +1077,11 @@ func TestSetupWithManager_Coverage(t *testing.T) {
 }
 
 func TestTemplateLogic_Unit(t *testing.T) {
+	t.Parallel()
+
 	t.Run("MergeCellConfig", func(t *testing.T) {
+		t.Parallel()
+
 		tpl := &multigresv1alpha1.CellTemplate{
 			Spec: multigresv1alpha1.CellTemplateSpec{
 				MultiGateway: &multigresv1alpha1.StatelessSpec{
@@ -1155,6 +1165,8 @@ func TestTemplateLogic_Unit(t *testing.T) {
 	})
 
 	t.Run("MergeShardConfig", func(t *testing.T) {
+		t.Parallel()
+
 		tpl := &multigresv1alpha1.ShardTemplate{
 			Spec: multigresv1alpha1.ShardTemplateSpec{
 				MultiOrch: &multigresv1alpha1.MultiOrchSpec{
@@ -1233,6 +1245,8 @@ func TestTemplateLogic_Unit(t *testing.T) {
 	})
 
 	t.Run("ResolveGlobalTopo", func(t *testing.T) {
+		t.Parallel()
+
 		spec := &multigresv1alpha1.GlobalTopoServerSpec{TemplateRef: "t1"}
 		core := &multigresv1alpha1.CoreTemplate{
 			Spec: multigresv1alpha1.CoreTemplateSpec{
@@ -1258,6 +1272,8 @@ func TestTemplateLogic_Unit(t *testing.T) {
 	})
 
 	t.Run("ResolveMultiAdmin", func(t *testing.T) {
+		t.Parallel()
+
 		spec := &multigresv1alpha1.MultiAdminConfig{TemplateRef: "t1"}
 		core := &multigresv1alpha1.CoreTemplate{
 			Spec: multigresv1alpha1.CoreTemplateSpec{
