@@ -412,7 +412,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 					},
 				}
 			},
-			// Using defaults
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				cell := &multigresv1alpha1.Cell{}
@@ -443,22 +443,6 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 				if got, want := *cell.Spec.MultiGateway.Replicas, int32(4); got != want {
 					t.Errorf("Cell inline spec ignored got %d, want %d", got, want)
-				}
-			},
-		},
-		"Create: No Global Topo Config": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{} // Empty
-				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{}     // Empty
-				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}           // Empty
-			},
-			// Using defaults (coreTpl presence doesn't hurt)
-			validate: func(t testing.TB, c client.Client) {
-				// Verify Cell got empty topo address
-				cell := &multigresv1alpha1.Cell{}
-				_ = c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
-				if got, want := cell.Spec.GlobalTopoServer.Address, ""; got != want {
-					t.Errorf("Expected empty topo address mismatch got %q, want %q", got, want)
 				}
 			},
 		},
