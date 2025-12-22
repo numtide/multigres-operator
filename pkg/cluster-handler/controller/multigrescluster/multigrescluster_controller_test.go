@@ -134,10 +134,11 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace, finalizerName := setupFixtures()
 
 	tests := map[string]struct {
-		multigrescluster   *multigresv1alpha1.MultigresCluster
-		existingObjects    []client.Object
-		preReconcileUpdate func(testing.TB, *multigresv1alpha1.MultigresCluster)
-		validate           func(testing.TB, client.Client)
+		multigrescluster    *multigresv1alpha1.MultigresCluster
+		existingObjects     []client.Object
+		preReconcileUpdate  func(testing.TB, *multigresv1alpha1.MultigresCluster)
+		skipClusterCreation bool
+		validate            func(testing.TB, client.Client)
 	}{
 		"Create: Adds Finalizer": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -412,7 +413,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 					},
 				}
 			},
-			// Using defaults
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				cell := &multigresv1alpha1.Cell{}
@@ -443,6 +444,22 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 				if got, want := *cell.Spec.MultiGateway.Replicas, int32(4); got != want {
 					t.Errorf("Cell inline spec ignored got %d, want %d", got, want)
+				}
+			},
+		},
+		"Create: No Global Topo Config": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{} // Empty
+				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{}     // Empty
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{}           // Empty
+			},
+			// Using defaults (coreTpl presence doesn't hurt)
+			validate: func(t testing.TB, c client.Client) {
+				// Verify Cell got empty topo address
+				cell := &multigresv1alpha1.Cell{}
+				_ = c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell)
+				if got, want := cell.Spec.GlobalTopoServer.Address, ""; got != want {
+					t.Errorf("Expected empty topo address mismatch got %q, want %q", got, want)
 				}
 			},
 		},
@@ -490,7 +507,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			},
 		},
 		"Object Not Found (Clean Exit)": {
-			existingObjects: []client.Object{},
+			skipClusterCreation: true,
+			existingObjects:     []client.Object{},
 		},
 	}
 
@@ -504,14 +522,6 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				objects = []client.Object{coreTpl, cellTpl, shardTpl}
 			}
 
-			clientBuilder := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}, &multigresv1alpha1.Cell{}, &multigresv1alpha1.TableGroup{})
-			baseClient := clientBuilder.Build()
-
-			finalClient := baseClient
-
 			// Apply defaults if no specific cluster is provided
 			cluster := tc.multigrescluster
 			if cluster == nil {
@@ -523,39 +533,18 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				tc.preReconcileUpdate(t, cluster)
 			}
 
-			// Capture if deletion is intended BEFORE calling Create,
-			// because Create strips DeletionTimestamp from the local struct in some client implementations (or API logic mimics it).
-			shouldDelete := false
-			if cluster.GetDeletionTimestamp() != nil && !cluster.GetDeletionTimestamp().IsZero() {
-				shouldDelete = true
+			// Inject cluster into existingObjects if creation is not skipped
+			if !tc.skipClusterCreation {
+				objects = append(objects, cluster)
 			}
 
-			if !strings.Contains(name, "Object Not Found") {
-				check := &multigresv1alpha1.MultigresCluster{}
-				err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, check)
-				if apierrors.IsNotFound(err) {
-					if err := baseClient.Create(t.Context(), cluster); err != nil {
-						t.Fatalf("failed to create initial cluster: %v", err)
-					}
+			clientBuilder := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}, &multigresv1alpha1.Cell{}, &multigresv1alpha1.TableGroup{})
+			baseClient := clientBuilder.Build()
 
-					// Ensure DeletionTimestamp is set in the API if the test requires it.
-					// client.Create strips this field, so we must invoke Delete() to re-apply it.
-					if shouldDelete {
-						// 1. Refresh object to avoid ResourceVersion conflict
-						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
-							t.Fatalf("failed to refresh cluster before delete: %v", err)
-						}
-						// 2. Delete it
-						if err := baseClient.Delete(t.Context(), cluster); err != nil {
-							t.Fatalf("failed to set deletion timestamp: %v", err)
-						}
-						// 3. Refresh again to ensure the controller sees the deletion timestamp
-						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
-							t.Fatalf("failed to refresh cluster after deletion: %v", err)
-						}
-					}
-				}
-			}
+			finalClient := baseClient
 
 			reconciler := &MultigresClusterReconciler{
 				Client: finalClient,
@@ -594,11 +583,12 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 	errBoom := errors.New("boom")
 
 	tests := map[string]struct {
-		multigrescluster   *multigresv1alpha1.MultigresCluster
-		existingObjects    []client.Object
-		failureConfig      *testutil.FailureConfig
-		preReconcileUpdate func(testing.TB, *multigresv1alpha1.MultigresCluster)
-		validate           func(testing.TB, client.Client)
+		multigrescluster    *multigresv1alpha1.MultigresCluster
+		existingObjects     []client.Object
+		failureConfig       *testutil.FailureConfig
+		preReconcileUpdate  func(testing.TB, *multigresv1alpha1.MultigresCluster)
+		skipClusterCreation bool
+		validate            func(testing.TB, client.Client)
 	}{
 		"Delete: Block Finalization if Cells Exist": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -918,21 +908,6 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				objects = []client.Object{coreTpl, cellTpl, shardTpl}
 			}
 
-			clientBuilder := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(objects...).
-				WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}, &multigresv1alpha1.Cell{}, &multigresv1alpha1.TableGroup{})
-			baseClient := clientBuilder.Build()
-
-			var finalClient client.Client
-			finalClient = baseClient
-			if tc.failureConfig != nil {
-				finalClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
-			}
-			// In Failure tests, finalClient is assigned a new value (the wrapper), so we explicitly cast baseClient
-			// to client.Client interface if needed, or rely on type compatibility.
-			// Since failureConfig wrapper implements client.Client, we assign it.
-
 			// Apply defaults if no specific cluster is provided
 			cluster := tc.multigrescluster
 			if cluster == nil {
@@ -944,38 +919,23 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				tc.preReconcileUpdate(t, cluster)
 			}
 
-			// Capture if deletion is intended BEFORE calling Create,
-			// because Create strips DeletionTimestamp from the local struct in some client implementations (or API logic mimics it).
-			shouldDelete := false
-			if cluster.GetDeletionTimestamp() != nil && !cluster.GetDeletionTimestamp().IsZero() {
-				shouldDelete = true
+			// Inject cluster into existingObjects if creation is not skipped
+			// This handles initializing the fake client with the cluster state,
+			// including DeletionTimestamp if set by preReconcileUpdate.
+			if !tc.skipClusterCreation {
+				objects = append(objects, cluster)
 			}
 
-			if !strings.Contains(name, "Object Not Found") {
-				check := &multigresv1alpha1.MultigresCluster{}
-				err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, check)
-				if apierrors.IsNotFound(err) {
-					if err := baseClient.Create(t.Context(), cluster); err != nil {
-						t.Fatalf("failed to create initial cluster: %v", err)
-					}
+			clientBuilder := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}, &multigresv1alpha1.Cell{}, &multigresv1alpha1.TableGroup{})
+			baseClient := clientBuilder.Build()
 
-					// Ensure DeletionTimestamp is set in the API if the test requires it.
-					// client.Create strips this field, so we must invoke Delete() to re-apply it.
-					if shouldDelete {
-						// 1. Refresh object to avoid ResourceVersion conflict
-						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
-							t.Fatalf("failed to refresh cluster before delete: %v", err)
-						}
-						// 2. Delete it
-						if err := baseClient.Delete(t.Context(), cluster); err != nil {
-							t.Fatalf("failed to set deletion timestamp: %v", err)
-						}
-						// 3. Refresh again to ensure the controller sees the deletion timestamp
-						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
-							t.Fatalf("failed to refresh cluster after deletion: %v", err)
-						}
-					}
-				}
+			var finalClient client.Client
+			finalClient = client.Client(baseClient)
+			if tc.failureConfig != nil {
+				finalClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
 
 			reconciler := &MultigresClusterReconciler{
