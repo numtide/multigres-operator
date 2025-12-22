@@ -141,12 +141,17 @@ type LocalTopoServerSpec struct {
 // GlobalTopoServerRef defines a reference to the global topo server.
 // Used by Cell, TableGroup, and Shard.
 type GlobalTopoServerRef struct {
+	// Address is the DNS address of the topology server.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=512
 	Address string `json:"address"`
+
+	// RootPath is the etcd prefix for this cluster.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=512
 	RootPath string `json:"rootPath"`
+
+	// Implementation defines the client implementation (e.g. "etcd").
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	Implementation string `json:"implementation"`
