@@ -387,7 +387,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal("Global TopoServer not created")
 				}
-				if diff := cmp.Diff(int32(3), *ts.Spec.Etcd.Replicas); diff != "" {
+				if diff := cmp.Diff(DefaultEtcdReplicas, *ts.Spec.Etcd.Replicas); diff != "" {
 					t.Errorf("Expected default replicas mismatch (-want +got):\n%s", diff)
 				}
 				// Verify MultiAdmin NOT created

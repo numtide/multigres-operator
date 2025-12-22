@@ -12,6 +12,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// NOTE: We may want to consider moving this to different module/package before implementing the Mutating Webhook.
+// This separation is critical to prevent circular dependencies between the Webhook and Controller packages
+// and ensures that the "Level 4" defaulting logic is reusable as a Single Source of Truth for both the reconciliation loop
+// and admission requests.
+
 // TemplateResolver handles the logic for fetching and merging templates.
 type TemplateResolver struct {
 	// Client is the kubernetes client used to fetch templates.
