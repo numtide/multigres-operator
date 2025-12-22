@@ -121,8 +121,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 
 	errBoom := errors.New("boom")
 
-	tests := []struct {
-		name            string
+	tests := map[string]struct {
 		cluster         *multigresv1alpha1.MultigresCluster
 		existingObjects []client.Object
 		failureConfig   *testutil.FailureConfig
@@ -133,8 +132,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		// ---------------------------------------------------------------------
 		// Success Scenarios
 		// ---------------------------------------------------------------------
-		{
-			name: "Create: Adds Finalizer",
+		"Create: Adds Finalizer": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Finalizers = nil // Explicitly remove finalizer to test addition
@@ -151,8 +149,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name:            "Create: Full Cluster Creation with Templates",
+		"Create: Full Cluster Creation with Templates": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			expectError:     false,
@@ -178,8 +175,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: Independent Templates (Topo vs Admin)",
+		"Create: Independent Templates (Topo vs Admin)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = "" // clear default
@@ -237,8 +233,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: MultiAdmin TemplateRef Only",
+		"Create: MultiAdmin TemplateRef Only": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{
@@ -258,8 +253,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: MultiOrch Placement Defaulting",
+		"Create: MultiOrch Placement Defaulting": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.ShardTemplate = "" // Ensure no default template interferes
@@ -313,8 +307,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: MultiAdmin with ImagePullSecrets",
+		"Create: MultiAdmin with ImagePullSecrets": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.Images.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "my-secret"}}
@@ -334,8 +327,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: Inline Etcd",
+		"Create: Inline Etcd": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				// Use inline Etcd for GlobalTopoServer to test getGlobalTopoRef branch
@@ -358,8 +350,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: Defaults and Optional Components",
+		"Create: Defaults and Optional Components": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = "minimal-core"
@@ -397,8 +388,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: Cell with Local Topo in Template",
+		"Create: Cell with Local Topo in Template": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.Cells[0].CellTemplate = "local-topo-cell"
@@ -428,8 +418,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: External Topo with Empty Endpoints",
+		"Create: External Topo with Empty Endpoints": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = ""
@@ -453,8 +442,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: Inline Specs and Missing Templates",
+		"Create: Inline Specs and Missing Templates": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{External: &multigresv1alpha1.ExternalTopoServerSpec{Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"}}}
@@ -479,8 +467,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Create: Long Names (Truncation Check)",
+		"Create: Long Names (Truncation Check)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				longName := strings.Repeat("a", 50)
@@ -492,8 +479,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			expectError:     true, // Updated to true because controller now enforces 50 char limit
 			validate:        func(t *testing.T, c client.Client) {},
 		},
-		{
-			name: "Create: No Global Topo Config",
+		"Create: No Global Topo Config": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{} // Empty
@@ -512,8 +498,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "Status: Aggregation Logic",
+		"Status: Aggregation Logic": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.Databases = append(c.Spec.Databases, multigresv1alpha1.DatabaseConfig{Name: "db2", TableGroups: []multigresv1alpha1.TableGroupConfig{}})
@@ -543,8 +528,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		// ---------------------------------------------------------------------
 		// Deletion Scenarios
 		// ---------------------------------------------------------------------
-		{
-			name: "Delete: Block Finalization if Cells Exist",
+		"Delete: Block Finalization if Cells Exist": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -564,8 +548,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name: "Delete: Block Finalization if TableGroups Exist",
+		"Delete: Block Finalization if TableGroups Exist": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -585,8 +568,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name: "Delete: Block Finalization if TopoServer Exists",
+		"Delete: Block Finalization if TopoServer Exists": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -606,8 +588,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name: "Delete: Allow Finalization if Children Gone",
+		"Delete: Allow Finalization if Children Gone": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -639,8 +620,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		// ---------------------------------------------------------------------
 		// Error Injection Scenarios
 		// ---------------------------------------------------------------------
-		{
-			name: "Error: Explicit Template Missing (Should Fail)",
+		"Error: Explicit Template Missing (Should Fail)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = "non-existent-template"
@@ -650,8 +630,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			failureConfig:   nil,               // No API failure, just logical failure
 			expectError:     true,              // MUST ERROR NOW
 		},
-		{
-			name: "Error: Explicit Cell Template Missing",
+		"Error: Explicit Cell Template Missing": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.Cells[0].CellTemplate = "missing-cell-tpl"
@@ -660,8 +639,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, shardTpl}, // Missing cellTpl
 			expectError:     true,
 		},
-		{
-			name: "Error: Explicit Shard Template Missing",
+		"Error: Explicit Shard Template Missing": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.Databases[0].TableGroups[0].Shards[0].ShardTemplate = "missing-shard-tpl"
@@ -670,21 +648,18 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl}, // Missing shardTpl
 			expectError:     true,
 		},
-		{
-			name:            "Error: Object Not Found (Clean Exit)",
+		"Error: Object Not Found (Clean Exit)": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{},
 			expectError:     false,
 		},
-		{
-			name:            "Error: Fetch Cluster Failed",
+		"Error: Fetch Cluster Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName(clusterName, errBoom)},
 			expectError:     true,
 		},
-		{
-			name: "Error: Add Finalizer Failed",
+		"Error: Add Finalizer Failed": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Finalizers = nil // Ensure we trigger the AddFinalizer path
@@ -694,8 +669,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			failureConfig:   &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
 			expectError:     true,
 		},
-		{
-			name: "Error: Remove Finalizer Failed",
+		"Error: Remove Finalizer Failed": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -715,8 +689,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
 			expectError:   true,
 		},
-		{
-			name: "Error: CheckChildrenDeleted (List Cells Failed)",
+		"Error: CheckChildrenDeleted (List Cells Failed)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -743,8 +716,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name: "Error: CheckChildrenDeleted (List TableGroups Failed)",
+		"Error: CheckChildrenDeleted (List TableGroups Failed)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -771,8 +743,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name: "Error: CheckChildrenDeleted (List TopoServers Failed)",
+		"Error: CheckChildrenDeleted (List TopoServers Failed)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				now := metav1.Now()
@@ -799,15 +770,13 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name:            "Error: Resolve CoreTemplate Failed",
+		"Error: Resolve CoreTemplate Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl},
 			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-core", errBoom)},
 			expectError:     true,
 		},
-		{
-			name: "Error: Resolve Admin Template Failed (Second Call)",
+		"Error: Resolve Admin Template Failed (Second Call)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = ""
@@ -826,29 +795,25 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("admin-core-fail", errBoom)},
 			expectError:   true,
 		},
-		{
-			name:            "Error: Create GlobalTopo Failed",
+		"Error: Create GlobalTopo Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errBoom)},
 			expectError:     true,
 		},
-		{
-			name:            "Error: Create MultiAdmin Failed",
+		"Error: Create MultiAdmin Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errBoom)},
 			expectError:     true,
 		},
-		{
-			name:            "Error: Resolve CellTemplate Failed",
+		"Error: Resolve CellTemplate Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-cell", errBoom)},
 			expectError:     true,
 		},
-		{
-			name:            "Error: List Existing Cells Failed (Reconcile Loop)",
+		"Error: List Existing Cells Failed (Reconcile Loop)": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
@@ -861,15 +826,13 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name:            "Error: Create Cell Failed",
+		"Error: Create Cell Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errBoom)},
 			expectError:     true,
 		},
-		{
-			name: "Error: Prune Cell Failed",
+		"Error: Prune Cell Failed": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				return c
@@ -881,8 +844,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(clusterName+"-zone-b", errBoom)},
 			expectError:   true,
 		},
-		{
-			name:            "Error: List Existing TableGroups Failed",
+		"Error: List Existing TableGroups Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
@@ -895,22 +857,19 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name:            "Error: Resolve ShardTemplate Failed",
+		"Error: Resolve ShardTemplate Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-shard", errBoom)},
 			expectError:     true,
 		},
-		{
-			name:            "Error: Create TableGroup Failed",
+		"Error: Create TableGroup Failed": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errBoom)},
 			expectError:     true,
 		},
-		{
-			name: "Error: Prune TableGroup Failed",
+		"Error: Prune TableGroup Failed": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				return c
@@ -922,8 +881,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(clusterName+"-orphan-tg", errBoom)},
 			expectError:   true,
 		},
-		{
-			name: "Error: UpdateStatus (List Cells Failed)",
+		"Error: UpdateStatus (List Cells Failed)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				return c
@@ -945,8 +903,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name: "Error: UpdateStatus (List TableGroups Failed)",
+		"Error: UpdateStatus (List TableGroups Failed)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				return c
@@ -968,15 +925,13 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name:            "Error: Update Status Failed (API Error)",
+		"Error: Update Status Failed (API Error)": {
 			cluster:         baseCluster.DeepCopy(),
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig:   &testutil.FailureConfig{OnStatusUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
 			expectError:     true,
 		},
-		{
-			name: "Error: Global Topo Resolution Failed (During Cell Reconcile)",
+		"Error: Global Topo Resolution Failed (During Cell Reconcile)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = ""
@@ -1010,8 +965,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 			},
 			expectError: true,
 		},
-		{
-			name: "Error: Global Topo Resolution Failed (During Database Reconcile)",
+		"Error: Global Topo Resolution Failed (During Database Reconcile)": {
 			cluster: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults.CoreTemplate = ""
@@ -1048,8 +1002,8 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
 			clientBuilder := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
@@ -1067,7 +1021,7 @@ func TestMultigresClusterReconciler_Reconcile(t *testing.T) {
 				tc.setupFunc(baseClient)
 			}
 
-			if !strings.Contains(tc.name, "Object Not Found") {
+			if !strings.Contains(name, "Object Not Found") {
 				check := &multigresv1alpha1.MultigresCluster{}
 				err := baseClient.Get(context.Background(), types.NamespacedName{Name: tc.cluster.Name, Namespace: tc.cluster.Namespace}, check)
 				if apierrors.IsNotFound(err) {
