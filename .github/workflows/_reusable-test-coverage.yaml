@@ -44,7 +44,7 @@ jobs:
           fetch-depth: 0 # Fetch all history for changed-modules detection
 
       - name: Fetch base branch for comparison
-         run: |
+        run: |
           TARGET_BRANCH="${{ github.base_ref || 'main' }}"
           echo "Fetching comparison target: $TARGET_BRANCH"
           git fetch origin ${TARGET_BRANCH}:refs/remotes/origin/${TARGET_BRANCH}
@@ -178,7 +178,7 @@ jobs:
 
       # Exit with non-zero value if the test coverage has decreased or not
       # reached the threshold.
-- name: Check coverage status
+      - name: Check coverage status
         run: |
           echo "Coverage Threshold:     ${{ inputs.COVERAGE_THRESHOLD }}%"
           echo "Previous test coverage: ${{ env.PREV_COVERAGE || 'Unknown' }}%"
@@ -227,4 +227,3 @@ jobs:
             ~/.cache/coverage.txt
             ~/.cache/go-build
             ~/go/pkg/mod
-
