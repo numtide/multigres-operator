@@ -93,6 +93,11 @@ jobs:
           echo "Previous test coverage: Not found"
           fi
 
+          ## Setup Workspace for Tooling
+          # This forces Go to look at local directories for modules instead of trying to fetch them from online.
+          go work init
+          go work use -r .
+
           ## Step 2. Check new coverage
           # Get into directory so that go tool cover can work
           go tool cover -func=coverage/combined.out > /tmp/coverage.txt
