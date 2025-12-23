@@ -20,3 +20,7 @@ bin/
 
 # kind local development
 kubeconfig.yaml
+
+
+# MacOS
+.DS_Store   
