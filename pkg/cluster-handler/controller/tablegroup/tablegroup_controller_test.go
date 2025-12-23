@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -383,11 +384,23 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 func TestSetupWithManager_Coverage(t *testing.T) {
 	t.Parallel()
 
-	defer func() {
-		if r := recover(); r != nil {
-			// Expected panic
-		}
-	}()
-	reconciler := &TableGroupReconciler{}
-	_ = reconciler.SetupWithManager(nil)
+	t.Run("No Options", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				// Expected panic because manager is nil
+			}
+		}()
+		reconciler := &TableGroupReconciler{}
+		_ = reconciler.SetupWithManager(nil)
+	})
+
+	t.Run("With Options", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				// Expected panic because manager is nil
+			}
+		}()
+		reconciler := &TableGroupReconciler{}
+		_ = reconciler.SetupWithManager(nil, controller.Options{MaxConcurrentReconciles: 1})
+	})
 }

@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -510,12 +511,18 @@ func (r *MultigresClusterReconciler) updateStatus(ctx context.Context, cluster *
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *MultigresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *MultigresClusterReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.Options) error {
+	controllerOpts := controller.Options{}
+	if len(opts) > 0 {
+		controllerOpts = opts[0]
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.MultigresCluster{}).
 		Owns(&multigresv1alpha1.Cell{}).
 		Owns(&multigresv1alpha1.TableGroup{}).
 		Owns(&multigresv1alpha1.TopoServer{}).
 		Owns(&appsv1.Deployment{}).
+		WithOptions(controllerOpts).
 		Complete(r)
 }

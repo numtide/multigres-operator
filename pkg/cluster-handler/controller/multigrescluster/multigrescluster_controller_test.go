@@ -19,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -990,13 +991,27 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 func TestSetupWithManager_Coverage(t *testing.T) {
 	t.Parallel()
 
-	defer func() {
-		if r := recover(); r != nil {
-			// Expected panic
-		}
-	}()
-	reconciler := &MultigresClusterReconciler{}
-	_ = reconciler.SetupWithManager(nil)
+	// Test the default path (no options)
+	t.Run("No Options", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				// Expected panic because manager is nil
+			}
+		}()
+		reconciler := &MultigresClusterReconciler{}
+		_ = reconciler.SetupWithManager(nil)
+	})
+
+	// Test the path with options to ensure coverage of the 'if len(opts) > 0' block
+	t.Run("With Options", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				// Expected panic because manager is nil
+			}
+		}()
+		reconciler := &MultigresClusterReconciler{}
+		_ = reconciler.SetupWithManager(nil, controller.Options{MaxConcurrentReconciles: 1})
+	})
 }
 
 func TestTemplateLogic_Unit(t *testing.T) {

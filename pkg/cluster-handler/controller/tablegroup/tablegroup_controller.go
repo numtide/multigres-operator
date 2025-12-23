@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -141,9 +142,15 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *TableGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *TableGroupReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.Options) error {
+	controllerOpts := controller.Options{}
+	if len(opts) > 0 {
+		controllerOpts = opts[0]
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.TableGroup{}).
 		Owns(&multigresv1alpha1.Shard{}).
+		WithOptions(controllerOpts).
 		Complete(r)
 }
