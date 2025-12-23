@@ -108,15 +108,16 @@ jobs:
       # change is made, the previous test reports will be minimised, leaving the
       # only relevant comment.
       - name: Check and report
-        uses: actions/github-script@v6 # Based on Node.js v16
-        if: always() &&
-          github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        if: always() && github.event_name == 'pull_request'
+        env:
+          COVERAGE_THRESHOLD: ${{ inputs.COVERAGE_THRESHOLD }}
         with:
           retries: 3
           script: |
             const fs = require('fs/promises')
 
-            // 1. Retrieve existing bot comments for the PR
+            // 1. Retrieve existing bot comments
             const { data: comments } = await github.rest.issues.listComments({
               ...context.repo,
               issue_number: context.issue.number,
@@ -126,23 +127,44 @@ jobs:
                 comment.body.includes('Go Test Coverage Report')
             });
 
-            // 2. Prepare comment
-            const report = await fs.readFile('/tmp/coverage.txt')
-            const overallStatus =
-              ${{ inputs.COVERAGE_THRESHOLD }} > ${{ env.NEW_COVERAGE }} ?
-                "❌ FAIL: Coverage less than threshold of `${{ inputs.COVERAGE_THRESHOLD }}`" :
-              ${{ env.PREV_COVERAGE || '0' }} > ${{ env.NEW_COVERAGE }} ?
-                "❌ FAIL: Coverage less than the previous run" :
-                  "✅ PASS"
+            // 2. Safe Value Parsing
+            const threshold = parseFloat(process.env.COVERAGE_THRESHOLD) || 0;
+            const newCovStr = process.env.NEW_COVERAGE;
+            const prevCovStr = process.env.PREV_COVERAGE;
+            
+            const newCov = parseFloat(newCovStr); // NaN if undefined/empty
+            const prevCov = parseFloat(prevCovStr) || 0;
+
+            let overallStatus = "⚠️ SKIPPED (Build Failed?)";
+            
+            // Only calculate status if we actually have coverage data
+            if (!isNaN(newCov)) {
+                if (threshold > newCov) {
+                    overallStatus = `❌ FAIL: Coverage (${newCov}%) < Threshold (${threshold}%)`;
+                } else if (prevCov > newCov) {
+                    overallStatus = `❌ FAIL: Coverage decreased (${prevCov}% -> ${newCov}%)`;
+                } else {
+                    overallStatus = "✅ PASS";
+                }
+            }
+
+            // 3. Read Report or Default Message
+            let reportContent = "No coverage report generated (Build likely failed).";
+            try {
+                reportContent = await fs.readFile('/tmp/coverage.txt', 'utf8');
+            } catch (e) {
+                console.log("Could not read coverage file:", e.message);
+            }
+
             const comment = `### 🔬 Go Test Coverage Report
 
             #### Summary
 
             | Coverage Type          | Result                                 |
             | ---------------------- | -------------------------------------- |
-            | Threshold              | ${{ inputs.COVERAGE_THRESHOLD }}%      |
-            | Previous Test Coverage | ${{ env.PREV_COVERAGE || 'Unknown' }}% |
-            | New Test Coverage      | ${{ env.NEW_COVERAGE }}%               |
+            | Threshold              | ${threshold}%                          |
+            | Previous Test Coverage | ${prevCovStr || 'Unknown'}%            |
+            | New Test Coverage      | ${newCovStr || 'Unknown'}%             |
 
             #### Status
 
@@ -153,14 +175,14 @@ jobs:
             <details><summary>Show New Coverage</summary>
 
             \`\`\`
-            ${report}\`\`\`
+            ${reportContent}
+            \`\`\`
 
             </details>
             `;
 
-            // 3. If there are any old comments, minimize all of them first.
+            // 4. Minimize old comments
             for (const botComment of botComments) {
-              core.notice("There was an old comment found in the PR, minimizing it.")
               const query = `mutation {
                 minimizeComment(input: {classifier: OUTDATED, subjectId: "${botComment.node_id}"}) {
                   clientMutationId
@@ -169,7 +191,7 @@ jobs:
               await github.graphql(query)
             }
 
-            // 4. Create a comment with the coverage report
+            // 5. Create new comment
             github.rest.issues.createComment({
               ...context.repo,
               issue_number: context.issue.number,
