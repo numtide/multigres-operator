@@ -29,7 +29,10 @@ type TableGroupReconciler struct {
 // +kubebuilder:rbac:groups=multigres.com,resources=tablegroups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=tablegroups/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
-func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *TableGroupReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
 	tg := &multigresv1alpha1.TableGroup{}
@@ -89,7 +92,11 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	for _, s := range existingShards.Items {
 		if !activeShardNames[s.Name] {
 			if err := r.Delete(ctx, &s); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to delete orphan shard '%s': %w", s.Name, err)
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to delete orphan shard '%s': %w",
+					s.Name,
+					err,
+				)
 			}
 		}
 	}
@@ -142,7 +149,10 @@ func (r *TableGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *TableGroupReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.Options) error {
+func (r *TableGroupReconciler) SetupWithManager(
+	mgr ctrl.Manager,
+	opts ...controller.Options,
+) error {
 	controllerOpts := controller.Options{}
 	if len(opts) > 0 {
 		controllerOpts = opts[0]

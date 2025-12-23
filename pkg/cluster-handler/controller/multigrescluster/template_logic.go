@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// NOTE: We may want to consider moving this to different module/package before implementing the Mutating Webhook.
+// NOTE: We may want to consider move this to different module/package before implementing the Mutating Webhook.
 // This separation is critical to prevent circular dependencies between the Webhook and Controller packages
 // and ensures that the "Level 4" defaulting logic is reusable as a Single Source of Truth for both the reconciliation loop
 // and admission requests.
@@ -36,7 +36,10 @@ type TemplateResolver struct {
 // If an explicit template (param or cluster default) is not found, it returns an error.
 // If the implicit "default" template is not found, it returns an empty object (safe fallback).
 // In this case the default would be applied by the operator via mutating webhook.
-func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.CoreTemplate, error) {
+func (r *TemplateResolver) ResolveCoreTemplate(
+	ctx context.Context,
+	templateName string,
+) (*multigresv1alpha1.CoreTemplate, error) {
 	name := templateName
 	isImplicitFallback := false
 
@@ -53,7 +56,6 @@ func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
-
 				return &multigresv1alpha1.CoreTemplate{}, nil
 			}
 			return nil, fmt.Errorf("referenced CoreTemplate '%s' not found", name)
@@ -64,7 +66,10 @@ func (r *TemplateResolver) ResolveCoreTemplate(ctx context.Context, templateName
 }
 
 // ResolveCellTemplate fetches and resolves a CellTemplate by name, handling defaults.
-func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.CellTemplate, error) {
+func (r *TemplateResolver) ResolveCellTemplate(
+	ctx context.Context,
+	templateName string,
+) (*multigresv1alpha1.CellTemplate, error) {
 	name := templateName
 	isImplicitFallback := false
 
@@ -91,7 +96,10 @@ func (r *TemplateResolver) ResolveCellTemplate(ctx context.Context, templateName
 }
 
 // ResolveShardTemplate fetches and resolves a ShardTemplate by name, handling defaults.
-func (r *TemplateResolver) ResolveShardTemplate(ctx context.Context, templateName string) (*multigresv1alpha1.ShardTemplate, error) {
+func (r *TemplateResolver) ResolveShardTemplate(
+	ctx context.Context,
+	templateName string,
+) (*multigresv1alpha1.ShardTemplate, error) {
 	name := templateName
 	isImplicitFallback := false
 
@@ -118,7 +126,11 @@ func (r *TemplateResolver) ResolveShardTemplate(ctx context.Context, templateNam
 }
 
 // MergeCellConfig merges a template spec with overrides and an inline spec to produce the final configuration.
-func MergeCellConfig(template *multigresv1alpha1.CellTemplate, overrides *multigresv1alpha1.CellOverrides, inline *multigresv1alpha1.CellInlineSpec) (multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec) {
+func MergeCellConfig(
+	template *multigresv1alpha1.CellTemplate,
+	overrides *multigresv1alpha1.CellOverrides,
+	inline *multigresv1alpha1.CellInlineSpec,
+) (multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec) {
 	var gateway multigresv1alpha1.StatelessSpec
 	var localTopo *multigresv1alpha1.LocalTopoServerSpec
 
@@ -145,7 +157,11 @@ func MergeCellConfig(template *multigresv1alpha1.CellTemplate, overrides *multig
 }
 
 // MergeShardConfig merges a template spec with overrides and an inline spec to produce the final configuration.
-func MergeShardConfig(template *multigresv1alpha1.ShardTemplate, overrides *multigresv1alpha1.ShardOverrides, inline *multigresv1alpha1.ShardInlineSpec) (multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec) {
+func MergeShardConfig(
+	template *multigresv1alpha1.ShardTemplate,
+	overrides *multigresv1alpha1.ShardOverrides,
+	inline *multigresv1alpha1.ShardInlineSpec,
+) (multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec) {
 	if inline != nil {
 		return inline.MultiOrch, inline.Pools
 	}
@@ -180,7 +196,10 @@ func MergeShardConfig(template *multigresv1alpha1.ShardTemplate, overrides *mult
 	return multiOrch, pools
 }
 
-func mergeStatelessSpec(base *multigresv1alpha1.StatelessSpec, override *multigresv1alpha1.StatelessSpec) {
+func mergeStatelessSpec(
+	base *multigresv1alpha1.StatelessSpec,
+	override *multigresv1alpha1.StatelessSpec,
+) {
 	if override.Replicas != nil {
 		base.Replicas = override.Replicas
 	}
@@ -205,14 +224,20 @@ func mergeStatelessSpec(base *multigresv1alpha1.StatelessSpec, override *multigr
 	}
 }
 
-func mergeMultiOrchSpec(base *multigresv1alpha1.MultiOrchSpec, override *multigresv1alpha1.MultiOrchSpec) {
+func mergeMultiOrchSpec(
+	base *multigresv1alpha1.MultiOrchSpec,
+	override *multigresv1alpha1.MultiOrchSpec,
+) {
 	mergeStatelessSpec(&base.StatelessSpec, &override.StatelessSpec)
 	if len(override.Cells) > 0 {
 		base.Cells = override.Cells
 	}
 }
 
-func mergePoolSpec(base multigresv1alpha1.PoolSpec, override multigresv1alpha1.PoolSpec) multigresv1alpha1.PoolSpec {
+func mergePoolSpec(
+	base multigresv1alpha1.PoolSpec,
+	override multigresv1alpha1.PoolSpec,
+) multigresv1alpha1.PoolSpec {
 	out := base
 	if override.Type != "" {
 		out.Type = override.Type
@@ -239,7 +264,10 @@ func mergePoolSpec(base multigresv1alpha1.PoolSpec, override multigresv1alpha1.P
 }
 
 // ResolveGlobalTopo determines the final GlobalTopoServer configuration by preferring inline config over templates.
-func ResolveGlobalTopo(spec *multigresv1alpha1.GlobalTopoServerSpec, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.GlobalTopoServerSpec {
+func ResolveGlobalTopo(
+	spec *multigresv1alpha1.GlobalTopoServerSpec,
+	coreTemplate *multigresv1alpha1.CoreTemplate,
+) *multigresv1alpha1.GlobalTopoServerSpec {
 	// If inline config is present, use it.
 	if spec.Etcd != nil || spec.External != nil {
 		return spec
@@ -256,7 +284,10 @@ func ResolveGlobalTopo(spec *multigresv1alpha1.GlobalTopoServerSpec, coreTemplat
 }
 
 // ResolveMultiAdmin determines the final MultiAdmin configuration by preferring inline config over templates.
-func ResolveMultiAdmin(spec *multigresv1alpha1.MultiAdminConfig, coreTemplate *multigresv1alpha1.CoreTemplate) *multigresv1alpha1.StatelessSpec {
+func ResolveMultiAdmin(
+	spec *multigresv1alpha1.MultiAdminConfig,
+	coreTemplate *multigresv1alpha1.CoreTemplate,
+) *multigresv1alpha1.StatelessSpec {
 	// If inline spec is present, use it.
 	if spec.Spec != nil {
 		return spec.Spec

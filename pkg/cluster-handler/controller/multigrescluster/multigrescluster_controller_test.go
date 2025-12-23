@@ -134,7 +134,9 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace, finalizerName := setupFixtures(t)
+	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace, finalizerName := setupFixtures(
+		t,
+	)
 
 	tests := map[string]struct {
 		multigrescluster    *multigresv1alpha1.MultigresCluster
@@ -234,14 +236,20 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 				expectedAddr := clusterName + "-global-topo-client." + namespace + ".svc:2379"
 				if got, want := cell.Spec.GlobalTopoServer.Address, expectedAddr; got != want {
-					t.Errorf("Wiring Bug (Independent)! Cell has wrong Topo Address got %q, want %q", got, want)
+					t.Errorf(
+						"Wiring Bug (Independent)! Cell has wrong Topo Address got %q, want %q",
+						got,
+						want,
+					)
 				}
 			},
 		},
 		"Create: MultiAdmin TemplateRef Only": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{
-					External: &multigresv1alpha1.ExternalTopoServerSpec{Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"}},
+					External: &multigresv1alpha1.ExternalTopoServerSpec{
+						Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
+					},
 				}
 				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{TemplateRef: "default-core"}
 				c.Spec.TemplateDefaults.CoreTemplate = ""
@@ -270,11 +278,17 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 										Spec: &multigresv1alpha1.ShardInlineSpec{
 											// MultiOrch Cells explicitly EMPTY
 											MultiOrch: multigresv1alpha1.MultiOrchSpec{
-												StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+												StatelessSpec: multigresv1alpha1.StatelessSpec{
+													Replicas: ptr.To(int32(1)),
+												},
 											},
 											Pools: map[string]multigresv1alpha1.PoolSpec{
-												"pool-a": {Cells: []multigresv1alpha1.CellName{"zone-a"}},
-												"pool-b": {Cells: []multigresv1alpha1.CellName{"zone-b"}},
+												"pool-a": {
+													Cells: []multigresv1alpha1.CellName{"zone-a"},
+												},
+												"pool-b": {
+													Cells: []multigresv1alpha1.CellName{"zone-b"},
+												},
 											},
 										},
 									},
@@ -370,7 +384,9 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 				// Verify MultiAdmin NOT created
 				deploy := &appsv1.Deployment{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); !apierrors.IsNotFound(err) {
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); !apierrors.IsNotFound(
+					err,
+				) {
 					t.Error("MultiAdmin should not have been created")
 				}
 			},
@@ -398,7 +414,8 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 					t.Fatal(err)
 				}
 				// Updated to handle pointer dereference safety
-				if cell.Spec.TopoServer == nil || cell.Spec.TopoServer.Etcd == nil || cell.Spec.TopoServer.Etcd.Image != "local-etcd:v1" {
+				if cell.Spec.TopoServer == nil || cell.Spec.TopoServer.Etcd == nil ||
+					cell.Spec.TopoServer.Etcd.Image != "local-etcd:v1" {
 					t.Error("LocalTopoServer not propagated to Cell")
 				}
 			},
@@ -426,11 +443,21 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 		},
 		"Create: Inline Specs and Missing Templates": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{External: &multigresv1alpha1.ExternalTopoServerSpec{Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"}}}
-				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
-				c.Spec.Cells[0].Spec = &multigresv1alpha1.CellInlineSpec{MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(4))}}
+				c.Spec.GlobalTopoServer = multigresv1alpha1.GlobalTopoServerSpec{
+					External: &multigresv1alpha1.ExternalTopoServerSpec{
+						Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
+					},
+				}
+				c.Spec.MultiAdmin = multigresv1alpha1.MultiAdminConfig{
+					Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+				}
+				c.Spec.Cells[0].Spec = &multigresv1alpha1.CellInlineSpec{
+					MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(4))},
+				}
 				c.Spec.Databases[0].TableGroups[0].Shards[0].Spec = &multigresv1alpha1.ShardInlineSpec{
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))}},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
+					},
 				}
 				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{}
 			},
@@ -448,17 +475,29 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 		},
 		"Status: Aggregation Logic": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.Databases = append(c.Spec.Databases, multigresv1alpha1.DatabaseConfig{Name: "db2", TableGroups: []multigresv1alpha1.TableGroupConfig{}})
+				c.Spec.Databases = append(
+					c.Spec.Databases,
+					multigresv1alpha1.DatabaseConfig{
+						Name:        "db2",
+						TableGroups: []multigresv1alpha1.TableGroupConfig{},
+					},
+				)
 			},
 			// Here we insert the Cell WITH STATUS directly into existingObjects.
 			// The fake client will respect this state.
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.Cell{
-					ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}},
-					Spec:       multigresv1alpha1.CellSpec{Name: "zone-a"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-zone-a",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+					Spec: multigresv1alpha1.CellSpec{Name: "zone-a"},
 					Status: multigresv1alpha1.CellStatus{
-						Conditions: []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue}},
+						Conditions: []metav1.Condition{
+							{Type: "Available", Status: metav1.ConditionTrue},
+						},
 					},
 				},
 			},
@@ -481,7 +520,11 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{},
 			validate: func(t testing.TB, c client.Client) {
 				updated := &multigresv1alpha1.MultigresCluster{}
-				err := c.Get(t.Context(), types.NamespacedName{Name: clusterName, Namespace: namespace}, updated)
+				err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: clusterName, Namespace: namespace},
+					updated,
+				)
 				if err == nil {
 					if controllerutil.ContainsFinalizer(updated, finalizerName) {
 						t.Error("Finalizer was not removed")
@@ -524,16 +567,16 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				tc.preReconcileUpdate(t, cluster)
 			}
 
-			// Capture if deletion is intended BEFORE calling Create,
-			// because Create strips DeletionTimestamp from the local struct in some client implementations (or API logic mimics it).
-			shouldDelete := false
-			if cluster.GetDeletionTimestamp() != nil && !cluster.GetDeletionTimestamp().IsZero() {
-				shouldDelete = true
-			}
+			shouldDelete := cluster.GetDeletionTimestamp() != nil &&
+				!cluster.GetDeletionTimestamp().IsZero()
 
 			if !strings.Contains(name, "Object Not Found") {
 				check := &multigresv1alpha1.MultigresCluster{}
-				err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, check)
+				err := baseClient.Get(
+					t.Context(),
+					types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+					check,
+				)
 				if apierrors.IsNotFound(err) {
 					if err := baseClient.Create(t.Context(), cluster); err != nil {
 						t.Fatalf("failed to create initial cluster: %v", err)
@@ -590,7 +633,9 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace, finalizerName := setupFixtures(t)
+	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace, finalizerName := setupFixtures(
+		t,
+	)
 	errBoom := errors.New("boom")
 
 	tests := map[string]struct {
@@ -608,7 +653,13 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Finalizers = []string{finalizerName}
 			},
 			existingObjects: []client.Object{
-				&multigresv1alpha1.Cell{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-zone-a",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
 			},
 		},
 		"Delete: Block Finalization if TableGroups Exist": {
@@ -618,7 +669,13 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Finalizers = []string{finalizerName}
 			},
 			existingObjects: []client.Object{
-				&multigresv1alpha1.TableGroup{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-db1-tg1", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-db1-tg1",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
 			},
 		},
 		"Delete: Block Finalization if TopoServer Exists": {
@@ -628,7 +685,13 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Finalizers = []string{finalizerName}
 			},
 			existingObjects: []client.Object{
-				&multigresv1alpha1.TopoServer{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-global-topo", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
+				&multigresv1alpha1.TopoServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-global-topo",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
 			},
 		},
 		"Error: Explicit Template Missing (Should Fail)": {
@@ -652,14 +715,18 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		},
 		"Error: Fetch Cluster Failed": {
 			existingObjects: []client.Object{},
-			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName(clusterName, errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName(clusterName, errBoom),
+			},
 		},
 		"Error: Add Finalizer Failed": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Finalizers = nil // Ensure we trigger the Add Finalizer path
 			},
 			existingObjects: []client.Object{},
-			failureConfig:   &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(clusterName, errBoom),
+			},
 		},
 		"Error: Remove Finalizer Failed": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -668,7 +735,9 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				c.Finalizers = []string{finalizerName}
 			},
 			existingObjects: []client.Object{},
-			failureConfig:   &testutil.FailureConfig{OnUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(clusterName, errBoom),
+			},
 		},
 		"Error: CheckChildrenDeleted (List Cells Failed)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -720,7 +789,9 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		},
 		"Error: Resolve CoreTemplate Failed": {
 			existingObjects: []client.Object{coreTpl},
-			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-core", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName("default-core", errBoom),
+			},
 		},
 		"Error: Resolve Admin Template Failed (Second Call)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -736,16 +807,24 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 					Spec: multigresv1alpha1.CoreTemplateSpec{},
 				},
 			},
-			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("admin-core-fail", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName("admin-core-fail", errBoom),
+			},
 		},
 		"Error: Create GlobalTopo Failed": {
-			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errBoom),
+			},
 		},
 		"Error: Create MultiAdmin Failed": {
-			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errBoom),
+			},
 		},
 		"Error: Resolve CellTemplate Failed": {
-			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-cell", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName("default-cell", errBoom),
+			},
 		},
 		"Error: List Existing Cells Failed (Reconcile Loop)": {
 			failureConfig: &testutil.FailureConfig{
@@ -758,14 +837,24 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 		},
 		"Error: Create Cell Failed": {
-			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errBoom),
+			},
 		},
 		"Error: Prune Cell Failed": {
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
-				&multigresv1alpha1.Cell{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-b", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-zone-b",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
 			},
-			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(clusterName+"-zone-b", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(clusterName+"-zone-b", errBoom),
+			},
 		},
 		"Error: List Existing TableGroups Failed": {
 			failureConfig: &testutil.FailureConfig{
@@ -778,17 +867,29 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 		},
 		"Error: Resolve ShardTemplate Failed": {
-			failureConfig: &testutil.FailureConfig{OnGet: testutil.FailOnKeyName("default-shard", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName("default-shard", errBoom),
+			},
 		},
 		"Error: Create TableGroup Failed": {
-			failureConfig: &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errBoom),
+			},
 		},
 		"Error: Prune TableGroup Failed": {
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
-				&multigresv1alpha1.TableGroup{ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-orphan-tg", Namespace: namespace, Labels: map[string]string{"multigres.com/cluster": clusterName}}},
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-orphan-tg",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
 			},
-			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(clusterName+"-orphan-tg", errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(clusterName+"-orphan-tg", errBoom),
+			},
 		},
 		"Error: UpdateStatus (List Cells Failed)": {
 			failureConfig: &testutil.FailureConfig{
@@ -823,7 +924,9 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 		},
 		"Error: Update Status Failed (API Error)": {
-			failureConfig: &testutil.FailureConfig{OnStatusUpdate: testutil.FailOnObjectName(clusterName, errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errBoom),
+			},
 		},
 		"Error: Global Topo Resolution Failed (During Cell Reconcile)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -930,16 +1033,16 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				tc.preReconcileUpdate(t, cluster)
 			}
 
-			// Capture if deletion is intended BEFORE calling Create,
-			// because Create strips DeletionTimestamp from the local struct in some client implementations (or API logic mimics it).
-			shouldDelete := false
-			if cluster.GetDeletionTimestamp() != nil && !cluster.GetDeletionTimestamp().IsZero() {
-				shouldDelete = true
-			}
+			shouldDelete := cluster.GetDeletionTimestamp() != nil &&
+				!cluster.GetDeletionTimestamp().IsZero()
 
 			if !strings.Contains(name, "Object Not Found") {
 				check := &multigresv1alpha1.MultigresCluster{}
-				err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, check)
+				err := baseClient.Get(
+					t.Context(),
+					types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+					check,
+				)
 				if apierrors.IsNotFound(err) {
 					if err := baseClient.Create(t.Context(), cluster); err != nil {
 						t.Fatalf("failed to create initial cluster: %v", err)
@@ -995,7 +1098,7 @@ func TestSetupWithManager_Coverage(t *testing.T) {
 	t.Run("No Options", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
-				// Expected panic because manager is nil
+				t.Logf("Recovered expected panic: %v", r)
 			}
 		}()
 		reconciler := &MultigresClusterReconciler{}
@@ -1006,7 +1109,7 @@ func TestSetupWithManager_Coverage(t *testing.T) {
 	t.Run("With Options", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
-				// Expected panic because manager is nil
+				t.Logf("Recovered expected panic: %v", r)
 			}
 		}()
 		reconciler := &MultigresClusterReconciler{}
@@ -1118,7 +1221,9 @@ func TestTemplateLogic_Unit(t *testing.T) {
 						Type:            "readOnly",
 						ReplicasPerCell: ptr.To(int32(1)),
 						Storage:         multigresv1alpha1.StorageSpec{Size: "1Gi"},
-						Postgres:        multigresv1alpha1.ContainerConfig{Resources: corev1.ResourceRequirements{}},
+						Postgres: multigresv1alpha1.ContainerConfig{
+							Resources: corev1.ResourceRequirements{},
+						},
 					},
 				},
 			},
@@ -1134,10 +1239,14 @@ func TestTemplateLogic_Unit(t *testing.T) {
 					ReplicasPerCell: ptr.To(int32(2)),
 					Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
 					Postgres: multigresv1alpha1.ContainerConfig{
-						Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")}},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+						},
 					},
 					Multipooler: multigresv1alpha1.ContainerConfig{
-						Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")}},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+						},
 					},
 					Affinity: &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{}},
 					Cells:    []multigresv1alpha1.CellName{"c2"},
@@ -1159,10 +1268,14 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			ReplicasPerCell: ptr.To(int32(2)),
 			Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
 			Postgres: multigresv1alpha1.ContainerConfig{
-				Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")}},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+				},
 			},
 			Multipooler: multigresv1alpha1.ContainerConfig{
-				Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")}},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+				},
 			},
 			Affinity: &corev1.Affinity{PodAntiAffinity: &corev1.PodAntiAffinity{}},
 			Cells:    []multigresv1alpha1.CellName{"c2"},
@@ -1173,7 +1286,9 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		}
 
 		inline := &multigresv1alpha1.ShardInlineSpec{
-			MultiOrch: multigresv1alpha1.MultiOrchSpec{Cells: []multigresv1alpha1.CellName{"inline"}},
+			MultiOrch: multigresv1alpha1.MultiOrchSpec{
+				Cells: []multigresv1alpha1.CellName{"inline"},
+			},
 		}
 		orch, _ = MergeShardConfig(tpl, overrides, inline)
 		wantInlineCells := []multigresv1alpha1.CellName{"inline"}
@@ -1188,7 +1303,9 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		spec := &multigresv1alpha1.GlobalTopoServerSpec{TemplateRef: "t1"}
 		core := &multigresv1alpha1.CoreTemplate{
 			Spec: multigresv1alpha1.CoreTemplateSpec{
-				GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{Etcd: &multigresv1alpha1.EtcdSpec{Image: "resolved"}},
+				GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{Image: "resolved"},
+				},
 			},
 		}
 		res := ResolveGlobalTopo(spec, core)
@@ -1196,7 +1313,10 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			t.Errorf("ResolveGlobalTopo template mismatch got %q, want %q", got, want)
 		}
 
-		spec2 := &multigresv1alpha1.GlobalTopoServerSpec{TemplateRef: "t1", Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"}}
+		spec2 := &multigresv1alpha1.GlobalTopoServerSpec{
+			TemplateRef: "t1",
+			Etcd:        &multigresv1alpha1.EtcdSpec{Image: "inline"},
+		}
 		res2 := ResolveGlobalTopo(spec2, nil)
 		if got, want := res2.Etcd.Image, "inline"; got != want {
 			t.Errorf("ResolveGlobalTopo inline fallback mismatch got %q, want %q", got, want)
@@ -1223,7 +1343,10 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			t.Errorf("ResolveMultiAdmin template mismatch got %d, want %d", got, want)
 		}
 
-		spec2 := &multigresv1alpha1.MultiAdminConfig{TemplateRef: "t1", Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))}}
+		spec2 := &multigresv1alpha1.MultiAdminConfig{
+			TemplateRef: "t1",
+			Spec:        &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+		}
 		res2 := ResolveMultiAdmin(spec2, nil)
 		if got, want := *res2.Replicas, int32(5); got != want {
 			t.Errorf("ResolveMultiAdmin inline fallback mismatch got %d, want %d", got, want)

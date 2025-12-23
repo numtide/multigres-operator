@@ -20,7 +20,9 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
-func setupFixtures(t testing.TB) (*multigresv1alpha1.TableGroup, string, string, string, string, string) {
+func setupFixtures(
+	t testing.TB,
+) (*multigresv1alpha1.TableGroup, string, string, string, string, string) {
 	t.Helper()
 
 	tgName := "test-tg"
@@ -105,7 +107,9 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					{
 						Name: "shard-1", // New shard
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
-							StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+							StatelessSpec: multigresv1alpha1.StatelessSpec{
+								Replicas: ptr.To(int32(1)),
+							},
 						},
 					},
 				}
@@ -131,7 +135,9 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					t.Error("New shard-1 not created")
 				}
 				oldShard := &multigresv1alpha1.Shard{}
-				if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-0"), Namespace: namespace}, oldShard); !apierrors.IsNotFound(err) {
+				if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-0"), Namespace: namespace}, oldShard); !apierrors.IsNotFound(
+					err,
+				) {
 					t.Error("Old shard-0 was not pruned")
 				}
 			},
@@ -152,7 +158,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
 					Status: multigresv1alpha1.ShardStatus{
 						Conditions: []metav1.Condition{
-							{Type: "Available", Status: metav1.ConditionTrue, LastTransitionTime: metav1.Now()},
+							{
+								Type:               "Available",
+								Status:             metav1.ConditionTrue,
+								LastTransitionTime: metav1.Now(),
+							},
 						},
 					},
 				},
@@ -283,12 +293,19 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 		"Error: Get TableGroup Failed": {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
-			failureConfig:   &testutil.FailureConfig{OnGet: testutil.FailOnKeyName(tgName, errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName(tgName, errBoom),
+			},
 		},
 		"Error: Create/Update Shard Failed": {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
-			failureConfig:   &testutil.FailureConfig{OnCreate: testutil.FailOnObjectName(fmt.Sprintf("%s-%s", tgName, "shard-0"), errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: testutil.FailOnObjectName(
+					fmt.Sprintf("%s-%s", tgName, "shard-0"),
+					errBoom,
+				),
+			},
 		},
 		"Error: List Shards Failed (during pruning)": {
 			tableGroup:      baseTG.DeepCopy(),
@@ -327,12 +344,19 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 					},
 				},
 			},
-			failureConfig: &testutil.FailureConfig{OnDelete: testutil.FailOnObjectName(fmt.Sprintf("%s-%s", tgName, "shard-0"), errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(
+					fmt.Sprintf("%s-%s", tgName, "shard-0"),
+					errBoom,
+				),
+			},
 		},
 		"Error: Update Status Failed": {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
-			failureConfig:   &testutil.FailureConfig{OnStatusUpdate: testutil.FailOnObjectName(tgName, errBoom)},
+			failureConfig: &testutil.FailureConfig{
+				OnStatusUpdate: testutil.FailOnObjectName(tgName, errBoom),
+			},
 		},
 	}
 
@@ -384,20 +408,22 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 func TestSetupWithManager_Coverage(t *testing.T) {
 	t.Parallel()
 
+	// Test the default path (no options)
 	t.Run("No Options", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
-				// Expected panic because manager is nil
+				t.Logf("Recovered expected panic: %v", r)
 			}
 		}()
 		reconciler := &TableGroupReconciler{}
 		_ = reconciler.SetupWithManager(nil)
 	})
 
+	// Test the path with options to ensure coverage of the 'if len(opts) > 0' block
 	t.Run("With Options", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
-				// Expected panic because manager is nil
+				t.Logf("Recovered expected panic: %v", r)
 			}
 		}()
 		reconciler := &TableGroupReconciler{}
