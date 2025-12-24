@@ -1,0 +1,27 @@
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      # # 1. Ensure go.mod/go.sum are tidy across all modules
+      # - id: go-modules-tidy
+      #   name: Go Modules Tidy
+      #   entry: make modules-tidy
+      #   language: system
+      #   files: \.go$
+      #   pass_filenames: false
+
+      # 2. Run Linters and Auto-fixers (gofumpt, golines, etc.)
+      - id: go-lint-fix
+        name: Go Lint Fix
+        entry: make lint-fix
+        language: system
+        files: \.go$
+        pass_filenames: false
