@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/defaults"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -379,7 +380,7 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal("Global TopoServer not created")
 				}
-				if got, want := *ts.Spec.Etcd.Replicas, DefaultEtcdReplicas; got != want {
+				if got, want := *ts.Spec.Etcd.Replicas, defaults.DefaultEtcdReplicas; got != want {
 					t.Errorf("Expected default replicas mismatch got %d, want %d", got, want)
 				}
 				// Verify MultiAdmin NOT created
@@ -1155,7 +1156,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 
-		gw, topo := MergeCellConfig(tpl, overrides, nil)
+		gw, topo := defaults.MergeCellConfig(tpl, overrides, nil)
 
 		wantGw := multigresv1alpha1.StatelessSpec{
 			Replicas:       ptr.To(int32(2)),
@@ -1184,12 +1185,12 @@ func TestTemplateLogic_Unit(t *testing.T) {
 		inline := &multigresv1alpha1.CellInlineSpec{
 			MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(99))},
 		}
-		gw, _ = MergeCellConfig(tpl, overrides, inline)
+		gw, _ = defaults.MergeCellConfig(tpl, overrides, inline)
 		if got, want := *gw.Replicas, int32(99); got != want {
 			t.Errorf("MergeCellConfig inline priority mismatch got %d, want %d", got, want)
 		}
 
-		gw, _ = MergeCellConfig(nil, overrides, nil)
+		gw, _ = defaults.MergeCellConfig(nil, overrides, nil)
 		if got, want := *gw.Replicas, int32(2); got != want {
 			t.Errorf("MergeCellConfig nil template mismatch got %d, want %d", got, want)
 		}
@@ -1199,7 +1200,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 				MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 			},
 		}
-		gw, _ = MergeCellConfig(tplNil, overrides, nil)
+		gw, _ = defaults.MergeCellConfig(tplNil, overrides, nil)
 		if got, want := gw.PodAnnotations["baz"], "qux"; got != want {
 			t.Errorf("MergeCellConfig nil map init mismatch got %q, want %q", got, want)
 		}
@@ -1255,7 +1256,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			},
 		}
 
-		orch, pools := MergeShardConfig(tpl, overrides, nil)
+		orch, pools := defaults.MergeShardConfig(tpl, overrides, nil)
 
 		wantOrchCells := []multigresv1alpha1.CellName{"b"}
 		if diff := cmp.Diff(wantOrchCells, orch.Cells); diff != "" {
@@ -1290,7 +1291,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 				Cells: []multigresv1alpha1.CellName{"inline"},
 			},
 		}
-		orch, _ = MergeShardConfig(tpl, overrides, inline)
+		orch, _ = defaults.MergeShardConfig(tpl, overrides, inline)
 		wantInlineCells := []multigresv1alpha1.CellName{"inline"}
 		if diff := cmp.Diff(wantInlineCells, orch.Cells); diff != "" {
 			t.Errorf("MergeShardConfig inline priority mismatch (-want +got):\n%s", diff)
@@ -1308,7 +1309,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 				},
 			},
 		}
-		res := ResolveGlobalTopo(spec, core)
+		res := defaults.ResolveGlobalTopo(spec, core)
 		if got, want := res.Etcd.Image, "resolved"; got != want {
 			t.Errorf("ResolveGlobalTopo template mismatch got %q, want %q", got, want)
 		}
@@ -1317,13 +1318,13 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			TemplateRef: "t1",
 			Etcd:        &multigresv1alpha1.EtcdSpec{Image: "inline"},
 		}
-		res2 := ResolveGlobalTopo(spec2, nil)
+		res2 := defaults.ResolveGlobalTopo(spec2, nil)
 		if got, want := res2.Etcd.Image, "inline"; got != want {
 			t.Errorf("ResolveGlobalTopo inline fallback mismatch got %q, want %q", got, want)
 		}
 
 		spec4 := &multigresv1alpha1.GlobalTopoServerSpec{}
-		res4 := ResolveGlobalTopo(spec4, nil)
+		res4 := defaults.ResolveGlobalTopo(spec4, nil)
 		if diff := cmp.Diff(spec4, res4); diff != "" {
 			t.Errorf("ResolveGlobalTopo no-op mismatch (-want +got):\n%s", diff)
 		}
@@ -1338,7 +1339,7 @@ func TestTemplateLogic_Unit(t *testing.T) {
 				MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(10))},
 			},
 		}
-		res := ResolveMultiAdmin(spec, core)
+		res := defaults.ResolveMultiAdmin(spec, core)
 		if got, want := *res.Replicas, int32(10); got != want {
 			t.Errorf("ResolveMultiAdmin template mismatch got %d, want %d", got, want)
 		}
@@ -1347,18 +1348,18 @@ func TestTemplateLogic_Unit(t *testing.T) {
 			TemplateRef: "t1",
 			Spec:        &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
 		}
-		res2 := ResolveMultiAdmin(spec2, nil)
+		res2 := defaults.ResolveMultiAdmin(spec2, nil)
 		if got, want := *res2.Replicas, int32(5); got != want {
 			t.Errorf("ResolveMultiAdmin inline fallback mismatch got %d, want %d", got, want)
 		}
 
-		res3 := ResolveMultiAdmin(&multigresv1alpha1.MultiAdminConfig{}, nil)
+		res3 := defaults.ResolveMultiAdmin(&multigresv1alpha1.MultiAdminConfig{}, nil)
 		if res3 != nil {
 			t.Error("ResolveMultiAdmin expected nil for empty config")
 		}
 
 		spec5 := &multigresv1alpha1.MultiAdminConfig{}
-		res5 := ResolveMultiAdmin(spec5, nil)
+		res5 := defaults.ResolveMultiAdmin(spec5, nil)
 		if res5 != nil {
 			t.Error("ResolveMultiAdmin expected nil when no config and no template")
 		}

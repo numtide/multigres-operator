@@ -1,9 +1,4 @@
-package multigrescluster
-
-// NOTE: We may want to consider moving this to different module/package before implementing the Mutating Webhook.
-// This separation is critical to prevent circular dependencies between the Webhook and Controller packages
-// and ensures that the "Level 4" defaulting logic is reusable as a Single Source of Truth for both the reconciliation loop
-// and admission requests.
+package defaults
 
 const (
 	// DefaultEtcdReplicas is the default number of replicas for the managed Etcd cluster if not specified.

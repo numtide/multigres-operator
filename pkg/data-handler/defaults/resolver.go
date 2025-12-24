@@ -1,4 +1,4 @@
-package multigrescluster
+package defaults
 
 import (
 	"context"
@@ -12,19 +12,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// NOTE: We may want to consider move this to different module/package before implementing the Mutating Webhook.
-// This separation is critical to prevent circular dependencies between the Webhook and Controller packages
-// and ensures that the "Level 4" defaulting logic is reusable as a Single Source of Truth for both the reconciliation loop
-// and admission requests.
-
-// TemplateResolver handles the logic for fetching and merging templates.
-type TemplateResolver struct {
-	// Client is the kubernetes client used to fetch templates.
+// Resolver handles the logic for fetching templates and calculating defaults.
+// It serves as the single source of truth for defaulting logic across the operator.
+type Resolver struct {
+	// Client is the kubernetes client used to fetch templates or other cluster resources.
 	Client client.Client
-	// Namespace is the namespace where templates are expected to exist.
+	// Namespace is the namespace where templates/resources are expected to exist.
 	Namespace string
-	// Defaults contains the cluster-level template references to use when explicit ones are missing.
-	Defaults multigresv1alpha1.TemplateDefaults
+	// TemplateDefaults contains the cluster-level template references.
+	TemplateDefaults multigresv1alpha1.TemplateDefaults
+}
+
+// NewResolver creates a new defaults.Resolver.
+func NewResolver(
+	c client.Client,
+	namespace string,
+	tplDefaults multigresv1alpha1.TemplateDefaults,
+) *Resolver {
+	return &Resolver{
+		Client:           c,
+		Namespace:        namespace,
+		TemplateDefaults: tplDefaults,
+	}
 }
 
 // ResolveCoreTemplate determines the target CoreTemplate name and fetches it.
@@ -35,8 +44,8 @@ type TemplateResolver struct {
 //
 // If an explicit template (param or cluster default) is not found, it returns an error.
 // If the implicit "default" template is not found, it returns an empty object (safe fallback).
-// In this case the default would be applied by the operator via mutating webhook.
-func (r *TemplateResolver) ResolveCoreTemplate(
+// In this case the default would be applied by the operator via mutating webhook, if enabled.
+func (r *Resolver) ResolveCoreTemplate(
 	ctx context.Context,
 	templateName string,
 ) (*multigresv1alpha1.CoreTemplate, error) {
@@ -44,7 +53,7 @@ func (r *TemplateResolver) ResolveCoreTemplate(
 	isImplicitFallback := false
 
 	if name == "" {
-		name = r.Defaults.CoreTemplate
+		name = r.TemplateDefaults.CoreTemplate
 	}
 	if name == "" {
 		name = FallbackCoreTemplate
@@ -66,7 +75,7 @@ func (r *TemplateResolver) ResolveCoreTemplate(
 }
 
 // ResolveCellTemplate fetches and resolves a CellTemplate by name, handling defaults.
-func (r *TemplateResolver) ResolveCellTemplate(
+func (r *Resolver) ResolveCellTemplate(
 	ctx context.Context,
 	templateName string,
 ) (*multigresv1alpha1.CellTemplate, error) {
@@ -74,7 +83,7 @@ func (r *TemplateResolver) ResolveCellTemplate(
 	isImplicitFallback := false
 
 	if name == "" {
-		name = r.Defaults.CellTemplate
+		name = r.TemplateDefaults.CellTemplate
 	}
 	if name == "" {
 		name = FallbackCellTemplate
@@ -96,7 +105,7 @@ func (r *TemplateResolver) ResolveCellTemplate(
 }
 
 // ResolveShardTemplate fetches and resolves a ShardTemplate by name, handling defaults.
-func (r *TemplateResolver) ResolveShardTemplate(
+func (r *Resolver) ResolveShardTemplate(
 	ctx context.Context,
 	templateName string,
 ) (*multigresv1alpha1.ShardTemplate, error) {
@@ -104,7 +113,7 @@ func (r *TemplateResolver) ResolveShardTemplate(
 	isImplicitFallback := false
 
 	if name == "" {
-		name = r.Defaults.ShardTemplate
+		name = r.TemplateDefaults.ShardTemplate
 	}
 	if name == "" {
 		name = FallbackShardTemplate

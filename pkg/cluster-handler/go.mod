@@ -4,7 +4,8 @@ go 1.25.0
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/numtide/multigres-operator/api v0.0.0-20251222211535-b3e1d4ecd958
+	github.com/numtide/multigres-operator/api v0.0.0-20251224124005-355869230728
+	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-00010101000000-000000000000
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20251214105213-458b940d04bd
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
@@ -67,3 +68,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace github.com/numtide/multigres-operator/pkg/data-handler => ../data-handler
