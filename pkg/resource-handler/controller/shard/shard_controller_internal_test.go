@@ -94,8 +94,8 @@ func TestBuildMultiOrchContainer_WithImage(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Image: customImage,
+			Images: multigresv1alpha1.ShardImages{
+				MultiOrch: customImage,
 			},
 		},
 	}
@@ -124,7 +124,7 @@ func TestReconcileMultiOrchDeployment_InvalidScheme(t *testing.T) {
 		},
 		Spec: multigresv1alpha1.ShardSpec{
 			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Cells: []string{"cell1"},
+				Cells: []multigresv1alpha1.CellName{"cell1"},
 			},
 		},
 	}
@@ -182,10 +182,8 @@ func TestReconcilePoolStatefulSet_InvalidScheme(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -215,10 +213,8 @@ func TestReconcilePoolHeadlessService_InvalidScheme(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -248,11 +244,9 @@ func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+			Pools: map[string]multigresv1alpha1.PoolSpec{
 				"pool1": {
-					Cell:       "cell1",
-					Database:   "db1",
-					TableGroup: "tg1",
+					Cells: []multigresv1alpha1.CellName{"cell1"},
 				},
 			},
 		},
@@ -322,7 +316,7 @@ func TestReconcileMultiOrchDeployment_GetError(t *testing.T) {
 		},
 		Spec: multigresv1alpha1.ShardSpec{
 			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Cells: []string{"cell1"},
+				Cells: []multigresv1alpha1.CellName{"cell1"},
 			},
 		},
 	}
@@ -398,10 +392,8 @@ func TestReconcilePoolStatefulSet_GetError(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	// Create client with failure injection
@@ -440,10 +432,8 @@ func TestReconcilePoolHeadlessService_GetError(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	// Create client with failure injection
@@ -479,11 +469,9 @@ func TestUpdateStatus_GetError(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+			Pools: map[string]multigresv1alpha1.PoolSpec{
 				"pool1": {
-					Cell:       "cell1",
-					Database:   "db1",
-					TableGroup: "tg1",
+					Cells: []multigresv1alpha1.CellName{"cell1"},
 				},
 			},
 		},

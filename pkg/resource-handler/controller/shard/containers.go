@@ -41,7 +41,7 @@ var sidecarRestartPolicy = corev1.ContainerRestartPolicyAlways
 // This runs pgctld binary (which wraps postgres) and mounts persistent data storage.
 func buildPostgresContainer(
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
+	pool multigresv1alpha1.PoolSpec,
 ) corev1.Container {
 	image := DefaultPostgresImage
 	if shard.Spec.Images.Postgres != "" {
@@ -70,7 +70,7 @@ func buildPostgresContainer(
 // restartPolicy: Always (K8s 1.28+).
 func buildMultiPoolerSidecar(
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
+	pool multigresv1alpha1.PoolSpec,
 	poolName string,
 ) corev1.Container {
 	image := DefaultMultiPoolerImage
@@ -87,9 +87,9 @@ func buildMultiPoolerSidecar(
 		"--http-port", "15200",
 		"--grpc-port", "15270",
 		"--topo-implementation", "etcd2",
-		"--cell", pool.Cell,
-		"--database", pool.Database,
-		"--table-group", pool.TableGroup,
+		"--cell", cell,
+		"--database", shard.Spec.DatabaseName,
+		"--table-group", shard.Spec.TableGroupName,
 		"--service-id", getPoolServiceID(shard.Name, poolName),
 		"--pgctld-addr", "localhost:15470",
 		"--pg-port", "5432",
@@ -100,7 +100,7 @@ func buildMultiPoolerSidecar(
 		Image:         image,
 		Args:          args,
 		Ports:         buildMultiPoolerContainerPorts(),
-		Resources:     pool.MultiPooler.Resources,
+		Resources:     pool.Multipooler.Resources,
 		RestartPolicy: &sidecarRestartPolicy,
 	}
 }
@@ -127,8 +127,8 @@ func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 // buildMultiOrchContainer creates the MultiOrch container spec.
 func buildMultiOrchContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 	image := DefaultMultiOrchImage
-	if shard.Spec.MultiOrch.Image != "" {
-		image = shard.Spec.MultiOrch.Image
+	if shard.Spec.Images.MultiOrch != "" {
+		image = shard.Spec.Images.MultiOrch
 	}
 
 	// TODO: Add remaining command line arguments:
@@ -159,16 +159,6 @@ func buildPgctldVolume() corev1.Volume {
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
-	}
-}
-
-// buildDataVolumeClaimTemplate creates the PVC template for PostgreSQL data.
-func buildDataVolumeClaimTemplate(
-	pool multigresv1alpha1.ShardPoolSpec,
-) corev1.PersistentVolumeClaim {
-	// Use the pool's DataVolumeClaimTemplate directly if provided
-	return corev1.PersistentVolumeClaim{
-		Spec: pool.DataVolumeClaimTemplate,
 	}
 }
 

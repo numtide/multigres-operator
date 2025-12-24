@@ -188,9 +188,6 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 		return fmt.Errorf("failed to get MultiGateway Deployment for status: %w", err)
 	}
 
-	// Update status fields
-	cell.Status.ObservedGeneration = cell.Generation
-
 	// Update conditions
 	cell.Status.Conditions = r.buildConditions(cell, mgDeploy)
 

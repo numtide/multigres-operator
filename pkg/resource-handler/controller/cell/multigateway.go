@@ -45,8 +45,8 @@ func BuildMultiGatewayDeployment(
 	}
 
 	image := DefaultMultiGatewayImage
-	if cell.Spec.Images.MultiGateway != "" {
-		image = cell.Spec.Images.MultiGateway
+	if cell.Spec.MultiGatewayImage != "" {
+		image = cell.Spec.MultiGatewayImage
 	}
 
 	name := cell.Name + "-multigateway"
@@ -72,7 +72,7 @@ func BuildMultiGatewayDeployment(
 						{
 							Name:      "multigateway",
 							Image:     image,
-							Resources: cell.Spec.MultiGateway.ResourceRequirements,
+							Resources: cell.Spec.MultiGateway.Resources,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "http",

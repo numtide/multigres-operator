@@ -65,23 +65,18 @@ func TestShardReconciliation(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"us-west-1a", "us-west-1b"}, // 2 cells = 2 replicas
+						Cells: []multigresv1alpha1.CellName{"us-west-1a", "us-west-1b"}, // 2 cells = 2 replicas
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "us-west-1a",
+							Cells:      []multigresv1alpha1.CellName{"us-west-1a"},
 							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(2)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							ReplicasPerCell: ptr.To(int32(2)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -231,7 +226,6 @@ func TestShardReconciliation(t *testing.T) {
 											corev1.ResourceStorage: resource.MustParse("10Gi"),
 										},
 									},
-									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
 								},
 								Status: corev1.PersistentVolumeClaimStatus{
 									Phase: corev1.ClaimPending,
@@ -320,6 +314,9 @@ func shardLabels(t testing.TB, instanceName, component, cellName string) map[str
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
+		"multigres.com/cell":           cellName,
+		"multigres.com/database":       "testdb",
+		"multigres.com/tablegroup":     "default",
 	}
 }
 

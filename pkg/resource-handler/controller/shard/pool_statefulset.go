@@ -7,15 +7,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/storage"
 )
 
 const (
 	// DefaultPoolReplicas is the default number of replicas for a pool
 	DefaultPoolReplicas int32 = 1
+
+	// DefaultDataVolumeSize is the default size for data volumes
+	DefaultDataVolumeSize = "10Gi"
 )
 
 // BuildPoolStatefulSet creates a StatefulSet for a shard pool.
@@ -28,7 +31,7 @@ const (
 func BuildPoolStatefulSet(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
 	name := buildPoolName(shard.Name, poolName)
@@ -36,8 +39,8 @@ func BuildPoolStatefulSet(
 	labels := buildPoolLabels(shard, poolName, poolSpec)
 
 	replicas := DefaultPoolReplicas
-	if poolSpec.Replicas != nil {
-		replicas = *poolSpec.Replicas
+	if poolSpec.ReplicasPerCell != nil {
+		replicas = *poolSpec.ReplicasPerCell
 	}
 
 	sts := &appsv1.StatefulSet{
@@ -89,21 +92,21 @@ func BuildPoolStatefulSet(
 }
 
 // buildPoolVolumeClaimTemplates creates the PVC templates for a pool.
-// Uses the pool's DataVolumeClaimTemplate if provided.
+// Uses the pool's Storage configuration.
 func buildPoolVolumeClaimTemplates(
-	pool multigresv1alpha1.ShardPoolSpec,
+	pool multigresv1alpha1.PoolSpec,
 ) []corev1.PersistentVolumeClaim {
-	pvc := corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: DataVolumeName,
-		},
-		Spec: pool.DataVolumeClaimTemplate,
+	var storageClass *string
+	storageSize := DefaultDataVolumeSize
+
+	if pool.Storage.Class != "" {
+		storageClass = &pool.Storage.Class
+	}
+	if pool.Storage.Size != "" {
+		storageSize = pool.Storage.Size
 	}
 
-	// Set default VolumeMode if not specified
-	if pvc.Spec.VolumeMode == nil {
-		pvc.Spec.VolumeMode = ptr.To(corev1.PersistentVolumeFilesystem)
+	return []corev1.PersistentVolumeClaim{
+		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize),
 	}
-
-	return []corev1.PersistentVolumeClaim{pvc}
 }

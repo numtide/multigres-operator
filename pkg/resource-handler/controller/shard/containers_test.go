@@ -7,7 +7,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
@@ -15,14 +14,14 @@ import (
 func TestBuildPostgresContainer(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
-		poolSpec multigresv1alpha1.ShardPoolSpec
+		poolSpec multigresv1alpha1.PoolSpec
 		want     corev1.Container
 	}{
 		"default postgres image with no resources": {
 			shard: &multigresv1alpha1.Shard{
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{},
+			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: corev1.Container{
 				Name:      "postgres",
 				Image:     DefaultPostgresImage,
@@ -42,12 +41,12 @@ func TestBuildPostgresContainer(t *testing.T) {
 		"custom postgres image": {
 			shard: &multigresv1alpha1.Shard{
 				Spec: multigresv1alpha1.ShardSpec{
-					Images: multigresv1alpha1.ShardImagesSpec{
+					Images: multigresv1alpha1.ShardImages{
 						Postgres: "postgres:16",
 					},
 				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{},
+			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: corev1.Container{
 				Name:      "postgres",
 				Image:     "postgres:16",
@@ -68,8 +67,8 @@ func TestBuildPostgresContainer(t *testing.T) {
 			shard: &multigresv1alpha1.Shard{
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				Postgres: multigresv1alpha1.PostgresSpec{
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Postgres: multigresv1alpha1.ContainerConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -123,18 +122,19 @@ func TestBuildPostgresContainer(t *testing.T) {
 func TestBuildMultiPoolerSidecar(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
-		poolSpec multigresv1alpha1.ShardPoolSpec
+		poolSpec multigresv1alpha1.PoolSpec
 		want     corev1.Container
 	}{
 		"default multipooler image with no resources": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
-				Spec:       multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				Cell:       "zone1",
-				Database:   "testdb",
-				TableGroup: "default",
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Cells: []multigresv1alpha1.CellName{"zone1"},
 			},
 			want: corev1.Container{
 				Name:  "multipooler",
@@ -159,15 +159,15 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{Name: "custom-shard"},
 				Spec: multigresv1alpha1.ShardSpec{
-					Images: multigresv1alpha1.ShardImagesSpec{
+					DatabaseName:   "proddb",
+					TableGroupName: "orders",
+					Images: multigresv1alpha1.ShardImages{
 						MultiPooler: "custom/multipooler:v1.0.0",
 					},
 				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				Cell:       "zone2",
-				Database:   "proddb",
-				TableGroup: "orders",
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Cells: []multigresv1alpha1.CellName{"zone2"},
 			},
 			want: corev1.Container{
 				Name:  "multipooler",
@@ -191,13 +191,14 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 		"with resource requirements": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{Name: "resource-shard"},
-				Spec:       multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "mydb",
+					TableGroupName: "default",
+				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				Cell:       "zone1",
-				Database:   "mydb",
-				TableGroup: "default",
-				MultiPooler: multigresv1alpha1.MultiPoolerSpec{
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Cells:       []multigresv1alpha1.CellName{"zone1"},
+				Multipooler: multigresv1alpha1.ContainerConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("100m"),
@@ -338,52 +339,3 @@ func TestBuildPgctldVolume(t *testing.T) {
 	}
 }
 
-func TestBuildDataVolumeClaimTemplate(t *testing.T) {
-	tests := map[string]struct {
-		poolSpec multigresv1alpha1.ShardPoolSpec
-		want     corev1.PersistentVolumeClaim
-	}{
-		"with storage class and size": {
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-					StorageClassName: ptr.To("fast-ssd"),
-					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("10Gi"),
-						},
-					},
-				},
-			},
-			want: corev1.PersistentVolumeClaim{
-				Spec: corev1.PersistentVolumeClaimSpec{
-					StorageClassName: ptr.To("fast-ssd"),
-					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("10Gi"),
-						},
-					},
-				},
-			},
-		},
-		"minimal spec": {
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{},
-			},
-			want: corev1.PersistentVolumeClaim{
-				Spec: corev1.PersistentVolumeClaimSpec{},
-			},
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := buildDataVolumeClaimTemplate(tc.poolSpec)
-
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("buildDataVolumeClaimTemplate() mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}

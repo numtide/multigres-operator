@@ -1,6 +1,8 @@
 package shard
 
 import (
+	"strings"
+
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
 )
@@ -11,22 +13,24 @@ import (
 func buildPoolLabels(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	poolSpec multigresv1alpha1.PoolSpec,
 ) map[string]string {
 	fullPoolName := buildPoolName(shard.Name, poolName)
-	cellName := poolSpec.Cell
-	if cellName == "" {
-		cellName = metadata.DefaultCellName
+
+	// Build comma-separated list of cells for the label
+	cellNames := make([]string, len(poolSpec.Cells))
+	for i, cell := range poolSpec.Cells {
+		cellNames[i] = string(cell)
+	}
+	cellLabel := metadata.DefaultCellName
+	if len(cellNames) > 0 {
+		cellLabel = strings.Join(cellNames, ",")
 	}
 
-	// TODO: Remove this once we figure what to do with the cell name.
-	_ = cellName
-
 	labels := metadata.BuildStandardLabels(fullPoolName, PoolComponentName)
-	// TODO: Add multigres.com/* labels after finalizing label design:
-	// metadata.AddCellLabel(labels, cellName)
-	// metadata.AddDatabaseLabel(labels, poolSpec.Database)
-	// metadata.AddTableGroupLabel(labels, poolSpec.TableGroup)
+	metadata.AddCellLabel(labels, cellLabel)
+	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
+	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
 
 	metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 

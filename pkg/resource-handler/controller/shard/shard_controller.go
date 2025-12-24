@@ -193,7 +193,7 @@ func (r *ShardReconciler) reconcilePool(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
 	// Reconcile pool StatefulSet
 	if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, poolSpec); err != nil {
@@ -213,7 +213,7 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
 	desired, err := BuildPoolStatefulSet(shard, poolName, poolSpec, r.Scheme)
 	if err != nil {
@@ -252,7 +252,7 @@ func (r *ShardReconciler) reconcilePoolHeadlessService(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
 	desired, err := BuildPoolHeadlessService(shard, poolName, poolSpec, r.Scheme)
 	if err != nil {
@@ -316,9 +316,9 @@ func (r *ShardReconciler) updateStatus(
 	}
 
 	// Update status fields
-	shard.Status.TotalPods = totalPods
-	shard.Status.ReadyPods = readyPods
-	shard.Status.ObservedGeneration = shard.Generation
+	shard.Status.PoolsReady = (totalPods > 0 && totalPods == readyPods)
+	// TODO: Add OrchReady status check when MultiOrch deployment is implemented
+	// shard.Status.OrchReady = ...
 
 	// Update conditions
 	shard.Status.Conditions = r.buildConditions(shard, totalPods, readyPods)

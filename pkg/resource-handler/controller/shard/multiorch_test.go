@@ -33,7 +33,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"us-west-1a"}, // 1 cell = 1 replica
+						Cells: []multigresv1alpha1.CellName{"us-west-1a"}, // 1 cell = 1 replica
 					},
 				},
 			},
@@ -101,7 +101,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1", "zone2"}, // 2 cells = 2 replicas
+						Cells: []multigresv1alpha1.CellName{"zone1", "zone2"}, // 2 cells = 2 replicas
 					},
 				},
 			},

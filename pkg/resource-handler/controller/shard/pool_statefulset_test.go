@@ -21,7 +21,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
 		poolName string
-		poolSpec multigresv1alpha1.ShardPoolSpec
+		poolSpec multigresv1alpha1.PoolSpec
 		scheme   *runtime.Scheme
 		want     *appsv1.StatefulSet
 		wantErr  bool
@@ -33,17 +33,15 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.PoolSpec{
 				Type: "replica",
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("10Gi"),
-						},
-					},
+				Storage: multigresv1alpha1.StorageSpec{
+					Size: "10Gi",
 				},
 			},
 			poolName: "primary",
@@ -57,6 +55,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -79,6 +80,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cell":           "multigres-global-topo",
+							"multigres.com/database":       "testdb",
+							"multigres.com/tablegroup":     "default",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -93,23 +97,40 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cell":           "multigres-global-topo",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
 							},
 						},
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
+								buildPgctldInitContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+									},
+								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
 									},
-									multigresv1alpha1.ShardPoolSpec{},
+									multigresv1alpha1.PoolSpec{},
 									"primary",
 								),
 							},
 							Containers: []corev1.Container{
 								buildPostgresContainer(
-									&multigresv1alpha1.Shard{},
-									multigresv1alpha1.ShardPoolSpec{},
+									&multigresv1alpha1.Shard{
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
+									},
+									multigresv1alpha1.PoolSpec{},
 								),
 							},
 							Volumes: []corev1.Volume{
@@ -131,7 +152,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
 									},
 								},
-								VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
 							},
 						},
 					},
@@ -145,20 +165,18 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "prod",
 					UID:       "prod-uid",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.PoolSpec{
 				Type:     "readOnly",
-				Cell:     "zone-west",
-				Replicas: ptr.To(int32(3)),
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-					StorageClassName: ptr.To("fast-ssd"),
-					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("20Gi"),
-						},
-					},
+				Cells:    []multigresv1alpha1.CellName{"zone-west"},
+				ReplicasPerCell: ptr.To(int32(3)),
+				Storage: multigresv1alpha1.StorageSpec{
+					Class: "fast-ssd",
+					Size:  "20Gi",
 				},
 			},
 			poolName: "replica",
@@ -172,6 +190,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone-west",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -194,6 +215,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cell":           "zone-west",
+							"multigres.com/database":       "testdb",
+							"multigres.com/tablegroup":     "default",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -208,23 +232,40 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cell":           "zone-west",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
 							},
 						},
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
+								buildPgctldInitContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+									},
+								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-001"},
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
 									},
-									multigresv1alpha1.ShardPoolSpec{Cell: "zone-west"},
+									multigresv1alpha1.PoolSpec{Cells: []multigresv1alpha1.CellName{"zone-west"}},
 									"replica",
 								),
 							},
 							Containers: []corev1.Container{
 								buildPostgresContainer(
-									&multigresv1alpha1.Shard{},
-									multigresv1alpha1.ShardPoolSpec{},
+									&multigresv1alpha1.Shard{
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
+									},
+									multigresv1alpha1.PoolSpec{},
 								),
 							},
 							Volumes: []corev1.Volume{
@@ -247,7 +288,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 										corev1.ResourceStorage: resource.MustParse("20Gi"),
 									},
 								},
-								VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
 							},
 						},
 					},
@@ -261,16 +301,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "default",
 					UID:       "uid-002",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("5Gi"),
-						},
-					},
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Storage: multigresv1alpha1.StorageSpec{
+					Size: "5Gi",
 				},
 			},
 			poolName: "readOnly",
@@ -284,6 +322,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -306,6 +347,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cell":           "multigres-global-topo",
+							"multigres.com/database":       "testdb",
+							"multigres.com/tablegroup":     "default",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -320,23 +364,40 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cell":           "multigres-global-topo",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
 							},
 						},
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
+								buildPgctldInitContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+									},
+								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-002"},
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
 									},
-									multigresv1alpha1.ShardPoolSpec{},
+									multigresv1alpha1.PoolSpec{},
 									"readOnly",
 								),
 							},
 							Containers: []corev1.Container{
 								buildPostgresContainer(
-									&multigresv1alpha1.Shard{},
-									multigresv1alpha1.ShardPoolSpec{},
+									&multigresv1alpha1.Shard{
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
+									},
+									multigresv1alpha1.PoolSpec{},
 								),
 							},
 							Volumes: []corev1.Volume{
@@ -358,7 +419,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 										corev1.ResourceStorage: resource.MustParse("5Gi"),
 									},
 								},
-								VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
 							},
 						},
 					},
@@ -372,9 +432,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "default",
 					UID:       "affinity-uid",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.PoolSpec{
 				Type: "replica",
 				Affinity: &corev1.Affinity{
 					NodeAffinity: &corev1.NodeAffinity{
@@ -393,13 +456,8 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						},
 					},
 				},
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("10Gi"),
-						},
-					},
+				Storage: multigresv1alpha1.StorageSpec{
+					Size: "10Gi",
 				},
 			},
 			poolName: "primary",
@@ -413,6 +471,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -435,6 +496,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cell":           "multigres-global-topo",
+							"multigres.com/database":       "testdb",
+							"multigres.com/tablegroup":     "default",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -449,23 +513,40 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cell":           "multigres-global-topo",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
 							},
 						},
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{}),
+								buildPgctldInitContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+									},
+								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity"},
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
 									},
-									multigresv1alpha1.ShardPoolSpec{},
+									multigresv1alpha1.PoolSpec{},
 									"primary",
 								),
 							},
 							Containers: []corev1.Container{
 								buildPostgresContainer(
-									&multigresv1alpha1.Shard{},
-									multigresv1alpha1.ShardPoolSpec{},
+									&multigresv1alpha1.Shard{
+										Spec: multigresv1alpha1.ShardSpec{
+											DatabaseName:   "testdb",
+											TableGroupName: "default",
+										},
+									},
+									multigresv1alpha1.PoolSpec{},
 								),
 							},
 							Volumes: []corev1.Volume{
@@ -504,7 +585,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 										corev1.ResourceStorage: resource.MustParse("10Gi"),
 									},
 								},
-								VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
 							},
 						},
 					},
@@ -517,9 +597,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
+			poolSpec: multigresv1alpha1.PoolSpec{
 				Type: "replica",
 			},
 			poolName: "primary",
@@ -554,19 +637,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 
 func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 	tests := map[string]struct {
-		poolSpec multigresv1alpha1.ShardPoolSpec
+		poolSpec multigresv1alpha1.PoolSpec
 		want     []corev1.PersistentVolumeClaim
 	}{
 		"with storage class and size": {
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-					StorageClassName: ptr.To("fast-ssd"),
-					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("10Gi"),
-						},
-					},
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Storage: multigresv1alpha1.StorageSpec{
+					Class: "fast-ssd",
+					Size:  "10Gi",
 				},
 			},
 			want: []corev1.PersistentVolumeClaim{
@@ -582,20 +660,14 @@ func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 								corev1.ResourceStorage: resource.MustParse("10Gi"),
 							},
 						},
-						VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
 					},
 				},
 			},
 		},
-		"with volume mode already set": {
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-					VolumeMode: ptr.To(corev1.PersistentVolumeBlock),
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("20Gi"),
-						},
-					},
+		"with size": {
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Storage: multigresv1alpha1.StorageSpec{
+					Size: "20Gi",
 				},
 			},
 			want: []corev1.PersistentVolumeClaim{
@@ -604,7 +676,7 @@ func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 						Name: DataVolumeName,
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
-						VolumeMode: ptr.To(corev1.PersistentVolumeBlock),
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceStorage: resource.MustParse("20Gi"),
@@ -614,17 +686,20 @@ func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 				},
 			},
 		},
-		"minimal spec sets default VolumeMode": {
-			poolSpec: multigresv1alpha1.ShardPoolSpec{
-				DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{},
-			},
+		"minimal spec uses defaults": {
+			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: []corev1.PersistentVolumeClaim{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: DataVolumeName,
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
-						VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse(DefaultDataVolumeSize),
+							},
+						},
 					},
 				},
 			},

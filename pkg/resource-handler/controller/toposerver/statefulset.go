@@ -41,19 +41,24 @@ func BuildStatefulSet(
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
 	replicas := DefaultReplicas
-	if toposerver.Spec.Replicas != nil {
-		replicas = *toposerver.Spec.Replicas
+	if toposerver.Spec.Etcd != nil && toposerver.Spec.Etcd.Replicas != nil {
+		replicas = *toposerver.Spec.Etcd.Replicas
 	}
 
 	image := DefaultImage
-	if toposerver.Spec.Image != "" {
-		image = toposerver.Spec.Image
+	if toposerver.Spec.Etcd != nil && toposerver.Spec.Etcd.Image != "" {
+		image = toposerver.Spec.Etcd.Image
 	}
 
 	headlessServiceName := toposerver.Name + "-headless"
 	// TODO: Support cell-local TopoServers by adding CellName field to TopoServerSpec
 	// For now, TopoServer is always global topology
 	labels := metadata.BuildStandardLabels(toposerver.Name, ComponentName)
+
+	resources := corev1.ResourceRequirements{}
+	if toposerver.Spec.Etcd != nil {
+		resources = toposerver.Spec.Etcd.Resources
+	}
 
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -80,7 +85,7 @@ func BuildStatefulSet(
 						{
 							Name:      "etcd",
 							Image:     image,
-							Resources: toposerver.Spec.Resources,
+							Resources: resources,
 							Env: buildContainerEnv(
 								toposerver.Name,
 								toposerver.Namespace,
@@ -96,7 +101,6 @@ func BuildStatefulSet(
 							},
 						},
 					},
-					Affinity: toposerver.Spec.Affinity,
 				},
 			},
 			VolumeClaimTemplates: buildVolumeClaimTemplates(toposerver),
@@ -111,24 +115,22 @@ func BuildStatefulSet(
 }
 
 // buildVolumeClaimTemplates creates the PVC templates for etcd data storage.
-// TODO: Add StorageSize and StorageClassName fields to TopoServerSpec for simpler configuration
-// (similar to Etcd). For now, only DataVolumeClaimTemplate is supported.
 func buildVolumeClaimTemplates(
 	toposerver *multigresv1alpha1.TopoServer,
 ) []corev1.PersistentVolumeClaim {
-	if len(toposerver.Spec.DataVolumeClaimTemplate.AccessModes) > 0 {
-		return []corev1.PersistentVolumeClaim{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: DataVolumeName,
-				},
-				Spec: toposerver.Spec.DataVolumeClaimTemplate,
-			},
+	var storageClass *string
+	storageSize := DefaultStorageSize
+
+	if toposerver.Spec.Etcd != nil {
+		if toposerver.Spec.Etcd.Storage.Class != "" {
+			storageClass = &toposerver.Spec.Etcd.Storage.Class
+		}
+		if toposerver.Spec.Etcd.Storage.Size != "" {
+			storageSize = toposerver.Spec.Etcd.Storage.Size
 		}
 	}
 
-	// Use default storage if not specified
 	return []corev1.PersistentVolumeClaim{
-		storage.BuildPVCTemplate(DataVolumeName, nil, DefaultStorageSize),
+		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize),
 	}
 }

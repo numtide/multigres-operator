@@ -21,7 +21,7 @@ const (
 func BuildPoolHeadlessService(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
 	name := buildPoolName(shard.Name, poolName)

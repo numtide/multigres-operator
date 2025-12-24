@@ -206,10 +206,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					UID:       "image-uid",
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone3",
-					Images: multigresv1alpha1.CellImagesSpec{
-						MultiGateway: "custom/multigateway:v1.2.3",
-					},
+					Name:              "zone3",
+					MultiGatewayImage: "custom/multigateway:v1.2.3",
 				},
 			},
 			scheme: scheme,
@@ -417,7 +415,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone5",
 					MultiGateway: multigresv1alpha1.StatelessSpec{
-						ResourceRequirements: corev1.ResourceRequirements{
+						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("100m"),
 								corev1.ResourceMemory: resource.MustParse("128Mi"),
