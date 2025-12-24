@@ -636,7 +636,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace, finalizerName := setupFixtures(
 		t,
 	)
-	errBoom := errors.New("boom")
+	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]struct {
 		multigrescluster    *multigresv1alpha1.MultigresCluster
@@ -716,7 +716,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		"Error: Fetch Cluster Failed": {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(clusterName, errBoom),
+				OnGet: testutil.FailOnKeyName(clusterName, errSimulated),
 			},
 		},
 		"Error: Add Finalizer Failed": {
@@ -725,7 +725,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(clusterName, errBoom),
+				OnUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
 			},
 		},
 		"Error: Remove Finalizer Failed": {
@@ -736,7 +736,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(clusterName, errBoom),
+				OnUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
 			},
 		},
 		"Error: CheckChildrenDeleted (List Cells Failed)": {
@@ -749,7 +749,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.CellList); ok {
-						return errBoom
+						return errSimulated
 					}
 					return nil
 				},
@@ -765,7 +765,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.TableGroupList); ok {
-						return errBoom
+						return errSimulated
 					}
 					return nil
 				},
@@ -781,7 +781,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.TopoServerList); ok {
-						return errBoom
+						return errSimulated
 					}
 					return nil
 				},
@@ -790,7 +790,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		"Error: Resolve CoreTemplate Failed": {
 			existingObjects: []client.Object{coreTpl},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName("default-core", errBoom),
+				OnGet: testutil.FailOnKeyName("default-core", errSimulated),
 			},
 		},
 		"Error: Resolve Admin Template Failed (Second Call)": {
@@ -808,29 +808,29 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName("admin-core-fail", errBoom),
+				OnGet: testutil.FailOnKeyName("admin-core-fail", errSimulated),
 			},
 		},
 		"Error: Create GlobalTopo Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errBoom),
+				OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
 			},
 		},
 		"Error: Create MultiAdmin Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errBoom),
+				OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errSimulated),
 			},
 		},
 		"Error: Resolve CellTemplate Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName("default-cell", errBoom),
+				OnGet: testutil.FailOnKeyName("default-cell", errSimulated),
 			},
 		},
 		"Error: List Existing Cells Failed (Reconcile Loop)": {
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.CellList); ok {
-						return errBoom
+						return errSimulated
 					}
 					return nil
 				},
@@ -838,7 +838,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		},
 		"Error: Create Cell Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errBoom),
+				OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
 			},
 		},
 		"Error: Prune Cell Failed": {
@@ -853,14 +853,14 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-zone-b", errBoom),
+				OnDelete: testutil.FailOnObjectName(clusterName+"-zone-b", errSimulated),
 			},
 		},
 		"Error: List Existing TableGroups Failed": {
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.TableGroupList); ok {
-						return errBoom
+						return errSimulated
 					}
 					return nil
 				},
@@ -868,12 +868,12 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		},
 		"Error: Resolve ShardTemplate Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName("default-shard", errBoom),
+				OnGet: testutil.FailOnKeyName("default-shard", errSimulated),
 			},
 		},
 		"Error: Create TableGroup Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errBoom),
+				OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
 			},
 		},
 		"Error: Prune TableGroup Failed": {
@@ -888,7 +888,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-orphan-tg", errBoom),
+				OnDelete: testutil.FailOnObjectName(clusterName+"-orphan-tg", errSimulated),
 			},
 		},
 		"Error: UpdateStatus (List Cells Failed)": {
@@ -899,7 +899,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 						if _, ok := list.(*multigresv1alpha1.CellList); ok {
 							count++
 							if count > 1 {
-								return errBoom
+								return errSimulated
 							}
 						}
 						return nil
@@ -915,7 +915,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 						if _, ok := list.(*multigresv1alpha1.TableGroupList); ok {
 							count++
 							if count > 1 {
-								return errBoom
+								return errSimulated
 							}
 						}
 						return nil
@@ -925,7 +925,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 		},
 		"Error: Update Status Failed (API Error)": {
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errBoom),
+				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
 			},
 		},
 		"Error: Global Topo Resolution Failed (During Cell Reconcile)": {
@@ -951,7 +951,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 							// Call 1: reconcileGlobalComponents -> ResolveCoreTemplate (Succeeds to proceed)
 							// Call 2: reconcileCells -> getGlobalTopoRef -> ResolveCoreTemplate (Fails)
 							if count == 2 {
-								return errBoom
+								return errSimulated
 							}
 						}
 						return nil
@@ -983,7 +983,7 @@ func TestMultigresClusterReconciler_Reconcile_Failure(t *testing.T) {
 							// Call 2: reconcileCells (Succeeds)
 							// Call 3: reconcileDatabases -> getGlobalTopoRef (Fails)
 							if count == 3 {
-								return errBoom
+								return errSimulated
 							}
 						}
 						return nil

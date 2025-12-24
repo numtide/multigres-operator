@@ -282,7 +282,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
 	baseTG, tgName, namespace, clusterName, dbName, tgLabelName := setupFixtures(t)
-	errBoom := errors.New("boom")
+	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]struct {
 		tableGroup         *multigresv1alpha1.TableGroup
@@ -294,7 +294,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(tgName, errBoom),
+				OnGet: testutil.FailOnKeyName(tgName, errSimulated),
 			},
 		},
 		"Error: Create/Update Shard Failed": {
@@ -303,7 +303,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: testutil.FailOnObjectName(
 					fmt.Sprintf("%s-%s", tgName, "shard-0"),
-					errBoom,
+					errSimulated,
 				),
 			},
 		},
@@ -313,7 +313,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnList: func(list client.ObjectList) error {
 					if _, ok := list.(*multigresv1alpha1.ShardList); ok {
-						return errBoom
+						return errSimulated
 					}
 					return nil
 				},
@@ -323,7 +323,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnList: testutil.FailObjListAfterNCalls(1, errBoom),
+				OnList: testutil.FailObjListAfterNCalls(1, errSimulated),
 			},
 		},
 		"Error: Delete Orphan Shard Failed": {
@@ -342,12 +342,13 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 							"multigres.com/tablegroup": tgLabelName,
 						},
 					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnDelete: testutil.FailOnObjectName(
 					fmt.Sprintf("%s-%s", tgName, "shard-0"),
-					errBoom,
+					errSimulated,
 				),
 			},
 		},
@@ -355,7 +356,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName(tgName, errBoom),
+				OnStatusUpdate: testutil.FailOnObjectName(tgName, errSimulated),
 			},
 		},
 	}
