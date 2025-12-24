@@ -51,8 +51,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(1)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
@@ -119,16 +119,16 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"replica": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(2)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
 						},
 						"readOnly": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "readOnly",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "readOnly",
 							ReplicasPerCell: ptr.To(int32(3)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "5Gi",
@@ -194,8 +194,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(5)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "20Gi",
@@ -275,8 +275,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -298,11 +298,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						},
 						Pools: map[string]multigresv1alpha1.PoolSpec{
 							"primary": {
-								Cells:      []multigresv1alpha1.CellName{"zone1"},
-								Type:       "replica",
-										Storage: multigresv1alpha1.StorageSpec{
-										Size: "10Gi",
-									},
+								Cells: []multigresv1alpha1.CellName{"zone1"},
+								Type:  "replica",
+								Storage: multigresv1alpha1.StorageSpec{
+									Size: "10Gi",
+								},
 							},
 						},
 					},
@@ -336,8 +336,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(3)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
@@ -426,8 +426,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(5)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
@@ -516,16 +516,16 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"replica": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(2)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
 						},
 						"readOnly": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "readOnly",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "readOnly",
 							ReplicasPerCell: ptr.To(int32(3)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "5Gi",
@@ -612,8 +612,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -641,8 +641,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -677,8 +677,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -723,8 +723,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -757,8 +757,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -792,8 +792,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -840,8 +840,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -880,8 +880,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -916,8 +916,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(5)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
@@ -975,8 +975,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -1022,8 +1022,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -1058,8 +1058,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -1119,8 +1119,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -1173,8 +1173,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -1204,8 +1204,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -1227,11 +1227,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						},
 						Pools: map[string]multigresv1alpha1.PoolSpec{
 							"primary": {
-								Cells:      []multigresv1alpha1.CellName{"zone1"},
-								Type:       "replica",
-										Storage: multigresv1alpha1.StorageSpec{
-										Size: "10Gi",
-									},
+								Cells: []multigresv1alpha1.CellName{"zone1"},
+								Type:  "replica",
+								Storage: multigresv1alpha1.StorageSpec{
+									Size: "10Gi",
+								},
 							},
 						},
 					},
@@ -1256,8 +1256,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -1286,8 +1286,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"zone1"},
-							Type:       "replica",
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},

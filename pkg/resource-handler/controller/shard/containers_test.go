@@ -197,7 +197,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				},
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{
-				Cells:       []multigresv1alpha1.CellName{"zone1"},
+				Cells: []multigresv1alpha1.CellName{"zone1"},
 				Multipooler: multigresv1alpha1.ContainerConfig{
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -338,4 +338,3 @@ func TestBuildPgctldVolume(t *testing.T) {
 		t.Errorf("buildPgctldVolume() mismatch (-want +got):\n%s", diff)
 	}
 }
-

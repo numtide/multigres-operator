@@ -171,8 +171,8 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{
-				Type:     "readOnly",
-				Cells:    []multigresv1alpha1.CellName{"zone-west"},
+				Type:            "readOnly",
+				Cells:           []multigresv1alpha1.CellName{"zone-west"},
 				ReplicasPerCell: ptr.To(int32(3)),
 				Storage: multigresv1alpha1.StorageSpec{
 					Class: "fast-ssd",
@@ -253,7 +253,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									multigresv1alpha1.PoolSpec{Cells: []multigresv1alpha1.CellName{"zone-west"}},
+									multigresv1alpha1.PoolSpec{
+										Cells: []multigresv1alpha1.CellName{"zone-west"},
+									},
 									"replica",
 								),
 							},
