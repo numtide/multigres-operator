@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/data-handler/defaults"
+	"github.com/numtide/multigres-operator/pkg/defaults"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 

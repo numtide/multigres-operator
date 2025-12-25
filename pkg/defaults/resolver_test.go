@@ -20,12 +20,13 @@ import (
 )
 
 // setupFixtures helper returns a fresh set of test objects.
-func setupFixtures() (
+func setupFixtures(t testing.TB) (
 	*multigresv1alpha1.CoreTemplate,
 	*multigresv1alpha1.CellTemplate,
 	*multigresv1alpha1.ShardTemplate,
 	string,
 ) {
+	t.Helper()
 	namespace := "default"
 
 	coreTpl := &multigresv1alpha1.CoreTemplate{
@@ -60,18 +61,19 @@ func setupFixtures() (
 
 func TestNewResolver(t *testing.T) {
 	t.Parallel()
+
 	c := fake.NewClientBuilder().Build()
 	defaults := multigresv1alpha1.TemplateDefaults{CoreTemplate: "foo"}
 	r := NewResolver(c, "ns", defaults)
 
-	if r.Client != c {
-		t.Error("Client not set correctly")
+	if got, want := r.Client, c; got != want {
+		t.Errorf("Client mismatch: got %v, want %v", got, want)
 	}
-	if r.Namespace != "ns" {
-		t.Error("Namespace not set correctly")
+	if got, want := r.Namespace, "ns"; got != want {
+		t.Errorf("Namespace mismatch: got %q, want %q", got, want)
 	}
-	if r.TemplateDefaults.CoreTemplate != "foo" {
-		t.Error("Defaults not set correctly")
+	if got, want := r.TemplateDefaults.CoreTemplate, "foo"; got != want {
+		t.Errorf("Defaults mismatch: got %q, want %q", got, want)
 	}
 }
 
@@ -81,41 +83,58 @@ func TestResolver_ResolveTemplates(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
-	coreTpl, _, _, ns := setupFixtures()
+	coreTpl, cellTpl, shardTpl, ns := setupFixtures(t)
 
-	// Create a custom template to test explicit resolution
+	// Create custom templates to test explicit resolution
 	customCore := coreTpl.DeepCopy()
 	customCore.Name = "custom-core"
+
+	customCell := cellTpl.DeepCopy()
+	customCell.Name = "custom-cell"
+
+	customShard := shardTpl.DeepCopy()
+	customShard.Name = "custom-shard"
 
 	tests := map[string]struct {
 		existingObjects []client.Object
 		defaults        multigresv1alpha1.TemplateDefaults
-		// Test inputs (one is chosen based on test type logic below)
-		reqName string
-		// Expectations
-		wantErr     bool
-		errContains string
-		wantFound   bool
-		wantResName string // For CoreTemplate check
+		reqName         string
+		wantErr         bool
+		errContains     string
+		wantFound       bool
+		wantResName     string
+		resolveFunc     func(*Resolver, string) (client.Object, error)
 	}{
+		// ------------------------------------------------------------------
+		// CoreTemplate Tests
+		// ------------------------------------------------------------------
 		"Core: Explicit Found": {
 			existingObjects: []client.Object{customCore},
 			reqName:         "custom-core",
 			wantFound:       true,
 			wantResName:     "custom-core",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCoreTemplate(t.Context(), name)
+			},
 		},
 		"Core: Explicit Not Found (Error)": {
-			existingObjects: []client.Object{},
+			existingObjects: []client.Object{}, // Cleared to simulate missing
 			reqName:         "missing-core",
 			wantErr:         true,
 			errContains:     "referenced CoreTemplate 'missing-core' not found",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCoreTemplate(t.Context(), name)
+			},
 		},
 		"Core: Default from Config Found": {
 			existingObjects: []client.Object{customCore},
 			defaults:        multigresv1alpha1.TemplateDefaults{CoreTemplate: "custom-core"},
-			reqName:         "", // Empty implies use default
+			reqName:         "",
 			wantFound:       true,
 			wantResName:     "custom-core",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCoreTemplate(t.Context(), name)
+			},
 		},
 		"Core: Default from Config Not Found (Error)": {
 			existingObjects: []client.Object{},
@@ -123,127 +142,173 @@ func TestResolver_ResolveTemplates(t *testing.T) {
 			reqName:         "",
 			wantErr:         true,
 			errContains:     "referenced CoreTemplate 'missing' not found",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCoreTemplate(t.Context(), name)
+			},
 		},
 		"Core: Implicit Fallback Found": {
-			existingObjects: []client.Object{coreTpl}, // Name is "default"
-			defaults:        multigresv1alpha1.TemplateDefaults{},
-			reqName:         "",
-			wantFound:       true,
-			wantResName:     "default",
+			// existingObjects defaults to standard set (containing "default" coreTpl)
+			defaults:    multigresv1alpha1.TemplateDefaults{},
+			reqName:     "",
+			wantFound:   true,
+			wantResName: "default",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCoreTemplate(t.Context(), name)
+			},
 		},
 		"Core: Implicit Fallback Not Found (Safe Empty Return)": {
-			existingObjects: []client.Object{}, // "default" does not exist
+			existingObjects: []client.Object{},
 			defaults:        multigresv1alpha1.TemplateDefaults{},
 			reqName:         "",
-			wantFound:       false, // Should return empty object, no error
+			wantFound:       false,
 			wantErr:         false,
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCoreTemplate(t.Context(), name)
+			},
+		},
+
+		// ------------------------------------------------------------------
+		// CellTemplate Tests
+		// ------------------------------------------------------------------
+		"Cell: Explicit Found": {
+			existingObjects: []client.Object{customCell},
+			reqName:         "custom-cell",
+			wantFound:       true,
+			wantResName:     "custom-cell",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCellTemplate(t.Context(), name)
+			},
+		},
+		"Cell: Explicit Not Found (Error)": {
+			existingObjects: []client.Object{},
+			reqName:         "missing-cell",
+			wantErr:         true,
+			errContains:     "referenced CellTemplate 'missing-cell' not found",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCellTemplate(t.Context(), name)
+			},
+		},
+		"Cell: Implicit Fallback Found": {
+			// existingObjects defaults to standard set (containing "default" cellTpl)
+			defaults:    multigresv1alpha1.TemplateDefaults{},
+			reqName:     "",
+			wantFound:   true,
+			wantResName: "default",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCellTemplate(t.Context(), name)
+			},
+		},
+		"Cell: Implicit Fallback Not Found (Safe Empty Return)": {
+			existingObjects: []client.Object{},
+			defaults:        multigresv1alpha1.TemplateDefaults{},
+			reqName:         "",
+			wantFound:       false,
+			wantErr:         false,
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveCellTemplate(t.Context(), name)
+			},
+		},
+
+		// ------------------------------------------------------------------
+		// ShardTemplate Tests
+		// ------------------------------------------------------------------
+		"Shard: Explicit Found": {
+			existingObjects: []client.Object{customShard},
+			reqName:         "custom-shard",
+			wantFound:       true,
+			wantResName:     "custom-shard",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveShardTemplate(t.Context(), name)
+			},
+		},
+		"Shard: Explicit Not Found (Error)": {
+			existingObjects: []client.Object{},
+			reqName:         "missing-shard",
+			wantErr:         true,
+			errContains:     "referenced ShardTemplate 'missing-shard' not found",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveShardTemplate(t.Context(), name)
+			},
+		},
+		"Shard: Implicit Fallback Found": {
+			// existingObjects defaults to standard set (containing "default" shardTpl)
+			defaults:    multigresv1alpha1.TemplateDefaults{},
+			reqName:     "",
+			wantFound:   true,
+			wantResName: "default",
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveShardTemplate(t.Context(), name)
+			},
+		},
+		"Shard: Implicit Fallback Not Found (Safe Empty Return)": {
+			existingObjects: []client.Object{},
+			defaults:        multigresv1alpha1.TemplateDefaults{},
+			reqName:         "",
+			wantFound:       false,
+			wantErr:         false,
+			resolveFunc: func(r *Resolver, name string) (client.Object, error) {
+				return r.ResolveShardTemplate(t.Context(), name)
+			},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Default existingObjects if nil
+			objects := tc.existingObjects
+			if objects == nil {
+				objects = []client.Object{coreTpl, cellTpl, shardTpl}
+			}
+
 			c := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(tc.existingObjects...).
+				WithObjects(objects...).
 				Build()
 			r := NewResolver(c, ns, tc.defaults)
 
-			// We use CoreTemplate for the main logic drive
-			res, err := r.ResolveCoreTemplate(context.Background(), tc.reqName)
-
+			res, err := tc.resolveFunc(r, tc.reqName)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("Expected error, got nil")
 				}
 				if tc.errContains != "" && err.Error() != tc.errContains {
 					t.Errorf(
-						"Error message mismatch. Want substring %q, got %q",
-						tc.errContains,
+						"Error message mismatch: got %q, want substring %q",
 						err.Error(),
+						tc.errContains,
 					)
 				}
 				return
-			}
-
-			if err != nil {
+			} else if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			// For Implicit Fallback Not Found, we expect an empty pointer/struct that isn't nil, but empty content
 			if !tc.wantFound {
 				if res == nil {
 					t.Fatal(
 						"Expected non-nil result structure even for not-found implicit fallback",
 					)
 				}
-				if res.Name != "" {
-					t.Errorf("Expected empty result, got object with name %q", res.Name)
+				if res.GetName() != "" {
+					t.Errorf("Expected empty result, got object with name %q", res.GetName())
 				}
 				return
 			}
 
-			if res.Name != tc.wantResName {
-				t.Errorf("Result name mismatch. Want %q, got %q", tc.wantResName, res.Name)
+			if got, want := res.GetName(), tc.wantResName; got != want {
+				t.Errorf("Result name mismatch: got %q, want %q", got, want)
 			}
 		})
 	}
 }
 
-// TestResolver_Types_Coverage ensures ResolveCellTemplate and ResolveShardTemplate
-// work correctly, covering the "Implicit Not Found" paths which were missing coverage.
-func TestResolver_Types_Coverage(t *testing.T) {
-	t.Parallel()
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-
-	_, cellTpl, shardTpl, ns := setupFixtures()
-
-	// Case 1: Templates EXIST (Happy Path)
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cellTpl, shardTpl).Build()
-	r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
-
-	// Cell Found
-	cell, err := r.ResolveCellTemplate(context.Background(), "default")
-	if err != nil || cell.Name != "default" {
-		t.Errorf("ResolveCellTemplate explicit found failed")
-	}
-	// Shard Found
-	shard, err := r.ResolveShardTemplate(context.Background(), "default")
-	if err != nil || shard.Name != "default" {
-		t.Errorf("ResolveShardTemplate explicit found failed")
-	}
-
-	// Case 2: Templates DO NOT EXIST + Implicit Request (Implicit Fallback Logic)
-	// This covers the: if errors.IsNotFound { if isImplicitFallback { return empty } } block
-	cEmpty := fake.NewClientBuilder().WithScheme(scheme).Build() // No objects
-	rEmpty := NewResolver(cEmpty, ns, multigresv1alpha1.TemplateDefaults{})
-
-	// Cell Implicit Not Found
-	cellEmpty, err := rEmpty.ResolveCellTemplate(context.Background(), "") // Empty name = implicit
-	if err != nil {
-		t.Errorf("ResolveCellTemplate implicit fallback failed: %v", err)
-	}
-	if cellEmpty == nil || cellEmpty.Name != "" {
-		t.Error("ResolveCellTemplate expected empty struct for implicit missing")
-	}
-
-	// Shard Implicit Not Found
-	shardEmpty, err := rEmpty.ResolveShardTemplate(
-		context.Background(),
-		"",
-	) // Empty name = implicit
-	if err != nil {
-		t.Errorf("ResolveShardTemplate implicit fallback failed: %v", err)
-	}
-	if shardEmpty == nil || shardEmpty.Name != "" {
-		t.Error("ResolveShardTemplate expected empty struct for implicit missing")
-	}
-}
-
-// mockClient is a partial implementation of client.Client to force errors
+// mockClient is a partial implementation of client.Client to force errors.
 type mockClient struct {
 	client.Client
 	failGet bool
+	err     error
 }
 
 func (m *mockClient) Get(
@@ -253,7 +318,7 @@ func (m *mockClient) Get(
 	opts ...client.GetOption,
 ) error {
 	if m.failGet {
-		return errors.New("simulated database connection error")
+		return m.err
 	}
 	return apierrors.NewNotFound(schema.GroupResource{}, key.Name)
 }
@@ -261,26 +326,36 @@ func (m *mockClient) Get(
 func TestResolver_ClientErrors(t *testing.T) {
 	t.Parallel()
 
-	mc := &mockClient{failGet: true}
+	errSimulated := errors.New("simulated database connection error")
+	mc := &mockClient{failGet: true, err: errSimulated}
 	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
-	ctx := context.Background()
 
-	_, err := r.ResolveCoreTemplate(ctx, "any")
-	if err == nil ||
-		err.Error() != "failed to get CoreTemplate: simulated database connection error" {
-		t.Errorf("Core error mismatch: %v", err)
+	tests := map[string]struct {
+		callFunc func() error
+		wantMsg  string
+	}{
+		"ResolveCoreTemplate": {
+			callFunc: func() error { _, err := r.ResolveCoreTemplate(t.Context(), "any"); return err },
+			wantMsg:  "failed to get CoreTemplate: simulated database connection error",
+		},
+		"ResolveCellTemplate": {
+			callFunc: func() error { _, err := r.ResolveCellTemplate(t.Context(), "any"); return err },
+			wantMsg:  "failed to get CellTemplate: simulated database connection error",
+		},
+		"ResolveShardTemplate": {
+			callFunc: func() error { _, err := r.ResolveShardTemplate(t.Context(), "any"); return err },
+			wantMsg:  "failed to get ShardTemplate: simulated database connection error",
+		},
 	}
 
-	_, err = r.ResolveCellTemplate(ctx, "any")
-	if err == nil ||
-		err.Error() != "failed to get CellTemplate: simulated database connection error" {
-		t.Errorf("Cell error mismatch: %v", err)
-	}
-
-	_, err = r.ResolveShardTemplate(ctx, "any")
-	if err == nil ||
-		err.Error() != "failed to get ShardTemplate: simulated database connection error" {
-		t.Errorf("Shard error mismatch: %v", err)
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.callFunc()
+			if err == nil || err.Error() != tc.wantMsg {
+				t.Errorf("Error mismatch: got %v, want %s", err, tc.wantMsg)
+			}
+		})
 	}
 }
 
@@ -294,12 +369,16 @@ func TestMergeCellConfig(t *testing.T) {
 		wantGw    multigresv1alpha1.StatelessSpec
 		wantTopo  *multigresv1alpha1.LocalTopoServerSpec
 	}{
-		"Full Merge": {
+		"Full Merge With Resources and Affinity Overrides": {
+			// Covers: Override resources/affinity present (Red lines in mergeStatelessSpec)
 			tpl: &multigresv1alpha1.CellTemplate{
 				Spec: multigresv1alpha1.CellTemplateSpec{
 					MultiGateway: &multigresv1alpha1.StatelessSpec{
 						Replicas:       ptr.To(int32(1)),
 						PodAnnotations: map[string]string{"foo": "bar"},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("100m")},
+						},
 					},
 					LocalTopoServer: &multigresv1alpha1.LocalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{Image: "base"},
@@ -310,18 +389,32 @@ func TestMergeCellConfig(t *testing.T) {
 				MultiGateway: &multigresv1alpha1.StatelessSpec{
 					Replicas:       ptr.To(int32(2)),
 					PodAnnotations: map[string]string{"baz": "qux"},
+					// Force override of Resources to trigger the if block
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("200m")},
+					},
+					// Force override of Affinity to trigger the if block
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{},
+					},
 				},
 			},
 			wantGw: multigresv1alpha1.StatelessSpec{
 				Replicas:       ptr.To(int32(2)),
 				PodAnnotations: map[string]string{"foo": "bar", "baz": "qux"},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("200m")},
+				},
+				Affinity: &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{},
+				},
 			},
 			wantTopo: &multigresv1alpha1.LocalTopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{Image: "base"},
 			},
 		},
 		"Template Only (Nil Overrides)": {
-			// CRITICAL: Covers the 'false' branch of 'if overrides != nil'
+			// Covers the 'false' branch of 'if overrides != nil'
 			tpl: &multigresv1alpha1.CellTemplate{
 				Spec: multigresv1alpha1.CellTemplateSpec{
 					MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
@@ -340,7 +433,7 @@ func TestMergeCellConfig(t *testing.T) {
 				},
 			},
 			overrides: &multigresv1alpha1.CellOverrides{
-				MultiGateway: &multigresv1alpha1.StatelessSpec{}, // Empty struct!
+				MultiGateway: &multigresv1alpha1.StatelessSpec{}, // Empty struct
 			},
 			wantGw: multigresv1alpha1.StatelessSpec{
 				Replicas:       ptr.To(int32(1)), // Should preserve base
@@ -348,9 +441,11 @@ func TestMergeCellConfig(t *testing.T) {
 			},
 		},
 		"Map Init (Nil Base)": {
+			// Covers: Loop where base map is nil (Red lines in mergeStatelessSpec)
 			tpl: &multigresv1alpha1.CellTemplate{
 				Spec: multigresv1alpha1.CellTemplateSpec{
 					MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+					// PodAnnotations is nil here by default
 				},
 			},
 			overrides: &multigresv1alpha1.CellOverrides{
@@ -392,6 +487,7 @@ func TestMergeCellConfig(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			gw, topo := MergeCellConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
@@ -414,12 +510,20 @@ func TestMergeShardConfig(t *testing.T) {
 		wantOrch  multigresv1alpha1.MultiOrchSpec
 		wantPools map[string]multigresv1alpha1.PoolSpec
 	}{
-		"Full Merge": {
+		"Full Merge with MultiOrch Overrides": {
+			// Ensure resources/affinity are covered for MultiOrch too
 			tpl: &multigresv1alpha1.ShardTemplate{
 				Spec: multigresv1alpha1.ShardTemplateSpec{
 					MultiOrch: &multigresv1alpha1.MultiOrchSpec{
-						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
-						Cells:         []multigresv1alpha1.CellName{"a"},
+						StatelessSpec: multigresv1alpha1.StatelessSpec{
+							Replicas: ptr.To(int32(1)),
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceMemory: parseQty("1Gi"),
+								},
+							},
+						},
+						Cells: []multigresv1alpha1.CellName{"a"},
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"p1": {Type: "read"},
@@ -428,6 +532,16 @@ func TestMergeShardConfig(t *testing.T) {
 			},
 			overrides: &multigresv1alpha1.ShardOverrides{
 				MultiOrch: &multigresv1alpha1.MultiOrchSpec{
+					StatelessSpec: multigresv1alpha1.StatelessSpec{
+						// Override resources
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: parseQty("2Gi")},
+						},
+						// Override affinity
+						Affinity: &corev1.Affinity{
+							PodAntiAffinity: &corev1.PodAntiAffinity{},
+						},
+					},
 					Cells: []multigresv1alpha1.CellName{"b"},
 				},
 				Pools: map[string]multigresv1alpha1.PoolSpec{
@@ -436,8 +550,16 @@ func TestMergeShardConfig(t *testing.T) {
 				},
 			},
 			wantOrch: multigresv1alpha1.MultiOrchSpec{
-				StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
-				Cells:         []multigresv1alpha1.CellName{"b"},
+				StatelessSpec: multigresv1alpha1.StatelessSpec{
+					Replicas: ptr.To(int32(1)),
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceMemory: parseQty("2Gi")},
+					},
+					Affinity: &corev1.Affinity{
+						PodAntiAffinity: &corev1.PodAntiAffinity{},
+					},
+				},
+				Cells: []multigresv1alpha1.CellName{"b"},
 			},
 			wantPools: map[string]multigresv1alpha1.PoolSpec{
 				"p1": {Type: "write"},
@@ -445,7 +567,6 @@ func TestMergeShardConfig(t *testing.T) {
 			},
 		},
 		"Template Only (Nil Overrides)": {
-			// CRITICAL: Covers the 'false' branch of 'if overrides != nil'
 			tpl: &multigresv1alpha1.ShardTemplate{
 				Spec: multigresv1alpha1.ShardTemplateSpec{
 					MultiOrch: &multigresv1alpha1.MultiOrchSpec{
@@ -558,6 +679,7 @@ func TestMergeShardConfig(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			orch, pools := MergeShardConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
@@ -573,97 +695,121 @@ func TestMergeShardConfig(t *testing.T) {
 func TestResolveGlobalTopo(t *testing.T) {
 	t.Parallel()
 
-	// 1. Inline Priority (Etcd)
-	spec := &multigresv1alpha1.GlobalTopoServerSpec{
-		Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"},
-	}
-	res := ResolveGlobalTopo(spec, nil)
-	if res.Etcd.Image != "inline" {
-		t.Error("Expected inline spec priority")
-	}
-
-	// 2. Inline Priority (External) - Covers the || spec.External check
-	spec = &multigresv1alpha1.GlobalTopoServerSpec{
-		External: &multigresv1alpha1.ExternalTopoServerSpec{
-			Endpoints: []multigresv1alpha1.EndpointUrl{"http://foo"},
+	tests := map[string]struct {
+		spec *multigresv1alpha1.GlobalTopoServerSpec
+		tpl  *multigresv1alpha1.CoreTemplate
+		want *multigresv1alpha1.GlobalTopoServerSpec
+	}{
+		"Inline Priority (Etcd)": {
+			spec: &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"},
+			},
+			tpl: nil,
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"},
+			},
 		},
-	}
-	res = ResolveGlobalTopo(spec, nil)
-	if res.External == nil {
-		t.Error("Expected inline external priority")
-	}
-
-	// 3. Template Fallback
-	spec = &multigresv1alpha1.GlobalTopoServerSpec{}
-	tpl := &multigresv1alpha1.CoreTemplate{
-		Spec: multigresv1alpha1.CoreTemplateSpec{
-			GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+		"Inline Priority (External)": {
+			spec: &multigresv1alpha1.GlobalTopoServerSpec{
+				External: &multigresv1alpha1.ExternalTopoServerSpec{
+					Endpoints: []multigresv1alpha1.EndpointUrl{"http://foo"},
+				},
+			},
+			tpl: nil,
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				External: &multigresv1alpha1.ExternalTopoServerSpec{
+					Endpoints: []multigresv1alpha1.EndpointUrl{"http://foo"},
+				},
+			},
+		},
+		"Template Fallback": {
+			spec: &multigresv1alpha1.GlobalTopoServerSpec{},
+			tpl: &multigresv1alpha1.CoreTemplate{
+				Spec: multigresv1alpha1.CoreTemplateSpec{
+					GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{Image: "template"},
+					},
+				},
+			},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{Image: "template"},
 			},
 		},
-	}
-	res = ResolveGlobalTopo(spec, tpl)
-	if res.Etcd.Image != "template" {
-		t.Error("Expected template fallback")
-	}
-
-	// 4. Template Found but Nil Content (Covers coreTemplate.Spec.GlobalTopoServer != nil check)
-	tplEmpty := &multigresv1alpha1.CoreTemplate{
-		Spec: multigresv1alpha1.CoreTemplateSpec{
-			GlobalTopoServer: nil, // This is explicitly nil
+		"Template Found but Nil Content": {
+			spec: &multigresv1alpha1.GlobalTopoServerSpec{},
+			tpl: &multigresv1alpha1.CoreTemplate{
+				Spec: multigresv1alpha1.CoreTemplateSpec{
+					GlobalTopoServer: nil,
+				},
+			},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{},
+		},
+		"No-op (Nil Template)": {
+			spec: &multigresv1alpha1.GlobalTopoServerSpec{},
+			tpl:  nil,
+			want: &multigresv1alpha1.GlobalTopoServerSpec{},
 		},
 	}
-	res = ResolveGlobalTopo(spec, tplEmpty)
-	if res.Etcd != nil {
-		t.Error("Expected nil result when template content is nil")
-	}
 
-	// 5. No-op (Nil Template)
-	res = ResolveGlobalTopo(spec, nil)
-	if res.Etcd != nil {
-		t.Error("Expected nil result for empty inputs")
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := ResolveGlobalTopo(tc.spec, tc.tpl)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("ResolveGlobalTopo mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
 func TestResolveMultiAdmin(t *testing.T) {
 	t.Parallel()
 
-	// 1. Inline Priority
-	spec := &multigresv1alpha1.MultiAdminConfig{
-		Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
-	}
-	res := ResolveMultiAdmin(spec, nil)
-	if *res.Replicas != 5 {
-		t.Error("Expected inline spec priority")
-	}
-
-	// 2. Template Fallback
-	spec = &multigresv1alpha1.MultiAdminConfig{}
-	tpl := &multigresv1alpha1.CoreTemplate{
-		Spec: multigresv1alpha1.CoreTemplateSpec{
-			MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
+	tests := map[string]struct {
+		spec *multigresv1alpha1.MultiAdminConfig
+		tpl  *multigresv1alpha1.CoreTemplate
+		want *multigresv1alpha1.StatelessSpec
+	}{
+		"Inline Priority": {
+			spec: &multigresv1alpha1.MultiAdminConfig{
+				Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+			},
+			tpl:  nil,
+			want: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+		},
+		"Template Fallback": {
+			spec: &multigresv1alpha1.MultiAdminConfig{},
+			tpl: &multigresv1alpha1.CoreTemplate{
+				Spec: multigresv1alpha1.CoreTemplateSpec{
+					MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
+				},
+			},
+			want: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
+		},
+		"Template Found but Nil Content": {
+			spec: &multigresv1alpha1.MultiAdminConfig{},
+			tpl: &multigresv1alpha1.CoreTemplate{
+				Spec: multigresv1alpha1.CoreTemplateSpec{
+					MultiAdmin: nil,
+				},
+			},
+			want: nil,
+		},
+		"No-op (Nil Template)": {
+			spec: &multigresv1alpha1.MultiAdminConfig{},
+			tpl:  nil,
+			want: nil,
 		},
 	}
-	res = ResolveMultiAdmin(spec, tpl)
-	if *res.Replicas != 3 {
-		t.Error("Expected template fallback")
-	}
 
-	// 3. Template Found but Nil Content (Covers coreTemplate.Spec.MultiAdmin != nil check)
-	tplEmpty := &multigresv1alpha1.CoreTemplate{
-		Spec: multigresv1alpha1.CoreTemplateSpec{
-			MultiAdmin: nil, // This is explicitly nil
-		},
-	}
-	res = ResolveMultiAdmin(spec, tplEmpty)
-	if res != nil {
-		t.Error("Expected nil result when template content is nil")
-	}
-
-	// 4. No-op (Nil Template)
-	res = ResolveMultiAdmin(spec, nil)
-	if res != nil {
-		t.Error("Expected nil result for empty inputs")
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := ResolveMultiAdmin(tc.spec, tc.tpl)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("ResolveMultiAdmin mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
