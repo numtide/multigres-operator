@@ -3,6 +3,7 @@ package defaults
 import (
 	"context"
 	"errors"
+	"strings" // Added import
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -74,6 +75,221 @@ func TestNewResolver(t *testing.T) {
 	}
 	if got, want := r.TemplateDefaults.CoreTemplate, "foo"; got != want {
 		t.Errorf("Defaults mismatch: got %q, want %q", got, want)
+	}
+}
+
+func TestResolver_PopulateClusterDefaults(t *testing.T) {
+	t.Parallel()
+
+	// Helper to create a Resolver (client not used for this method)
+	r := NewResolver(
+		fake.NewClientBuilder().Build(),
+		"default",
+		multigresv1alpha1.TemplateDefaults{},
+	)
+
+	tests := map[string]struct {
+		input *multigresv1alpha1.MultigresCluster
+		want  *multigresv1alpha1.MultigresCluster
+	}{
+		"Empty Cluster: Applies All Static Defaults": {
+			input: &multigresv1alpha1.MultigresCluster{},
+			want: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        DefaultPostgresImage,
+						MultiAdmin:      DefaultMultiAdminImage,
+						MultiOrch:       DefaultMultiOrchImage,
+						MultiPooler:     DefaultMultiPoolerImage,
+						MultiGateway:    DefaultMultiGatewayImage,
+						ImagePullPolicy: DefaultImagePullPolicy,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  FallbackCoreTemplate,
+						CellTemplate:  FallbackCellTemplate,
+						ShardTemplate: FallbackShardTemplate,
+					},
+					// Inline structs are nil in input, so they remain nil (no default expansion)
+				},
+			},
+		},
+		"Preserve Existing Values: Does Not Overwrite": {
+			input: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        "custom-postgres",
+						MultiAdmin:      "custom-admin",
+						MultiOrch:       "custom-orch",
+						MultiPooler:     "custom-pooler",
+						MultiGateway:    "custom-gateway",
+						ImagePullPolicy: corev1.PullAlways,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  "custom-core",
+						CellTemplate:  "custom-cell",
+						ShardTemplate: "custom-shard",
+					},
+				},
+			},
+			want: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        "custom-postgres",
+						MultiAdmin:      "custom-admin",
+						MultiOrch:       "custom-orch",
+						MultiPooler:     "custom-pooler",
+						MultiGateway:    "custom-gateway",
+						ImagePullPolicy: corev1.PullAlways,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  "custom-core",
+						CellTemplate:  "custom-cell",
+						ShardTemplate: "custom-shard",
+					},
+				},
+			},
+		},
+		"Inline Configs: Deep Defaulting (Etcd & Admin)": {
+			input: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+						// User initiates inline config with empty struct
+						Etcd: &multigresv1alpha1.EtcdSpec{},
+					},
+					MultiAdmin: multigresv1alpha1.MultiAdminConfig{
+						// User initiates inline config with empty struct
+						Spec: &multigresv1alpha1.StatelessSpec{},
+					},
+				},
+			},
+			want: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					// Standard defaults still apply
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        DefaultPostgresImage,
+						MultiAdmin:      DefaultMultiAdminImage,
+						MultiOrch:       DefaultMultiOrchImage,
+						MultiPooler:     DefaultMultiPoolerImage,
+						MultiGateway:    DefaultMultiGatewayImage,
+						ImagePullPolicy: DefaultImagePullPolicy,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  FallbackCoreTemplate,
+						CellTemplate:  FallbackCellTemplate,
+						ShardTemplate: FallbackShardTemplate,
+					},
+					// Expanded Inline Configs
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Image:     DefaultEtcdImage,
+							Replicas:  ptr.To(DefaultEtcdReplicas),
+							Resources: DefaultResourcesEtcd,
+							Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+						},
+					},
+					MultiAdmin: multigresv1alpha1.MultiAdminConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{
+							Replicas:  ptr.To(DefaultAdminReplicas),
+							Resources: DefaultResourcesAdmin,
+						},
+					},
+				},
+			},
+		},
+		"Inline Configs: Deep Defaulting (Cells)": {
+			input: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{
+							Name: "cell-1",
+							Spec: &multigresv1alpha1.CellInlineSpec{
+								// Empty gateway spec triggers defaulting
+								MultiGateway: multigresv1alpha1.StatelessSpec{},
+							},
+						},
+					},
+				},
+			},
+			want: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        DefaultPostgresImage,
+						MultiAdmin:      DefaultMultiAdminImage,
+						MultiOrch:       DefaultMultiOrchImage,
+						MultiPooler:     DefaultMultiPoolerImage,
+						MultiGateway:    DefaultMultiGatewayImage,
+						ImagePullPolicy: DefaultImagePullPolicy,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  FallbackCoreTemplate,
+						CellTemplate:  FallbackCellTemplate,
+						ShardTemplate: FallbackShardTemplate,
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{
+							Name: "cell-1",
+							Spec: &multigresv1alpha1.CellInlineSpec{
+								MultiGateway: multigresv1alpha1.StatelessSpec{
+									Replicas: ptr.To(
+										int32(1),
+									), // Hardcoded safety default in PopulateClusterDefaults
+									Resources: corev1.ResourceRequirements{}, // Hardcoded placeholder
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"Inline Configs: Partial Overrides Preserved": {
+			input: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Image: "custom-etcd", // Should be preserved
+							// Replicas missing -> default
+						},
+					},
+				},
+			},
+			want: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        DefaultPostgresImage,
+						MultiAdmin:      DefaultMultiAdminImage,
+						MultiOrch:       DefaultMultiOrchImage,
+						MultiPooler:     DefaultMultiPoolerImage,
+						MultiGateway:    DefaultMultiGatewayImage,
+						ImagePullPolicy: DefaultImagePullPolicy,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  FallbackCoreTemplate,
+						CellTemplate:  FallbackCellTemplate,
+						ShardTemplate: FallbackShardTemplate,
+					},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Image:     "custom-etcd",
+							Replicas:  ptr.To(DefaultEtcdReplicas),
+							Resources: DefaultResourcesEtcd,
+							Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := tc.input.DeepCopy()
+			r.PopulateClusterDefaults(got)
+
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+				t.Errorf("Cluster defaults mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -273,7 +489,8 @@ func TestResolver_ResolveTemplates(t *testing.T) {
 				if err == nil {
 					t.Fatal("Expected error, got nil")
 				}
-				if tc.errContains != "" && err.Error() != tc.errContains {
+				// FIX: Use strings.Contains for substring matching
+				if tc.errContains != "" && !strings.Contains(err.Error(), tc.errContains) {
 					t.Errorf(
 						"Error message mismatch: got %q, want substring %q",
 						err.Error(),
@@ -370,7 +587,7 @@ func TestMergeCellConfig(t *testing.T) {
 		wantTopo  *multigresv1alpha1.LocalTopoServerSpec
 	}{
 		"Full Merge With Resources and Affinity Overrides": {
-			// Covers: Override resources/affinity present (Red lines in mergeStatelessSpec)
+			// Covers: Override resources/affinity present
 			tpl: &multigresv1alpha1.CellTemplate{
 				Spec: multigresv1alpha1.CellTemplateSpec{
 					MultiGateway: &multigresv1alpha1.StatelessSpec{
@@ -441,11 +658,10 @@ func TestMergeCellConfig(t *testing.T) {
 			},
 		},
 		"Map Init (Nil Base)": {
-			// Covers: Loop where base map is nil (Red lines in mergeStatelessSpec)
+			// Covers: Loop where base map is nil
 			tpl: &multigresv1alpha1.CellTemplate{
 				Spec: multigresv1alpha1.CellTemplateSpec{
 					MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
-					// PodAnnotations is nil here by default
 				},
 			},
 			overrides: &multigresv1alpha1.CellOverrides{
@@ -706,7 +922,12 @@ func TestResolveGlobalTopo(t *testing.T) {
 			},
 			tpl: nil,
 			want: &multigresv1alpha1.GlobalTopoServerSpec{
-				Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"},
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     "inline",
+					Replicas:  ptr.To(DefaultEtcdReplicas),
+					Resources: DefaultResourcesEtcd,
+					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+				},
 			},
 		},
 		"Inline Priority (External)": {
@@ -732,7 +953,12 @@ func TestResolveGlobalTopo(t *testing.T) {
 				},
 			},
 			want: &multigresv1alpha1.GlobalTopoServerSpec{
-				Etcd: &multigresv1alpha1.EtcdSpec{Image: "template"},
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     "template",
+					Replicas:  ptr.To(DefaultEtcdReplicas),
+					Resources: DefaultResourcesEtcd,
+					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+				},
 			},
 		},
 		"Template Found but Nil Content": {
@@ -742,12 +968,28 @@ func TestResolveGlobalTopo(t *testing.T) {
 					GlobalTopoServer: nil,
 				},
 			},
-			want: &multigresv1alpha1.GlobalTopoServerSpec{},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				// Deep defaulting kicks in on the empty default struct
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     DefaultEtcdImage,
+					Replicas:  ptr.To(DefaultEtcdReplicas),
+					Resources: DefaultResourcesEtcd,
+					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+				},
+			},
 		},
 		"No-op (Nil Template)": {
 			spec: &multigresv1alpha1.GlobalTopoServerSpec{},
 			tpl:  nil,
-			want: &multigresv1alpha1.GlobalTopoServerSpec{},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				// Deep defaulting kicks in on the empty default struct
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     DefaultEtcdImage,
+					Replicas:  ptr.To(DefaultEtcdReplicas),
+					Resources: DefaultResourcesEtcd,
+					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+				},
+			},
 		},
 	}
 
@@ -755,7 +997,7 @@ func TestResolveGlobalTopo(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			got := ResolveGlobalTopo(tc.spec, tc.tpl)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
 				t.Errorf("ResolveGlobalTopo mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -774,8 +1016,11 @@ func TestResolveMultiAdmin(t *testing.T) {
 			spec: &multigresv1alpha1.MultiAdminConfig{
 				Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
 			},
-			tpl:  nil,
-			want: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+			tpl: nil,
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(5)),
+				Resources: DefaultResourcesAdmin,
+			},
 		},
 		"Template Fallback": {
 			spec: &multigresv1alpha1.MultiAdminConfig{},
@@ -784,7 +1029,10 @@ func TestResolveMultiAdmin(t *testing.T) {
 					MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
 				},
 			},
-			want: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(3)),
+				Resources: DefaultResourcesAdmin,
+			},
 		},
 		"Template Found but Nil Content": {
 			spec: &multigresv1alpha1.MultiAdminConfig{},
@@ -793,12 +1041,18 @@ func TestResolveMultiAdmin(t *testing.T) {
 					MultiAdmin: nil,
 				},
 			},
-			want: nil,
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(DefaultAdminReplicas),
+				Resources: DefaultResourcesAdmin,
+			},
 		},
 		"No-op (Nil Template)": {
 			spec: &multigresv1alpha1.MultiAdminConfig{},
 			tpl:  nil,
-			want: nil,
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(DefaultAdminReplicas),
+				Resources: DefaultResourcesAdmin,
+			},
 		},
 	}
 
@@ -806,7 +1060,7 @@ func TestResolveMultiAdmin(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			got := ResolveMultiAdmin(tc.spec, tc.tpl)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
 				t.Errorf("ResolveMultiAdmin mismatch (-want +got):\n%s", diff)
 			}
 		})

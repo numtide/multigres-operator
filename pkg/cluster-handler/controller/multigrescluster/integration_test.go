@@ -19,6 +19,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
+	"github.com/numtide/multigres-operator/pkg/defaults"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -124,8 +125,10 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{
-							Image:    "etcd:latest",
-							Replicas: ptr.To(int32(3)), // Default from logic
+							Image:     "etcd:latest",
+							Replicas:  ptr.To(int32(3)), // Default from logic
+							Storage:   multigresv1alpha1.StorageSpec{Size: defaults.DefaultEtcdStorageSize},
+							Resources: defaults.DefaultResourcesEtcd,
 						},
 					},
 				},
@@ -149,8 +152,9 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
-										Name:  "multiadmin",
-										Image: "admin:latest",
+										Name:      "multiadmin",
+										Image:     "admin:latest",
+										Resources: defaults.DefaultResourcesAdmin,
 									},
 								},
 							},
@@ -278,18 +282,45 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 				t.Fatalf("Failed to create controller, %v", err)
 			}
 
-			// 4. Create the Input
+			// 4. Create Defaults (Templates)
+			// The controller expects "default" templates to exist when TemplateDefaults are not specified.
+			// We create empty templates so the resolution succeeds and falls back to hardcoded defaults or inline specs.
+			emptyCore := &multigresv1alpha1.CoreTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
+				Spec:       multigresv1alpha1.CoreTemplateSpec{},
+			}
+			if err := k8sClient.Create(ctx, emptyCore); client.IgnoreAlreadyExists(err) != nil {
+				t.Fatalf("Failed to create default core template: %v", err)
+			}
+
+			emptyCell := &multigresv1alpha1.CellTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
+				Spec:       multigresv1alpha1.CellTemplateSpec{},
+			}
+			if err := k8sClient.Create(ctx, emptyCell); client.IgnoreAlreadyExists(err) != nil {
+				t.Fatalf("Failed to create default cell template: %v", err)
+			}
+
+			emptyShard := &multigresv1alpha1.ShardTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
+				Spec:       multigresv1alpha1.ShardTemplateSpec{},
+			}
+			if err := k8sClient.Create(ctx, emptyShard); client.IgnoreAlreadyExists(err) != nil {
+				t.Fatalf("Failed to create default shard template: %v", err)
+			}
+
+			// 5. Create the Input
 			if err := k8sClient.Create(ctx, tc.cluster); err != nil {
 				t.Fatalf("Failed to create the initial cluster, %v", err)
 			}
 
-			// 5. Assert Logic: Wait for Children
+			// 6. Assert Logic: Wait for Children
 			// This ensures the controller has run and reconciled at least once successfully
 			if err := watcher.WaitForMatch(tc.wantResources...); err != nil {
 				t.Errorf("Resources mismatch:\n%v", err)
 			}
 
-			// 6. Verify Parent Finalizer (Manual Check)
+			// 7. Verify Parent Finalizer (Manual Check)
 			// We check this manually to avoid fighting with status/spec diffs in the watcher
 			fetchedCluster := &multigresv1alpha1.MultigresCluster{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tc.cluster), fetchedCluster); err != nil {

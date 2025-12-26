@@ -71,6 +71,9 @@ func (r *MultigresClusterReconciler) Reconcile(
 	// This now returns *defaults.Resolver
 	resolver := defaults.NewResolver(r.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
 
+	// Apply defaults (in-memory) to ensure we have images/configs even if webhook didn't run
+	resolver.PopulateClusterDefaults(cluster)
+
 	if err := r.reconcileGlobalComponents(ctx, cluster, resolver); err != nil {
 		l.Error(err, "Failed to reconcile global components")
 		return ctrl.Result{}, err
@@ -171,6 +174,8 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 	}
 
 	spec := defaults.ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, tpl)
+	// If Etcd is nil, it means we are using External topology (or invalid config handled by validations).
+	// We only create a TopoServer CR if we are managing Etcd.
 	if spec.Etcd != nil {
 		ts := &multigresv1alpha1.TopoServer{
 			ObjectMeta: metav1.ObjectMeta{
@@ -180,14 +185,10 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 			},
 		}
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
-			replicas := defaults.DefaultEtcdReplicas
-			if spec.Etcd.Replicas != nil {
-				replicas = *spec.Etcd.Replicas
-			}
-
+			// defaults.ResolveGlobalTopo guarantees spec.Etcd.Replicas is set
 			ts.Spec.Etcd = &multigresv1alpha1.EtcdSpec{
 				Image:     spec.Etcd.Image,
-				Replicas:  &replicas,
+				Replicas:  spec.Etcd.Replicas,
 				Storage:   spec.Etcd.Storage,
 				Resources: spec.Etcd.Resources,
 			}
@@ -214,48 +215,46 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 		return fmt.Errorf("failed to resolve admin template: %w", err)
 	}
 
+	// defaults.ResolveMultiAdmin guarantees a non-nil spec with defaults applied
 	spec := defaults.ResolveMultiAdmin(&cluster.Spec.MultiAdmin, tpl)
-	if spec != nil {
-		deploy := &appsv1.Deployment{
+
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Name + "-multiadmin",
+			Namespace: cluster.Namespace,
+			Labels: map[string]string{
+				"multigres.com/cluster": cluster.Name,
+				"app":                   "multiadmin",
+			},
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		// defaults.ResolveMultiAdmin guarantees Replicas is set
+		deploy.Spec.Replicas = spec.Replicas
+		deploy.Spec.Selector = &metav1.LabelSelector{
+			MatchLabels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
+		}
+		deploy.Spec.Template = corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      cluster.Name + "-multiadmin",
-				Namespace: cluster.Namespace,
-				Labels: map[string]string{
-					"multigres.com/cluster": cluster.Name,
-					"app":                   "multiadmin",
+				Labels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
+			},
+			Spec: corev1.PodSpec{
+				ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
+				Containers: []corev1.Container{
+					{
+						Name:      "multiadmin",
+						Image:     cluster.Spec.Images.MultiAdmin,
+						Resources: spec.Resources,
+					},
 				},
+				Affinity: spec.Affinity,
 			},
 		}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			replicas := defaults.DefaultAdminReplicas
-			if spec.Replicas != nil {
-				replicas = *spec.Replicas
-			}
-			deploy.Spec.Replicas = &replicas
-			deploy.Spec.Selector = &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
-			}
-			deploy.Spec.Template = corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
-				},
-				Spec: corev1.PodSpec{
-					ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
-					Containers: []corev1.Container{
-						{
-							Name:      "multiadmin",
-							Image:     cluster.Spec.Images.MultiAdmin,
-							Resources: spec.Resources,
-						},
-					},
-					Affinity: spec.Affinity,
-				},
-			}
-			return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
-		}); err != nil {
-			return fmt.Errorf("failed to create/update multiadmin: %w", err)
-		}
+		return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
+	}); err != nil {
+		return fmt.Errorf("failed to create/update multiadmin: %w", err)
 	}
+
 	return nil
 }
 

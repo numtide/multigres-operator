@@ -36,6 +36,111 @@ func NewResolver(
 	}
 }
 
+// PopulateClusterDefaults applies static defaults to the Cluster Spec.
+// This is safe for the Mutating Webhook because it DOES NOT fetch external templates.
+// It ensures that "invisible defaults" (Images, default template names) are made visible
+// and applies safety limits to any inline configurations provided by the user.
+func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresCluster) {
+	// 1. Default Images
+	if cluster.Spec.Images.Postgres == "" {
+		cluster.Spec.Images.Postgres = DefaultPostgresImage
+	}
+	if cluster.Spec.Images.MultiAdmin == "" {
+		cluster.Spec.Images.MultiAdmin = DefaultMultiAdminImage
+	}
+	if cluster.Spec.Images.MultiOrch == "" {
+		cluster.Spec.Images.MultiOrch = DefaultMultiOrchImage
+	}
+	if cluster.Spec.Images.MultiPooler == "" {
+		cluster.Spec.Images.MultiPooler = DefaultMultiPoolerImage
+	}
+	if cluster.Spec.Images.MultiGateway == "" {
+		cluster.Spec.Images.MultiGateway = DefaultMultiGatewayImage
+	}
+	if cluster.Spec.Images.ImagePullPolicy == "" {
+		cluster.Spec.Images.ImagePullPolicy = DefaultImagePullPolicy
+	}
+
+	// 2. Default Template Refs (Strings only)
+	if cluster.Spec.TemplateDefaults.CoreTemplate == "" {
+		cluster.Spec.TemplateDefaults.CoreTemplate = FallbackCoreTemplate
+	}
+	if cluster.Spec.TemplateDefaults.CellTemplate == "" {
+		cluster.Spec.TemplateDefaults.CellTemplate = FallbackCellTemplate
+	}
+	if cluster.Spec.TemplateDefaults.ShardTemplate == "" {
+		cluster.Spec.TemplateDefaults.ShardTemplate = FallbackShardTemplate
+	}
+
+	// 3. Default Inline Configs (Deep Defaulting)
+	// We ONLY default these if the user explicitly provided the block (Inline).
+	// We DO NOT fetch templates here, adhering to the "Non-Goal" of the design doc.
+
+	// GlobalTopoServer: If user provided 'etcd: {}', fill in the details.
+	if cluster.Spec.GlobalTopoServer.Etcd != nil {
+		defaultEtcdSpec(cluster.Spec.GlobalTopoServer.Etcd)
+	}
+
+	// MultiAdmin: If user provided 'spec: {}', fill in the details.
+	if cluster.Spec.MultiAdmin.Spec != nil {
+		defaultStatelessSpec(
+			cluster.Spec.MultiAdmin.Spec,
+			DefaultResourcesAdmin,
+			DefaultAdminReplicas,
+		)
+	}
+
+	// Cells: Default inline specs
+	for i := range cluster.Spec.Cells {
+		if cluster.Spec.Cells[i].Spec != nil {
+			defaultStatelessSpec(
+				&cluster.Spec.Cells[i].Spec.MultiGateway,
+				// Note: You might want to define specific defaults for Gateway if they differ from Admin.
+				// For now using the same pattern or generic defaults.
+				// Assuming you might add DefaultResourcesGateway later, but using valid struct defaults here.
+				corev1.ResourceRequirements{}, // Placeholder or define specific constant if needed
+				1,                             // Default replicas
+			)
+		}
+	}
+}
+
+// defaultEtcdSpec applies hardcoded safety defaults to an inline Etcd spec.
+func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec) {
+	if spec.Image == "" {
+		spec.Image = DefaultEtcdImage
+	}
+	if spec.Storage.Size == "" {
+		spec.Storage.Size = DefaultEtcdStorageSize
+	}
+	if spec.Replicas == nil {
+		r := DefaultEtcdReplicas
+		spec.Replicas = &r
+	}
+	if reflect.DeepEqual(spec.Resources, corev1.ResourceRequirements{}) {
+		spec.Resources = DefaultResourcesEtcd
+	}
+}
+
+// defaultStatelessSpec applies hardcoded safety defaults to any stateless spec.
+func defaultStatelessSpec(
+	spec *multigresv1alpha1.StatelessSpec,
+	defaultRes corev1.ResourceRequirements,
+	defaultReplicas int32,
+) {
+	if spec.Replicas == nil {
+		spec.Replicas = &defaultReplicas
+	}
+	if reflect.DeepEqual(spec.Resources, corev1.ResourceRequirements{}) {
+		spec.Resources = defaultRes
+	}
+}
+
+// ============================================================================
+// Resolution Logic (Used by Controller ONLY)
+// These functions fetch Templates and Merge them. They are NOT for the Webhook.
+// ============================================================================
+
 // ResolveCoreTemplate determines the target CoreTemplate name and fetches it.
 //
 // If templateName is empty, it uses the following precedence:
@@ -44,7 +149,6 @@ func NewResolver(
 //
 // If an explicit template (param or cluster default) is not found, it returns an error.
 // If the implicit "default" template is not found, it returns an empty object (safe fallback).
-// In this case the default would be applied by the operator via mutating webhook, if enabled.
 func (r *Resolver) ResolveCoreTemplate(
 	ctx context.Context,
 	templateName string,
@@ -67,7 +171,7 @@ func (r *Resolver) ResolveCoreTemplate(
 			if isImplicitFallback {
 				return &multigresv1alpha1.CoreTemplate{}, nil
 			}
-			return nil, fmt.Errorf("referenced CoreTemplate '%s' not found", name)
+			return nil, fmt.Errorf("referenced CoreTemplate '%s' not found: %w", name, err)
 		}
 		return nil, fmt.Errorf("failed to get CoreTemplate: %w", err)
 	}
@@ -97,7 +201,7 @@ func (r *Resolver) ResolveCellTemplate(
 			if isImplicitFallback {
 				return &multigresv1alpha1.CellTemplate{}, nil
 			}
-			return nil, fmt.Errorf("referenced CellTemplate '%s' not found", name)
+			return nil, fmt.Errorf("referenced CellTemplate '%s' not found: %w", name, err)
 		}
 		return nil, fmt.Errorf("failed to get CellTemplate: %w", err)
 	}
@@ -127,7 +231,7 @@ func (r *Resolver) ResolveShardTemplate(
 			if isImplicitFallback {
 				return &multigresv1alpha1.ShardTemplate{}, nil
 			}
-			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found", name)
+			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found: %w", name, err)
 		}
 		return nil, fmt.Errorf("failed to get ShardTemplate: %w", err)
 	}
@@ -205,6 +309,67 @@ func MergeShardConfig(
 	return multiOrch, pools
 }
 
+// ResolveGlobalTopo determines the final GlobalTopoServer configuration.
+// It prioritizes Inline Config > Template > Implicit Default (Managed Etcd).
+// It applies deep defaults (safety limits) to the final result.
+func ResolveGlobalTopo(
+	spec *multigresv1alpha1.GlobalTopoServerSpec,
+	coreTemplate *multigresv1alpha1.CoreTemplate,
+) *multigresv1alpha1.GlobalTopoServerSpec {
+	var finalSpec *multigresv1alpha1.GlobalTopoServerSpec
+
+	// 1. Determine base config
+	if spec.Etcd != nil || spec.External != nil {
+		finalSpec = spec
+	} else if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
+		// Copy from template
+		finalSpec = &multigresv1alpha1.GlobalTopoServerSpec{
+			Etcd: coreTemplate.Spec.GlobalTopoServer.Etcd.DeepCopy(),
+		}
+	} else {
+		// Fallback: Default to an empty Etcd spec if nothing found.
+		finalSpec = &multigresv1alpha1.GlobalTopoServerSpec{
+			Etcd: &multigresv1alpha1.EtcdSpec{},
+		}
+	}
+
+	// 2. Apply Deep Defaults to Etcd if present
+	if finalSpec.Etcd != nil {
+		defaultEtcdSpec(finalSpec.Etcd)
+	}
+
+	return finalSpec
+}
+
+// ResolveMultiAdmin determines the final MultiAdmin configuration.
+// It prioritizes Inline Config > Template > Implicit Default.
+// It applies deep defaults (safety limits) to the final result.
+func ResolveMultiAdmin(
+	spec *multigresv1alpha1.MultiAdminConfig,
+	coreTemplate *multigresv1alpha1.CoreTemplate,
+) *multigresv1alpha1.StatelessSpec {
+	var finalSpec *multigresv1alpha1.StatelessSpec
+
+	// 1. Determine base config
+	if spec.Spec != nil {
+		finalSpec = spec.Spec
+	} else if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil {
+		finalSpec = coreTemplate.Spec.MultiAdmin
+	} else {
+		// Fallback to empty spec so we can apply defaults
+		finalSpec = &multigresv1alpha1.StatelessSpec{}
+	}
+
+	// 2. Apply Deep Defaults
+	defaultStatelessSpec(finalSpec, DefaultResourcesAdmin, DefaultAdminReplicas)
+
+	return finalSpec
+}
+
+// ============================================================================
+// Merge Helpers
+// ============================================================================
+
 func mergeStatelessSpec(
 	base *multigresv1alpha1.StatelessSpec,
 	override *multigresv1alpha1.StatelessSpec,
@@ -270,42 +435,4 @@ func mergePoolSpec(
 		out.Affinity = override.Affinity
 	}
 	return out
-}
-
-// ResolveGlobalTopo determines the final GlobalTopoServer configuration by preferring inline config over templates.
-func ResolveGlobalTopo(
-	spec *multigresv1alpha1.GlobalTopoServerSpec,
-	coreTemplate *multigresv1alpha1.CoreTemplate,
-) *multigresv1alpha1.GlobalTopoServerSpec {
-	// If inline config is present, use it.
-	if spec.Etcd != nil || spec.External != nil {
-		return spec
-	}
-
-	// Otherwise, use the template (loaded by caller based on TemplateRef or Defaults)
-	if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
-		return &multigresv1alpha1.GlobalTopoServerSpec{
-			Etcd: coreTemplate.Spec.GlobalTopoServer.Etcd,
-		}
-	}
-
-	return spec
-}
-
-// ResolveMultiAdmin determines the final MultiAdmin configuration by preferring inline config over templates.
-func ResolveMultiAdmin(
-	spec *multigresv1alpha1.MultiAdminConfig,
-	coreTemplate *multigresv1alpha1.CoreTemplate,
-) *multigresv1alpha1.StatelessSpec {
-	// If inline spec is present, use it.
-	if spec.Spec != nil {
-		return spec.Spec
-	}
-
-	// Otherwise, use the template (loaded by caller based on TemplateRef or Defaults)
-	if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil {
-		return coreTemplate.Spec.MultiAdmin
-	}
-
-	return nil
 }
