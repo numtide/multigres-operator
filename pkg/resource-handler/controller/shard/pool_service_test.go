@@ -20,6 +20,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
 		poolName string
+		cellName string
 		poolSpec multigresv1alpha1.PoolSpec
 		scheme   *runtime.Scheme
 		want     *corev1.Service
@@ -38,20 +39,21 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 			},
 			poolName: "primary",
+			cellName: "zone1",
 			poolSpec: multigresv1alpha1.PoolSpec{
 				Type: "replica",
 			},
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pool-primary-headless",
+					Name:      "test-shard-pool-primary-zone1-headless",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
 					},
@@ -70,11 +72,11 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
 					},
@@ -115,17 +117,18 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 			},
 			poolName: "ro",
+			cellName: "zone-east",
 			poolSpec: multigresv1alpha1.PoolSpec{
 				Type:  "readonly",
 				Cells: []multigresv1alpha1.CellName{"zone-east"},
 			},
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-001-pool-ro-headless",
+					Name:      "shard-001-pool-ro-zone-east-headless",
 					Namespace: "prod",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-pool-ro",
+						"app.kubernetes.io/instance":   "shard-001-pool-ro-zone-east",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -148,7 +151,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-pool-ro",
+						"app.kubernetes.io/instance":   "shard-001-pool-ro-zone-east",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -193,18 +196,19 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 			},
 			poolName: "primary",
+			cellName: "zone1",
 			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-002-pool-primary-headless",
+					Name:      "shard-002-pool-primary-zone1-headless",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-primary",
+						"app.kubernetes.io/instance":   "shard-002-pool-primary-zone1",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
 					},
@@ -223,11 +227,11 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-primary",
+						"app.kubernetes.io/instance":   "shard-002-pool-primary-zone1",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
 					},
@@ -270,6 +274,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				Type: "replica",
 			},
 			poolName: "primary",
+			cellName: "zone1",
 			scheme:   runtime.NewScheme(), // empty scheme
 			wantErr:  true,
 		},
@@ -281,7 +286,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 			if tc.scheme != nil {
 				testScheme = tc.scheme
 			}
-			got, err := BuildPoolHeadlessService(tc.shard, tc.poolName, tc.poolSpec, testScheme)
+			got, err := BuildPoolHeadlessService(tc.shard, tc.poolName, tc.cellName, tc.poolSpec, testScheme)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildPoolHeadlessService() error = %v, wantErr %v", err, tc.wantErr)

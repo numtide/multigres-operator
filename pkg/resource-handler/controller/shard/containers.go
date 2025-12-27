@@ -68,14 +68,23 @@ func buildPostgresContainer(
 // buildMultiPoolerSidecar creates the multipooler sidecar container spec.
 // This is implemented as a native sidecar using init container with
 // restartPolicy: Always (K8s 1.28+).
+// cellName specifies which cell this container is running in.
+// If cellName is empty, defaults to the global topology cell.
 func buildMultiPoolerSidecar(
 	shard *multigresv1alpha1.Shard,
 	pool multigresv1alpha1.PoolSpec,
 	poolName string,
+	cellName string,
 ) corev1.Container {
 	image := DefaultMultiPoolerImage
 	if shard.Spec.Images.MultiPooler != "" {
 		image = shard.Spec.Images.MultiPooler
+	}
+
+	// Use default cell name if none is specified
+	cell := cellName
+	if cell == "" {
+		cell = "multigres-global-topo"
 	}
 
 	// TODO: Add remaining command line arguments:

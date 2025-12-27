@@ -21,7 +21,8 @@ const (
 	DefaultDataVolumeSize = "10Gi"
 )
 
-// BuildPoolStatefulSet creates a StatefulSet for a shard pool.
+// BuildPoolStatefulSet creates a StatefulSet for a shard pool in a specific cell.
+// For pools spanning multiple cells, this function should be called once per cell.
 // The StatefulSet includes:
 // - Init container: pgctld-init (copies pgctld binary to shared emptyDir)
 // - Init container (native sidecar): multipooler (with restartPolicy: Always)
@@ -31,13 +32,15 @@ const (
 func BuildPoolStatefulSet(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
+	cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
-	name := buildPoolName(shard.Name, poolName)
+	name := buildPoolNameWithCell(shard.Name, poolName, cellName)
 	headlessServiceName := name + "-headless"
-	labels := buildPoolLabels(shard, poolName, poolSpec)
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
 
+	// Each StatefulSet in a cell has ReplicasPerCell replicas
 	replicas := DefaultPoolReplicas
 	if poolSpec.ReplicasPerCell != nil {
 		replicas = *poolSpec.ReplicasPerCell
@@ -67,7 +70,7 @@ func BuildPoolStatefulSet(
 					// Init containers: pgctld copies binary, multipooler is a native sidecar
 					InitContainers: []corev1.Container{
 						buildPgctldInitContainer(shard),
-						buildMultiPoolerSidecar(shard, poolSpec, poolName),
+						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 					},
 					// Postgres is the main container (runs pgctld binary)
 					Containers: []corev1.Container{

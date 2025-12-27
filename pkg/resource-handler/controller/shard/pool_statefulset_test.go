@@ -21,6 +21,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
 		poolName string
+		cellName string
 		poolSpec multigresv1alpha1.PoolSpec
 		scheme   *runtime.Scheme
 		want     *appsv1.StatefulSet
@@ -45,17 +46,18 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "primary",
+			cellName: "zone1",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pool-primary",
+					Name:      "test-shard-pool-primary-zone1",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
 					},
@@ -71,16 +73,16 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "test-shard-pool-primary-headless",
+					ServiceName: "test-shard-pool-primary-zone1-headless",
 					Replicas:    ptr.To(DefaultPoolReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-shard-pool-primary",
+							"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
+							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
 						},
@@ -93,11 +95,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-shard-pool-primary",
+								"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
+								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
 							},
@@ -120,6 +122,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									},
 									multigresv1alpha1.PoolSpec{},
 									"primary",
+									"zone1",
 								),
 							},
 							Containers: []corev1.Container{
@@ -180,13 +183,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "replica",
+			cellName: "zone-west",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-001-pool-replica",
+					Name:      "shard-001-pool-replica-zone-west",
 					Namespace: "prod",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-pool-replica",
+						"app.kubernetes.io/instance":   "shard-001-pool-replica-zone-west",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -206,12 +210,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "shard-001-pool-replica-headless",
+					ServiceName: "shard-001-pool-replica-zone-west-headless",
 					Replicas:    ptr.To(int32(3)),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-001-pool-replica",
+							"app.kubernetes.io/instance":   "shard-001-pool-replica-zone-west",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -228,7 +232,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-001-pool-replica",
+								"app.kubernetes.io/instance":   "shard-001-pool-replica-zone-west",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -257,6 +261,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 										Cells: []multigresv1alpha1.CellName{"zone-west"},
 									},
 									"replica",
+									"zone-west",
 								),
 							},
 							Containers: []corev1.Container{
@@ -314,17 +319,18 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "readOnly",
+			cellName: "zone1",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-002-pool-readOnly",
+					Name:      "shard-002-pool-readOnly-zone1",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-readOnly",
+						"app.kubernetes.io/instance":   "shard-002-pool-readOnly-zone1",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
 					},
@@ -340,16 +346,16 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "shard-002-pool-readOnly-headless",
+					ServiceName: "shard-002-pool-readOnly-zone1-headless",
 					Replicas:    ptr.To(DefaultPoolReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-002-pool-readOnly",
+							"app.kubernetes.io/instance":   "shard-002-pool-readOnly-zone1",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
+							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
 						},
@@ -362,11 +368,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-002-pool-readOnly",
+								"app.kubernetes.io/instance":   "shard-002-pool-readOnly-zone1",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
+								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
 							},
@@ -389,6 +395,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									},
 									multigresv1alpha1.PoolSpec{},
 									"readOnly",
+									"zone1",
 								),
 							},
 							Containers: []corev1.Container{
@@ -463,17 +470,18 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				},
 			},
 			poolName: "primary",
+			cellName: "zone1",
 			want: &appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "shard-affinity-pool-primary",
+					Name:      "shard-affinity-pool-primary-zone1",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-affinity-pool-primary",
+						"app.kubernetes.io/instance":   "shard-affinity-pool-primary-zone1",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "multigres-global-topo",
+						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
 					},
@@ -489,16 +497,16 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					},
 				},
 				Spec: appsv1.StatefulSetSpec{
-					ServiceName: "shard-affinity-pool-primary-headless",
+					ServiceName: "shard-affinity-pool-primary-zone1-headless",
 					Replicas:    ptr.To(DefaultPoolReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-affinity-pool-primary",
+							"app.kubernetes.io/instance":   "shard-affinity-pool-primary-zone1",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cell":           "multigres-global-topo",
+							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
 						},
@@ -511,11 +519,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-affinity-pool-primary",
+								"app.kubernetes.io/instance":   "shard-affinity-pool-primary-zone1",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
-								"multigres.com/cell":           "multigres-global-topo",
+								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
 							},
@@ -538,6 +546,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									},
 									multigresv1alpha1.PoolSpec{},
 									"primary",
+									"zone1",
 								),
 							},
 							Containers: []corev1.Container{
@@ -608,6 +617,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				Type: "replica",
 			},
 			poolName: "primary",
+			cellName: "zone1",
 			scheme:   runtime.NewScheme(), // empty scheme
 			wantErr:  true,
 		},
@@ -619,7 +629,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 			if tc.scheme != nil {
 				testScheme = tc.scheme
 			}
-			got, err := BuildPoolStatefulSet(tc.shard, tc.poolName, tc.poolSpec, testScheme)
+			got, err := BuildPoolStatefulSet(tc.shard, tc.poolName, tc.cellName, tc.poolSpec, testScheme)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildPoolStatefulSet() error = %v, wantErr %v", err, tc.wantErr)

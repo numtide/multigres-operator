@@ -123,6 +123,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
 		poolSpec multigresv1alpha1.PoolSpec
+		cellName string
 		want     corev1.Container
 	}{
 		"default multipooler image with no resources": {
@@ -136,6 +137,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			poolSpec: multigresv1alpha1.PoolSpec{
 				Cells: []multigresv1alpha1.CellName{"zone1"},
 			},
+			cellName: "zone1",
 			want: corev1.Container{
 				Name:  "multipooler",
 				Image: DefaultMultiPoolerImage,
@@ -169,6 +171,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			poolSpec: multigresv1alpha1.PoolSpec{
 				Cells: []multigresv1alpha1.CellName{"zone2"},
 			},
+			cellName: "zone2",
 			want: corev1.Container{
 				Name:  "multipooler",
 				Image: "custom/multipooler:v1.0.0",
@@ -211,6 +214,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					},
 				},
 			},
+			cellName: "zone1",
 			want: corev1.Container{
 				Name:  "multipooler",
 				Image: DefaultMultiPoolerImage,
@@ -243,7 +247,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildMultiPoolerSidecar(tc.shard, tc.poolSpec, "primary")
+			got := buildMultiPoolerSidecar(tc.shard, tc.poolSpec, "primary", tc.cellName)
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildMultiPoolerSidecar() mismatch (-want +got):\n%s", diff)

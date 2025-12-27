@@ -189,33 +189,46 @@ func (r *ShardReconciler) reconcileMultiOrchService(
 }
 
 // reconcilePool creates or updates the StatefulSet and headless Service for a pool.
+// For pools spanning multiple cells, this creates one StatefulSet per cell.
 func (r *ShardReconciler) reconcilePool(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	// Reconcile pool StatefulSet
-	if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, poolSpec); err != nil {
-		return fmt.Errorf("failed to reconcile pool StatefulSet: %w", err)
+	// Pools must have cells specified
+	cells := poolSpec.Cells
+	if len(cells) == 0 {
+		return fmt.Errorf("pool %s has no cells specified - cannot deploy without cell information", poolName)
 	}
 
-	// Reconcile pool headless Service
-	if err := r.reconcilePoolHeadlessService(ctx, shard, poolName, poolSpec); err != nil {
-		return fmt.Errorf("failed to reconcile pool headless Service: %w", err)
+	// Create one StatefulSet per cell
+	for _, cell := range cells {
+		cellName := string(cell)
+
+		// Reconcile pool StatefulSet for this cell
+		if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf("failed to reconcile pool StatefulSet for cell %s: %w", cellName, err)
+		}
+
+		// Reconcile pool headless Service for this cell
+		if err := r.reconcilePoolHeadlessService(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf("failed to reconcile pool headless Service for cell %s: %w", cellName, err)
+		}
 	}
 
 	return nil
 }
 
-// reconcilePoolStatefulSet creates or updates the StatefulSet for a pool.
+// reconcilePoolStatefulSet creates or updates the StatefulSet for a pool in a specific cell.
 func (r *ShardReconciler) reconcilePoolStatefulSet(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
+	cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	desired, err := BuildPoolStatefulSet(shard, poolName, poolSpec, r.Scheme)
+	desired, err := BuildPoolStatefulSet(shard, poolName, cellName, poolSpec, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build pool StatefulSet: %w", err)
 	}
@@ -247,14 +260,15 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 	return nil
 }
 
-// reconcilePoolHeadlessService creates or updates the headless Service for a pool.
+// reconcilePoolHeadlessService creates or updates the headless Service for a pool in a specific cell.
 func (r *ShardReconciler) reconcilePoolHeadlessService(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
+	cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	desired, err := BuildPoolHeadlessService(shard, poolName, poolSpec, r.Scheme)
+	desired, err := BuildPoolHeadlessService(shard, poolName, cellName, poolSpec, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build pool headless Service: %w", err)
 	}
