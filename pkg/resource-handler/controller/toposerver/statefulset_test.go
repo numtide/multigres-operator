@@ -31,7 +31,7 @@ func TestBuildStatefulSet(t *testing.T) {
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			scheme: scheme,
 			want: &appsv1.StatefulSet{
@@ -134,8 +134,8 @@ func TestBuildStatefulSet(t *testing.T) {
 					Namespace: "test",
 					UID:       "custom-uid",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{
-					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
 						Replicas: ptr.To(int32(5)),
 						Image:    "quay.io/coreos/etcd:v3.5.15",
 					},
@@ -242,18 +242,11 @@ func TestBuildStatefulSet(t *testing.T) {
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{
-					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
-						DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-							AccessModes: []corev1.PersistentVolumeAccessMode{
-								corev1.ReadWriteMany,
-							},
-							Resources: corev1.VolumeResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceStorage: resource.MustParse("50Gi"),
-								},
-							},
-							StorageClassName: ptr.To("fast-ssd"),
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						Storage: multigresv1alpha1.StorageSpec{
+							Size:  "50Gi",
+							Class: "fast-ssd",
 						},
 					},
 				},
@@ -337,7 +330,7 @@ func TestBuildStatefulSet(t *testing.T) {
 							},
 							Spec: corev1.PersistentVolumeClaimSpec{
 								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteMany,
+									corev1.ReadWriteOnce,
 								},
 								Resources: corev1.VolumeResourceRequirements{
 									Requests: corev1.ResourceList{
@@ -357,7 +350,7 @@ func TestBuildStatefulSet(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			scheme:  runtime.NewScheme(), // empty scheme with incorrect type
 			wantErr: true,

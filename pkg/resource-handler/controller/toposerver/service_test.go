@@ -30,7 +30,7 @@ func TestBuildHeadlessService(t *testing.T) {
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			scheme: scheme,
 			want: &corev1.Service{
@@ -121,7 +121,7 @@ func TestBuildClientService(t *testing.T) {
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			scheme: scheme,
 			want: &corev1.Service{

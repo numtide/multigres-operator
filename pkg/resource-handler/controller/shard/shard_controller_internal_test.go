@@ -94,8 +94,8 @@ func TestBuildMultiOrchContainer_WithImage(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Image: customImage,
+			Images: multigresv1alpha1.ShardImages{
+				MultiOrch: customImage,
 			},
 		},
 	}
@@ -124,7 +124,7 @@ func TestReconcileMultiOrchDeployment_InvalidScheme(t *testing.T) {
 		},
 		Spec: multigresv1alpha1.ShardSpec{
 			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Cells: []string{"cell1"},
+				Cells: []multigresv1alpha1.CellName{"cell1"},
 			},
 		},
 	}
@@ -182,10 +182,8 @@ func TestReconcilePoolStatefulSet_InvalidScheme(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -197,7 +195,7 @@ func TestReconcilePoolStatefulSet_InvalidScheme(t *testing.T) {
 		Scheme: invalidScheme,
 	}
 
-	err := reconciler.reconcilePoolStatefulSet(context.Background(), shard, poolName, poolSpec)
+	err := reconciler.reconcilePoolStatefulSet(context.Background(), shard, poolName, "", poolSpec)
 	if err == nil {
 		t.Error("reconcilePoolStatefulSet() should error with invalid scheme")
 	}
@@ -215,10 +213,8 @@ func TestReconcilePoolHeadlessService_InvalidScheme(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -230,7 +226,13 @@ func TestReconcilePoolHeadlessService_InvalidScheme(t *testing.T) {
 		Scheme: invalidScheme,
 	}
 
-	err := reconciler.reconcilePoolHeadlessService(context.Background(), shard, poolName, poolSpec)
+	err := reconciler.reconcilePoolHeadlessService(
+		context.Background(),
+		shard,
+		poolName,
+		"",
+		poolSpec,
+	)
 	if err == nil {
 		t.Error("reconcilePoolHeadlessService() should error with invalid scheme")
 	}
@@ -248,11 +250,9 @@ func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+			Pools: map[string]multigresv1alpha1.PoolSpec{
 				"pool1": {
-					Cell:       "cell1",
-					Database:   "db1",
-					TableGroup: "tg1",
+					Cells: []multigresv1alpha1.CellName{"cell1"},
 				},
 			},
 		},
@@ -322,7 +322,7 @@ func TestReconcileMultiOrchDeployment_GetError(t *testing.T) {
 		},
 		Spec: multigresv1alpha1.ShardSpec{
 			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Cells: []string{"cell1"},
+				Cells: []multigresv1alpha1.CellName{"cell1"},
 			},
 		},
 	}
@@ -398,10 +398,8 @@ func TestReconcilePoolStatefulSet_GetError(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	// Create client with failure injection
@@ -411,7 +409,7 @@ func TestReconcilePoolStatefulSet_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-pool-pool1", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName("test-shard-pool-pool1-cell1", testutil.ErrNetworkTimeout),
 	})
 
 	reconciler := &ShardReconciler{
@@ -419,7 +417,13 @@ func TestReconcilePoolStatefulSet_GetError(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	err := reconciler.reconcilePoolStatefulSet(context.Background(), shard, poolName, poolSpec)
+	err := reconciler.reconcilePoolStatefulSet(
+		context.Background(),
+		shard,
+		poolName,
+		"cell1",
+		poolSpec,
+	)
 	if err == nil {
 		t.Error("reconcilePoolStatefulSet() should error on Get failure")
 	}
@@ -440,10 +444,8 @@ func TestReconcilePoolHeadlessService_GetError(t *testing.T) {
 	}
 
 	poolName := "pool1"
-	poolSpec := multigresv1alpha1.ShardPoolSpec{
-		Cell:       "cell1",
-		Database:   "db1",
-		TableGroup: "tg1",
+	poolSpec := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"cell1"},
 	}
 
 	// Create client with failure injection
@@ -453,7 +455,10 @@ func TestReconcilePoolHeadlessService_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-pool-pool1-headless", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName(
+			"test-shard-pool-pool1-cell1-headless",
+			testutil.ErrNetworkTimeout,
+		),
 	})
 
 	reconciler := &ShardReconciler{
@@ -461,7 +466,13 @@ func TestReconcilePoolHeadlessService_GetError(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	err := reconciler.reconcilePoolHeadlessService(context.Background(), shard, poolName, poolSpec)
+	err := reconciler.reconcilePoolHeadlessService(
+		context.Background(),
+		shard,
+		poolName,
+		"cell1",
+		poolSpec,
+	)
 	if err == nil {
 		t.Error("reconcilePoolHeadlessService() should error on Get failure")
 	}
@@ -479,11 +490,9 @@ func TestUpdateStatus_GetError(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+			Pools: map[string]multigresv1alpha1.PoolSpec{
 				"pool1": {
-					Cell:       "cell1",
-					Database:   "db1",
-					TableGroup: "tg1",
+					Cells: []multigresv1alpha1.CellName{"cell1"},
 				},
 			},
 		},

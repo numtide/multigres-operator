@@ -26,7 +26,7 @@ func TestReconcileStatefulSet_InvalidScheme(t *testing.T) {
 			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.TopoServerChildSpec{},
+		Spec: multigresv1alpha1.TopoServerSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -53,7 +53,7 @@ func TestReconcileHeadlessService_InvalidScheme(t *testing.T) {
 			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.TopoServerChildSpec{},
+		Spec: multigresv1alpha1.TopoServerSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -80,7 +80,7 @@ func TestReconcileClientService_InvalidScheme(t *testing.T) {
 			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.TopoServerChildSpec{},
+		Spec: multigresv1alpha1.TopoServerSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -109,7 +109,7 @@ func TestUpdateStatus_StatefulSetNotFound(t *testing.T) {
 			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.TopoServerChildSpec{},
+		Spec: multigresv1alpha1.TopoServerSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -141,7 +141,7 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 			Namespace:  "default",
 			Finalizers: []string{}, // No finalizer
 		},
-		Spec: multigresv1alpha1.TopoServerChildSpec{},
+		Spec: multigresv1alpha1.TopoServerSpec{},
 	}
 
 	fakeClient := fake.NewClientBuilder().
@@ -175,7 +175,7 @@ func TestReconcileClientService_GetError(t *testing.T) {
 			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.TopoServerChildSpec{},
+		Spec: multigresv1alpha1.TopoServerSpec{},
 	}
 
 	// Create client with failure injection
@@ -210,7 +210,7 @@ func TestUpdateStatus_GetError(t *testing.T) {
 			Name:      "test-toposerver",
 			Namespace: "default",
 		},
-		Spec: multigresv1alpha1.TopoServerChildSpec{},
+		Spec: multigresv1alpha1.TopoServerSpec{},
 	}
 
 	baseClient := fake.NewClientBuilder().

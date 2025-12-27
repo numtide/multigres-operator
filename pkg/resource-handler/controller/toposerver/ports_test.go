@@ -22,7 +22,7 @@ func TestBuildContainerPorts(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			want: []corev1.ContainerPort{
 				{
@@ -60,7 +60,7 @@ func TestBuildHeadlessServicePorts(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			want: []corev1.ServicePort{
 				{
@@ -100,7 +100,7 @@ func TestBuildClientServicePorts(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			want: []corev1.ServicePort{
 				{

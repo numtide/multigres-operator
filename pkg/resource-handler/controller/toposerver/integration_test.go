@@ -69,9 +69,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{
-					RootPath: "/vitess/global",
-				},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			wantResources: []client.Object{
 				&appsv1.StatefulSet{

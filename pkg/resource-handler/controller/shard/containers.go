@@ -41,7 +41,7 @@ var sidecarRestartPolicy = corev1.ContainerRestartPolicyAlways
 // This runs pgctld binary (which wraps postgres) and mounts persistent data storage.
 func buildPostgresContainer(
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
+	pool multigresv1alpha1.PoolSpec,
 ) corev1.Container {
 	image := DefaultPostgresImage
 	if shard.Spec.Images.Postgres != "" {
@@ -68,14 +68,23 @@ func buildPostgresContainer(
 // buildMultiPoolerSidecar creates the multipooler sidecar container spec.
 // This is implemented as a native sidecar using init container with
 // restartPolicy: Always (K8s 1.28+).
+// cellName specifies which cell this container is running in.
+// If cellName is empty, defaults to the global topology cell.
 func buildMultiPoolerSidecar(
 	shard *multigresv1alpha1.Shard,
-	pool multigresv1alpha1.ShardPoolSpec,
+	pool multigresv1alpha1.PoolSpec,
 	poolName string,
+	cellName string,
 ) corev1.Container {
 	image := DefaultMultiPoolerImage
 	if shard.Spec.Images.MultiPooler != "" {
 		image = shard.Spec.Images.MultiPooler
+	}
+
+	// Use default cell name if none is specified
+	cell := cellName
+	if cell == "" {
+		cell = "multigres-global-topo"
 	}
 
 	// TODO: Add remaining command line arguments:
@@ -87,9 +96,9 @@ func buildMultiPoolerSidecar(
 		"--http-port", "15200",
 		"--grpc-port", "15270",
 		"--topo-implementation", "etcd2",
-		"--cell", pool.Cell,
-		"--database", pool.Database,
-		"--table-group", pool.TableGroup,
+		"--cell", cell,
+		"--database", shard.Spec.DatabaseName,
+		"--table-group", shard.Spec.TableGroupName,
 		"--service-id", getPoolServiceID(shard.Name, poolName),
 		"--pgctld-addr", "localhost:15470",
 		"--pg-port", "5432",
@@ -100,7 +109,7 @@ func buildMultiPoolerSidecar(
 		Image:         image,
 		Args:          args,
 		Ports:         buildMultiPoolerContainerPorts(),
-		Resources:     pool.MultiPooler.Resources,
+		Resources:     pool.Multipooler.Resources,
 		RestartPolicy: &sidecarRestartPolicy,
 	}
 }
@@ -127,8 +136,8 @@ func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 // buildMultiOrchContainer creates the MultiOrch container spec.
 func buildMultiOrchContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 	image := DefaultMultiOrchImage
-	if shard.Spec.MultiOrch.Image != "" {
-		image = shard.Spec.MultiOrch.Image
+	if shard.Spec.Images.MultiOrch != "" {
+		image = shard.Spec.Images.MultiOrch
 	}
 
 	// TODO: Add remaining command line arguments:
@@ -159,16 +168,6 @@ func buildPgctldVolume() corev1.Volume {
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
-	}
-}
-
-// buildDataVolumeClaimTemplate creates the PVC template for PostgreSQL data.
-func buildDataVolumeClaimTemplate(
-	pool multigresv1alpha1.ShardPoolSpec,
-) corev1.PersistentVolumeClaim {
-	// Use the pool's DataVolumeClaimTemplate directly if provided
-	return corev1.PersistentVolumeClaim{
-		Spec: pool.DataVolumeClaimTemplate,
 	}
 }
 

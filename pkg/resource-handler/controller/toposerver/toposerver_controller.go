@@ -216,14 +216,9 @@ func (r *TopoServerReconciler) updateStatus(
 		return fmt.Errorf("failed to get StatefulSet for status: %w", err)
 	}
 
-	// Update status fields
-	toposerver.Status.Replicas = sts.Status.Replicas
-	toposerver.Status.ReadyReplicas = sts.Status.ReadyReplicas
-	toposerver.Status.ObservedGeneration = toposerver.Generation
-
 	// Set service names
-	toposerver.Status.ClientServiceName = toposerver.Name
-	toposerver.Status.PeerServiceName = toposerver.Name + "-headless"
+	toposerver.Status.ClientService = toposerver.Name
+	toposerver.Status.PeerService = toposerver.Name + "-headless"
 
 	// Update conditions
 	toposerver.Status.Conditions = r.buildConditions(toposerver, sts)

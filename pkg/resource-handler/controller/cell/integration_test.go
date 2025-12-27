@@ -71,13 +71,12 @@ func TestCellReconciliation(t *testing.T) {
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/vitess/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
-					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
@@ -143,13 +142,12 @@ func TestCellReconciliation(t *testing.T) {
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(3)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(3)),
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/vitess/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
-					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
@@ -211,21 +209,17 @@ func TestCellReconciliation(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone3",
-					Images: multigresv1alpha1.CellImagesSpec{
-						MultiGateway: "custom/multigateway:v1.0.0",
-						MultiOrch:    "custom/multiorch:v1.0.0",
-					},
+					Name:              "zone3",
+					MultiGatewayImage: "custom/multigateway:v1.0.0",
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/vitess/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
-					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
@@ -308,30 +302,12 @@ func TestCellReconciliation(t *testing.T) {
 							},
 						},
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
-						Affinity: &corev1.Affinity{
-							PodAntiAffinity: &corev1.PodAntiAffinity{
-								PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-									{
-										Weight: 100,
-										PodAffinityTerm: corev1.PodAffinityTerm{
-											LabelSelector: &metav1.LabelSelector{
-												MatchLabels: map[string]string{
-													"app.kubernetes.io/component": "multiorch",
-												},
-											},
-											TopologyKey: "kubernetes.io/hostname",
-										},
-									},
-								},
-							},
-						},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/vitess/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
-					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
