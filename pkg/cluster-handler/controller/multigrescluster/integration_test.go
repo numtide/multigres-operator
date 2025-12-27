@@ -19,7 +19,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
-	"github.com/numtide/multigres-operator/pkg/defaults"
+	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -127,8 +127,8 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     "etcd:latest",
 							Replicas:  ptr.To(int32(3)), // Default from logic
-							Storage:   multigresv1alpha1.StorageSpec{Size: defaults.DefaultEtcdStorageSize},
-							Resources: defaults.DefaultResourcesEtcd,
+							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
+							Resources: resolver.DefaultResourcesEtcd,
 						},
 					},
 				},
@@ -154,7 +154,7 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 									{
 										Name:      "multiadmin",
 										Image:     "admin:latest",
-										Resources: defaults.DefaultResourcesAdmin,
+										Resources: resolver.DefaultResourcesAdmin,
 									},
 								},
 							},

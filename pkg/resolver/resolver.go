@@ -1,4 +1,4 @@
-package defaults
+package resolver
 
 import (
 	"context"
