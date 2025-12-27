@@ -199,7 +199,10 @@ func (r *ShardReconciler) reconcilePool(
 	// Pools must have cells specified
 	cells := poolSpec.Cells
 	if len(cells) == 0 {
-		return fmt.Errorf("pool %s has no cells specified - cannot deploy without cell information", poolName)
+		return fmt.Errorf(
+			"pool %s has no cells specified - cannot deploy without cell information",
+			poolName,
+		)
 	}
 
 	// Create one StatefulSet per cell
@@ -213,7 +216,11 @@ func (r *ShardReconciler) reconcilePool(
 
 		// Reconcile pool headless Service for this cell
 		if err := r.reconcilePoolHeadlessService(ctx, shard, poolName, cellName, poolSpec); err != nil {
-			return fmt.Errorf("failed to reconcile pool headless Service for cell %s: %w", cellName, err)
+			return fmt.Errorf(
+				"failed to reconcile pool headless Service for cell %s: %w",
+				cellName,
+				err,
+			)
 		}
 	}
 

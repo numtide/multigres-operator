@@ -629,7 +629,13 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 			if tc.scheme != nil {
 				testScheme = tc.scheme
 			}
-			got, err := BuildPoolStatefulSet(tc.shard, tc.poolName, tc.cellName, tc.poolSpec, testScheme)
+			got, err := BuildPoolStatefulSet(
+				tc.shard,
+				tc.poolName,
+				tc.cellName,
+				tc.poolSpec,
+				testScheme,
+			)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildPoolStatefulSet() error = %v, wantErr %v", err, tc.wantErr)

@@ -286,7 +286,13 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 			if tc.scheme != nil {
 				testScheme = tc.scheme
 			}
-			got, err := BuildPoolHeadlessService(tc.shard, tc.poolName, tc.cellName, tc.poolSpec, testScheme)
+			got, err := BuildPoolHeadlessService(
+				tc.shard,
+				tc.poolName,
+				tc.cellName,
+				tc.poolSpec,
+				testScheme,
+			)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildPoolHeadlessService() error = %v, wantErr %v", err, tc.wantErr)
