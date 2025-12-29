@@ -72,8 +72,8 @@ func TestShardReconciliation(t *testing.T) {
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:      []multigresv1alpha1.CellName{"us-west-1a"},
-							Type:       "replica",
+							Cells:           []multigresv1alpha1.CellName{"us-west-1a"},
+							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(2)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",

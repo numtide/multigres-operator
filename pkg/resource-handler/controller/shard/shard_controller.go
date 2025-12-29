@@ -63,7 +63,9 @@ func (r *ShardReconciler) Reconcile(
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	cells := shard.Spec.MultiOrch.Cells
 	if len(cells) == 0 {
-		return ctrl.Result{}, fmt.Errorf("MultiOrch has no cells specified - cannot deploy without cell information")
+		return ctrl.Result{}, fmt.Errorf(
+			"MultiOrch has no cells specified - cannot deploy without cell information",
+		)
 	}
 
 	for _, cell := range cells {

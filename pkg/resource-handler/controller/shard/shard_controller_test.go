@@ -887,7 +887,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch-zone1" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -935,7 +936,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch-zone1" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrInjected
 					}
 					return nil
