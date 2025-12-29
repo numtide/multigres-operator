@@ -9,17 +9,12 @@ import (
 )
 
 const (
-	// DefaultMultiPoolerImage is the default multipooler container image
-	DefaultMultiPoolerImage = "ghcr.io/multigres/multipooler:latest"
+	// DefaultMultigresImage is the base image for all Multigres components (multipooler, multiorch, pgctld)
+	// Different components use different subcommands.
+	DefaultMultigresImage = "ghcr.io/multigres/multigres:latest"
 
-	// DefaultPgctldImage is the default pgctld container image
-	DefaultPgctldImage = "ghcr.io/multigres/pgctld:latest"
-
-	// DefaultPostgresImage is the default postgres container image
+	// DefaultPostgresImage is the default PostgreSQL database container image
 	DefaultPostgresImage = "postgres:17"
-
-	// DefaultMultiOrchImage is the default multiorch container image
-	DefaultMultiOrchImage = "numtide/multigres-operator:latest"
 
 	// PgctldVolumeName is the name of the shared volume for pgctld binary
 	PgctldVolumeName = "pgctld-bin"
@@ -76,29 +71,26 @@ func buildMultiPoolerSidecar(
 	poolName string,
 	cellName string,
 ) corev1.Container {
-	image := DefaultMultiPoolerImage
+	image := DefaultMultigresImage
 	if shard.Spec.Images.MultiPooler != "" {
 		image = shard.Spec.Images.MultiPooler
 	}
 
-	// Use default cell name if none is specified
-	cell := cellName
-	if cell == "" {
-		cell = "multigres-global-topo"
-	}
-
 	// TODO: Add remaining command line arguments:
-	// --topo-global-server-addresses (needs global topo server ref in ShardSpec)
-	// --topo-global-root (needs global topo server ref in ShardSpec)
 	// --pooler-dir, --grpc-socket-file, --log-level, --log-output, --hostname, --service-map
+	// --pgbackrest-stanza, --connpool-admin-password, --socket-file
 
 	args := []string{
+		"multipooler", // Subcommand
 		"--http-port", "15200",
 		"--grpc-port", "15270",
-		"--topo-implementation", "etcd2",
-		"--cell", cell,
+		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
+		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
+		"--topo-implementation", shard.Spec.GlobalTopoServer.Implementation,
+		"--cell", cellName,
 		"--database", shard.Spec.DatabaseName,
 		"--table-group", shard.Spec.TableGroupName,
+		"--shard", shard.Spec.ShardName,
 		"--service-id", getPoolServiceID(shard.Name, poolName),
 		"--pgctld-addr", "localhost:15470",
 		"--pg-port", "5432",
@@ -117,13 +109,17 @@ func buildMultiPoolerSidecar(
 // buildPgctldInitContainer creates the pgctld init container spec.
 // This copies the pgctld binary to a shared volume for use by the postgres container.
 func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
-	image := DefaultPgctldImage
+	image := DefaultMultigresImage
 	// TODO: Add pgctld image field to Shard spec if needed
 
 	return corev1.Container{
-		Name:    "pgctld-init",
-		Image:   image,
-		Command: []string{"sh", "-c", "cp /pgctld /shared/pgctld && chmod +x /shared/pgctld"},
+		Name:  "pgctld-init",
+		Image: image,
+		Args: []string{
+			"pgctld", // Subcommand
+			"copy-binary",
+			"--output", "/shared/pgctld",
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      PgctldVolumeName,
@@ -133,23 +129,25 @@ func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 	}
 }
 
-// buildMultiOrchContainer creates the MultiOrch container spec.
-func buildMultiOrchContainer(shard *multigresv1alpha1.Shard) corev1.Container {
-	image := DefaultMultiOrchImage
+// buildMultiOrchContainer creates the MultiOrch container spec for a specific cell.
+func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) corev1.Container {
+	image := DefaultMultigresImage
 	if shard.Spec.Images.MultiOrch != "" {
 		image = shard.Spec.Images.MultiOrch
 	}
 
 	// TODO: Add remaining command line arguments:
-	// --topo-global-server-addresses (needs global topo server ref in ShardSpec)
-	// --topo-global-root (needs global topo server ref in ShardSpec)
-	// --cell (needs to be determined per-pod using StatefulSet with topology spread or env var from Downward API based on shard.Spec.MultiOrch.Cells)
-	// --log-level, --log-output, --hostname
+	// --watch-targets, --log-level, --log-output, --hostname
+	// --cluster-metadata-refresh-interval, --pooler-health-check-interval, --recovery-cycle-interval
 
 	args := []string{
+		"multiorch", // Subcommand
 		"--http-port", "15300",
 		"--grpc-port", "15370",
-		"--topo-implementation", "etcd2",
+		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
+		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
+		"--topo-implementation", shard.Spec.GlobalTopoServer.Implementation,
+		"--cell", cellName,
 	}
 
 	return corev1.Container{
