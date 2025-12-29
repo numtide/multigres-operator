@@ -1,8 +1,3 @@
-// Package resolver provides the central logic for resolving MultigresCluster
-// defaults, templates, and configurations.
-//
-// It serves as the single source of truth for merging user inputs,
-// cluster-level defaults, and external templates into a final resource specification.
 package resolver
 
 import (
