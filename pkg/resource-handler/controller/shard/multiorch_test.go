@@ -35,6 +35,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"us-west-1a"},
 					},
@@ -97,8 +102,14 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd2",
+										},
+									},
+								}, "us-west-1a"),
 							},
 						},
 					},
@@ -115,6 +126,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "proddb",
 					TableGroupName: "prod-tg",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{
 							"zone1",
@@ -180,8 +196,14 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd2",
+										},
+									},
+								}, "zone1"),
 							},
 						},
 					},
@@ -198,6 +220,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						StatelessSpec: multigresv1alpha1.StatelessSpec{
 							Replicas: ptr.To(int32(3)),
@@ -263,8 +290,14 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd2",
+										},
+									},
+								}, "zone1"),
 							},
 						},
 					},

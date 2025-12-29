@@ -94,13 +94,18 @@ func TestBuildMultiOrchContainer_WithImage(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        "global-topo:2379",
+				RootPath:       "/multigres/global",
+				Implementation: "etcd2",
+			},
 			Images: multigresv1alpha1.ShardImages{
 				MultiOrch: customImage,
 			},
 		},
 	}
 
-	container := buildMultiOrchContainer(shard)
+	container := buildMultiOrchContainer(shard, "zone1")
 
 	if container.Image != customImage {
 		t.Errorf("buildMultiOrchContainer() image = %s, want %s", container.Image, customImage)

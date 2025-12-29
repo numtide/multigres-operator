@@ -34,6 +34,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 				},
 			},
 			scheme: scheme,
@@ -83,8 +88,18 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:      "multigateway",
-									Image:     DefaultMultiGatewayImage,
+									Name:  "multigateway",
+									Image: DefaultMultiGatewayImage,
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--topo-implementation", "etcd2",
+										"--cell", "zone1",
+									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
 										{
@@ -119,6 +134,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(5)),
 					},
@@ -171,8 +191,18 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:      "multigateway",
-									Image:     DefaultMultiGatewayImage,
+									Name:  "multigateway",
+									Image: DefaultMultiGatewayImage,
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--topo-implementation", "etcd2",
+										"--cell", "zone2",
+									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
 										{
@@ -208,6 +238,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.CellSpec{
 					Name:              "zone3",
 					MultiGatewayImage: "custom/multigateway:v1.2.3",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 				},
 			},
 			scheme: scheme,
@@ -257,8 +292,18 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:      "multigateway",
-									Image:     "custom/multigateway:v1.2.3",
+									Name:  "multigateway",
+									Image: "custom/multigateway:v1.2.3",
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--topo-implementation", "etcd2",
+										"--cell", "zone3",
+									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
 										{
@@ -293,6 +338,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone4",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Affinity: &corev1.Affinity{
 							NodeAffinity: &corev1.NodeAffinity{
@@ -361,8 +411,18 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								{
-									Name:      "multigateway",
-									Image:     DefaultMultiGatewayImage,
+									Name:  "multigateway",
+									Image: DefaultMultiGatewayImage,
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--topo-implementation", "etcd2",
+										"--cell", "zone4",
+									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
 										{
@@ -414,6 +474,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone5",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -477,6 +542,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								{
 									Name:  "multigateway",
 									Image: DefaultMultiGatewayImage,
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--topo-implementation", "etcd2",
+										"--cell", "zone5",
+									},
 									Resources: corev1.ResourceRequirements{
 										Requests: corev1.ResourceList{
 											corev1.ResourceCPU:    resource.MustParse("100m"),

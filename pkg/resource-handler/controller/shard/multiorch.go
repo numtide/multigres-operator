@@ -52,7 +52,7 @@ func BuildMultiOrchDeployment(
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
-						buildMultiOrchContainer(shard),
+						buildMultiOrchContainer(shard, cellName),
 					},
 					// TODO: Add Affinity support to MultiOrchSpec (like Cell's StatelessSpec)
 					// This would allow pod affinity/anti-affinity rules for MultiOrch deployment
