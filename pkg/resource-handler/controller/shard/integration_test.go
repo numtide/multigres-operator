@@ -280,22 +280,22 @@ func TestShardReconciliation(t *testing.T) {
 				},
 			},
 			wantResources: []client.Object{
-				// MultiOrch Deployment
+				// MultiOrch Deployment for zone1
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "multi-cell-shard-multiorch",
+						Name:            "multi-cell-shard-multiorch-zone1",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "multi-cell-shard-multiorch", "multiorch", "multigres-global-topo"),
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
 						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
 					},
 					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
+						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "multi-cell-shard-multiorch", "multiorch", "multigres-global-topo"),
+							MatchLabels: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "multi-cell-shard-multiorch", "multiorch", "multigres-global-topo"),
+								Labels: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -317,12 +317,12 @@ func TestShardReconciliation(t *testing.T) {
 						},
 					},
 				},
-				// MultiOrch Service
+				// MultiOrch Service for zone1
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "multi-cell-shard-multiorch",
+						Name:            "multi-cell-shard-multiorch-zone1",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "multi-cell-shard-multiorch", "multiorch", "multigres-global-topo"),
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
 						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -331,7 +331,61 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						Selector: shardLabels(t, "multi-cell-shard-multiorch", "multiorch", "multigres-global-topo"),
+						Selector: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+					},
+				},
+				// MultiOrch Deployment for zone2
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-multiorch-zone2",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "multiorch",
+										Image: "numtide/multigres-operator:latest",
+										Args: []string{
+											"--http-port", "15300",
+											"--grpc-port", "15370",
+											"--topo-implementation", "etcd2",
+										},
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "http", 15300),
+											tcpPort(t, "grpc", 15370),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				// MultiOrch Service for zone2
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-multiorch-zone2",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15300),
+							tcpServicePort(t, "grpc", 15370),
+						},
+						Selector: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
 					},
 				},
 				// StatefulSet for zone1

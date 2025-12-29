@@ -63,18 +63,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				// Verify MultiOrch Deployment was created
+				// Verify MultiOrch Deployment was created (with cell suffix)
 				moDeploy := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-multiorch", Namespace: "default"},
+					types.NamespacedName{Name: "test-shard-multiorch-zone1", Namespace: "default"},
 					moDeploy); err != nil {
 					t.Errorf("MultiOrch Deployment should exist: %v", err)
 				}
 
-				// Verify MultiOrch Service was created
+				// Verify MultiOrch Service was created (with cell suffix)
 				moSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-multiorch", Namespace: "default"},
+					types.NamespacedName{Name: "test-shard-multiorch-zone1", Namespace: "default"},
 					moSvc); err != nil {
 					t.Errorf("MultiOrch Service should exist: %v", err)
 				}
@@ -174,6 +174,33 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					t.Errorf("ReadOnly pool headless Service should exist: %v", err)
 				}
 			},
+		},
+		"error when MultiOrch has no cells specified": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-multiorch-cell",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{}, // Empty cells - should error
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			wantErr:         true,
 		},
 		"error when pool has no cells specified": {
 			shard: &multigresv1alpha1.Shard{
@@ -745,7 +772,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-shard-multiorch" {
+						deploy.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -780,7 +807,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.DeploymentSpec{
@@ -791,7 +818,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-shard-multiorch" {
+						deploy.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -826,7 +853,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-multiorch" {
+					if key.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -860,7 +887,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch" {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -895,20 +922,20 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch" {
+					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -943,14 +970,14 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-svc-multiorch",
+						Name:      "test-shard-svc-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: testutil.FailOnNamespacedKeyName(
-					"test-shard-svc-multiorch",
+					"test-shard-svc-multiorch-zone1",
 					"default",
 					testutil.ErrNetworkTimeout,
 				),
@@ -1020,13 +1047,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
@@ -1078,13 +1105,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
@@ -1161,13 +1188,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
@@ -1222,13 +1249,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},

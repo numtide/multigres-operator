@@ -18,23 +18,22 @@ const (
 	MultiOrchComponentName = "multiorch"
 )
 
-// BuildMultiOrchDeployment creates a Deployment for the MultiOrch component.
+// BuildMultiOrchDeployment creates a Deployment for the MultiOrch component in a specific cell.
+// For shards spanning multiple cells, this function should be called once per cell.
 // MultiOrch handles orchestration for the shard.
 func BuildMultiOrchDeployment(
 	shard *multigresv1alpha1.Shard,
+	cellName string,
 	scheme *runtime.Scheme,
 ) (*appsv1.Deployment, error) {
-	// MultiOrch should be deployed one per Cell.
-	// The user provided config of "Cells" can specify exact cells to deploy to,
-	// and when not specified, MultigresCluster configuration should pass down
-	// computed list of Cells associated for the entire MultigresCluster.
-	cellCount := len(shard.Spec.MultiOrch.Cells)
-	replicas := int32(cellCount)
+	// Default to 1 replica per cell if not specified
+	replicas := int32(1)
+	if shard.Spec.MultiOrch.Replicas != nil {
+		replicas = *shard.Spec.MultiOrch.Replicas
+	}
 
-	name := shard.Name + "-multiorch"
-	// MultiOrch doesn't have a specific cell, use default
-	// TODO: This label setup needs to be further reviewed, it probably needs more.
-	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
+	name := buildMultiOrchNameWithCell(shard.Name, cellName)
+	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -69,13 +68,14 @@ func BuildMultiOrchDeployment(
 	return deployment, nil
 }
 
-// BuildMultiOrchService creates a Service for the MultiOrch component.
+// BuildMultiOrchService creates a Service for the MultiOrch component in a specific cell.
 func BuildMultiOrchService(
 	shard *multigresv1alpha1.Shard,
+	cellName string,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := shard.Name + "-multiorch"
-	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
+	name := buildMultiOrchNameWithCell(shard.Name, cellName)
+	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -95,4 +95,24 @@ func BuildMultiOrchService(
 	}
 
 	return svc, nil
+}
+
+// buildMultiOrchNameWithCell generates the name for MultiOrch resources in a specific cell.
+// Format: {shardName}-multiorch-{cellName}
+func buildMultiOrchNameWithCell(shardName, cellName string) string {
+	return fmt.Sprintf("%s-multiorch-%s", shardName, cellName)
+}
+
+// buildMultiOrchLabelsWithCell creates labels for MultiOrch resources in a specific cell.
+func buildMultiOrchLabelsWithCell(
+	shard *multigresv1alpha1.Shard,
+	cellName string,
+) map[string]string {
+	name := buildMultiOrchNameWithCell(shard.Name, cellName)
+	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
+	metadata.AddCellLabel(labels, cellName)
+	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
+	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
+	metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
+	return labels
 }

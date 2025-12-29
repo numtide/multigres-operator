@@ -138,7 +138,7 @@ func TestReconcileMultiOrchDeployment_InvalidScheme(t *testing.T) {
 		Scheme: invalidScheme,
 	}
 
-	err := reconciler.reconcileMultiOrchDeployment(context.Background(), shard)
+	err := reconciler.reconcileMultiOrchDeployment(context.Background(), shard, "cell1")
 	if err == nil {
 		t.Error("reconcileMultiOrchDeployment() should error with invalid scheme")
 	}
@@ -164,7 +164,7 @@ func TestReconcileMultiOrchService_InvalidScheme(t *testing.T) {
 		Scheme: invalidScheme,
 	}
 
-	err := reconciler.reconcileMultiOrchService(context.Background(), shard)
+	err := reconciler.reconcileMultiOrchService(context.Background(), shard, "cell1")
 	if err == nil {
 		t.Error("reconcileMultiOrchService() should error with invalid scheme")
 	}
@@ -334,7 +334,7 @@ func TestReconcileMultiOrchDeployment_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-multiorch", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName("test-shard-multiorch-cell1", testutil.ErrNetworkTimeout),
 	})
 
 	reconciler := &ShardReconciler{
@@ -342,7 +342,7 @@ func TestReconcileMultiOrchDeployment_GetError(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	err := reconciler.reconcileMultiOrchDeployment(context.Background(), shard)
+	err := reconciler.reconcileMultiOrchDeployment(context.Background(), shard, "cell1")
 	if err == nil {
 		t.Error("reconcileMultiOrchDeployment() should error on Get failure")
 	}
@@ -369,7 +369,7 @@ func TestReconcileMultiOrchService_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-multiorch", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName("test-shard-multiorch-cell1", testutil.ErrNetworkTimeout),
 	})
 
 	reconciler := &ShardReconciler{
@@ -377,7 +377,7 @@ func TestReconcileMultiOrchService_GetError(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	err := reconciler.reconcileMultiOrchService(context.Background(), shard)
+	err := reconciler.reconcileMultiOrchService(context.Background(), shard, "cell1")
 	if err == nil {
 		t.Error("reconcileMultiOrchService() should error on Get failure")
 	}

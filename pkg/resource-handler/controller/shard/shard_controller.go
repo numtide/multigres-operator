@@ -60,16 +60,26 @@ func (r *ShardReconciler) Reconcile(
 		}
 	}
 
-	// Reconcile MultiOrch Deployment
-	if err := r.reconcileMultiOrchDeployment(ctx, shard); err != nil {
-		logger.Error(err, "Failed to reconcile MultiOrch Deployment")
-		return ctrl.Result{}, err
+	// Reconcile MultiOrch - one Deployment and Service per cell
+	cells := shard.Spec.MultiOrch.Cells
+	if len(cells) == 0 {
+		return ctrl.Result{}, fmt.Errorf("MultiOrch has no cells specified - cannot deploy without cell information")
 	}
 
-	// Reconcile MultiOrch Service
-	if err := r.reconcileMultiOrchService(ctx, shard); err != nil {
-		logger.Error(err, "Failed to reconcile MultiOrch Service")
-		return ctrl.Result{}, err
+	for _, cell := range cells {
+		cellName := string(cell)
+
+		// Reconcile MultiOrch Deployment for this cell
+		if err := r.reconcileMultiOrchDeployment(ctx, shard, cellName); err != nil {
+			logger.Error(err, "Failed to reconcile MultiOrch Deployment", "cell", cellName)
+			return ctrl.Result{}, err
+		}
+
+		// Reconcile MultiOrch Service for this cell
+		if err := r.reconcileMultiOrchService(ctx, shard, cellName); err != nil {
+			logger.Error(err, "Failed to reconcile MultiOrch Service", "cell", cellName)
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Reconcile each pool
@@ -113,12 +123,13 @@ func (r *ShardReconciler) handleDeletion(
 	return ctrl.Result{}, nil
 }
 
-// reconcileMultiOrchDeployment creates or updates the MultiOrch Deployment.
+// reconcileMultiOrchDeployment creates or updates the MultiOrch Deployment for a specific cell.
 func (r *ShardReconciler) reconcileMultiOrchDeployment(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
+	cellName string,
 ) error {
-	desired, err := BuildMultiOrchDeployment(shard, r.Scheme)
+	desired, err := BuildMultiOrchDeployment(shard, cellName, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build MultiOrch Deployment: %w", err)
 	}
@@ -150,12 +161,13 @@ func (r *ShardReconciler) reconcileMultiOrchDeployment(
 	return nil
 }
 
-// reconcileMultiOrchService creates or updates the MultiOrch Service.
+// reconcileMultiOrchService creates or updates the MultiOrch Service for a specific cell.
 func (r *ShardReconciler) reconcileMultiOrchService(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
+	cellName string,
 ) error {
-	desired, err := BuildMultiOrchService(shard, r.Scheme)
+	desired, err := BuildMultiOrchService(shard, cellName, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build MultiOrch Service: %w", err)
 	}
