@@ -69,7 +69,9 @@ func TestTopoServerReconciliation(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{},
+				},
 			},
 			wantResources: []client.Object{
 				&appsv1.StatefulSet{

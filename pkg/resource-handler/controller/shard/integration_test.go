@@ -69,8 +69,8 @@ func TestShardReconciliation(t *testing.T) {
 					TableGroupName: "default",
 					ShardName:      "0",
 					Images: multigresv1alpha1.ShardImages{
-						MultiOrch:   "numtide/multigres-operator:latest",
-						MultiPooler: "ghcr.io/multigres/multipooler:latest",
+						MultiOrch:   "ghcr.io/multigres/multigres:latest",
+						MultiPooler: "ghcr.io/multigres/multigres:latest",
 						Postgres:    "postgres:17",
 					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -115,11 +115,15 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multiorch",
 											"--http-port", "15300",
 											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
+											"--cell", "us-west-1a",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -169,11 +173,15 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multiorch",
 											"--http-port", "15300",
 											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
+											"--cell", "us-west-1b",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -204,16 +212,16 @@ func TestShardReconciliation(t *testing.T) {
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-pool-primary",
+						Name:            "test-shard-pool-primary-us-west-1a",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "test-shard-pool-primary-headless",
+						ServiceName: "test-shard-pool-primary-us-west-1a-headless",
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+							MatchLabels: shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 						},
 						PodManagementPolicy: appsv1.ParallelPodManagement,
 						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -221,28 +229,36 @@ func TestShardReconciliation(t *testing.T) {
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+								Labels: shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 							},
 							Spec: corev1.PodSpec{
 								InitContainers: []corev1.Container{
 									{
-										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/pgctld:latest",
-										Command: []string{"sh", "-c", "cp /pgctld /shared/pgctld && chmod +x /shared/pgctld"},
+										Name:  "pgctld-init",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"pgctld",
+											"copy-binary",
+											"--output", "/shared/pgctld",
+										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
 										},
 									},
 									{
 										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multipooler:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multipooler",
 											"--http-port", "15200",
 											"--grpc-port", "15270",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
 											"--cell", "us-west-1a",
 											"--database", "testdb",
 											"--table-group", "default",
+											"--shard", "0",
 											"--service-id", "test-shard-pool-primary",
 											"--pgctld-addr", "localhost:15470",
 											"--pg-port", "5432",
@@ -283,6 +299,7 @@ func TestShardReconciliation(t *testing.T) {
 											corev1.ResourceStorage: resource.MustParse("10Gi"),
 										},
 									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
 								},
 								Status: corev1.PersistentVolumeClaimStatus{
 									Phase: corev1.ClaimPending,
@@ -293,9 +310,9 @@ func TestShardReconciliation(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-pool-primary-headless",
+						Name:            "test-shard-pool-primary-us-west-1a-headless",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -306,7 +323,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15270),
 							tcpServicePort(t, "postgres", 5432),
 						},
-						Selector:                 shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+						Selector:                 shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 						PublishNotReadyAddresses: true,
 					},
 				},
@@ -323,8 +340,8 @@ func TestShardReconciliation(t *testing.T) {
 					TableGroupName: "default",
 					ShardName:      "0",
 					Images: multigresv1alpha1.ShardImages{
-						MultiOrch:   "numtide/multigres-operator:latest",
-						MultiPooler: "ghcr.io/multigres/multipooler:latest",
+						MultiOrch:   "ghcr.io/multigres/multigres:latest",
+						MultiPooler: "ghcr.io/multigres/multigres:latest",
 						Postgres:    "postgres:17",
 					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -369,11 +386,15 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multiorch",
 											"--http-port", "15300",
 											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
+											"--cell", "zone1",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -423,11 +444,15 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multiorch",
 											"--http-port", "15300",
 											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
+											"--cell", "zone2",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -486,10 +511,11 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:  "pgctld-init",
-										Image: "ghcr.io/multigres/pgctld:latest",
-										Command: []string{
-											"sh", "-c",
-											"cp /pgctld /shared/pgctld && chmod +x /shared/pgctld",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"pgctld",
+											"copy-binary",
+											"--output", "/shared/pgctld",
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
@@ -497,14 +523,18 @@ func TestShardReconciliation(t *testing.T) {
 									},
 									{
 										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multipooler:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multipooler",
 											"--http-port", "15200",
 											"--grpc-port", "15270",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
 											"--cell", "zone1",
 											"--database", "testdb",
 											"--table-group", "default",
+											"--shard", "0",
 											"--service-id", "multi-cell-shard-pool-primary",
 											"--pgctld-addr", "localhost:15470",
 											"--pg-port", "5432",
@@ -541,6 +571,10 @@ func TestShardReconciliation(t *testing.T) {
 											corev1.ResourceStorage: resource.MustParse("10Gi"),
 										},
 									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+								},
+								Status: corev1.PersistentVolumeClaimStatus{
+									Phase: corev1.ClaimPending,
 								},
 							},
 						},
@@ -555,6 +589,7 @@ func TestShardReconciliation(t *testing.T) {
 						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
 					},
 					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeClusterIP,
 						ClusterIP: corev1.ClusterIPNone,
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "http", 15200),
@@ -595,10 +630,11 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:  "pgctld-init",
-										Image: "ghcr.io/multigres/pgctld:latest",
-										Command: []string{
-											"sh", "-c",
-											"cp /pgctld /shared/pgctld && chmod +x /shared/pgctld",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"pgctld",
+											"copy-binary",
+											"--output", "/shared/pgctld",
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
@@ -606,14 +642,18 @@ func TestShardReconciliation(t *testing.T) {
 									},
 									{
 										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multipooler:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multipooler",
 											"--http-port", "15200",
 											"--grpc-port", "15270",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
 											"--cell", "zone2",
 											"--database", "testdb",
 											"--table-group", "default",
+											"--shard", "0",
 											"--service-id", "multi-cell-shard-pool-primary",
 											"--pgctld-addr", "localhost:15470",
 											"--pg-port", "5432",
@@ -650,6 +690,10 @@ func TestShardReconciliation(t *testing.T) {
 											corev1.ResourceStorage: resource.MustParse("10Gi"),
 										},
 									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+								},
+								Status: corev1.PersistentVolumeClaimStatus{
+									Phase: corev1.ClaimPending,
 								},
 							},
 						},
@@ -664,6 +708,7 @@ func TestShardReconciliation(t *testing.T) {
 						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
 					},
 					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeClusterIP,
 						ClusterIP: corev1.ClusterIPNone,
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "http", 15200),
