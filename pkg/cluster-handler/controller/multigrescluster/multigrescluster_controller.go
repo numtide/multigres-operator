@@ -68,8 +68,6 @@ func (r *MultigresClusterReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
-	// This now returns *resolver.Resolver
-	// Renamed variable to 'res' to avoid collision with package name 'resolver'
 	res := resolver.NewResolver(r.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
 
 	// Apply defaults (in-memory) to ensure we have images/configs even if webhook didn't run
