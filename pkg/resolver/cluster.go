@@ -120,6 +120,13 @@ func isResourcesEmpty(res corev1.ResourceRequirements) bool {
 	return len(res.Requests) == 0 && len(res.Limits) == 0
 }
 
+// isResourcesZero checks if the resource requirements are strictly the zero value (nil maps).
+// This mimics reflect.DeepEqual(res, corev1.ResourceRequirements{}) but is safer and faster.
+// It is used for merging logic where we want to distinguish "inherit" (nil) from "empty" (set to empty).
+func isResourcesZero(res corev1.ResourceRequirements) bool {
+	return res.Requests == nil && res.Limits == nil && res.Claims == nil
+}
+
 // ResolveCoreTemplate determines the target CoreTemplate name and fetches it.
 //
 // If templateName is empty, it uses the following precedence:

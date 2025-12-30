@@ -1,9 +1,11 @@
+// Package resolver provides the central logic for resolving MultigresCluster
+// defaults, templates, and configurations.
+//
+// It serves as the single source of truth for merging user inputs,
+// cluster-level defaults, and external templates into a final resource specification.
 package resolver
 
 import (
-	"reflect"
-
-	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -46,7 +48,7 @@ func mergeStatelessSpec(
 	}
 
 	// Safety: Use DeepCopy to ensure we don't share mutable map references (Requests/Limits)
-	if !reflect.DeepEqual(override.Resources, corev1.ResourceRequirements{}) {
+	if !isResourcesZero(override.Resources) {
 		base.Resources = *override.Resources.DeepCopy()
 	}
 

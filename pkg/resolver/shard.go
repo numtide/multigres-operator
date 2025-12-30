@@ -3,9 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"reflect"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -110,10 +108,10 @@ func mergePoolSpec(
 		out.Storage = override.Storage
 	}
 	// Safety: Use DeepCopy to avoid sharing pointers to maps within ResourceRequirements
-	if !reflect.DeepEqual(override.Postgres.Resources, corev1.ResourceRequirements{}) {
+	if !isResourcesZero(override.Postgres.Resources) {
 		out.Postgres.Resources = *override.Postgres.Resources.DeepCopy()
 	}
-	if !reflect.DeepEqual(override.Multipooler.Resources, corev1.ResourceRequirements{}) {
+	if !isResourcesZero(override.Multipooler.Resources) {
 		out.Multipooler.Resources = *override.Multipooler.Resources.DeepCopy()
 	}
 	if override.Affinity != nil {
