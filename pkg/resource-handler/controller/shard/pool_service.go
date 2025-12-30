@@ -49,11 +49,6 @@ func BuildPoolHeadlessService(
 	return svc, nil
 }
 
-// buildPoolName generates a consistent name for pool resources.
-func buildPoolName(shardName, poolName string) string {
-	return fmt.Sprintf("%s-pool-%s", shardName, poolName)
-}
-
 // buildPoolNameWithCell generates the name for pool resources in a specific cell.
 // Format: {shardName}-pool-{poolName}-{cellName}
 // For pools spanning multiple cells, this creates unique names per cell.
