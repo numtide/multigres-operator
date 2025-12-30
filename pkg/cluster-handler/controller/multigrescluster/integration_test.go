@@ -128,7 +128,7 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 							Image:     "etcd:latest",
 							Replicas:  ptr.To(int32(3)), // Default from logic
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
-							Resources: resolver.DefaultResourcesEtcd,
+							Resources: resolver.DefaultResourcesEtcd(),
 						},
 					},
 				},
@@ -154,7 +154,7 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 									{
 										Name:      "multiadmin",
 										Image:     "admin:latest",
-										Resources: resolver.DefaultResourcesAdmin,
+										Resources: resolver.DefaultResourcesAdmin(),
 									},
 								},
 							},

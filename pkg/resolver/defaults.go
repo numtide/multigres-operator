@@ -46,13 +46,10 @@ const (
 	DefaultEtcdStorageSize = "1Gi"
 )
 
-// Resource Defaults (Computed variables for reuse).
-// Note: These are declared as variables because Go does not support const structs,
-// but they should be treated as immutable.
-var (
-	// DefaultResourcesAdmin defines the default resource requests and limits for the MultiAdmin deployment.
-	// It requests 100m CPU and 128Mi memory, with a limit of 256Mi memory.
-	DefaultResourcesAdmin = corev1.ResourceRequirements{
+// DefaultResourcesAdmin returns the default resource requests and limits for the MultiAdmin deployment.
+// It requests 100m CPU and 128Mi memory, with a limit of 256Mi memory.
+func DefaultResourcesAdmin() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("100m"),
 			corev1.ResourceMemory: resource.MustParse("128Mi"),
@@ -61,10 +58,12 @@ var (
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
 		},
 	}
+}
 
-	// DefaultResourcesEtcd defines the default resource requests and limits for the managed Etcd cluster.
-	// It requests 100m CPU and 256Mi memory, with a limit of 512Mi memory.
-	DefaultResourcesEtcd = corev1.ResourceRequirements{
+// DefaultResourcesEtcd returns the default resource requests and limits for the managed Etcd cluster.
+// It requests 100m CPU and 256Mi memory, with a limit of 512Mi memory.
+func DefaultResourcesEtcd() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("100m"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
@@ -73,4 +72,4 @@ var (
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		},
 	}
-)
+}

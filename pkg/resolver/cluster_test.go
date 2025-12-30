@@ -115,14 +115,14 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     DefaultEtcdImage,
 							Replicas:  ptr.To(DefaultEtcdReplicas),
-							Resources: DefaultResourcesEtcd,
+							Resources: DefaultResourcesEtcd(),
 							Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 						},
 					},
 					MultiAdmin: multigresv1alpha1.MultiAdminConfig{
 						Spec: &multigresv1alpha1.StatelessSpec{
 							Replicas:  ptr.To(DefaultAdminReplicas),
-							Resources: DefaultResourcesAdmin,
+							Resources: DefaultResourcesAdmin(),
 						},
 					},
 				},
@@ -199,7 +199,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     "custom-etcd",
 							Replicas:  ptr.To(DefaultEtcdReplicas),
-							Resources: DefaultResourcesEtcd,
+							Resources: DefaultResourcesEtcd(),
 							Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 						},
 					},
@@ -344,7 +344,7 @@ func TestResolveGlobalTopo(t *testing.T) {
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:     "inline",
 					Replicas:  ptr.To(DefaultEtcdReplicas),
-					Resources: DefaultResourcesEtcd,
+					Resources: DefaultResourcesEtcd(),
 					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 				},
 			},
@@ -375,7 +375,7 @@ func TestResolveGlobalTopo(t *testing.T) {
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:     "template",
 					Replicas:  ptr.To(DefaultEtcdReplicas),
-					Resources: DefaultResourcesEtcd,
+					Resources: DefaultResourcesEtcd(),
 					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 				},
 			},
@@ -391,7 +391,7 @@ func TestResolveGlobalTopo(t *testing.T) {
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:     DefaultEtcdImage,
 					Replicas:  ptr.To(DefaultEtcdReplicas),
-					Resources: DefaultResourcesEtcd,
+					Resources: DefaultResourcesEtcd(),
 					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 				},
 			},
@@ -403,7 +403,7 @@ func TestResolveGlobalTopo(t *testing.T) {
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:     DefaultEtcdImage,
 					Replicas:  ptr.To(DefaultEtcdReplicas),
-					Resources: DefaultResourcesEtcd,
+					Resources: DefaultResourcesEtcd(),
 					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 				},
 			},
@@ -436,7 +436,7 @@ func TestResolveMultiAdmin(t *testing.T) {
 			tpl: nil,
 			want: &multigresv1alpha1.StatelessSpec{
 				Replicas:  ptr.To(int32(5)),
-				Resources: DefaultResourcesAdmin,
+				Resources: DefaultResourcesAdmin(),
 			},
 		},
 		"Template Fallback": {
@@ -448,7 +448,7 @@ func TestResolveMultiAdmin(t *testing.T) {
 			},
 			want: &multigresv1alpha1.StatelessSpec{
 				Replicas:  ptr.To(int32(3)),
-				Resources: DefaultResourcesAdmin,
+				Resources: DefaultResourcesAdmin(),
 			},
 		},
 		"Template Found but Nil Content": {
@@ -460,7 +460,7 @@ func TestResolveMultiAdmin(t *testing.T) {
 			},
 			want: &multigresv1alpha1.StatelessSpec{
 				Replicas:  ptr.To(DefaultAdminReplicas),
-				Resources: DefaultResourcesAdmin,
+				Resources: DefaultResourcesAdmin(),
 			},
 		},
 		"No-op (Nil Template)": {
@@ -468,7 +468,7 @@ func TestResolveMultiAdmin(t *testing.T) {
 			tpl:  nil,
 			want: &multigresv1alpha1.StatelessSpec{
 				Replicas:  ptr.To(DefaultAdminReplicas),
-				Resources: DefaultResourcesAdmin,
+				Resources: DefaultResourcesAdmin(),
 			},
 		},
 	}

@@ -60,7 +60,7 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 	if cluster.Spec.MultiAdmin.Spec != nil {
 		defaultStatelessSpec(
 			cluster.Spec.MultiAdmin.Spec,
-			DefaultResourcesAdmin,
+			DefaultResourcesAdmin(),
 			DefaultAdminReplicas,
 		)
 	}
@@ -93,8 +93,8 @@ func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec) {
 		spec.Replicas = &r
 	}
 	if isResourcesEmpty(spec.Resources) {
-		// Safety: Must DeepCopy global default to avoid shared mutable state
-		spec.Resources = *DefaultResourcesEtcd.DeepCopy()
+		// Safety: DefaultResourcesEtcd() returns a fresh struct, so no DeepCopy needed.
+		spec.Resources = DefaultResourcesEtcd()
 	}
 }
 
@@ -108,7 +108,8 @@ func defaultStatelessSpec(
 		spec.Replicas = &defaultReplicas
 	}
 	if isResourcesEmpty(spec.Resources) {
-		// Safety: Must DeepCopy global default to avoid shared mutable state
+		// Safety: We assume defaultRes is passed by value (a fresh copy from the default function).
+		// We perform a DeepCopy to ensure spec.Resources owns its own maps, independent of the input defaultRes.
 		spec.Resources = *defaultRes.DeepCopy()
 	}
 }
@@ -208,7 +209,7 @@ func ResolveMultiAdmin(
 	}
 
 	// 2. Apply Deep Defaults
-	defaultStatelessSpec(finalSpec, DefaultResourcesAdmin, DefaultAdminReplicas)
+	defaultStatelessSpec(finalSpec, DefaultResourcesAdmin(), DefaultAdminReplicas)
 
 	return finalSpec
 }
