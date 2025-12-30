@@ -65,7 +65,12 @@ func MergeCellConfig(
 	}
 
 	if inline != nil {
-		return inline.MultiGateway, inline.LocalTopoServer
+		gw := *inline.MultiGateway.DeepCopy()
+		var topo *multigresv1alpha1.LocalTopoServerSpec
+		if inline.LocalTopoServer != nil {
+			topo = inline.LocalTopoServer.DeepCopy()
+		}
+		return gw, topo
 	}
 
 	return gateway, localTopo

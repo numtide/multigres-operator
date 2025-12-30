@@ -214,7 +214,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 			got := tc.input.DeepCopy()
 			r.PopulateClusterDefaults(got)
 
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("Cluster defaults mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -414,7 +414,7 @@ func TestResolveGlobalTopo(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			got := ResolveGlobalTopo(tc.spec, tc.tpl)
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("ResolveGlobalTopo mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -477,7 +477,7 @@ func TestResolveMultiAdmin(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			got := ResolveMultiAdmin(tc.spec, tc.tpl)
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("ResolveMultiAdmin mismatch (-want +got):\n%s", diff)
 			}
 		})

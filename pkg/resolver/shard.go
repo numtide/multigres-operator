@@ -47,7 +47,12 @@ func MergeShardConfig(
 	inline *multigresv1alpha1.ShardInlineSpec,
 ) (multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec) {
 	if inline != nil {
-		return inline.MultiOrch, inline.Pools
+		orch := *inline.MultiOrch.DeepCopy()
+		pools := make(map[string]multigresv1alpha1.PoolSpec)
+		for k, v := range inline.Pools {
+			pools[k] = *v.DeepCopy()
+		}
+		return orch, pools
 	}
 
 	var multiOrch multigresv1alpha1.MultiOrchSpec

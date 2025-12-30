@@ -211,8 +211,14 @@ func TestMergeCellConfig(t *testing.T) {
 			},
 			inline: &multigresv1alpha1.CellInlineSpec{
 				MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(99))},
+				LocalTopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline-etcd"},
+				},
 			},
 			wantGw: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(99))},
+			wantTopo: &multigresv1alpha1.LocalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline-etcd"},
+			},
 		},
 		"Nil Template (Override Only)": {
 			tpl: nil,
@@ -233,7 +239,7 @@ func TestMergeCellConfig(t *testing.T) {
 			t.Parallel()
 			gw, topo := MergeCellConfig(tc.tpl, tc.overrides, tc.inline)
 
-			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("Gateway mismatch (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.wantTopo, topo); diff != "" {

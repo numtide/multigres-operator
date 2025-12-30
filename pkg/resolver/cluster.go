@@ -171,7 +171,7 @@ func ResolveGlobalTopo(
 
 	// 1. Determine base config
 	if spec.Etcd != nil || spec.External != nil {
-		finalSpec = spec
+		finalSpec = spec.DeepCopy()
 	} else if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
 		// Copy from template
 		finalSpec = &multigresv1alpha1.GlobalTopoServerSpec{
@@ -203,9 +203,9 @@ func ResolveMultiAdmin(
 
 	// 1. Determine base config
 	if spec.Spec != nil {
-		finalSpec = spec.Spec
+		finalSpec = spec.Spec.DeepCopy()
 	} else if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil {
-		finalSpec = coreTemplate.Spec.MultiAdmin
+		finalSpec = coreTemplate.Spec.MultiAdmin.DeepCopy()
 	} else {
 		// Fallback to empty spec so we can apply defaults
 		finalSpec = &multigresv1alpha1.StatelessSpec{}

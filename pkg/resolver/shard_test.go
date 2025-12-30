@@ -265,9 +265,15 @@ func TestMergeShardConfig(t *testing.T) {
 				MultiOrch: multigresv1alpha1.MultiOrchSpec{
 					Cells: []multigresv1alpha1.CellName{"inline"},
 				},
+				Pools: map[string]multigresv1alpha1.PoolSpec{
+					"inline-pool": {Type: "read"},
+				},
 			},
 			wantOrch: multigresv1alpha1.MultiOrchSpec{
 				Cells: []multigresv1alpha1.CellName{"inline"},
+			},
+			wantPools: map[string]multigresv1alpha1.PoolSpec{
+				"inline-pool": {Type: "read"},
 			},
 		},
 		"Nil Template": {
@@ -290,7 +296,7 @@ func TestMergeShardConfig(t *testing.T) {
 			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
 				t.Errorf("Orch mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.wantPools, pools, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			if diff := cmp.Diff(tc.wantPools, pools, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("Pools mismatch (-want +got):\n%s", diff)
 			}
 		})
