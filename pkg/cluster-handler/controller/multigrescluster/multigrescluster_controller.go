@@ -305,7 +305,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			cellCR.Spec.Zone = cellCfg.Zone
 			cellCR.Spec.Region = cellCfg.Region
 			cellCR.Spec.MultiGatewayImage = cluster.Spec.Images.MultiGateway
-			cellCR.Spec.MultiGateway = gatewaySpec
+			cellCR.Spec.MultiGateway = *gatewaySpec
 			cellCR.Spec.AllCells = allCellNames
 
 			cellCR.Spec.GlobalTopoServer = globalTopoRef

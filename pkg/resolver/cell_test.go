@@ -115,7 +115,7 @@ func TestMergeCellConfig(t *testing.T) {
 		tpl       *multigresv1alpha1.CellTemplate
 		overrides *multigresv1alpha1.CellOverrides
 		inline    *multigresv1alpha1.CellInlineSpec
-		wantGw    multigresv1alpha1.StatelessSpec
+		wantGw    *multigresv1alpha1.StatelessSpec
 		wantTopo  *multigresv1alpha1.LocalTopoServerSpec
 	}{
 		"Full Merge With Resources and Affinity Overrides": {
@@ -145,7 +145,7 @@ func TestMergeCellConfig(t *testing.T) {
 					},
 				},
 			},
-			wantGw: multigresv1alpha1.StatelessSpec{
+			wantGw: &multigresv1alpha1.StatelessSpec{
 				Replicas:       ptr.To(int32(2)),
 				PodAnnotations: map[string]string{"foo": "bar", "baz": "qux"},
 				Resources: corev1.ResourceRequirements{
@@ -166,7 +166,7 @@ func TestMergeCellConfig(t *testing.T) {
 				},
 			},
 			overrides: nil,
-			wantGw:    multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+			wantGw:    &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 		},
 		"Preserve Base (Empty Override)": {
 			tpl: &multigresv1alpha1.CellTemplate{
@@ -180,7 +180,7 @@ func TestMergeCellConfig(t *testing.T) {
 			overrides: &multigresv1alpha1.CellOverrides{
 				MultiGateway: &multigresv1alpha1.StatelessSpec{},
 			},
-			wantGw: multigresv1alpha1.StatelessSpec{
+			wantGw: &multigresv1alpha1.StatelessSpec{
 				Replicas:       ptr.To(int32(1)),
 				PodAnnotations: map[string]string{"foo": "bar"},
 			},
@@ -197,7 +197,7 @@ func TestMergeCellConfig(t *testing.T) {
 					PodLabels:      map[string]string{"c": "d"},
 				},
 			},
-			wantGw: multigresv1alpha1.StatelessSpec{
+			wantGw: &multigresv1alpha1.StatelessSpec{
 				Replicas:       ptr.To(int32(1)),
 				PodAnnotations: map[string]string{"a": "b"},
 				PodLabels:      map[string]string{"c": "d"},
@@ -215,7 +215,7 @@ func TestMergeCellConfig(t *testing.T) {
 					Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline-etcd"},
 				},
 			},
-			wantGw: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(99))},
+			wantGw: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(99))},
 			wantTopo: &multigresv1alpha1.LocalTopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline-etcd"},
 			},
@@ -225,11 +225,11 @@ func TestMergeCellConfig(t *testing.T) {
 			overrides: &multigresv1alpha1.CellOverrides{
 				MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(2))},
 			},
-			wantGw: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(2))},
+			wantGw: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(2))},
 		},
 		"Nil Everything": {
 			tpl:      nil,
-			wantGw:   multigresv1alpha1.StatelessSpec{},
+			wantGw:   &multigresv1alpha1.StatelessSpec{},
 			wantTopo: nil,
 		},
 	}

@@ -45,13 +45,13 @@ func MergeCellConfig(
 	template *multigresv1alpha1.CellTemplate,
 	overrides *multigresv1alpha1.CellOverrides,
 	inline *multigresv1alpha1.CellInlineSpec,
-) (multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec) {
-	var gateway multigresv1alpha1.StatelessSpec
+) (*multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec) {
+	gateway := &multigresv1alpha1.StatelessSpec{}
 	var localTopo *multigresv1alpha1.LocalTopoServerSpec
 
 	if template != nil {
 		if template.Spec.MultiGateway != nil {
-			gateway = *template.Spec.MultiGateway.DeepCopy()
+			gateway = template.Spec.MultiGateway.DeepCopy()
 		}
 		if template.Spec.LocalTopoServer != nil {
 			localTopo = template.Spec.LocalTopoServer.DeepCopy()
@@ -60,12 +60,12 @@ func MergeCellConfig(
 
 	if overrides != nil {
 		if overrides.MultiGateway != nil {
-			mergeStatelessSpec(&gateway, overrides.MultiGateway)
+			mergeStatelessSpec(gateway, overrides.MultiGateway)
 		}
 	}
 
 	if inline != nil {
-		gw := *inline.MultiGateway.DeepCopy()
+		gw := inline.MultiGateway.DeepCopy()
 		var topo *multigresv1alpha1.LocalTopoServerSpec
 		if inline.LocalTopoServer != nil {
 			topo = inline.LocalTopoServer.DeepCopy()
