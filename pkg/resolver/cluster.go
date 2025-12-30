@@ -92,7 +92,8 @@ func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec) {
 		r := DefaultEtcdReplicas
 		spec.Replicas = &r
 	}
-	if isResourcesEmpty(spec.Resources) {
+	// Use isResourcesZero to ensure we respect overrides that only have Claims
+	if isResourcesZero(spec.Resources) {
 		// Safety: DefaultResourcesEtcd() returns a fresh struct, so no DeepCopy needed.
 		spec.Resources = DefaultResourcesEtcd()
 	}
@@ -107,17 +108,12 @@ func defaultStatelessSpec(
 	if spec.Replicas == nil {
 		spec.Replicas = &defaultReplicas
 	}
-	if isResourcesEmpty(spec.Resources) {
+	// Use isResourcesZero to ensure we respect overrides that only have Claims
+	if isResourcesZero(spec.Resources) {
 		// Safety: We assume defaultRes is passed by value (a fresh copy from the default function).
 		// We perform a DeepCopy to ensure spec.Resources owns its own maps, independent of the input defaultRes.
 		spec.Resources = *defaultRes.DeepCopy()
 	}
-}
-
-// isResourcesEmpty checks if the resource requirements are effectively empty.
-// We prefer this over reflect.DeepEqual to handle cases where maps are initialized but empty.
-func isResourcesEmpty(res corev1.ResourceRequirements) bool {
-	return len(res.Requests) == 0 && len(res.Limits) == 0
 }
 
 // isResourcesZero checks if the resource requirements are strictly the zero value (nil maps).
