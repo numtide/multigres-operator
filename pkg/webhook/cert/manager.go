@@ -2,9 +2,11 @@ package cert
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -51,6 +53,9 @@ type Options struct {
 type Manager struct {
 	Client  client.Client
 	Options Options
+	// rng is the source of randomness. Defaults to crypto/rand.Reader.
+	// We keep this internal but mutable via internal constructors/tests if needed.
+	rng io.Reader
 }
 
 // NewManager creates a new certificate manager.
@@ -58,6 +63,7 @@ func NewManager(c client.Client, opts Options) *Manager {
 	return &Manager{
 		Client:  c,
 		Options: opts,
+		rng:     rand.Reader, // Secure default
 	}
 }
 
@@ -94,8 +100,9 @@ func (m *Manager) ensureSecret(ctx context.Context) (*Artifacts, error) {
 	secret := &corev1.Secret{}
 	err := m.Client.Get(ctx, types.NamespacedName{Name: SecretName, Namespace: m.Options.Namespace}, secret)
 
-	// If secret exists, check if it's valid
+	secretFound := false
 	if err == nil {
+		secretFound = true
 		artifacts := &Artifacts{
 			CACertPEM:     secret.Data["ca.crt"],
 			CAKeyPEM:      secret.Data["ca.key"],
@@ -124,9 +131,10 @@ func (m *Manager) ensureSecret(ctx context.Context) (*Artifacts, error) {
 	}
 
 	logger.Info("generating new self-signed certificates", "commonName", commonName)
-	artifacts, err := GenerateSelfSignedArtifacts(commonName, dnsNames)
-	if err != nil {
-		return nil, err
+	// PASSING m.rng HERE IS THE KEY CHANGE
+	artifacts, genErr := GenerateSelfSignedArtifacts(m.rng, commonName, dnsNames)
+	if genErr != nil {
+		return nil, genErr
 	}
 
 	// Create or Update the Secret
@@ -142,8 +150,7 @@ func (m *Manager) ensureSecret(ctx context.Context) (*Artifacts, error) {
 		"ca.key":  artifacts.CAKeyPEM,
 	}
 
-	// We use CreateOrUpdate logic (or simply Update if it existed, Create if not)
-	if err == nil {
+	if secretFound {
 		if updateErr := m.Client.Update(ctx, secret); updateErr != nil {
 			return nil, fmt.Errorf("failed to update cert secret: %w", updateErr)
 		}

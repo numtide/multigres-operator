@@ -1,19 +1,4 @@
 // Package webhook provides the entry point for the Multigres Operator's admission control layer.
-//
-// This package orchestrates the setup of the controller-runtime webhook server, including:
-//
-//  1. Certificate Management: It delegates to the 'cert' subpackage to ensure TLS certificates
-//     are present (either self-signed or externally provisioned) before the server starts.
-//
-//  2. Handler Registration: It registers the specific admission handlers (from the 'handlers'
-//     subpackage) to their corresponding API paths (e.g., /mutate-..., /validate-...).
-//
-// Usage:
-//
-//	if err := webhook.Setup(mgr, resolver, opts); err != nil {
-//	    setupLog.Error(err, "unable to setup webhook")
-//	    os.Exit(1)
-//	}
 package webhook
 
 import (
@@ -40,6 +25,9 @@ type Options struct {
 	Namespace string
 	// ServiceName is the operator's service name (required for self-signed strategy).
 	ServiceName string
+	// ServiceAccountName is the name of the operator's service account.
+	// Used to exempt the operator from child resource validation blocks.
+	ServiceAccountName string
 }
 
 // Setup configures the webhook server, handles certificate generation (if requested),
@@ -53,8 +41,6 @@ func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 	logger.Info("Setting up webhook server", "strategy", opts.CertStrategy)
 
 	// 1. Certificate Management
-	// If using self-signed certs, we must ensure they exist and patch the
-	// WebhookConfigurations *before* the manager starts the server.
 	if opts.CertStrategy == "self-signed" {
 		certMgr := cert.NewManager(mgr.GetClient(), cert.Options{
 			Namespace:   opts.Namespace,
@@ -72,8 +58,6 @@ func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 	server := mgr.GetWebhookServer()
 
 	// -- Mutating Webhook (Defaulter) --
-	// Path: /mutate-multigres-com-v1alpha1-multigrescluster
-	// This path MUST match the +kubebuilder:webhook annotation in your types or controller
 	server.Register(
 		"/mutate-multigres-com-v1alpha1-multigrescluster",
 		&webhook.Admission{
@@ -82,7 +66,6 @@ func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 	)
 
 	// -- Validating Webhook (MultigresCluster) --
-	// Path: /validate-multigres-com-v1alpha1-multigrescluster
 	server.Register(
 		"/validate-multigres-com-v1alpha1-multigrescluster",
 		&webhook.Admission{
@@ -90,30 +73,44 @@ func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 		},
 	)
 
-	// -- Validating Webhook (DeploymentTemplate) --
-	// Path: /validate-multigres-com-v1alpha1-deploymenttemplate
+	// -- Validating Webhook (Templates - In-Use Protection) --
 	server.Register(
-		"/validate-multigres-com-v1alpha1-deploymenttemplate",
+		"/validate-multigres-com-v1alpha1-coretemplate",
 		&webhook.Admission{
-			Handler: handlers.NewDeploymentTemplateValidator(mgr.GetClient()),
+			Handler: handlers.NewTemplateValidator(mgr.GetClient(), "CoreTemplate"),
+		},
+	)
+	server.Register(
+		"/validate-multigres-com-v1alpha1-celltemplate",
+		&webhook.Admission{
+			Handler: handlers.NewTemplateValidator(mgr.GetClient(), "CellTemplate"),
+		},
+	)
+	server.Register(
+		"/validate-multigres-com-v1alpha1-shardtemplate",
+		&webhook.Admission{
+			Handler: handlers.NewTemplateValidator(mgr.GetClient(), "ShardTemplate"),
 		},
 	)
 
 	// -- Validating Webhook (Child Resources) --
-	// Fallback logic for ValidatingAdmissionPolicy.
-	// We register one handler for multiple paths (Cell, Shard, TopoServer, etc.)
-	childValidator := &webhook.Admission{Handler: handlers.NewChildResourceValidator()}
+	// Construct the validator with the operator's service account as the exempt principal.
+	operatorPrincipal := fmt.Sprintf("system:serviceaccount:%s:%s", opts.Namespace, opts.ServiceAccountName)
+	if opts.ServiceAccountName == "" {
+		// Fallback defaults if not provided
+		operatorPrincipal = fmt.Sprintf("system:serviceaccount:%s:multigres-operator", opts.Namespace)
+	}
 
-	// Paths must match the ValidatingWebhookConfiguration rules you will eventually generate/write
+	childValidator := &webhook.Admission{
+		Handler: handlers.NewChildResourceValidator(operatorPrincipal),
+	}
+
+	// Paths must match the ValidatingWebhookConfiguration
 	childResources := []string{"cell", "shard", "toposerver", "tablegroup"}
 	for _, res := range childResources {
 		path := fmt.Sprintf("/validate-multigres-com-v1alpha1-%s", res)
 		server.Register(path, childValidator)
 	}
-
-	// 3. Register standard types for built-in defaulting/validation if needed
-	// (Only if you were using the simpler Defaulter/Validator interfaces on the types themselves,
-	// but we are using custom handlers to keep logic out of the API package).
 
 	return nil
 }

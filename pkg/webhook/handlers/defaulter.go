@@ -43,11 +43,11 @@ func (d *MultigresClusterDefaulter) Handle(ctx context.Context, req admission.Re
 	}
 
 	// Apply defaults using the central resolver.
-	// This ensures that whether defaults are applied here (webhook) or in the
-	// controller (reconcile loop), the logic is identical.
-	if err := d.Resolver.Resolve(ctx, cluster); err != nil {
-		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to calculate defaults: %w", err))
-	}
+	// We use PopulateClusterDefaults which performs local, stateless defaulting
+	// (e.g. setting default image tags, default template names, and deep defaulting inline specs).
+	// It does NOT fetch external templates, adhering to the design requirement that
+	// webhooks should remain fast and deterministic.
+	d.Resolver.PopulateClusterDefaults(cluster)
 
 	marshaled, err := json.Marshal(cluster)
 	if err != nil {

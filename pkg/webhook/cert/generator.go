@@ -1,12 +1,12 @@
 package cert
 
 import (
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"time"
@@ -34,15 +34,16 @@ type Artifacts struct {
 // GenerateSelfSignedArtifacts generates a complete set of self-signed artifacts:
 // 1. A new Root CA.
 // 2. A Server Certificate signed by that CA for the given Common Name and DNS names.
-func GenerateSelfSignedArtifacts(commonName string, dnsNames []string) (*Artifacts, error) {
-	// 1. Generate CA
-	caCertPEM, caKeyPEM, caPrivKey, err := generateCA()
+// It accepts a random number generator (rng) to allow for secure testing/fault injection.
+func GenerateSelfSignedArtifacts(rng io.Reader, commonName string, dnsNames []string) (*Artifacts, error) {
+	// 1. Generate CA (returns PEMs and the parsed object for signing)
+	caCertPEM, caKeyPEM, caCert, caPrivKey, err := generateCA(rng)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate CA: %w", err)
 	}
 
-	// 2. Generate Server Certificate signed by CA
-	serverCertPEM, serverKeyPEM, err := generateServerCert(commonName, dnsNames, caCertPEM, caPrivKey)
+	// 2. Generate Server Certificate signed by CA (uses parsed object directly)
+	serverCertPEM, serverKeyPEM, err := generateServerCert(rng, commonName, dnsNames, caCert, caPrivKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate server certificate: %w", err)
 	}
@@ -55,10 +56,10 @@ func GenerateSelfSignedArtifacts(commonName string, dnsNames []string) (*Artifac
 	}, nil
 }
 
-func generateCA() ([]byte, []byte, *rsa.PrivateKey, error) {
-	privKey, err := rsa.GenerateKey(rand.Reader, RSAKeySize)
+func generateCA(rng io.Reader) ([]byte, []byte, *x509.Certificate, *rsa.PrivateKey, error) {
+	privKey, err := rsa.GenerateKey(rng, RSAKeySize)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	template := x509.Certificate{
@@ -75,30 +76,26 @@ func generateCA() ([]byte, []byte, *rsa.PrivateKey, error) {
 		IsCA:                  true,
 	}
 
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privKey.PublicKey, privKey)
+	derBytes, err := x509.CreateCertificate(rng, &template, &template, &privKey.PublicKey, privKey)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
+	}
+
+	// Parse it back to get the structural representation needed for signing the next cert
+	caCert, err := x509.ParseCertificate(derBytes)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
 
 	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 	caKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
 
-	return caCertPEM, caKeyPEM, privKey, nil
+	return caCertPEM, caKeyPEM, caCert, privKey, nil
 }
 
-func generateServerCert(commonName string, dnsNames []string, caCertPEM []byte, caKey *rsa.PrivateKey) ([]byte, []byte, error) {
-	// Parse CA Cert to use as parent
-	block, _ := pem.Decode(caCertPEM)
-	if block == nil {
-		return nil, nil, fmt.Errorf("failed to parse generated CA PEM")
-	}
-	caCert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, nil, err
-	}
-
+func generateServerCert(rng io.Reader, commonName string, dnsNames []string, caCert *x509.Certificate, caKey *rsa.PrivateKey) ([]byte, []byte, error) {
 	// Generate Server Key
-	privKey, err := rsa.GenerateKey(rand.Reader, RSAKeySize)
+	privKey, err := rsa.GenerateKey(rng, RSAKeySize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -121,7 +118,7 @@ func generateServerCert(commonName string, dnsNames []string, caCertPEM []byte, 
 		template.IPAddresses = append(template.IPAddresses, ip)
 	}
 
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, caCert, &privKey.PublicKey, caKey)
+	derBytes, err := x509.CreateCertificate(rng, &template, caCert, &privKey.PublicKey, caKey)
 	if err != nil {
 		return nil, nil, err
 	}
