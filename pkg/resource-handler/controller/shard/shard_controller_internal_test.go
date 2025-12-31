@@ -122,7 +122,7 @@ func TestBuildMultiOrchContainer_WithImage(t *testing.T) {
 // Test exists for coverage of defensive error handling.
 func TestReconcile_InvalidScheme(t *testing.T) {
 	tests := map[string]struct {
-		setupShard   func() *multigresv1alpha1.Shard
+		setupShard    func() *multigresv1alpha1.Shard
 		reconcileFunc func(*ShardReconciler, context.Context, *multigresv1alpha1.Shard) error
 	}{
 		"MultiOrchDeployment": {
@@ -287,9 +287,9 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 // TestReconcile_GetError tests error path on Get operations (not NotFound, but network errors).
 func TestReconcile_GetError(t *testing.T) {
 	tests := map[string]struct {
-		setupShard      func() *multigresv1alpha1.Shard
-		failOnKeyName   string
-		reconcileFunc   func(*ShardReconciler, context.Context, *multigresv1alpha1.Shard) error
+		setupShard    func() *multigresv1alpha1.Shard
+		failOnKeyName string
+		reconcileFunc func(*ShardReconciler, context.Context, *multigresv1alpha1.Shard) error
 	}{
 		"MultiOrchDeployment": {
 			setupShard: func() *multigresv1alpha1.Shard {
@@ -395,10 +395,10 @@ func TestReconcile_GetError(t *testing.T) {
 // TestUpdateStatus_MultiOrch tests updateStatus with different MultiOrch deployment scenarios.
 func TestUpdateStatus_MultiOrch(t *testing.T) {
 	tests := map[string]struct {
-		setupObjects   []client.Object
-		expectError    bool
+		setupObjects    []client.Object
+		expectError     bool
 		expectOrchReady bool
-		setupClient    func(*testing.T, *runtime.Scheme, *multigresv1alpha1.Shard) client.Client
+		setupClient     func(*testing.T, *runtime.Scheme, *multigresv1alpha1.Shard) client.Client
 	}{
 		"GetError": {
 			expectError: true,
@@ -409,7 +409,10 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 					WithStatusSubresource(&multigresv1alpha1.Shard{}).
 					Build()
 				return testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-					OnGet: testutil.FailOnKeyName("test-shard-multiorch-zone1", testutil.ErrNetworkTimeout),
+					OnGet: testutil.FailOnKeyName(
+						"test-shard-multiorch-zone1",
+						testutil.ErrNetworkTimeout,
+					),
 				})
 			},
 		},
@@ -500,7 +503,11 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 				}
 
 				if updatedShard.Status.OrchReady != tc.expectOrchReady {
-					t.Errorf("OrchReady = %v, want %v", updatedShard.Status.OrchReady, tc.expectOrchReady)
+					t.Errorf(
+						"OrchReady = %v, want %v",
+						updatedShard.Status.OrchReady,
+						tc.expectOrchReady,
+					)
 				}
 			}
 		})

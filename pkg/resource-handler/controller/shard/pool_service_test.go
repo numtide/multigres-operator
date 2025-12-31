@@ -309,4 +309,3 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 		})
 	}
 }
-
