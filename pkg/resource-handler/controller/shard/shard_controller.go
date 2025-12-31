@@ -325,33 +325,24 @@ func (r *ShardReconciler) updateStatus(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) error {
-	var totalPods, readyPods int32
+	cellsSet := make(map[multigresv1alpha1.CellName]bool)
 
-	// Aggregate status from all pool StatefulSets
-	for poolName := range shard.Spec.Pools {
-		stsName := buildPoolName(shard.Name, poolName)
-		sts := &appsv1.StatefulSet{}
-		err := r.Get(
-			ctx,
-			client.ObjectKey{Namespace: shard.Namespace, Name: stsName},
-			sts,
-		)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// StatefulSet not created yet, skip
-				continue
-			}
-			return fmt.Errorf("failed to get pool StatefulSet for status: %w", err)
-		}
-
-		totalPods += sts.Status.Replicas
-		readyPods += sts.Status.ReadyReplicas
+	// Update pools status
+	totalPods, readyPods, err := r.updatePoolsStatus(ctx, shard, cellsSet)
+	if err != nil {
+		return err
 	}
 
-	// Update status fields
+	// Update MultiOrch status
+	if err := r.updateMultiOrchStatus(ctx, shard, cellsSet); err != nil {
+		return err
+	}
+
+	// Update cells list from all observed cells
+	shard.Status.Cells = cellSetToSlice(cellsSet)
+
+	// Update aggregate status fields
 	shard.Status.PoolsReady = (totalPods > 0 && totalPods == readyPods)
-	// TODO: Add OrchReady status check when MultiOrch deployment is implemented
-	// shard.Status.OrchReady = ...
 
 	// Update conditions
 	shard.Status.Conditions = r.buildConditions(shard, totalPods, readyPods)
@@ -361,6 +352,96 @@ func (r *ShardReconciler) updateStatus(
 	}
 
 	return nil
+}
+
+// updatePoolsStatus aggregates status from all pool StatefulSets.
+// Returns total pods, ready pods, and tracks cells in the cellsSet.
+func (r *ShardReconciler) updatePoolsStatus(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	cellsSet map[multigresv1alpha1.CellName]bool,
+) (int32, int32, error) {
+	var totalPods, readyPods int32
+
+	for poolName, poolSpec := range shard.Spec.Pools {
+		// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
+		for _, cell := range poolSpec.Cells {
+			cellName := string(cell)
+			cellsSet[cell] = true
+
+			stsName := buildPoolNameWithCell(shard.Name, poolName, cellName)
+			sts := &appsv1.StatefulSet{}
+			err := r.Get(
+				ctx,
+				client.ObjectKey{Namespace: shard.Namespace, Name: stsName},
+				sts,
+			)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					continue
+				}
+				return 0, 0, fmt.Errorf("failed to get pool StatefulSet for status: %w", err)
+			}
+
+			totalPods += sts.Status.Replicas
+			readyPods += sts.Status.ReadyReplicas
+		}
+	}
+
+	return totalPods, readyPods, nil
+}
+
+// updateMultiOrchStatus checks MultiOrch Deployments and sets OrchReady status.
+// Also tracks cells in the cellsSet.
+func (r *ShardReconciler) updateMultiOrchStatus(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	cellsSet map[multigresv1alpha1.CellName]bool,
+) error {
+	multiOrchCells, err := getMultiOrchCells(shard)
+	if err != nil {
+		shard.Status.OrchReady = false
+		return nil
+	}
+
+	orchReady := true
+	for _, cell := range multiOrchCells {
+		cellName := string(cell)
+		cellsSet[cell] = true
+
+		deployName := buildMultiOrchNameWithCell(shard.Name, cellName)
+		deploy := &appsv1.Deployment{}
+		err := r.Get(
+			ctx,
+			client.ObjectKey{Namespace: shard.Namespace, Name: deployName},
+			deploy,
+		)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				orchReady = false
+				break
+			}
+			return fmt.Errorf("failed to get MultiOrch Deployment for status: %w", err)
+		}
+
+		// Check if deployment is ready
+		if deploy.Spec.Replicas == nil || deploy.Status.ReadyReplicas != *deploy.Spec.Replicas {
+			orchReady = false
+			break
+		}
+	}
+
+	shard.Status.OrchReady = orchReady
+	return nil
+}
+
+// cellSetToSlice converts a cell set (map) to a slice.
+func cellSetToSlice(cellsSet map[multigresv1alpha1.CellName]bool) []multigresv1alpha1.CellName {
+	cells := make([]multigresv1alpha1.CellName, 0, len(cellsSet))
+	for cell := range cellsSet {
+		cells = append(cells, cell)
+	}
+	return cells
 }
 
 // buildConditions creates status conditions based on observed state.
