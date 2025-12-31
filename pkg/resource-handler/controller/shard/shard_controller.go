@@ -61,14 +61,12 @@ func (r *ShardReconciler) Reconcile(
 	}
 
 	// Reconcile MultiOrch - one Deployment and Service per cell
-	cells := shard.Spec.MultiOrch.Cells
-	if len(cells) == 0 {
-		return ctrl.Result{}, fmt.Errorf(
-			"MultiOrch has no cells specified - cannot deploy without cell information",
-		)
+	multiOrchCells, err := getMultiOrchCells(shard)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
-	for _, cell := range cells {
+	for _, cell := range multiOrchCells {
 		cellName := string(cell)
 
 		// Reconcile MultiOrch Deployment for this cell
@@ -211,8 +209,7 @@ func (r *ShardReconciler) reconcilePool(
 	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
 	// Pools must have cells specified
-	cells := poolSpec.Cells
-	if len(cells) == 0 {
+	if len(poolSpec.Cells) == 0 {
 		return fmt.Errorf(
 			"pool %s has no cells specified - cannot deploy without cell information",
 			poolName,
@@ -220,7 +217,8 @@ func (r *ShardReconciler) reconcilePool(
 	}
 
 	// Create one StatefulSet per cell
-	for _, cell := range cells {
+	// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
+	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
 
 		// Reconcile pool StatefulSet for this cell
@@ -391,6 +389,42 @@ func (r *ShardReconciler) buildConditions(
 
 	conditions = append(conditions, availableCondition)
 	return conditions
+}
+
+// getMultiOrchCells returns the list of cells where MultiOrch should be deployed.
+// If MultiOrch.Cells is specified, it uses that.
+// Otherwise, it infers cells from all pools (union of pool cells).
+func getMultiOrchCells(shard *multigresv1alpha1.Shard) ([]multigresv1alpha1.CellName, error) {
+	cells := shard.Spec.MultiOrch.Cells
+
+	// If MultiOrch specifies cells explicitly, use them
+	// TODO(#91): Add +listType=set validation to MultiOrch.Cells to prevent duplicates at API level
+	if len(cells) > 0 {
+		return cells, nil
+	}
+
+	// Otherwise, collect unique cells from all pools
+	cellSet := make(map[multigresv1alpha1.CellName]bool)
+	for _, pool := range shard.Spec.Pools {
+		for _, cell := range pool.Cells {
+			cellSet[cell] = true
+		}
+	}
+
+	// Convert set to slice
+	cells = make([]multigresv1alpha1.CellName, 0, len(cellSet))
+	for cell := range cellSet {
+		cells = append(cells, cell)
+	}
+
+	// If still no cells found, error
+	if len(cells) == 0 {
+		return nil, fmt.Errorf(
+			"MultiOrch has no cells specified and no cells found in pools - cannot deploy without cell information",
+		)
+	}
+
+	return cells, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
