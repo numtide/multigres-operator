@@ -399,6 +399,7 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 		expectError     bool
 		expectOrchReady bool
 		setupClient     func(*testing.T, *runtime.Scheme, *multigresv1alpha1.Shard) client.Client
+		customShard     *multigresv1alpha1.Shard // Optional: override default shard
 	}{
 		"GetError": {
 			expectError: true,
@@ -449,6 +450,28 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 				},
 			},
 		},
+		"NotFound": {
+			expectError:     false,
+			expectOrchReady: false,
+			setupObjects:    []client.Object{}, // No MultiOrch Deployment - will get NotFound
+		},
+		"NoCellsInMultiOrchOrPools": {
+			expectError:     false,
+			expectOrchReady: false,
+			setupObjects:    []client.Object{},
+			customShard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{}, // Empty
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{}, // Empty
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -457,17 +480,21 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 			_ = multigresv1alpha1.AddToScheme(scheme)
 			_ = appsv1.AddToScheme(scheme)
 
-			shard := &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
+			// Use custom shard if provided, otherwise use default
+			shard := tc.customShard
+			if shard == nil {
+				shard = &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{},
-				},
+					Spec: multigresv1alpha1.ShardSpec{
+						MultiOrch: multigresv1alpha1.MultiOrchSpec{
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+						},
+						Pools: map[string]multigresv1alpha1.PoolSpec{},
+					},
+				}
 			}
 
 			var fakeClient client.Client
