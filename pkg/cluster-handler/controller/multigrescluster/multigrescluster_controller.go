@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resolver"
 )
 
 const (
@@ -67,23 +68,22 @@ func (r *MultigresClusterReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
-	resolver := &TemplateResolver{
-		Client:    r.Client,
-		Namespace: cluster.Namespace,
-		Defaults:  cluster.Spec.TemplateDefaults,
-	}
+	res := resolver.NewResolver(r.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
 
-	if err := r.reconcileGlobalComponents(ctx, cluster, resolver); err != nil {
+	// Apply defaults (in-memory) to ensure we have images/configs even if webhook didn't run
+	res.PopulateClusterDefaults(cluster)
+
+	if err := r.reconcileGlobalComponents(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile global components")
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileCells(ctx, cluster, resolver); err != nil {
+	if err := r.reconcileCells(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile cells")
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileDatabases(ctx, cluster, resolver); err != nil {
+	if err := r.reconcileDatabases(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile databases")
 		return ctrl.Result{}, err
 	}
@@ -146,12 +146,12 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(
 func (r *MultigresClusterReconciler) reconcileGlobalComponents(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
-	resolver *TemplateResolver,
+	res *resolver.Resolver,
 ) error {
-	if err := r.reconcileGlobalTopoServer(ctx, cluster, resolver); err != nil {
+	if err := r.reconcileGlobalTopoServer(ctx, cluster, res); err != nil {
 		return err
 	}
-	if err := r.reconcileMultiAdmin(ctx, cluster, resolver); err != nil {
+	if err := r.reconcileMultiAdmin(ctx, cluster, res); err != nil {
 		return err
 	}
 	return nil
@@ -160,19 +160,21 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(
 func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
-	resolver *TemplateResolver,
+	res *resolver.Resolver,
 ) error {
 	tplName := cluster.Spec.TemplateDefaults.CoreTemplate
 	if cluster.Spec.GlobalTopoServer.TemplateRef != "" {
 		tplName = cluster.Spec.GlobalTopoServer.TemplateRef
 	}
 
-	tpl, err := resolver.ResolveCoreTemplate(ctx, tplName)
+	tpl, err := res.ResolveCoreTemplate(ctx, tplName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve topo template: %w", err)
 	}
 
-	spec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, tpl)
+	spec := resolver.ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, tpl)
+	// If Etcd is nil, it means we are using External topology (or invalid config handled by validations).
+	// We only create a TopoServer CR if we are managing Etcd.
 	if spec.Etcd != nil {
 		ts := &multigresv1alpha1.TopoServer{
 			ObjectMeta: metav1.ObjectMeta{
@@ -182,14 +184,10 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 			},
 		}
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
-			replicas := DefaultEtcdReplicas
-			if spec.Etcd.Replicas != nil {
-				replicas = *spec.Etcd.Replicas
-			}
-
+			// resolver.ResolveGlobalTopo guarantees spec.Etcd.Replicas is set
 			ts.Spec.Etcd = &multigresv1alpha1.EtcdSpec{
 				Image:     spec.Etcd.Image,
-				Replicas:  &replicas,
+				Replicas:  spec.Etcd.Replicas,
 				Storage:   spec.Etcd.Storage,
 				Resources: spec.Etcd.Resources,
 			}
@@ -204,74 +202,72 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
-	resolver *TemplateResolver,
+	res *resolver.Resolver,
 ) error {
 	tplName := cluster.Spec.TemplateDefaults.CoreTemplate
 	if cluster.Spec.MultiAdmin.TemplateRef != "" {
 		tplName = cluster.Spec.MultiAdmin.TemplateRef
 	}
 
-	tpl, err := resolver.ResolveCoreTemplate(ctx, tplName)
+	tpl, err := res.ResolveCoreTemplate(ctx, tplName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve admin template: %w", err)
 	}
 
-	spec := ResolveMultiAdmin(&cluster.Spec.MultiAdmin, tpl)
-	if spec != nil {
-		deploy := &appsv1.Deployment{
+	// resolver.ResolveMultiAdmin guarantees a non-nil spec with defaults applied
+	spec := resolver.ResolveMultiAdmin(&cluster.Spec.MultiAdmin, tpl)
+
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Name + "-multiadmin",
+			Namespace: cluster.Namespace,
+			Labels: map[string]string{
+				"multigres.com/cluster": cluster.Name,
+				"app":                   "multiadmin",
+			},
+		},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		// resolver.ResolveMultiAdmin guarantees Replicas is set
+		deploy.Spec.Replicas = spec.Replicas
+		deploy.Spec.Selector = &metav1.LabelSelector{
+			MatchLabels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
+		}
+		deploy.Spec.Template = corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      cluster.Name + "-multiadmin",
-				Namespace: cluster.Namespace,
-				Labels: map[string]string{
-					"multigres.com/cluster": cluster.Name,
-					"app":                   "multiadmin",
+				Labels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
+			},
+			Spec: corev1.PodSpec{
+				ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
+				Containers: []corev1.Container{
+					{
+						Name:      "multiadmin",
+						Image:     cluster.Spec.Images.MultiAdmin,
+						Resources: spec.Resources,
+					},
 				},
+				Affinity: spec.Affinity,
 			},
 		}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			replicas := DefaultAdminReplicas
-			if spec.Replicas != nil {
-				replicas = *spec.Replicas
-			}
-			deploy.Spec.Replicas = &replicas
-			deploy.Spec.Selector = &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
-			}
-			deploy.Spec.Template = corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
-				},
-				Spec: corev1.PodSpec{
-					ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
-					Containers: []corev1.Container{
-						{
-							Name:      "multiadmin",
-							Image:     cluster.Spec.Images.MultiAdmin,
-							Resources: spec.Resources,
-						},
-					},
-					Affinity: spec.Affinity,
-				},
-			}
-			return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
-		}); err != nil {
-			return fmt.Errorf("failed to create/update multiadmin: %w", err)
-		}
+		return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
+	}); err != nil {
+		return fmt.Errorf("failed to create/update multiadmin: %w", err)
 	}
+
 	return nil
 }
 
 func (r *MultigresClusterReconciler) reconcileCells(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
-	resolver *TemplateResolver,
+	res *resolver.Resolver,
 ) error {
 	existingCells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, existingCells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return fmt.Errorf("failed to list existing cells: %w", err)
 	}
 
-	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
+	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, res)
 	if err != nil {
 		return fmt.Errorf("failed to get global topo ref: %w", err)
 	}
@@ -286,12 +282,12 @@ func (r *MultigresClusterReconciler) reconcileCells(
 	for _, cellCfg := range cluster.Spec.Cells {
 		activeCellNames[cellCfg.Name] = true
 
-		tpl, err := resolver.ResolveCellTemplate(ctx, cellCfg.CellTemplate)
+		tpl, err := res.ResolveCellTemplate(ctx, cellCfg.CellTemplate)
 		if err != nil {
 			return fmt.Errorf("failed to resolve cell template '%s': %w", cellCfg.CellTemplate, err)
 		}
 
-		gatewaySpec, localTopoSpec := MergeCellConfig(tpl, cellCfg.Overrides, cellCfg.Spec)
+		gatewaySpec, localTopoSpec := resolver.MergeCellConfig(tpl, cellCfg.Overrides, cellCfg.Spec)
 
 		cellCR := &multigresv1alpha1.Cell{
 			ObjectMeta: metav1.ObjectMeta{
@@ -309,7 +305,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			cellCR.Spec.Zone = cellCfg.Zone
 			cellCR.Spec.Region = cellCfg.Region
 			cellCR.Spec.MultiGatewayImage = cluster.Spec.Images.MultiGateway
-			cellCR.Spec.MultiGateway = gatewaySpec
+			cellCR.Spec.MultiGateway = *gatewaySpec
 			cellCR.Spec.AllCells = allCellNames
 
 			cellCR.Spec.GlobalTopoServer = globalTopoRef
@@ -341,14 +337,14 @@ func (r *MultigresClusterReconciler) reconcileCells(
 func (r *MultigresClusterReconciler) reconcileDatabases(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
-	resolver *TemplateResolver,
+	res *resolver.Resolver,
 ) error {
 	existingTGs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, existingTGs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return fmt.Errorf("failed to list existing tablegroups: %w", err)
 	}
 
-	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, resolver)
+	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, res)
 	if err != nil {
 		return fmt.Errorf("failed to get global topo ref: %w", err)
 	}
@@ -370,7 +366,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 			resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
 
 			for _, shard := range tg.Shards {
-				tpl, err := resolver.ResolveShardTemplate(ctx, shard.ShardTemplate)
+				tpl, err := res.ResolveShardTemplate(ctx, shard.ShardTemplate)
 				if err != nil {
 					return fmt.Errorf(
 						"failed to resolve shard template '%s': %w",
@@ -379,7 +375,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 					)
 				}
 
-				orch, pools := MergeShardConfig(tpl, shard.Overrides, shard.Spec)
+				orch, pools := resolver.MergeShardConfig(tpl, shard.Overrides, shard.Spec)
 
 				// Default MultiOrch Cells if empty (Consensus safety)
 				// If 'cells' is empty, it defaults to all cells where pools are defined.
@@ -451,14 +447,14 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 func (r *MultigresClusterReconciler) getGlobalTopoRef(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
-	resolver *TemplateResolver,
+	res *resolver.Resolver,
 ) (multigresv1alpha1.GlobalTopoServerRef, error) {
 	topoTplName := cluster.Spec.TemplateDefaults.CoreTemplate
 	if cluster.Spec.GlobalTopoServer.TemplateRef != "" {
 		topoTplName = cluster.Spec.GlobalTopoServer.TemplateRef
 	}
 
-	topoTpl, err := resolver.ResolveCoreTemplate(ctx, topoTplName)
+	topoTpl, err := res.ResolveCoreTemplate(ctx, topoTplName)
 	if err != nil {
 		return multigresv1alpha1.GlobalTopoServerRef{}, fmt.Errorf(
 			"failed to resolve global topo template: %w",
@@ -466,7 +462,7 @@ func (r *MultigresClusterReconciler) getGlobalTopoRef(
 		)
 	}
 
-	topoSpec := ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
+	topoSpec := resolver.ResolveGlobalTopo(&cluster.Spec.GlobalTopoServer, topoTpl)
 
 	address := ""
 	if topoSpec.Etcd != nil {
