@@ -175,21 +175,63 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		"error when MultiOrch has no cells specified": {
+		"MultiOrch infers cells from pools when not specified": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "no-multiorch-cell",
+					Name:      "inferred-cells-shard",
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{}, // Empty cells - should error
+						Cells: []multigresv1alpha1.CellName{}, // Empty - will infer from pools
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
+				// MultiOrch should be deployed to both zone1 and zone2
+				mo1 := &appsv1.Deployment{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "inferred-cells-shard-multiorch-zone1", Namespace: "default"},
+					mo1); err != nil {
+					t.Errorf("MultiOrch Deployment for zone1 should exist: %v", err)
+				}
+
+				mo2 := &appsv1.Deployment{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "inferred-cells-shard-multiorch-zone2", Namespace: "default"},
+					mo2); err != nil {
+					t.Errorf("MultiOrch Deployment for zone2 should exist: %v", err)
+				}
+			},
+		},
+		"error when MultiOrch and pools have no cells specified": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-cells-anywhere",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{}, // Empty
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{}, // Also empty - should error
 							Type:            "replica",
 							ReplicasPerCell: ptr.To(int32(1)),
 							Storage: multigresv1alpha1.StorageSpec{
@@ -467,22 +509,22 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-multiorch",
+						Name:      "test-shard-ready-multiorch-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
+						Replicas: ptr.To(int32(1)),
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-multiorch",
+						Name:      "test-shard-ready-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-pool-primary",
+						Name:      "test-shard-ready-pool-primary-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
@@ -495,7 +537,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-pool-primary-headless",
+						Name:      "test-shard-ready-pool-primary-zone1-headless",
 						Namespace: "default",
 					},
 				},
@@ -655,19 +697,19 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-multiorch",
+						Name:      "test-shard-multi-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-multiorch",
+						Name:      "test-shard-multi-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-replica",
+						Name:      "test-shard-multi-pool-replica-zone1",
 						Namespace: "default",
 					},
 					Status: appsv1.StatefulSetStatus{
@@ -677,13 +719,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-replica-headless",
+						Name:      "test-shard-multi-pool-replica-zone1-headless",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-readOnly",
+						Name:      "test-shard-multi-pool-readOnly-zone1",
 						Namespace: "default",
 					},
 					Status: appsv1.StatefulSetStatus{
@@ -693,7 +735,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-readOnly-headless",
+						Name:      "test-shard-multi-pool-readOnly-zone1-headless",
 						Namespace: "default",
 					},
 				},

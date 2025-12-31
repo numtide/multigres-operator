@@ -8,6 +8,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/google/go-cmp/cmp"
@@ -115,131 +117,100 @@ func TestBuildMultiOrchContainer_WithImage(t *testing.T) {
 	}
 }
 
-// TestReconcileMultiOrchDeployment_InvalidScheme tests the error path when BuildMultiOrchDeployment fails.
+// TestReconcile_InvalidScheme tests the error path when Build* functions fail due to invalid scheme.
 // This should never happen in production - scheme is properly set up in main.go.
 // Test exists for coverage of defensive error handling.
-func TestReconcileMultiOrchDeployment_InvalidScheme(t *testing.T) {
-	// Empty scheme without Shard type registered
-	invalidScheme := runtime.NewScheme()
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
+func TestReconcile_InvalidScheme(t *testing.T) {
+	tests := map[string]struct {
+		setupShard   func() *multigresv1alpha1.Shard
+		reconcileFunc func(*ShardReconciler, context.Context, *multigresv1alpha1.Shard) error
+	}{
+		"MultiOrchDeployment": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+					Spec: multigresv1alpha1.ShardSpec{
+						MultiOrch: multigresv1alpha1.MultiOrchSpec{
+							Cells: []multigresv1alpha1.CellName{"cell1"},
+						},
+					},
+				}
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				return r.reconcileMultiOrchDeployment(ctx, shard, "cell1")
+			},
 		},
-		Spec: multigresv1alpha1.ShardSpec{
-			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Cells: []multigresv1alpha1.CellName{"cell1"},
+		"MultiOrchService": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				return r.reconcileMultiOrchService(ctx, shard, "cell1")
+			},
+		},
+		"PoolStatefulSet": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				poolSpec := multigresv1alpha1.PoolSpec{
+					Cells: []multigresv1alpha1.CellName{"cell1"},
+				}
+				return r.reconcilePoolStatefulSet(ctx, shard, "pool1", "", poolSpec)
+			},
+		},
+		"PoolHeadlessService": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				poolSpec := multigresv1alpha1.PoolSpec{
+					Cells: []multigresv1alpha1.CellName{"cell1"},
+				}
+				return r.reconcilePoolHeadlessService(ctx, shard, "pool1", "", poolSpec)
 			},
 		},
 	}
 
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(invalidScheme).
-		Build()
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Empty scheme without Shard type registered
+			invalidScheme := runtime.NewScheme()
 
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
-	}
+			shard := tc.setupShard()
 
-	err := reconciler.reconcileMultiOrchDeployment(context.Background(), shard, "cell1")
-	if err == nil {
-		t.Error("reconcileMultiOrchDeployment() should error with invalid scheme")
-	}
-}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(invalidScheme).
+				Build()
 
-// TestReconcileMultiOrchService_InvalidScheme tests the error path when BuildMultiOrchService fails.
-func TestReconcileMultiOrchService_InvalidScheme(t *testing.T) {
-	invalidScheme := runtime.NewScheme()
+			reconciler := &ShardReconciler{
+				Client: fakeClient,
+				Scheme: invalidScheme,
+			}
 
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(invalidScheme).
-		Build()
-
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
-	}
-
-	err := reconciler.reconcileMultiOrchService(context.Background(), shard, "cell1")
-	if err == nil {
-		t.Error("reconcileMultiOrchService() should error with invalid scheme")
-	}
-}
-
-// TestReconcilePoolStatefulSet_InvalidScheme tests the error path when BuildPoolStatefulSet fails.
-func TestReconcilePoolStatefulSet_InvalidScheme(t *testing.T) {
-	invalidScheme := runtime.NewScheme()
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-	}
-
-	poolName := "pool1"
-	poolSpec := multigresv1alpha1.PoolSpec{
-		Cells: []multigresv1alpha1.CellName{"cell1"},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(invalidScheme).
-		Build()
-
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
-	}
-
-	err := reconciler.reconcilePoolStatefulSet(context.Background(), shard, poolName, "", poolSpec)
-	if err == nil {
-		t.Error("reconcilePoolStatefulSet() should error with invalid scheme")
-	}
-}
-
-// TestReconcilePoolHeadlessService_InvalidScheme tests the error path when BuildPoolHeadlessService fails.
-func TestReconcilePoolHeadlessService_InvalidScheme(t *testing.T) {
-	invalidScheme := runtime.NewScheme()
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-	}
-
-	poolName := "pool1"
-	poolSpec := multigresv1alpha1.PoolSpec{
-		Cells: []multigresv1alpha1.CellName{"cell1"},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(invalidScheme).
-		Build()
-
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
-	}
-
-	err := reconciler.reconcilePoolHeadlessService(
-		context.Background(),
-		shard,
-		poolName,
-		"",
-		poolSpec,
-	)
-	if err == nil {
-		t.Error("reconcilePoolHeadlessService() should error with invalid scheme")
+			err := tc.reconcileFunc(reconciler, context.Background(), shard)
+			if err == nil {
+				t.Errorf("reconcile function should error with invalid scheme")
+			}
+		})
 	}
 }
 
@@ -313,173 +284,226 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 	}
 }
 
-// TestReconcileMultiOrchDeployment_GetError tests error path on Get MultiOrch Deployment (not NotFound).
-func TestReconcileMultiOrchDeployment_GetError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
+// TestReconcile_GetError tests error path on Get operations (not NotFound, but network errors).
+func TestReconcile_GetError(t *testing.T) {
+	tests := map[string]struct {
+		setupShard      func() *multigresv1alpha1.Shard
+		failOnKeyName   string
+		reconcileFunc   func(*ShardReconciler, context.Context, *multigresv1alpha1.Shard) error
+	}{
+		"MultiOrchDeployment": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+					Spec: multigresv1alpha1.ShardSpec{
+						MultiOrch: multigresv1alpha1.MultiOrchSpec{
+							Cells: []multigresv1alpha1.CellName{"cell1"},
+						},
+					},
+				}
+			},
+			failOnKeyName: "test-shard-multiorch-cell1",
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				return r.reconcileMultiOrchDeployment(ctx, shard, "cell1")
+			},
 		},
-		Spec: multigresv1alpha1.ShardSpec{
-			MultiOrch: multigresv1alpha1.MultiOrchSpec{
-				Cells: []multigresv1alpha1.CellName{"cell1"},
+		"MultiOrchService": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			failOnKeyName: "test-shard-multiorch-cell1",
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				return r.reconcileMultiOrchService(ctx, shard, "cell1")
+			},
+		},
+		"PoolStatefulSet": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			failOnKeyName: "test-shard-pool-pool1-cell1",
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				poolSpec := multigresv1alpha1.PoolSpec{
+					Cells: []multigresv1alpha1.CellName{"cell1"},
+				}
+				return r.reconcilePoolStatefulSet(ctx, shard, "pool1", "cell1", poolSpec)
+			},
+		},
+		"PoolHeadlessService": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			failOnKeyName: "test-shard-pool-pool1-cell1-headless",
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				poolSpec := multigresv1alpha1.PoolSpec{
+					Cells: []multigresv1alpha1.CellName{"cell1"},
+				}
+				return r.reconcilePoolHeadlessService(ctx, shard, "pool1", "cell1", poolSpec)
 			},
 		},
 	}
 
-	// Create client with failure injection
-	baseClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(shard).
-		Build()
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = multigresv1alpha1.AddToScheme(scheme)
+			_ = appsv1.AddToScheme(scheme)
+			_ = corev1.AddToScheme(scheme)
 
-	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-multiorch-cell1", testutil.ErrNetworkTimeout),
-	})
+			shard := tc.setupShard()
 
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
+			// Create client with failure injection
+			baseClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(shard).
+				Build()
 
-	err := reconciler.reconcileMultiOrchDeployment(context.Background(), shard, "cell1")
-	if err == nil {
-		t.Error("reconcileMultiOrchDeployment() should error on Get failure")
-	}
-}
+			fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName(tc.failOnKeyName, testutil.ErrNetworkTimeout),
+			})
 
-// TestReconcileMultiOrchService_GetError tests error path on Get MultiOrch Service (not NotFound).
-func TestReconcileMultiOrchService_GetError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+			reconciler := &ShardReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+			}
 
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-	}
-
-	// Create client with failure injection
-	baseClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(shard).
-		Build()
-
-	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-multiorch-cell1", testutil.ErrNetworkTimeout),
-	})
-
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	err := reconciler.reconcileMultiOrchService(context.Background(), shard, "cell1")
-	if err == nil {
-		t.Error("reconcileMultiOrchService() should error on Get failure")
+			err := tc.reconcileFunc(reconciler, context.Background(), shard)
+			if err == nil {
+				t.Errorf("reconcile function should error on Get failure")
+			}
+		})
 	}
 }
 
-// TestReconcilePoolStatefulSet_GetError tests error path on Get pool StatefulSet (not NotFound).
-func TestReconcilePoolStatefulSet_GetError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
+// TestUpdateStatus_MultiOrch tests updateStatus with different MultiOrch deployment scenarios.
+func TestUpdateStatus_MultiOrch(t *testing.T) {
+	tests := map[string]struct {
+		setupObjects   []client.Object
+		expectError    bool
+		expectOrchReady bool
+		setupClient    func(*testing.T, *runtime.Scheme, *multigresv1alpha1.Shard) client.Client
+	}{
+		"GetError": {
+			expectError: true,
+			setupClient: func(t *testing.T, scheme *runtime.Scheme, shard *multigresv1alpha1.Shard) client.Client {
+				baseClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(shard).
+					WithStatusSubresource(&multigresv1alpha1.Shard{}).
+					Build()
+				return testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+					OnGet: testutil.FailOnKeyName("test-shard-multiorch-zone1", testutil.ErrNetworkTimeout),
+				})
+			},
+		},
+		"NotReady": {
+			expectError:     false,
+			expectOrchReady: false,
+			setupObjects: []client.Object{
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard-multiorch-zone1",
+						Namespace: "default",
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(3)),
+					},
+					Status: appsv1.DeploymentStatus{
+						ReadyReplicas: 1, // Not all ready
+					},
+				},
+			},
+		},
+		"NilReplicas": {
+			expectError:     false,
+			expectOrchReady: false,
+			setupObjects: []client.Object{
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard-multiorch-zone1",
+						Namespace: "default",
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: nil, // Nil replicas
+					},
+				},
+			},
 		},
 	}
 
-	poolName := "pool1"
-	poolSpec := multigresv1alpha1.PoolSpec{
-		Cells: []multigresv1alpha1.CellName{"cell1"},
-	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = multigresv1alpha1.AddToScheme(scheme)
+			_ = appsv1.AddToScheme(scheme)
 
-	// Create client with failure injection
-	baseClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(shard).
-		Build()
+			shard := &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone1"},
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{},
+				},
+			}
 
-	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-pool-pool1-cell1", testutil.ErrNetworkTimeout),
-	})
+			var fakeClient client.Client
+			if tc.setupClient != nil {
+				fakeClient = tc.setupClient(t, scheme, shard)
+			} else {
+				objects := append([]client.Object{shard}, tc.setupObjects...)
+				fakeClient = fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(objects...).
+					WithStatusSubresource(&multigresv1alpha1.Shard{}).
+					Build()
+			}
 
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
+			reconciler := &ShardReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+			}
 
-	err := reconciler.reconcilePoolStatefulSet(
-		context.Background(),
-		shard,
-		poolName,
-		"cell1",
-		poolSpec,
-	)
-	if err == nil {
-		t.Error("reconcilePoolStatefulSet() should error on Get failure")
-	}
-}
+			err := reconciler.updateStatus(context.Background(), shard)
+			if tc.expectError && err == nil {
+				t.Error("updateStatus() should error but didn't")
+			}
+			if !tc.expectError && err != nil {
+				t.Errorf("updateStatus() unexpected error: %v", err)
+			}
 
-// TestReconcilePoolHeadlessService_GetError tests error path on Get pool headless Service (not NotFound).
-func TestReconcilePoolHeadlessService_GetError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+			// For non-error cases, verify OrchReady status
+			if !tc.expectError {
+				updatedShard := &multigresv1alpha1.Shard{}
+				if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(shard), updatedShard); err != nil {
+					t.Fatalf("Failed to get shard: %v", err)
+				}
 
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-	}
-
-	poolName := "pool1"
-	poolSpec := multigresv1alpha1.PoolSpec{
-		Cells: []multigresv1alpha1.CellName{"cell1"},
-	}
-
-	// Create client with failure injection
-	baseClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(shard).
-		Build()
-
-	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName(
-			"test-shard-pool-pool1-cell1-headless",
-			testutil.ErrNetworkTimeout,
-		),
-	})
-
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	err := reconciler.reconcilePoolHeadlessService(
-		context.Background(),
-		shard,
-		poolName,
-		"cell1",
-		poolSpec,
-	)
-	if err == nil {
-		t.Error("reconcilePoolHeadlessService() should error on Get failure")
+				if updatedShard.Status.OrchReady != tc.expectOrchReady {
+					t.Errorf("OrchReady = %v, want %v", updatedShard.Status.OrchReady, tc.expectOrchReady)
+				}
+			}
+		})
 	}
 }
 
@@ -510,7 +534,7 @@ func TestUpdateStatus_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-pool-pool1", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName("test-shard-pool-pool1-cell1", testutil.ErrNetworkTimeout),
 	})
 
 	reconciler := &ShardReconciler{
