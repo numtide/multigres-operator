@@ -11,7 +11,7 @@ import (
 const (
 	// DefaultMultigresImage is the base image for all Multigres components (multipooler, multiorch, pgctld)
 	// Different components use different subcommands.
-	DefaultMultigresImage = "ghcr.io/multigres/multigres:latest"
+	DefaultMultigresImage = "ghcr.io/multigres/multigres:main"
 
 	// DefaultPostgresImage is the default PostgreSQL database container image
 	DefaultPostgresImage = "postgres:17"

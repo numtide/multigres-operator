@@ -103,7 +103,7 @@ func TestCellReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multigateway",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multigateway",
 											"--http-port", "15100",
@@ -187,7 +187,7 @@ func TestCellReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multigateway",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multigateway",
 											"--http-port", "15100",
@@ -373,7 +373,7 @@ func TestCellReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multigateway",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multigateway",
 											"--http-port", "15100",

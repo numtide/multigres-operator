@@ -69,8 +69,8 @@ func TestShardReconciliation(t *testing.T) {
 					TableGroupName: "default",
 					ShardName:      "0",
 					Images: multigresv1alpha1.ShardImages{
-						MultiOrch:   "ghcr.io/multigres/multigres:latest",
-						MultiPooler: "ghcr.io/multigres/multigres:latest",
+						MultiOrch:   "ghcr.io/multigres/multigres:main",
+						MultiPooler: "ghcr.io/multigres/multigres:main",
 						Postgres:    "postgres:17",
 					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -115,7 +115,7 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multiorch",
 											"--http-port", "15300",
@@ -173,7 +173,7 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multiorch",
 											"--http-port", "15300",
@@ -235,7 +235,7 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:  "pgctld-init",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"pgctld",
 											"copy-binary",
@@ -247,7 +247,7 @@ func TestShardReconciliation(t *testing.T) {
 									},
 									{
 										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multipooler",
 											"--http-port", "15200",
@@ -340,8 +340,8 @@ func TestShardReconciliation(t *testing.T) {
 					TableGroupName: "default",
 					ShardName:      "0",
 					Images: multigresv1alpha1.ShardImages{
-						MultiOrch:   "ghcr.io/multigres/multigres:latest",
-						MultiPooler: "ghcr.io/multigres/multigres:latest",
+						MultiOrch:   "ghcr.io/multigres/multigres:main",
+						MultiPooler: "ghcr.io/multigres/multigres:main",
 						Postgres:    "postgres:17",
 					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -386,7 +386,7 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multiorch",
 											"--http-port", "15300",
@@ -444,7 +444,7 @@ func TestShardReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multiorch",
 											"--http-port", "15300",
@@ -511,7 +511,7 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:  "pgctld-init",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"pgctld",
 											"copy-binary",
@@ -523,7 +523,7 @@ func TestShardReconciliation(t *testing.T) {
 									},
 									{
 										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multipooler",
 											"--http-port", "15200",
@@ -630,7 +630,7 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:  "pgctld-init",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"pgctld",
 											"copy-binary",
@@ -642,7 +642,7 @@ func TestShardReconciliation(t *testing.T) {
 									},
 									{
 										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multigres:latest",
+										Image: "ghcr.io/multigres/multigres:main",
 										Args: []string{
 											"multipooler",
 											"--http-port", "15200",
