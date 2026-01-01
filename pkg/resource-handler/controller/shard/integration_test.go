@@ -65,60 +65,65 @@ func TestShardReconciliation(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"us-west-1a", "us-west-1b"}, // 2 cells = 2 replicas
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					ShardName:      "0",
+					Images: multigresv1alpha1.ShardImages{
+						MultiOrch:   "ghcr.io/multigres/multigres:latest",
+						MultiPooler: "ghcr.io/multigres/multigres:latest",
+						Postgres:    "postgres:17",
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"us-west-1a", "us-west-1b"},
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "us-west-1a",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(2)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"us-west-1a"},
+							Type:            "readWrite",
+							ReplicasPerCell: ptr.To(int32(2)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
 				},
 			},
 			wantResources: []client.Object{
+				// MultiOrch Deployment for us-west-1a
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
-						Namespace: "default",
-						// TODO: Cell information is not mapped for MultiOrch
-						// Labels:          shardLabels(t, "test-shard-multiorch", "multiorch", "us-west-1a"),
-						Labels:          shardLabels(t, "test-shard-multiorch", "multiorch", "multigres-global-topo"),
+						Name:            "test-shard-multiorch-us-west-1a",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
+						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							// TODO: Cell information is not mapped for MultiOrch
-							// MatchLabels:          shardLabels(t, "test-shard-multiorch", "multiorch", "us-west-1a"),
-							MatchLabels: shardLabels(t, "test-shard-multiorch", "multiorch", "multigres-global-topo"),
+							MatchLabels: shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								// TODO: Cell information is not mapped for MultiOrch
-								// Labels:          shardLabels(t, "test-shard-multiorch", "multiorch", "us-west-1a"),
-								Labels: shardLabels(t, "test-shard-multiorch", "multiorch", "multigres-global-topo"),
+								Labels: shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
 										Name:  "multiorch",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multiorch",
 											"--http-port", "15300",
 											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
+											"--cell", "us-west-1a",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -130,13 +135,12 @@ func TestShardReconciliation(t *testing.T) {
 						},
 					},
 				},
+				// MultiOrch Service for us-west-1a
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
-						Namespace: "default",
-						// TODO: Cell information is not mapped for MultiOrch
-						// Labels:          shardLabels(t, "test-shard-multiorch", "multiorch", "us-west-1a"),
-						Labels:          shardLabels(t, "test-shard-multiorch", "multiorch", "multigres-global-topo"),
+						Name:            "test-shard-multiorch-us-west-1a",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -145,23 +149,79 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						// TODO: Cell information is not mapped for MultiOrch
-						// Selector:          shardLabels(t, "test-shard-multiorch", "multiorch", "us-west-1a"),
-						Selector: shardLabels(t, "test-shard-multiorch", "multiorch", "multigres-global-topo"),
+						Selector: shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
+					},
+				},
+				// MultiOrch Deployment for us-west-1b
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "test-shard-multiorch-us-west-1b",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+						OwnerReferences: shardOwnerRefs(t, "test-shard"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "multiorch",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multiorch",
+											"--http-port", "15300",
+											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "us-west-1b",
+										},
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "http", 15300),
+											tcpPort(t, "grpc", 15370),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				// MultiOrch Service for us-west-1b
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "test-shard-multiorch-us-west-1b",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+						OwnerReferences: shardOwnerRefs(t, "test-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15300),
+							tcpServicePort(t, "grpc", 15370),
+						},
+						Selector: shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-pool-primary",
+						Name:            "test-shard-pool-primary-us-west-1a",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "test-shard-pool-primary-headless",
+						ServiceName: "test-shard-pool-primary-us-west-1a-headless",
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+							MatchLabels: shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 						},
 						PodManagementPolicy: appsv1.ParallelPodManagement,
 						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -169,28 +229,36 @@ func TestShardReconciliation(t *testing.T) {
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+								Labels: shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 							},
 							Spec: corev1.PodSpec{
 								InitContainers: []corev1.Container{
 									{
-										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/pgctld:latest",
-										Command: []string{"sh", "-c", "cp /pgctld /shared/pgctld && chmod +x /shared/pgctld"},
+										Name:  "pgctld-init",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"pgctld",
+											"copy-binary",
+											"--output", "/shared/pgctld",
+										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
 										},
 									},
 									{
 										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multipooler:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
 										Args: []string{
+											"multipooler",
 											"--http-port", "15200",
 											"--grpc-port", "15270",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
 											"--topo-implementation", "etcd2",
 											"--cell", "us-west-1a",
 											"--database", "testdb",
 											"--table-group", "default",
+											"--shard", "0",
 											"--service-id", "test-shard-pool-primary",
 											"--pgctld-addr", "localhost:15470",
 											"--pg-port", "5432",
@@ -242,9 +310,9 @@ func TestShardReconciliation(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-pool-primary-headless",
+						Name:            "test-shard-pool-primary-us-west-1a-headless",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -255,7 +323,399 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15270),
 							tcpServicePort(t, "postgres", 5432),
 						},
-						Selector:                 shardLabels(t, "test-shard-pool-primary", "shard-pool", "us-west-1a"),
+						Selector:                 shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
+						PublishNotReadyAddresses: true,
+					},
+				},
+			},
+		},
+		"shard with pool spanning two cells": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "multi-cell-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					ShardName:      "0",
+					Images: multigresv1alpha1.ShardImages{
+						MultiOrch:   "ghcr.io/multigres/multigres:latest",
+						MultiPooler: "ghcr.io/multigres/multigres:latest",
+						Postgres:    "postgres:17",
+					},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone1", "zone2"},
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
+							Type:            "readWrite",
+							ReplicasPerCell: ptr.To(int32(2)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			wantResources: []client.Object{
+				// MultiOrch Deployment for zone1
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-multiorch-zone1",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "multiorch",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multiorch",
+											"--http-port", "15300",
+											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone1",
+										},
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "http", 15300),
+											tcpPort(t, "grpc", 15370),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				// MultiOrch Service for zone1
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-multiorch-zone1",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15300),
+							tcpServicePort(t, "grpc", 15370),
+						},
+						Selector: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+					},
+				},
+				// MultiOrch Deployment for zone2
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-multiorch-zone2",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "multiorch",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multiorch",
+											"--http-port", "15300",
+											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone2",
+										},
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "http", 15300),
+											tcpPort(t, "grpc", 15370),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				// MultiOrch Service for zone2
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-multiorch-zone2",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15300),
+							tcpServicePort(t, "grpc", 15370),
+						},
+						Selector: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+					},
+				},
+				// StatefulSet for zone1
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-pool-primary-zone1",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: appsv1.StatefulSetSpec{
+						ServiceName: "multi-cell-shard-pool-primary-zone1-headless",
+						Replicas:    ptr.To(int32(2)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
+							},
+							Spec: corev1.PodSpec{
+								Volumes: []corev1.Volume{
+									{
+										Name: "pgctld-bin",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+								},
+								InitContainers: []corev1.Container{
+									{
+										Name:  "pgctld-init",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"pgctld",
+											"copy-binary",
+											"--output", "/shared/pgctld",
+										},
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "pgctld-bin", MountPath: "/shared"},
+										},
+									},
+									{
+										Name:  "multipooler",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multipooler",
+											"--http-port", "15200",
+											"--grpc-port", "15270",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone1",
+											"--database", "testdb",
+											"--table-group", "default",
+											"--shard", "0",
+											"--service-id", "multi-cell-shard-pool-primary",
+											"--pgctld-addr", "localhost:15470",
+											"--pg-port", "5432",
+										},
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "http", 15200),
+											tcpPort(t, "grpc", 15270),
+											tcpPort(t, "postgres", 5432),
+										},
+										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
+									},
+								},
+								Containers: []corev1.Container{
+									{
+										Name:  "postgres",
+										Image: "postgres:17",
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},
+											{Name: "pgctld-bin", MountPath: "/usr/local/bin/pgctld"},
+										},
+									},
+								},
+							},
+						},
+						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+							{
+								ObjectMeta: metav1.ObjectMeta{Name: "pgdata"},
+								Spec: corev1.PersistentVolumeClaimSpec{
+									AccessModes: []corev1.PersistentVolumeAccessMode{
+										corev1.ReadWriteOnce,
+									},
+									Resources: corev1.VolumeResourceRequirements{
+										Requests: corev1.ResourceList{
+											corev1.ResourceStorage: resource.MustParse("10Gi"),
+										},
+									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+								},
+								Status: corev1.PersistentVolumeClaimStatus{
+									Phase: corev1.ClaimPending,
+								},
+							},
+						},
+					},
+				},
+				// Headless Service for zone1
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-pool-primary-zone1-headless",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeClusterIP,
+						ClusterIP: corev1.ClusterIPNone,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15200),
+							tcpServicePort(t, "grpc", 15270),
+							tcpServicePort(t, "postgres", 5432),
+						},
+						Selector:                 shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
+						PublishNotReadyAddresses: true,
+					},
+				},
+				// StatefulSet for zone2
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-pool-primary-zone2",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: appsv1.StatefulSetSpec{
+						ServiceName: "multi-cell-shard-pool-primary-zone2-headless",
+						Replicas:    ptr.To(int32(2)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
+							},
+							Spec: corev1.PodSpec{
+								Volumes: []corev1.Volume{
+									{
+										Name: "pgctld-bin",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+								},
+								InitContainers: []corev1.Container{
+									{
+										Name:  "pgctld-init",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"pgctld",
+											"copy-binary",
+											"--output", "/shared/pgctld",
+										},
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "pgctld-bin", MountPath: "/shared"},
+										},
+									},
+									{
+										Name:  "multipooler",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multipooler",
+											"--http-port", "15200",
+											"--grpc-port", "15270",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone2",
+											"--database", "testdb",
+											"--table-group", "default",
+											"--shard", "0",
+											"--service-id", "multi-cell-shard-pool-primary",
+											"--pgctld-addr", "localhost:15470",
+											"--pg-port", "5432",
+										},
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "http", 15200),
+											tcpPort(t, "grpc", 15270),
+											tcpPort(t, "postgres", 5432),
+										},
+										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
+									},
+								},
+								Containers: []corev1.Container{
+									{
+										Name:  "postgres",
+										Image: "postgres:17",
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},
+											{Name: "pgctld-bin", MountPath: "/usr/local/bin/pgctld"},
+										},
+									},
+								},
+							},
+						},
+						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+							{
+								ObjectMeta: metav1.ObjectMeta{Name: "pgdata"},
+								Spec: corev1.PersistentVolumeClaimSpec{
+									AccessModes: []corev1.PersistentVolumeAccessMode{
+										corev1.ReadWriteOnce,
+									},
+									Resources: corev1.VolumeResourceRequirements{
+										Requests: corev1.ResourceList{
+											corev1.ResourceStorage: resource.MustParse("10Gi"),
+										},
+									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+								},
+								Status: corev1.PersistentVolumeClaimStatus{
+									Phase: corev1.ClaimPending,
+								},
+							},
+						},
+					},
+				},
+				// Headless Service for zone2
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "multi-cell-shard-pool-primary-zone2-headless",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
+						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeClusterIP,
+						ClusterIP: corev1.ClusterIPNone,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15200),
+							tcpServicePort(t, "grpc", 15270),
+							tcpServicePort(t, "postgres", 5432),
+						},
+						Selector:                 shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
 						PublishNotReadyAddresses: true,
 					},
 				},
@@ -320,6 +780,9 @@ func shardLabels(t testing.TB, instanceName, component, cellName string) map[str
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
+		"multigres.com/cell":           cellName,
+		"multigres.com/database":       "testdb",
+		"multigres.com/tablegroup":     "default",
 	}
 }
 

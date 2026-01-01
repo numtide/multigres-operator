@@ -60,16 +60,26 @@ func (r *ShardReconciler) Reconcile(
 		}
 	}
 
-	// Reconcile MultiOrch Deployment
-	if err := r.reconcileMultiOrchDeployment(ctx, shard); err != nil {
-		logger.Error(err, "Failed to reconcile MultiOrch Deployment")
+	// Reconcile MultiOrch - one Deployment and Service per cell
+	multiOrchCells, err := getMultiOrchCells(shard)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile MultiOrch Service
-	if err := r.reconcileMultiOrchService(ctx, shard); err != nil {
-		logger.Error(err, "Failed to reconcile MultiOrch Service")
-		return ctrl.Result{}, err
+	for _, cell := range multiOrchCells {
+		cellName := string(cell)
+
+		// Reconcile MultiOrch Deployment for this cell
+		if err := r.reconcileMultiOrchDeployment(ctx, shard, cellName); err != nil {
+			logger.Error(err, "Failed to reconcile MultiOrch Deployment", "cell", cellName)
+			return ctrl.Result{}, err
+		}
+
+		// Reconcile MultiOrch Service for this cell
+		if err := r.reconcileMultiOrchService(ctx, shard, cellName); err != nil {
+			logger.Error(err, "Failed to reconcile MultiOrch Service", "cell", cellName)
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Reconcile each pool
@@ -113,12 +123,13 @@ func (r *ShardReconciler) handleDeletion(
 	return ctrl.Result{}, nil
 }
 
-// reconcileMultiOrchDeployment creates or updates the MultiOrch Deployment.
+// reconcileMultiOrchDeployment creates or updates the MultiOrch Deployment for a specific cell.
 func (r *ShardReconciler) reconcileMultiOrchDeployment(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
+	cellName string,
 ) error {
-	desired, err := BuildMultiOrchDeployment(shard, r.Scheme)
+	desired, err := BuildMultiOrchDeployment(shard, cellName, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build MultiOrch Deployment: %w", err)
 	}
@@ -150,12 +161,13 @@ func (r *ShardReconciler) reconcileMultiOrchDeployment(
 	return nil
 }
 
-// reconcileMultiOrchService creates or updates the MultiOrch Service.
+// reconcileMultiOrchService creates or updates the MultiOrch Service for a specific cell.
 func (r *ShardReconciler) reconcileMultiOrchService(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
+	cellName string,
 ) error {
-	desired, err := BuildMultiOrchService(shard, r.Scheme)
+	desired, err := BuildMultiOrchService(shard, cellName, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build MultiOrch Service: %w", err)
 	}
@@ -189,33 +201,53 @@ func (r *ShardReconciler) reconcileMultiOrchService(
 }
 
 // reconcilePool creates or updates the StatefulSet and headless Service for a pool.
+// For pools spanning multiple cells, this creates one StatefulSet per cell.
 func (r *ShardReconciler) reconcilePool(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	// Reconcile pool StatefulSet
-	if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, poolSpec); err != nil {
-		return fmt.Errorf("failed to reconcile pool StatefulSet: %w", err)
+	// Pools must have cells specified
+	if len(poolSpec.Cells) == 0 {
+		return fmt.Errorf(
+			"pool %s has no cells specified - cannot deploy without cell information",
+			poolName,
+		)
 	}
 
-	// Reconcile pool headless Service
-	if err := r.reconcilePoolHeadlessService(ctx, shard, poolName, poolSpec); err != nil {
-		return fmt.Errorf("failed to reconcile pool headless Service: %w", err)
+	// Create one StatefulSet per cell
+	// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
+	for _, cell := range poolSpec.Cells {
+		cellName := string(cell)
+
+		// Reconcile pool StatefulSet for this cell
+		if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf("failed to reconcile pool StatefulSet for cell %s: %w", cellName, err)
+		}
+
+		// Reconcile pool headless Service for this cell
+		if err := r.reconcilePoolHeadlessService(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf(
+				"failed to reconcile pool headless Service for cell %s: %w",
+				cellName,
+				err,
+			)
+		}
 	}
 
 	return nil
 }
 
-// reconcilePoolStatefulSet creates or updates the StatefulSet for a pool.
+// reconcilePoolStatefulSet creates or updates the StatefulSet for a pool in a specific cell.
 func (r *ShardReconciler) reconcilePoolStatefulSet(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	cellName string,
+	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	desired, err := BuildPoolStatefulSet(shard, poolName, poolSpec, r.Scheme)
+	desired, err := BuildPoolStatefulSet(shard, poolName, cellName, poolSpec, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build pool StatefulSet: %w", err)
 	}
@@ -247,14 +279,15 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 	return nil
 }
 
-// reconcilePoolHeadlessService creates or updates the headless Service for a pool.
+// reconcilePoolHeadlessService creates or updates the headless Service for a pool in a specific cell.
 func (r *ShardReconciler) reconcilePoolHeadlessService(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	cellName string,
+	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	desired, err := BuildPoolHeadlessService(shard, poolName, poolSpec, r.Scheme)
+	desired, err := BuildPoolHeadlessService(shard, poolName, cellName, poolSpec, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build pool headless Service: %w", err)
 	}
@@ -292,33 +325,24 @@ func (r *ShardReconciler) updateStatus(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) error {
-	var totalPods, readyPods int32
+	cellsSet := make(map[multigresv1alpha1.CellName]bool)
 
-	// Aggregate status from all pool StatefulSets
-	for poolName := range shard.Spec.Pools {
-		stsName := buildPoolName(shard.Name, poolName)
-		sts := &appsv1.StatefulSet{}
-		err := r.Get(
-			ctx,
-			client.ObjectKey{Namespace: shard.Namespace, Name: stsName},
-			sts,
-		)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// StatefulSet not created yet, skip
-				continue
-			}
-			return fmt.Errorf("failed to get pool StatefulSet for status: %w", err)
-		}
-
-		totalPods += sts.Status.Replicas
-		readyPods += sts.Status.ReadyReplicas
+	// Update pools status
+	totalPods, readyPods, err := r.updatePoolsStatus(ctx, shard, cellsSet)
+	if err != nil {
+		return err
 	}
 
-	// Update status fields
-	shard.Status.TotalPods = totalPods
-	shard.Status.ReadyPods = readyPods
-	shard.Status.ObservedGeneration = shard.Generation
+	// Update MultiOrch status
+	if err := r.updateMultiOrchStatus(ctx, shard, cellsSet); err != nil {
+		return err
+	}
+
+	// Update cells list from all observed cells
+	shard.Status.Cells = cellSetToSlice(cellsSet)
+
+	// Update aggregate status fields
+	shard.Status.PoolsReady = (totalPods > 0 && totalPods == readyPods)
 
 	// Update conditions
 	shard.Status.Conditions = r.buildConditions(shard, totalPods, readyPods)
@@ -328,6 +352,96 @@ func (r *ShardReconciler) updateStatus(
 	}
 
 	return nil
+}
+
+// updatePoolsStatus aggregates status from all pool StatefulSets.
+// Returns total pods, ready pods, and tracks cells in the cellsSet.
+func (r *ShardReconciler) updatePoolsStatus(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	cellsSet map[multigresv1alpha1.CellName]bool,
+) (int32, int32, error) {
+	var totalPods, readyPods int32
+
+	for poolName, poolSpec := range shard.Spec.Pools {
+		// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
+		for _, cell := range poolSpec.Cells {
+			cellName := string(cell)
+			cellsSet[cell] = true
+
+			stsName := buildPoolNameWithCell(shard.Name, poolName, cellName)
+			sts := &appsv1.StatefulSet{}
+			err := r.Get(
+				ctx,
+				client.ObjectKey{Namespace: shard.Namespace, Name: stsName},
+				sts,
+			)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					continue
+				}
+				return 0, 0, fmt.Errorf("failed to get pool StatefulSet for status: %w", err)
+			}
+
+			totalPods += sts.Status.Replicas
+			readyPods += sts.Status.ReadyReplicas
+		}
+	}
+
+	return totalPods, readyPods, nil
+}
+
+// updateMultiOrchStatus checks MultiOrch Deployments and sets OrchReady status.
+// Also tracks cells in the cellsSet.
+func (r *ShardReconciler) updateMultiOrchStatus(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	cellsSet map[multigresv1alpha1.CellName]bool,
+) error {
+	multiOrchCells, err := getMultiOrchCells(shard)
+	if err != nil {
+		shard.Status.OrchReady = false
+		return nil
+	}
+
+	orchReady := true
+	for _, cell := range multiOrchCells {
+		cellName := string(cell)
+		cellsSet[cell] = true
+
+		deployName := buildMultiOrchNameWithCell(shard.Name, cellName)
+		deploy := &appsv1.Deployment{}
+		err := r.Get(
+			ctx,
+			client.ObjectKey{Namespace: shard.Namespace, Name: deployName},
+			deploy,
+		)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				orchReady = false
+				break
+			}
+			return fmt.Errorf("failed to get MultiOrch Deployment for status: %w", err)
+		}
+
+		// Check if deployment is ready
+		if deploy.Spec.Replicas == nil || deploy.Status.ReadyReplicas != *deploy.Spec.Replicas {
+			orchReady = false
+			break
+		}
+	}
+
+	shard.Status.OrchReady = orchReady
+	return nil
+}
+
+// cellSetToSlice converts a cell set (map) to a slice.
+func cellSetToSlice(cellsSet map[multigresv1alpha1.CellName]bool) []multigresv1alpha1.CellName {
+	cells := make([]multigresv1alpha1.CellName, 0, len(cellsSet))
+	for cell := range cellsSet {
+		cells = append(cells, cell)
+	}
+	return cells
 }
 
 // buildConditions creates status conditions based on observed state.
@@ -356,6 +470,42 @@ func (r *ShardReconciler) buildConditions(
 
 	conditions = append(conditions, availableCondition)
 	return conditions
+}
+
+// getMultiOrchCells returns the list of cells where MultiOrch should be deployed.
+// If MultiOrch.Cells is specified, it uses that.
+// Otherwise, it infers cells from all pools (union of pool cells).
+func getMultiOrchCells(shard *multigresv1alpha1.Shard) ([]multigresv1alpha1.CellName, error) {
+	cells := shard.Spec.MultiOrch.Cells
+
+	// If MultiOrch specifies cells explicitly, use them
+	// TODO(#91): Add +listType=set validation to MultiOrch.Cells to prevent duplicates at API level
+	if len(cells) > 0 {
+		return cells, nil
+	}
+
+	// Otherwise, collect unique cells from all pools
+	cellSet := make(map[multigresv1alpha1.CellName]bool)
+	for _, pool := range shard.Spec.Pools {
+		for _, cell := range pool.Cells {
+			cellSet[cell] = true
+		}
+	}
+
+	// Convert set to slice
+	cells = make([]multigresv1alpha1.CellName, 0, len(cellSet))
+	for cell := range cellSet {
+		cells = append(cells, cell)
+	}
+
+	// If still no cells found, error
+	if len(cells) == 0 {
+		return nil, fmt.Errorf(
+			"MultiOrch has no cells specified and no cells found in pools - cannot deploy without cell information",
+		)
+	}
+
+	return cells, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

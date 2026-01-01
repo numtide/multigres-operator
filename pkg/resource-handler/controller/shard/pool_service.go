@@ -16,16 +16,17 @@ const (
 	PoolComponentName = "shard-pool"
 )
 
-// BuildPoolHeadlessService creates a headless Service for a pool's StatefulSet.
+// BuildPoolHeadlessService creates a headless Service for a pool's StatefulSet in a specific cell.
 // Headless services are required for StatefulSet pod DNS records.
 func BuildPoolHeadlessService(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
-	poolSpec multigresv1alpha1.ShardPoolSpec,
+	cellName string,
+	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := buildPoolName(shard.Name, poolName)
-	labels := buildPoolLabels(shard, poolName, poolSpec)
+	name := buildPoolNameWithCell(shard.Name, poolName, cellName)
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -48,7 +49,10 @@ func BuildPoolHeadlessService(
 	return svc, nil
 }
 
-// buildPoolName generates a consistent name for pool resources.
-func buildPoolName(shardName, poolName string) string {
-	return fmt.Sprintf("%s-pool-%s", shardName, poolName)
+// buildPoolNameWithCell generates the name for pool resources in a specific cell.
+// Format: {shardName}-pool-{poolName}-{cellName}
+// For pools spanning multiple cells, this creates unique names per cell.
+// cellName must not be empty - pools must belong to a cell.
+func buildPoolNameWithCell(shardName, poolName, cellName string) string {
+	return fmt.Sprintf("%s-pool-%s-%s", shardName, poolName, cellName)
 }

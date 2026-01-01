@@ -19,10 +19,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		shard   *multigresv1alpha1.Shard
-		scheme  *runtime.Scheme
-		want    *appsv1.Deployment
-		wantErr bool
+		shard    *multigresv1alpha1.Shard
+		cellName string
+		scheme   *runtime.Scheme
+		want     *appsv1.Deployment
+		wantErr  bool
 	}{
 		"minimal spec - all defaults": {
 			shard: &multigresv1alpha1.Shard{
@@ -32,22 +33,33 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					UID:       "test-uid",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"us-west-1a"}, // 1 cell = 1 replica
+						Cells: []multigresv1alpha1.CellName{"us-west-1a"},
 					},
 				},
 			},
-			scheme: scheme,
+			cellName: "us-west-1a",
+			scheme:   scheme,
 			want: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-multiorch",
+					Name:      "test-shard-multiorch-us-west-1a",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-multiorch",
+						"app.kubernetes.io/instance":   "test-shard-multiorch-us-west-1a",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "us-west-1a",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -65,27 +77,39 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-shard-multiorch",
+							"app.kubernetes.io/instance":   "test-shard-multiorch-us-west-1a",
 							"app.kubernetes.io/component":  MultiOrchComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cell":           "us-west-1a",
+							"multigres.com/database":       "testdb",
+							"multigres.com/tablegroup":     "default",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-shard-multiorch",
+								"app.kubernetes.io/instance":   "test-shard-multiorch-us-west-1a",
 								"app.kubernetes.io/component":  MultiOrchComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cell":           "us-west-1a",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
 							},
 						},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd2",
+										},
+									},
+								}, "us-west-1a"),
 							},
 						},
 					},
@@ -100,22 +124,36 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					UID:       "prod-uid",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "proddb",
+					TableGroupName: "prod-tg",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1", "zone2"}, // 2 cells = 2 replicas
+						Cells: []multigresv1alpha1.CellName{
+							"zone1",
+							"zone2",
+						},
 					},
 				},
 			},
-			scheme: scheme,
+			cellName: "zone1",
+			scheme:   scheme,
 			want: &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "production-shard-multiorch",
+					Name:      "production-shard-multiorch-zone1",
 					Namespace: "prod-ns",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-shard-multiorch",
+						"app.kubernetes.io/instance":   "production-shard-multiorch-zone1",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "proddb",
+						"multigres.com/tablegroup":     "prod-tg",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -129,31 +167,137 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					},
 				},
 				Spec: appsv1.DeploymentSpec{
-					Replicas: ptr.To(int32(2)), // Replicas = len(cells) = 2
+					Replicas: ptr.To(int32(1)), // 1 replica per cell
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "production-shard-multiorch",
+							"app.kubernetes.io/instance":   "production-shard-multiorch-zone1",
 							"app.kubernetes.io/component":  MultiOrchComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cell":           "zone1",
+							"multigres.com/database":       "proddb",
+							"multigres.com/tablegroup":     "prod-tg",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "production-shard-multiorch",
+								"app.kubernetes.io/instance":   "production-shard-multiorch-zone1",
 								"app.kubernetes.io/component":  MultiOrchComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cell":           "zone1",
+								"multigres.com/database":       "proddb",
+								"multigres.com/tablegroup":     "prod-tg",
 							},
 						},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd2",
+										},
+									},
+								}, "zone1"),
+							},
+						},
+					},
+				},
+			},
+		},
+		"with custom replicas per cell": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "replicas-shard",
+					Namespace: "default",
+					UID:       "replicas-uid",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						StatelessSpec: multigresv1alpha1.StatelessSpec{
+							Replicas: ptr.To(int32(3)),
+						},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
+					},
+				},
+			},
+			cellName: "zone1",
+			scheme:   scheme,
+			want: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "replicas-shard-multiorch-zone1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "replicas-shard-multiorch-zone1",
+						"app.kubernetes.io/component":  MultiOrchComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "replicas-shard",
+							UID:                "replicas-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To(int32(3)),
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/name":       "multigres",
+							"app.kubernetes.io/instance":   "replicas-shard-multiorch-zone1",
+							"app.kubernetes.io/component":  MultiOrchComponentName,
+							"app.kubernetes.io/part-of":    "multigres",
+							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cell":           "zone1",
+							"multigres.com/database":       "testdb",
+							"multigres.com/tablegroup":     "default",
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app.kubernetes.io/name":       "multigres",
+								"app.kubernetes.io/instance":   "replicas-shard-multiorch-zone1",
+								"app.kubernetes.io/component":  MultiOrchComponentName,
+								"app.kubernetes.io/part-of":    "multigres",
+								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cell":           "zone1",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
+							},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								buildMultiOrchContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd2",
+										},
+									},
+								}, "zone1"),
 							},
 						},
 					},
@@ -166,16 +310,20 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			scheme:  runtime.NewScheme(), // empty scheme
-			wantErr: true,
+			cellName: "us-west-1a",
+			scheme:   runtime.NewScheme(), // empty scheme
+			wantErr:  true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := BuildMultiOrchDeployment(tc.shard, tc.scheme)
+			got, err := BuildMultiOrchDeployment(tc.shard, tc.cellName, tc.scheme)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildMultiOrchDeployment() error = %v, wantErr %v", err, tc.wantErr)
@@ -198,10 +346,11 @@ func TestBuildMultiOrchService(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		shard   *multigresv1alpha1.Shard
-		scheme  *runtime.Scheme
-		want    *corev1.Service
-		wantErr bool
+		shard    *multigresv1alpha1.Shard
+		cellName string
+		scheme   *runtime.Scheme
+		want     *corev1.Service
+		wantErr  bool
 	}{
 		"minimal spec": {
 			shard: &multigresv1alpha1.Shard{
@@ -210,19 +359,26 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			scheme: scheme,
+			cellName: "us-west-1a",
+			scheme:   scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-multiorch",
+					Name:      "test-shard-multiorch-us-west-1a",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-multiorch",
+						"app.kubernetes.io/instance":   "test-shard-multiorch-us-west-1a",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "us-west-1a",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -239,10 +395,13 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-multiorch",
+						"app.kubernetes.io/instance":   "test-shard-multiorch-us-west-1a",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "us-west-1a",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -268,19 +427,26 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Namespace: "prod-ns",
 					UID:       "prod-uid",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "proddb",
+					TableGroupName: "prod-tg",
+				},
 			},
-			scheme: scheme,
+			cellName: "zone2",
+			scheme:   scheme,
 			want: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "production-shard-multiorch",
+					Name:      "production-shard-multiorch-zone2",
 					Namespace: "prod-ns",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-shard-multiorch",
+						"app.kubernetes.io/instance":   "production-shard-multiorch-zone2",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone2",
+						"multigres.com/database":       "proddb",
+						"multigres.com/tablegroup":     "prod-tg",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -297,10 +463,13 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-shard-multiorch",
+						"app.kubernetes.io/instance":   "production-shard-multiorch-zone2",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone2",
+						"multigres.com/database":       "proddb",
+						"multigres.com/tablegroup":     "prod-tg",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -325,16 +494,20 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.ShardSpec{},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+				},
 			},
-			scheme:  runtime.NewScheme(), // empty scheme
-			wantErr: true,
+			cellName: "us-west-1a",
+			scheme:   runtime.NewScheme(), // empty scheme
+			wantErr:  true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := BuildMultiOrchService(tc.shard, tc.scheme)
+			got, err := BuildMultiOrchService(tc.shard, tc.cellName, tc.scheme)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("BuildMultiOrchService() error = %v, wantErr %v", err, tc.wantErr)

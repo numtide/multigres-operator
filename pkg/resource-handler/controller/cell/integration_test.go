@@ -68,16 +68,18 @@ func TestCellReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
+					Zone: "us-west-1a",
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{},
 					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
@@ -101,7 +103,17 @@ func TestCellReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multigateway",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multigateway",
+											"--http-port", "15100",
+											"--grpc-port", "15170",
+											"--pg-port", "15432",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone1",
+										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
@@ -140,16 +152,18 @@ func TestCellReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
+					Zone: "us-west-1b",
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(3)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(3)),
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{},
 					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
@@ -173,7 +187,17 @@ func TestCellReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multigateway",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multigateway",
+											"--http-port", "15100",
+											"--grpc-port", "15170",
+											"--pg-port", "15432",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone2",
+										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
@@ -211,21 +235,20 @@ func TestCellReconciliation(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone3",
-					Images: multigresv1alpha1.CellImagesSpec{
-						MultiGateway: "custom/multigateway:v1.0.0",
-						MultiOrch:    "custom/multiorch:v1.0.0",
-					},
+					Name:              "zone3",
+					Zone:              "us-west-1c",
+					MultiGatewayImage: "custom/multigateway:v1.0.0",
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{},
 					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
@@ -250,6 +273,16 @@ func TestCellReconciliation(t *testing.T) {
 									{
 										Name:  "multigateway",
 										Image: "custom/multigateway:v1.0.0",
+										Args: []string{
+											"multigateway",
+											"--http-port", "15100",
+											"--grpc-port", "15170",
+											"--pg-port", "15432",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone3",
+										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
@@ -288,6 +321,7 @@ func TestCellReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone4",
+					Zone: "us-west-1d",
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 						Affinity: &corev1.Affinity{
@@ -308,30 +342,14 @@ func TestCellReconciliation(t *testing.T) {
 							},
 						},
 					},
-					MultiOrch: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
-						Affinity: &corev1.Affinity{
-							PodAntiAffinity: &corev1.PodAntiAffinity{
-								PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
-									{
-										Weight: 100,
-										PodAffinityTerm: corev1.PodAffinityTerm{
-											LabelSelector: &metav1.LabelSelector{
-												MatchLabels: map[string]string{
-													"app.kubernetes.io/component": "multiorch",
-												},
-											},
-											TopologyKey: "kubernetes.io/hostname",
-										},
-									},
-								},
-							},
-						},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
 					},
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRefSpec{
-						ClientServiceName: "global-topo",
+					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{},
 					},
-					TopoServer: multigresv1alpha1.CellTopoServerSpec{},
 				},
 			},
 			wantResources: []client.Object{
@@ -355,7 +373,17 @@ func TestCellReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "multigateway",
-										Image: "numtide/multigres-operator:latest",
+										Image: "ghcr.io/multigres/multigres:latest",
+										Args: []string{
+											"multigateway",
+											"--http-port", "15100",
+											"--grpc-port", "15170",
+											"--pg-port", "15432",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--topo-implementation", "etcd2",
+											"--cell", "zone4",
+										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),

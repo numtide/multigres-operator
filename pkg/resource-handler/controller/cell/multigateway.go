@@ -22,7 +22,7 @@ const (
 	DefaultMultiGatewayReplicas int32 = 2
 
 	// DefaultMultiGatewayImage is the default MultiGateway container image
-	DefaultMultiGatewayImage = "numtide/multigres-operator:latest"
+	DefaultMultiGatewayImage = "ghcr.io/multigres/multigres:latest"
 
 	// MultiGatewayHTTPPort is the default port for HTTP connections
 	MultiGatewayHTTPPort int32 = 15100
@@ -45,8 +45,8 @@ func BuildMultiGatewayDeployment(
 	}
 
 	image := DefaultMultiGatewayImage
-	if cell.Spec.Images.MultiGateway != "" {
-		image = cell.Spec.Images.MultiGateway
+	if cell.Spec.MultiGatewayImage != "" {
+		image = cell.Spec.MultiGatewayImage
 	}
 
 	name := cell.Name + "-multigateway"
@@ -70,9 +70,19 @@ func BuildMultiGatewayDeployment(
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:      "multigateway",
-							Image:     image,
-							Resources: cell.Spec.MultiGateway.ResourceRequirements,
+							Name:  "multigateway",
+							Image: image,
+							Args: []string{
+								"multigateway",
+								"--http-port", fmt.Sprintf("%d", MultiGatewayHTTPPort),
+								"--grpc-port", fmt.Sprintf("%d", MultiGatewayGRPCPort),
+								"--pg-port", fmt.Sprintf("%d", MultiGatewayPostgresPort),
+								"--topo-global-server-addresses", cell.Spec.GlobalTopoServer.Address,
+								"--topo-global-root", cell.Spec.GlobalTopoServer.RootPath,
+								"--topo-implementation", cell.Spec.GlobalTopoServer.Implementation,
+								"--cell", cell.Spec.Name,
+							},
+							Resources: cell.Spec.MultiGateway.Resources,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "http",

@@ -47,7 +47,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
@@ -101,8 +101,8 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{
-					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
 						Replicas: ptr.To(int32(5)),
 						Image:    "quay.io/coreos/etcd:v3.5.15",
 					},
@@ -165,7 +165,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{
 				&multigresv1alpha1.TopoServer{
@@ -175,7 +175,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 					},
-					Spec: multigresv1alpha1.TopoServerChildSpec{},
+					Spec: multigresv1alpha1.TopoServerSpec{},
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
@@ -198,8 +198,8 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{
-					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
 						Replicas: ptr.To(int32(3)),
 					},
 				},
@@ -227,15 +227,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get TopoServer: %v", err)
 				}
 
-				if updatedTopoServer.Status.Replicas != 3 {
-					t.Errorf("Status.Replicas = %d, want 3", updatedTopoServer.Status.Replicas)
-				}
-				if updatedTopoServer.Status.ReadyReplicas != 3 {
-					t.Errorf(
-						"Status.ReadyReplicas = %d, want 3",
-						updatedTopoServer.Status.ReadyReplicas,
-					)
-				}
+				// Status no longer tracks Replicas/ReadyReplicas directly
 				if len(updatedTopoServer.Status.Conditions) == 0 {
 					t.Error("Status.Conditions should not be empty")
 				} else {
@@ -265,7 +257,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -280,7 +272,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
@@ -304,7 +296,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -324,7 +316,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
@@ -363,7 +355,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
@@ -394,7 +386,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -415,7 +407,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
@@ -449,7 +441,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
@@ -475,7 +467,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -495,8 +487,8 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{
-					TopoServerSpec: multigresv1alpha1.TopoServerSpec{
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
 						Replicas: ptr.To(int32(5)),
 					},
 				},
@@ -529,7 +521,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -548,7 +540,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -564,7 +556,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{
 				&multigresv1alpha1.TopoServer{
@@ -574,7 +566,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
 					},
-					Spec: multigresv1alpha1.TopoServerChildSpec{},
+					Spec: multigresv1alpha1.TopoServerSpec{},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
@@ -588,7 +580,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 				},
-				Spec: multigresv1alpha1.TopoServerChildSpec{},
+				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{

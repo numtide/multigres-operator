@@ -6,7 +6,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,25 +44,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(1)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -71,34 +63,34 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				// Verify MultiOrch Deployment was created
+				// Verify MultiOrch Deployment was created (with cell suffix)
 				moDeploy := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-multiorch", Namespace: "default"},
+					types.NamespacedName{Name: "test-shard-multiorch-zone1", Namespace: "default"},
 					moDeploy); err != nil {
 					t.Errorf("MultiOrch Deployment should exist: %v", err)
 				}
 
-				// Verify MultiOrch Service was created
+				// Verify MultiOrch Service was created (with cell suffix)
 				moSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-multiorch", Namespace: "default"},
+					types.NamespacedName{Name: "test-shard-multiorch-zone1", Namespace: "default"},
 					moSvc); err != nil {
 					t.Errorf("MultiOrch Service should exist: %v", err)
 				}
 
-				// Verify Pool StatefulSet was created
+				// Verify Pool StatefulSet was created (with cell suffix)
 				poolSts := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-pool-primary", Namespace: "default"},
+					types.NamespacedName{Name: "test-shard-pool-primary-zone1", Namespace: "default"},
 					poolSts); err != nil {
 					t.Errorf("Pool StatefulSet should exist: %v", err)
 				}
 
-				// Verify Pool headless Service was created
+				// Verify Pool headless Service was created (with cell suffix)
 				poolSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-pool-primary-headless", Namespace: "default"},
+					types.NamespacedName{Name: "test-shard-pool-primary-zone1-headless", Namespace: "default"},
 					poolSvc); err != nil {
 					t.Errorf("Pool headless Service should exist: %v", err)
 				}
@@ -120,42 +112,26 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"replica": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(2)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(2)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 						"readOnly": {
-							Cell:       "zone1",
-							Type:       "readOnly",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(3)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("5Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "readOnly",
+							ReplicasPerCell: ptr.To(int32(3)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "5Gi",
 							},
 						},
 					},
@@ -166,7 +142,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify replica pool StatefulSet
 				replicaSts := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-replica", Namespace: "default"},
+					types.NamespacedName{Name: "multi-pool-shard-pool-replica-zone1", Namespace: "default"},
 					replicaSts); err != nil {
 					t.Errorf("Replica pool StatefulSet should exist: %v", err)
 				} else if *replicaSts.Spec.Replicas != 2 {
@@ -176,7 +152,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify readOnly pool StatefulSet
 				readOnlySts := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-readOnly", Namespace: "default"},
+					types.NamespacedName{Name: "multi-pool-shard-pool-readOnly-zone1", Namespace: "default"},
 					readOnlySts); err != nil {
 					t.Errorf("ReadOnly pool StatefulSet should exist: %v", err)
 				} else if *readOnlySts.Spec.Replicas != 3 {
@@ -186,16 +162,176 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify both headless services
 				replicaSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-replica-headless", Namespace: "default"},
+					types.NamespacedName{Name: "multi-pool-shard-pool-replica-zone1-headless", Namespace: "default"},
 					replicaSvc); err != nil {
 					t.Errorf("Replica pool headless Service should exist: %v", err)
 				}
 
 				readOnlySvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-readOnly-headless", Namespace: "default"},
+					types.NamespacedName{Name: "multi-pool-shard-pool-readOnly-zone1-headless", Namespace: "default"},
 					readOnlySvc); err != nil {
 					t.Errorf("ReadOnly pool headless Service should exist: %v", err)
+				}
+			},
+		},
+		"MultiOrch infers cells from pools when not specified": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "inferred-cells-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{}, // Empty - will infer from pools
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
+				// MultiOrch should be deployed to both zone1 and zone2
+				mo1 := &appsv1.Deployment{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "inferred-cells-shard-multiorch-zone1", Namespace: "default"},
+					mo1); err != nil {
+					t.Errorf("MultiOrch Deployment for zone1 should exist: %v", err)
+				}
+
+				mo2 := &appsv1.Deployment{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "inferred-cells-shard-multiorch-zone2", Namespace: "default"},
+					mo2); err != nil {
+					t.Errorf("MultiOrch Deployment for zone2 should exist: %v", err)
+				}
+			},
+		},
+		"error when MultiOrch and pools have no cells specified": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-cells-anywhere",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{}, // Empty
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{}, // Also empty - should error
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			wantErr:         true,
+		},
+		"error when pool has no cells specified": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "no-cell-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone1"},
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{}, // Empty cells - should error
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			wantErr:         true,
+		},
+		"create resources for Shard with multi-cell pool": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "multi-cell-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone1", "zone2"},
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(2)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
+				// Verify StatefulSet for zone1
+				sts1 := &appsv1.StatefulSet{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone1", Namespace: "default"},
+					sts1); err != nil {
+					t.Fatalf("StatefulSet for zone1 should exist: %v", err)
+				}
+				if *sts1.Spec.Replicas != 2 {
+					t.Errorf("Zone1 replicas = %d, want 2", *sts1.Spec.Replicas)
+				}
+
+				// Verify StatefulSet for zone2
+				sts2 := &appsv1.StatefulSet{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone2", Namespace: "default"},
+					sts2); err != nil {
+					t.Fatalf("StatefulSet for zone2 should exist: %v", err)
+				}
+				if *sts2.Spec.Replicas != 2 {
+					t.Errorf("Zone2 replicas = %d, want 2", *sts2.Spec.Replicas)
+				}
+
+				// Verify headless Services for both cells
+				svc1 := &corev1.Service{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone1-headless", Namespace: "default"},
+					svc1); err != nil {
+					t.Fatalf("Headless Service for zone1 should exist: %v", err)
+				}
+
+				svc2 := &corev1.Service{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone2-headless", Namespace: "default"},
+					svc2); err != nil {
+					t.Fatalf("Headless Service for zone2 should exist: %v", err)
 				}
 			},
 		},
@@ -207,29 +343,22 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Images: multigresv1alpha1.ShardImagesSpec{
+					Images: multigresv1alpha1.ShardImages{
 						MultiPooler: "custom/multipooler:v1.0.0",
 						Postgres:    "postgres:16",
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(5)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("20Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(5)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "20Gi",
 							},
 						},
 					},
@@ -257,7 +386,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-shard-pool-primary",
+						Name:      "existing-shard-pool-primary-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
@@ -270,7 +399,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-shard-pool-primary-headless",
+						Name:      "existing-shard-pool-primary-zone1-headless",
 						Namespace: "default",
 					},
 				},
@@ -278,7 +407,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
 				poolSts := &appsv1.StatefulSet{}
 				err := c.Get(t.Context(), types.NamespacedName{
-					Name:      "existing-shard-pool-primary",
+					Name:      "existing-shard-pool-primary-zone1",
 					Namespace: "default",
 				}, poolSts)
 				if err != nil {
@@ -299,24 +428,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers:        []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -332,23 +454,14 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Spec: multigresv1alpha1.ShardSpec{
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
-							Cells: []string{"zone1"},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
 						},
-						Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+						Pools: map[string]multigresv1alpha1.PoolSpec{
 							"primary": {
-								Cell:       "zone1",
-								Type:       "replica",
-								Database:   "testdb",
-								TableGroup: "default",
-								DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{
-										corev1.ReadWriteOnce,
-									},
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: corev1.ResourceList{
-											corev1.ResourceStorage: resource.MustParse("10Gi"),
-										},
-									},
+								Cells: []multigresv1alpha1.CellName{"zone1"},
+								Type:  "replica",
+								Storage: multigresv1alpha1.StorageSpec{
+									Size: "10Gi",
 								},
 							},
 						},
@@ -376,25 +489,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(3)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(3)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -403,22 +509,22 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-multiorch",
+						Name:      "test-shard-ready-multiorch-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
+						Replicas: ptr.To(int32(1)),
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-multiorch",
+						Name:      "test-shard-ready-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-pool-primary",
+						Name:      "test-shard-ready-pool-primary-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
@@ -431,7 +537,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-pool-primary-headless",
+						Name:      "test-shard-ready-pool-primary-zone1-headless",
 						Namespace: "default",
 					},
 				},
@@ -459,11 +565,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					}
 				}
 
-				if updatedShard.Status.TotalPods != 3 {
-					t.Errorf("TotalPods = %d, want 3", updatedShard.Status.TotalPods)
-				}
-				if updatedShard.Status.ReadyPods != 3 {
-					t.Errorf("ReadyPods = %d, want 3", updatedShard.Status.ReadyPods)
+				// Status no longer tracks TotalPods/ReadyPods - uses PoolsReady boolean instead
+				if !updatedShard.Status.PoolsReady {
+					t.Error("PoolsReady should be true when all pools are ready")
 				}
 			},
 		},
@@ -475,25 +579,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(5)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(5)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -558,11 +655,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					)
 				}
 
-				if updatedShard.Status.TotalPods != 5 {
-					t.Errorf("TotalPods = %d, want 5", updatedShard.Status.TotalPods)
-				}
-				if updatedShard.Status.ReadyPods != 3 {
-					t.Errorf("ReadyPods = %d, want 3", updatedShard.Status.ReadyPods)
+				// Status no longer tracks TotalPods/ReadyPods - partial ready means PoolsReady=false
+				if updatedShard.Status.PoolsReady {
+					t.Error("PoolsReady should be false when not all pools are ready")
 				}
 			},
 		},
@@ -574,42 +669,26 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"replica": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(2)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(2)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 						"readOnly": {
-							Cell:       "zone1",
-							Type:       "readOnly",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(3)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("5Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "readOnly",
+							ReplicasPerCell: ptr.To(int32(3)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "5Gi",
 							},
 						},
 					},
@@ -618,19 +697,19 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-multiorch",
+						Name:      "test-shard-multi-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-multiorch",
+						Name:      "test-shard-multi-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-replica",
+						Name:      "test-shard-multi-pool-replica-zone1",
 						Namespace: "default",
 					},
 					Status: appsv1.StatefulSetStatus{
@@ -640,13 +719,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-replica-headless",
+						Name:      "test-shard-multi-pool-replica-zone1-headless",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-readOnly",
+						Name:      "test-shard-multi-pool-readOnly-zone1",
 						Namespace: "default",
 					},
 					Status: appsv1.StatefulSetStatus{
@@ -656,7 +735,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-readOnly-headless",
+						Name:      "test-shard-multi-pool-readOnly-zone1-headless",
 						Namespace: "default",
 					},
 				},
@@ -670,11 +749,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 
 				// Total should be 2 + 3 = 5
-				if updatedShard.Status.TotalPods != 5 {
-					t.Errorf("TotalPods = %d, want 5", updatedShard.Status.TotalPods)
-				}
-				if updatedShard.Status.ReadyPods != 5 {
-					t.Errorf("ReadyPods = %d, want 5", updatedShard.Status.ReadyPods)
+				// Status no longer tracks TotalPods/ReadyPods - uses PoolsReady boolean instead
+				if !updatedShard.Status.PoolsReady {
+					t.Error("PoolsReady should be true when all pools are ready")
 				}
 			},
 		},
@@ -688,24 +765,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -724,24 +794,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -751,7 +814,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-shard-multiorch" {
+						deploy.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -767,24 +830,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -793,7 +849,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.DeploymentSpec{
@@ -804,7 +860,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-shard-multiorch" {
+						deploy.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -820,24 +876,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -846,7 +895,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-multiorch" {
+					if key.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -861,24 +910,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -887,7 +929,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -903,24 +946,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -929,20 +965,21 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-shard-multiorch" {
+					if svc, ok := obj.(*corev1.Service); ok &&
+						svc.Name == "test-shard-multiorch-zone1" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -958,24 +995,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -984,14 +1014,14 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-svc-multiorch",
+						Name:      "test-shard-svc-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: testutil.FailOnNamespacedKeyName(
-					"test-shard-svc-multiorch",
+					"test-shard-svc-multiorch-zone1",
 					"default",
 					testutil.ErrNetworkTimeout,
 				),
@@ -1005,24 +1035,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1032,7 +1055,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
-						sts.Name == "test-shard-pool-primary" {
+						sts.Name == "test-shard-pool-primary-zone1" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1048,25 +1071,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							Replicas:   ptr.To(int32(5)),
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(5)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1075,19 +1091,19 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary",
+						Name:      "test-shard-pool-primary-zone1",
 						Namespace: "default",
 					},
 					Spec: appsv1.StatefulSetSpec{
@@ -1098,7 +1114,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
-						sts.Name == "test-shard-pool-primary" {
+						sts.Name == "test-shard-pool-primary-zone1" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1114,24 +1130,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1140,20 +1149,20 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-pool-primary" {
+					if key.Name == "test-shard-pool-primary-zone1" {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -1168,24 +1177,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1195,7 +1197,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-shard-pool-primary-headless" {
+						svc.Name == "test-shard-pool-primary-zone1-headless" {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1211,24 +1213,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1237,25 +1232,25 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary",
+						Name:      "test-shard-pool-primary-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary-headless",
+						Name:      "test-shard-pool-primary-zone1-headless",
 						Namespace: "default",
 					},
 				},
@@ -1263,7 +1258,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-shard-pool-primary-headless" {
+						svc.Name == "test-shard-pool-primary-zone1-headless" {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1279,24 +1274,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1305,26 +1293,26 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch",
+						Name:      "test-shard-multiorch-zone1",
 						Namespace: "default",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary",
+						Name:      "test-shard-pool-primary-zone1",
 						Namespace: "default",
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-pool-primary-headless" &&
+					if key.Name == "test-shard-pool-primary-zone1-headless" &&
 						key.Namespace == "default" {
 						return testutil.ErrNetworkTimeout
 					}
@@ -1340,24 +1328,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1378,24 +1359,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers:        []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1411,23 +1385,14 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Spec: multigresv1alpha1.ShardSpec{
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
-							Cells: []string{"zone1"},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
 						},
-						Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+						Pools: map[string]multigresv1alpha1.PoolSpec{
 							"primary": {
-								Cell:       "zone1",
-								Type:       "replica",
-								Database:   "testdb",
-								TableGroup: "default",
-								DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{
-										corev1.ReadWriteOnce,
-									},
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: corev1.ResourceList{
-											corev1.ResourceStorage: resource.MustParse("10Gi"),
-										},
-									},
+								Cells: []multigresv1alpha1.CellName{"zone1"},
+								Type:  "replica",
+								Storage: multigresv1alpha1.StorageSpec{
+									Size: "10Gi",
 								},
 							},
 						},
@@ -1446,24 +1411,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
@@ -1483,24 +1441,17 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []string{"zone1"},
+						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.ShardPoolSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cell:       "zone1",
-							Type:       "replica",
-							Database:   "testdb",
-							TableGroup: "default",
-							DataVolumeClaimTemplate: corev1.PersistentVolumeClaimSpec{
-								AccessModes: []corev1.PersistentVolumeAccessMode{
-									corev1.ReadWriteOnce,
-								},
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceStorage: resource.MustParse("10Gi"),
-									},
-								},
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
 							},
 						},
 					},
