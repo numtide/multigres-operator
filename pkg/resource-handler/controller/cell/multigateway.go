@@ -22,7 +22,7 @@ const (
 	DefaultMultiGatewayReplicas int32 = 2
 
 	// DefaultMultiGatewayImage is the default MultiGateway container image
-	DefaultMultiGatewayImage = "ghcr.io/multigres/multigres:latest"
+	DefaultMultiGatewayImage = "ghcr.io/multigres/multigres:main"
 
 	// MultiGatewayHTTPPort is the default port for HTTP connections
 	MultiGatewayHTTPPort int32 = 15100
