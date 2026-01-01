@@ -3,8 +3,8 @@ module github.com/numtide/multigres-operator
 go 1.25.0
 
 require (
-	github.com/numtide/multigres-operator/api v0.0.0-20251213015258-2919bb5e88f9
-	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20251214103105-801ed36d716f
+	github.com/numtide/multigres-operator/api v0.0.0-20260101063420-94576a4bc1f7
+	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260101072241-f8648bb2952b
 	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.3
 	sigs.k8s.io/controller-runtime v0.22.4
