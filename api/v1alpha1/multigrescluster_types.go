@@ -55,8 +55,8 @@ type MultigresClusterSpec struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=name
-	// +kubebuilder:validation:XValidation:rule="self.filter(x, has(x.default) && x.default).size() <= 1",message="only one database can be marked as default"
-	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:MaxItems=1
+	// +kubebuilder:validation:XValidation:rule="self.all(db, db.name == 'postgres' && db.default == true)",message="in v1alpha1, only the single system database named 'postgres' (marked default: true) is supported"
 	Databases []DatabaseConfig `json:"databases,omitempty"`
 }
 
@@ -223,6 +223,7 @@ type DatabaseConfig struct {
 }
 
 // TableGroupConfig defines a table group within a database.
+// +kubebuilder:validation:XValidation:rule="!self.default || self.name == 'default'",message="the default tablegroup must be named 'default'"
 type TableGroupConfig struct {
 	// Name is the logical name of the table group.
 	// +kubebuilder:validation:MinLength=1
