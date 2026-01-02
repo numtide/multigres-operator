@@ -189,6 +189,28 @@ verify: manifests generate ## Verify generated files are up to date
 	}
 	@echo "==> Verification passed!"
 
+.PHONY: verify-warn
+verify-warn: manifests generate ## Verify generated files are up to date (non-blocking, warns only)
+	@echo "==> Verifying generated files are committed"
+	@if ! git diff --exit-code config/crd api/ >/dev/null 2>&1; then \
+		echo ""; \
+		echo "========================================"; \
+		echo "WARNING: Generated files are out of date"; \
+		echo "========================================"; \
+		echo ""; \
+		echo "The following files have changes:"; \
+		git diff --stat config/crd api/; \
+		echo ""; \
+		echo "This is not blocking the build, but you should run"; \
+		echo "'make manifests generate' and commit the changes"; \
+		echo "before merging to ensure CRDs are synchronized."; \
+		echo ""; \
+		echo "========================================"; \
+		exit 0; \
+	else \
+		echo "==> Verification passed!"; \
+	fi
+
 .PHONY: pre-commit
 pre-commit: modules-tidy fmt vet lint test ## Run full pre-commit checks (tidy, fmt, vet, lint, test)
 	@echo "==> Pre-commit checks passed!"
