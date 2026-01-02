@@ -4,41 +4,48 @@ metadata:
   name: kind-shard-sample
   namespace: default
 spec:
+  # Shard identification
+  databaseName: mydb
+  tableGroupName: users
+  shardName: "0"
+
   # Container images for shard components
   images:
+    multiorch: ghcr.io/multigres/multigres:main
+    multipooler: ghcr.io/multigres/multigres:main
     postgres: postgres:16-alpine
-    multipooler: ghcr.io/multigres/multipooler:latest
+
+  # Reference to the global topology server
+  globalTopoServer:
+    address: kind-global-topo:2379
+    rootPath: /multigres/global
+    implementation: etcd2
 
   # MultiOrch configuration for shard orchestration
-  multiOrch:
+  multiorch:
     cells:
       - zone-a
-    image: ghcr.io/multigres/multiorch:latest
+    replicas: 1
     resources:
       requests:
         cpu: 50m
         memory: 64Mi
       limits:
         cpu: 200m
-        memory: 256Mi
+        memory: 128Mi
 
   # Shard pools - different types of PostgreSQL replicas
   pools:
     # Primary replica pool
     primary:
-      type: replica
-      cell: zone-a
-      database: mydb
-      tableGroup: users
-      replicas: 1
+      type: readWrite
+      cells:
+        - zone-a
+      replicasPerCell: 1
 
       # Storage configuration - kind uses local storage provisioner
-      dataVolumeClaimTemplate:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
+      storage:
+        size: 1Gi
 
       # PostgreSQL container configuration - lower resources for kind
       postgres:
@@ -62,18 +69,13 @@ spec:
 
     # Read replica pool
     replica:
-      type: replica
-      cell: zone-a
-      database: mydb
-      tableGroup: users
-      replicas: 1
+      type: readOnly
+      cells:
+        - zone-a
+      replicasPerCell: 1
 
-      dataVolumeClaimTemplate:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
+      storage:
+        size: 1Gi
 
       postgres:
         resources:

@@ -7,10 +7,11 @@ spec:
   # Logical name of the cell
   name: zone-a
 
-  # Container images for cell components
-  images:
-    multigateway: ghcr.io/multigres/multigateway:latest
-    multiorch: ghcr.io/multigres/multiorch:latest
+  # Physical zone placement (use either 'zone' or 'region', not both)
+  zone: us-west-1a
+
+  # Container image for multigateway
+  multigatewayImage: ghcr.io/multigres/multigres:main
 
   # MultiGateway deployment - query routing
   multigateway:
@@ -23,38 +24,20 @@ spec:
         cpu: 200m
         memory: 256Mi
 
-  # MultiOrch deployment - cell orchestration
-  multiorch:
-    replicas: 1
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 200m
-        memory: 128Mi
-
   # Reference to the global topology server
   globalTopoServer:
-    rootPath: /multigres
-    clientServiceName: kind-global-topo-client
+    address: kind-global-topo:2379
+    rootPath: /multigres/global
+    implementation: etcd2
 
-  # Cell-local topology server configuration
-  # If managedSpec is set, a TopoServer CR will be created for this cell
+  # Cell-local topology server configuration (optional)
+  # If specified, creates a local etcd cluster for this cell
   topoServer:
-    managedSpec:
+    etcd:
       image: quay.io/coreos/etcd:v3.5.12
       replicas: 1
-
-      # Storage for etcd data - kind uses local storage provisioner
-      dataVolumeClaimTemplate:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
-
-      # Resource requirements for etcd - lower for kind
+      storage:
+        size: 1Gi
       resources:
         requests:
           cpu: 50m
@@ -70,4 +53,4 @@ spec:
   # Topology reconciliation settings
   topologyReconciliation:
     registerCell: true
-    pruneTablets: true
+    prunePoolers: true
