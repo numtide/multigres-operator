@@ -1,0 +1,38 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: standard-ha-cluster
+  namespace: default
+spec:
+  # 1. Define Cluster-Wide Defaults
+  templateDefaults:
+    coreTemplate: "standard-core"
+    cellTemplate: "standard-cell"
+    shardTemplate: "standard-shard"
+
+  # 2. Define Cells (Inherits 'standard-cell')
+  cells:
+    - name: "us-east-1a"
+      zone: "us-east-1a"
+    - name: "us-east-1b"
+      zone: "us-east-1b"
+
+  # 3. Configure the System Database
+  # We explicitly define this to ensure it uses our 'standard-shard' template
+  # and has the correct redundancy.
+  databases:
+    - name: "postgres"
+      default: true # Marks this as the System Catalog
+      tablegroups:
+        - name: "default" # MUST be named 'default' for Gateway routing
+          default: true
+          shards:
+            - name: "0"
+              # Inherits 'standard-shard' template automatically via defaults
+              overrides:
+                pools:
+                  main-app:
+                    # Spread the primary pool across both available cells
+                    cells:
+                      - "us-east-1a"
+                      - "us-east-1b"
