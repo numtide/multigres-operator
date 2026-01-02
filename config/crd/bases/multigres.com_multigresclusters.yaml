@@ -6873,8 +6873,9 @@ spec:
                       - name
                       x-kubernetes-list-type: map
                       x-kubernetes-validations:
-                      - message: only one tablegroup can be marked as default
-                        rule: self.filter(x, has(x.default) && x.default).size() <=
+                      - message: every database must have exactly one tablegroup marked
+                          as default
+                        rule: self.filter(x, has(x.default) && x.default).size() ==
                           1
                   required:
                   - name

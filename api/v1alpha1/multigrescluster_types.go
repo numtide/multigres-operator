@@ -217,7 +217,7 @@ type DatabaseConfig struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=name
-	// +kubebuilder:validation:XValidation:rule="self.filter(x, has(x.default) && x.default).size() <= 1",message="only one tablegroup can be marked as default"
+	// +kubebuilder:validation:XValidation:rule="self.filter(x, has(x.default) && x.default).size() == 1",message="every database must have exactly one tablegroup marked as default"
 	// +kubebuilder:validation:MaxItems=20
 	TableGroups []TableGroupConfig `json:"tablegroups,omitempty"`
 }
