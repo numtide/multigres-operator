@@ -36,6 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
+	tablegroupcontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
 	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
@@ -263,6 +265,20 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TopoServer")
+		os.Exit(1)
+	}
+	if err := (&multigresclustercontroller.MultigresClusterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MultigresCluster")
+		os.Exit(1)
+	}
+	if err := (&tablegroupcontroller.TableGroupReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TableGroup")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
