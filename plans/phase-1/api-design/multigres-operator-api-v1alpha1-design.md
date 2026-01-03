@@ -681,8 +681,12 @@ spec:
   name: "us-east-1a"
   zone: "us-east-1a" # this would be region if that was chosen instead.
 
-  # Image passed down from global configuration
-  multigatewayImage: "multigres/multigres:latest"
+  # Images and pull config passed down from global configuration
+  images:
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
+    multigateway: "multigres/multigres:latest"
 
   # Resolved from CellTemplate + Overrides
   multigateway:
@@ -777,10 +781,13 @@ metadata:
 spec:
   databaseName: "production_db"
   tableGroupName: "orders_tg"
-  default: false
+  default: true
 
-  # Images passed down from global configuration
+  # Images and pull config passed down from global configuration
   images:
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
@@ -940,8 +947,11 @@ spec:
   tableGroupName: "orders_tg"
   shardName: "0"
 
-  # Images passed down from global configuration
+  # Images and pull config passed down from global configuration
   images:
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
