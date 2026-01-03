@@ -112,6 +112,15 @@ type ShardSpec struct {
 
 // ShardImages defines the images required for a Shard.
 type ShardImages struct {
+	// ImagePullPolicy overrides the default image pull policy.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// ImagePullSecrets is a list of references to secrets in the same namespace.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
 	// MultiOrch is the image for the shard orchestrator.
 	// +kubebuilder:validation:MaxLength=512
 	MultiOrch string `json:"multiorch"`
