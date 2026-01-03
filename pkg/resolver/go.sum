@@ -82,6 +82,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/numtide/multigres-operator/api v0.0.0-20251224124005-355869230728 h1:a+iM4L0nC7kUgcAD1P+wuNJg4x0rjcy6rVZ3+vF52Cc=
 github.com/numtide/multigres-operator/api v0.0.0-20251224124005-355869230728/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
+github.com/numtide/multigres-operator/api v0.0.0-20260103121224-057738b43b3b h1:twErev/AdyVQvlYa5vbo5wqq+NlexZJmIm0pwEQd5qI=
+github.com/numtide/multigres-operator/api v0.0.0-20260103121224-057738b43b3b/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/onsi/ginkgo/v2 v2.25.3 h1:Ty8+Yi/ayDAGtk4XxmmfUy4GabvM+MegeB4cDLRi6nw=
 github.com/onsi/ginkgo/v2 v2.25.3/go.mod h1:43uiyQC4Ed2tkOzLsEYm7hnrb7UJTWHYNsuy3bG/snE=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=

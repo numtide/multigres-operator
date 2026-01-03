@@ -46,6 +46,19 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  FallbackCellTemplate,
 						ShardTemplate: FallbackShardTemplate,
 					},
+					// Expect Smart Defaulting: System Catalog
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:    DefaultSystemDatabaseName,
+							Default: true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name:    DefaultSystemTableGroupName,
+									Default: true,
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -65,6 +78,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  "custom-cell",
 						ShardTemplate: "custom-shard",
 					},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:        "existing-db",
+							Default:     true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{{Name: "tg1"}},
+						},
+					},
 				},
 			},
 			want: &multigresv1alpha1.MultigresCluster{
@@ -81,6 +101,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CoreTemplate:  "custom-core",
 						CellTemplate:  "custom-cell",
 						ShardTemplate: "custom-shard",
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:        "existing-db",
+							Default:     true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{{Name: "tg1"}},
+						},
 					},
 				},
 			},
@@ -110,6 +137,19 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CoreTemplate:  FallbackCoreTemplate,
 						CellTemplate:  FallbackCellTemplate,
 						ShardTemplate: FallbackShardTemplate,
+					},
+					// Expect Smart Defaulting for DBs
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:    DefaultSystemDatabaseName,
+							Default: true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name:    DefaultSystemTableGroupName,
+									Default: true,
+								},
+							},
+						},
 					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{
@@ -156,6 +196,19 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  FallbackCellTemplate,
 						ShardTemplate: FallbackShardTemplate,
 					},
+					// Expect Smart Defaulting for DBs
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:    DefaultSystemDatabaseName,
+							Default: true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name:    DefaultSystemTableGroupName,
+									Default: true,
+								},
+							},
+						},
+					},
 					Cells: []multigresv1alpha1.CellConfig{
 						{
 							Name: "cell-1",
@@ -195,12 +248,63 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  FallbackCellTemplate,
 						ShardTemplate: FallbackShardTemplate,
 					},
+					// Expect Smart Defaulting for DBs
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:    DefaultSystemDatabaseName,
+							Default: true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name:    DefaultSystemTableGroupName,
+									Default: true,
+								},
+							},
+						},
+					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     "custom-etcd",
 							Replicas:  ptr.To(DefaultEtcdReplicas),
 							Resources: DefaultResourcesEtcd(),
 							Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+						},
+					},
+				},
+			},
+		},
+		"Smart Defaulting: Inject TableGroup when DB exists": {
+			input: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{Name: "postgres", Default: true}, // No TableGroups
+					},
+				},
+			},
+			want: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        DefaultPostgresImage,
+						MultiAdmin:      DefaultMultiAdminImage,
+						MultiOrch:       DefaultMultiOrchImage,
+						MultiPooler:     DefaultMultiPoolerImage,
+						MultiGateway:    DefaultMultiGatewayImage,
+						ImagePullPolicy: DefaultImagePullPolicy,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  FallbackCoreTemplate,
+						CellTemplate:  FallbackCellTemplate,
+						ShardTemplate: FallbackShardTemplate,
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:    "postgres",
+							Default: true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name:    DefaultSystemTableGroupName,
+									Default: true,
+								},
+							},
 						},
 					},
 				},

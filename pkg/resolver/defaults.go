@@ -21,6 +21,12 @@ const (
 	// FallbackShardTemplate is the name of the template to look for if no specific ShardTemplate is referenced.
 	FallbackShardTemplate = "default"
 
+	// DefaultSystemDatabaseName is the name of the mandatory system database.
+	DefaultSystemDatabaseName = "postgres"
+
+	// DefaultSystemTableGroupName is the name of the mandatory default table group.
+	DefaultSystemTableGroupName = "default"
+
 	// DefaultPostgresImage is the default container image used for PostgreSQL instances.
 	DefaultPostgresImage = "postgres:15-alpine"
 
