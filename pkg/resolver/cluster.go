@@ -47,7 +47,29 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 		cluster.Spec.TemplateDefaults.ShardTemplate = FallbackShardTemplate
 	}
 
-	// 3. Default Inline Configs (Deep Defaulting)
+	// 3. Smart Defaulting: System Catalog
+	// If no databases are defined, inject the mandatory system database "postgres".
+	if len(cluster.Spec.Databases) == 0 {
+		cluster.Spec.Databases = append(cluster.Spec.Databases, multigresv1alpha1.DatabaseConfig{
+			Name:    DefaultSystemDatabaseName,
+			Default: true,
+		})
+	}
+
+	// If any database has no tablegroups, inject the mandatory default tablegroup "default".
+	for i := range cluster.Spec.Databases {
+		if len(cluster.Spec.Databases[i].TableGroups) == 0 {
+			cluster.Spec.Databases[i].TableGroups = append(
+				cluster.Spec.Databases[i].TableGroups,
+				multigresv1alpha1.TableGroupConfig{
+					Name:    DefaultSystemTableGroupName,
+					Default: true,
+				},
+			)
+		}
+	}
+
+	// 4. Default Inline Configs (Deep Defaulting)
 	// We ONLY default these if the user explicitly provided the block (Inline).
 	// We DO NOT fetch templates here, adhering to the "Non-Goal" of the design doc.
 
