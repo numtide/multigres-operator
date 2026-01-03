@@ -85,6 +85,10 @@ This logic is embedded directly into the CRD's OpenAPI v3.1 schema and is enforc
 `rule="size(self.metadata.name) + size(self.spec.databases[].name) < 50", message="Combined length of Cluster and Database names must be less than 50 characters."`
 * **Required Sub-Field (`ShardTemplate`):** Ensure pools include storage requests.
 `rule="!has(self.pools) || self.pools.all(k, p, has(p.storage))", message="All pools must define storage configuration."`
+* **v1alpha1 Constraints (`MultigresCluster`):** Enforce temporary system limits.
+`rule="self.all(db, db.name == 'postgres' && db.default == true)", message="in v1alpha1, only the single system database named 'postgres' is supported"`
+* **Mandatory Default (`TableGroup`):** Ensure routing validity.
+`rule="self.filter(x, has(x.default) && x.default).size() == 1", message="every database must have exactly one tablegroup marked as default"`
 
 
 
@@ -104,9 +108,11 @@ This is the final and most powerful layer: an HTTP server run by our operator. I
 
 * **Use Case 1: Mutation (The 4-Level Override Chain).**
 * **Goal:** Solve the "invisible defaults" problem and resolve the complex override logic defined in Design (6).
-* **Logic:** On `MultigresCluster` `CREATE` or `UPDATE`, the webhook will apply defaults for `GlobalTopoServer`, `MultiAdmin`, `Cells`, and `Shards` following this priority:
-1. **Inline Spec:** Use if present.
-2. **Explicit Template:** If `templateRef` (or `cellTemplate`/`shardTemplate`) is set, load that template.
+* **Logic:** On `MultigresCluster` `CREATE` or `UPDATE`, the webhook will apply defaults:
+1. **System Catalog Injection:** If `spec.databases` is empty, inject the mandatory `postgres` database. If any database lacks a `tableGroups` list, inject the `default` tablegroup.
+2. **Override Chain:** Apply defaults for `GlobalTopoServer`, `MultiAdmin`, `Cells`, and `Shards` following this priority:
+    * **Inline Spec:** Use if present.
+    * **Explicit Template:** If `templateRef` (or `cellTemplate`/`shardTemplate`) is set, load that template.
 3. **Cluster Default:** If `spec.templateDefaults.core/cell/shardTemplate` is set, load that template.
 4. **Namespace Default:** Look for a template named "default" in the namespace.
 5. **Operator Default:** Apply hardcoded values.
@@ -409,9 +415,10 @@ Since we **must** run a webhook server (Layer 4), we must manage TLS certificate
 ### Integration Tests (envtest)
 
 * **Mutation (Layer 4):**
-1. Create a `ShardTemplate` named "default" in the namespace.
-2. Create a `MultigresCluster` with a shard defined only as `name: "0"`.
-3. `Get` the `MultigresCluster` and assert that the shard spec is fully populated with values from the "default" template (Namespace Defaulting).
+    1.  **Scenario A (Smart Defaulting):** Create a `MultigresCluster` with only `cells` defined (leave `spec.databases` empty).
+        * `Get` the cluster and assert that the `postgres` database, `default` tablegroup, and shard `0` were automatically injected by the webhook.
+    2.  **Scenario B (Template Resolution):** Create a `ShardTemplate` named "default". Create a `MultigresCluster` explicitly defining the structure `databases` -> `postgres` -> `tablegroups` -> `default` -> `shards: [{name: "0"}]` (with no other shard details).
+        * `Get` the cluster and assert that shard `0` is fully populated with values (resources, sidecars) from the "default" template.
 
 
 * **Stateful Validation (Layer 4):**
@@ -423,9 +430,13 @@ Since we **must** run a webhook server (Layer 4), we must manage TLS certificate
 6. Assert that the creation is **rejected**.
 
 
-* **CRD-Embedded CEL (Layer 2):**
+* **CRD-Embedded CEL (Level 2):**
 1. Attempt to `CREATE` a `GlobalTopoServer` with *both* `etcd` and `templateRef` defined.
 2. Assert that the request is **rejected** by the CRD's schema.
+3. Attempt to `CREATE` a `MultigresCluster` with a database named "my-db" (not "postgres").
+4. Assert that the request is **rejected** (v1alpha1 constraint).
+5. Attempt to `CREATE` a `MultigresCluster` with a `postgres` database containing a tablegroup list, but *none* of them are marked `default: true`.
+6. Assert that the request is **rejected** (Mandatory Default TableGroup).
 
 
 * **`ValidatingAdmissionPolicy` (Layer 3):**
