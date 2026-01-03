@@ -13,6 +13,16 @@ This proposal defines the `v1alpha1` API for the Multigres Operator. The design 
 
 All other resources (`TopoServer`, `Cell`, `TableGroup`, `Shard`) should be considered read-only child CRs owned by the `MultigresCluster`. These child CRs reflect the *realized state* of the system and are managed by their own dedicated controllers. If the user edits them directly, they will get immediately reverted by the parent CR.
 
+### Temporary Constraints (v1alpha1)
+
+The API design described below is **forward-looking** and supports multiple logical databases and custom TableGroup names.
+
+However, the **current implementation (v1alpha1)** of the Multigres Gateway has specific temporary limitations:
+* **Routing Hardcode:** It routes all traffic to a hardcoded TableGroup named `"default"`.
+* **Database Ignorance:** It currently ignores the specific database name requested by the client connection string.
+
+**Implication:** To prevent users from creating "zombie" resources that the Gateway cannot route to, the v1alpha1 Operator will enforce a **Single-Database (System Catalog), Single-TableGroup** topology via validation rules. These constraints will be relaxed in future versions.
+
 ## Motivation
 
 Managing a distributed, sharded database system across multiple failure domains is inherently complex. Previous iterations explored monolithic CRDs (too complex), purely composable CRDs (too manual), and "managed" flags (unstable state).
@@ -124,7 +134,7 @@ spec:
   # ----------------------------------------------------------------
   # Global Components
   # ----------------------------------------------------------------
-  
+
   # Global TopoServer is a singleton. It follows the 4-level override chain.
   # It supports EITHER a 'etcd' OR 'external' OR 'templateRef'.
   globalTopoServer:
@@ -145,7 +155,7 @@ spec:
 
     # --- OPTION 2: Inline External Spec ---
     # external:
-    #   endpoints: 
+    #   endpoints:
     #     - "https://etcd-1.infra.local:2379"
     #     - "https://etcd-2.infra.local:2379"
     #   caSecret: "etcd-ca-secret"
@@ -161,13 +171,13 @@ spec:
     spec:
       replicas: 2
       resources:
-        requests: 
+        requests:
           cpu: "200m"
           memory: "256Mi"
         limits:
           cpu: "500m"
           memory: "512Mi"
-      # Affinity can be configured too by user if desired    
+      # Affinity can be configured too by user if desired
       # affinity:
       #   podAntiAffinity:
       #     preferredDuringSchedulingIgnoredDuringExecution:
@@ -188,11 +198,11 @@ spec:
     # --- CELL 1: Using an Explicit Template ---
     - name: "us-east-1a"
       # Location must be strictly one of: 'zone' OR 'region'
-      zone: "us-east-1a" 
+      zone: "us-east-1a"
       # region: "us-east-1" # use instead of zone
-      
+
       cellTemplate: "standard-cell-ha"
-      
+
       # Optional overrides applied ON TOP of the template.
       overrides:
         multigateway:
@@ -220,7 +230,7 @@ spec:
          #      storage:
          #        size: "5Gi"
          #        class: "standard-gp3"
-    
+
     # --- CELL 3: Using Cluster Default Template ---
     - name: "us-east-1c"
       zone: "us-east-1c"
@@ -235,8 +245,8 @@ spec:
   databases:
     # --- EXAMPLE 1: Configuring the System Default Database ---
     # This entry targets the system-level database created during bootstrap.
-    # We mark it as 'default: true' to apply this configuration to the 
-    # bootstrap resources (instead of creating a new user database).
+    # We mark it as 'default: true' to apply this configuration to the
+    # bootstrap resources (System Catalog).
     - name: "postgres"
       default: true
       tablegroups:
@@ -247,13 +257,15 @@ spec:
               # define resources for the system default shard
               shardTemplate: "standard-shard-ha"
 
-    # --- EXAMPLE 2: A User Database ---
+    # --- EXAMPLE 2: A User Database (Future/Logical Representation) ---
+    # [NOTE: v1alpha1 Constraint]
+    # While the API allows this definition, v1alpha1 enforces a single-database
+    # topology ("postgres"). Multiple database definitions are currently prevented
+    # by validation rules until Gateway routing support is added.
     - name: "production_db"
       # default: false (Implicit) - This creates a new logical database
       tablegroups:
         # The default TableGroup for this specific database.
-        # Note that the default TableGroup can only have one shard (i.e. unsharded).
-        # It handles all tables not explicitly moved to 'orders_tg' in this example.
         - name: "main_unsharded"
           default: true
           shards:
@@ -270,7 +282,7 @@ spec:
                 pools:
                   main-app:
                     type: "readWrite"
-                    cells: 
+                    cells:
                       - "us-east-1b"
                     replicasPerCell: 2
                     storage:
@@ -311,7 +323,7 @@ spec:
                 pools:
                   main-app:
                     type: "readWrite"
-                    cells: 
+                    cells:
                       - "us-east-1b"
                     replicasPerCell: 2
                     storage:
@@ -345,9 +357,9 @@ spec:
                    # Overriding the pool named 'main-app' from the template
                    # to ensure it lives in a specific cell for this shard.
                    main-app:
-                     cells: 
+                     cells:
                        - "us-east-1a"
-                     
+
             # --- SHARD 2: Using Cluster Default Template ---
             - name: "2"
               # 'spec' and 'shardTemplate' are omitted.
@@ -357,7 +369,7 @@ spec:
               overrides:
                  pools:
                    main-app:
-                     cells: 
+                     cells:
                        - "us-east-1c"
 
 status:
@@ -369,10 +381,10 @@ status:
       message: "All components are available."
   # Aggregated status for high-level visibility
   cells:
-    us-east-1a: 
+    us-east-1a:
       ready: True
       gatewayReplicas: 3
-    us-east-1b: 
+    us-east-1b:
       ready: True
       gatewayReplicas: 2
     us-east-1c:
@@ -420,13 +432,13 @@ spec:
   multiadmin:
     replicas: 2
     resources:
-      requests: 
+      requests:
         cpu: "200m"
         memory: "256Mi"
       limits:
         cpu: "500m"
         memory: "512Mi"
-    # Affinity can be configured too by user if desired    
+    # Affinity can be configured too by user if desired
     # affinity:
     #   podAntiAffinity:
     #     preferredDuringSchedulingIgnoredDuringExecution:
@@ -497,7 +509,7 @@ spec:
 * It is namespaced to support RBAC scoping (e.g., platform team owns templates, dev team owns clusters).
 * When created, templates are not reconciled until referenced by a `MultigresCluster`.
 * Similar to `CellTemplate`, this is a pure configuration object. It defines the "shape" of a shard: its orchestration and its data pools.
-* **`pools` is a MAP, keyed by the pool name:** Using a map structure ensures that overrides are resilient to changes in the underlying template; unlike list arrays where inserting or reordering items shifts indices—potentially causing an override targeting "index 1" to accidentally apply to the wrong pool if the template order changes—keyed maps guarantee that an override for a specific pool (e.g., `main-app`) always targets that exact logical resource, regardless of how other pools are added or organized in the template.  
+* **`pools` is a MAP, keyed by the pool name:** Using a map structure ensures that overrides are resilient to changes in the underlying template; unlike list arrays where inserting or reordering items shifts indices—potentially causing an override targeting "index 1" to accidentally apply to the wrong pool if the template order changes—keyed maps guarantee that an override for a specific pool (e.g., `main-app`) always targets that exact logical resource, regardless of how other pools are added or organized in the template.
 * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty or omitted, it defaults to all cells where pools are defined.
 * **Pool Placement:** `pools` uses a `cells` list. For `readWrite` pools, this list typically contains only a few cells rather than using all available cells. For `readOnly` pools, this list can contain multiple cells to apply the same configuration across multiple zones and regions.
 
@@ -511,8 +523,8 @@ spec:
   # Template strictly defines only Shard-scoped components.
 
   # MultiOrch is a shard-level component.
-  # The Operator will deploy one instance of this Deployment into EVERY Cell 
-  # listed in 'cells'. If 'cells' is empty, it defaults to all cells 
+  # The Operator will deploy one instance of this Deployment into EVERY Cell
+  # listed in 'cells'. If 'cells' is empty, it defaults to all cells
   # where pools are defined.
   multiorch:
     # replicas: 1 # replicas per cell and pool this multiorch is deployed
@@ -564,8 +576,8 @@ spec:
     dr-replica:
       type: "readOnly"
       # This pool will be deployed to all cells listed here.
-      cells: 
-        - "us-west-2a" 
+      cells:
+        - "us-west-2a"
       replicasPerCell: 1
       storage:
          class: "standard-gp3"
@@ -669,8 +681,12 @@ spec:
   name: "us-east-1a"
   zone: "us-east-1a" # this would be region if that was chosen instead.
 
-  # Image passed down from global configuration
-  multigatewayImage: "multigres/multigres:latest"
+  # Images and pull config passed down from global configuration
+  images:
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
+    multigateway: "multigres/multigres:latest"
 
   # Resolved from CellTemplate + Overrides
   multigateway:
@@ -691,7 +707,7 @@ spec:
                matchLabels:
                  app.kubernetes.io/component: multigateway
              topologyKey: "kubernetes.io/hostname"
-  
+
   # A reference to the GLOBAL TopoServer.
   # Always populated by the parent controller if no local server is used.
   globalTopoServer:
@@ -765,10 +781,13 @@ metadata:
 spec:
   databaseName: "production_db"
   tableGroupName: "orders_tg"
-  default: false
+  default: true
 
-  # Images passed down from global configuration
+  # Images and pull config passed down from global configuration
   images:
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
@@ -778,13 +797,13 @@ spec:
     address: "example-cluster-global-client.example.svc.cluster.local:2379"
     rootPath: "/multigres/global"
     implementation: "etcd2"
-  
+
   # The list of FULLY RESOLVED shard specifications.
   # This is pushed down from the MultigresCluster controller.
   shards:
     - name: "0"
       multiorch:
-        cells: 
+        cells:
           - "us-east-1a"
           - "us-east-1b"
         resources:
@@ -796,7 +815,7 @@ spec:
             memory: "256Mi"
       pools:
         main-app:
-          cells: 
+          cells:
             - "us-east-1a"
           type: "readWrite"
           replicasPerCell: 2
@@ -812,17 +831,17 @@ spec:
                   cpu: "4"
                   memory: "8Gi"
           multipooler:
-              resources: 
+              resources:
                 requests:
                   cpu: "1"
                   memory: "512Mi"
                 limits:
                   cpu: "2"
                   memory: "1Gi"
-    
+
     - name: "1"
       multiorch:
-        cells: 
+        cells:
            - "us-east-1b"
         resources:
           requests:
@@ -833,7 +852,7 @@ spec:
             memory: "256Mi"
       pools:
         main-app:
-          cells: 
+          cells:
             - "us-east-1b"
           type: "readWrite"
           replicasPerCell: 2
@@ -856,12 +875,12 @@ spec:
                 limits:
                   cpu: "2"
                   memory: "1Gi"
-    
+
     # This shard's spec is resolved from a template
     # (e.g., "cluster-wide-shard")
     - name: "2"
       multiorch:
-        cells: 
+        cells:
           - "us-east-1c"
         resources:
           requests:
@@ -872,12 +891,12 @@ spec:
             memory: "256Mi"
       pools:
         main-app:
-          cells: 
+          cells:
             - "us-east-1c" # Resolved from override
           type: "readWrite"
-          replicasPerCell: 2 
+          replicasPerCell: 2
           storage:
-             size: "100Gi" 
+             size: "100Gi"
              class: "standard-gp3"
           postgres:
               resources:
@@ -889,13 +908,13 @@ spec:
                   memory: "8Gi"
           multipooler:
               resources:
-                requests: 
+                requests:
                   cpu: "1"
                   memory: "512Mi"
                 limits:
                   cpu: "2"
                   memory: "1Gi"
-        
+
 status:
   readyShards: 3
   totalShards: 3
@@ -928,8 +947,11 @@ spec:
   tableGroupName: "orders_tg"
   shardName: "0"
 
-  # Images passed down from global configuration
+  # Images and pull config passed down from global configuration
   images:
+    imagePullPolicy: "IfNotPresent"
+    imagePullSecrets:
+      - name: "my-registry-secret"
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
     postgres: "postgres:15.3"
@@ -939,10 +961,10 @@ spec:
     address: "example-cluster-global-client.example.svc.cluster.local:2379"
     rootPath: "/multigres/global"
     implementation: "etcd2"
-  
+
   # Fully resolved from parent TableGroup spec
   multiorch:
-    cells: 
+    cells:
       - "us-east-1a"
     resources:
       requests:
@@ -954,15 +976,15 @@ spec:
 
   pools:
     main-app:
-      cells: 
-        - "us-east-1a" 
+      cells:
+        - "us-east-1a"
       type: "readWrite"
       replicasPerCell: 2
       storage:
          size: "100Gi"
          class: "standard-gp3"
       postgres:
-           resources: 
+           resources:
               requests:
                 cpu: "2"
                 memory: "4Gi"
@@ -978,7 +1000,7 @@ spec:
                 cpu: "2"
                 memory: "1Gi"
 status:
-  cells: 
+  cells:
     - "us-east-1a"
   orchReady: True
   poolsReady: True
@@ -1012,6 +1034,15 @@ A mutating admission webhook applies a strict **4-Level Override Chain** to reso
 5.  **List Replacement Behavior:** When overriding the `cells` field (in pools or multiorch), the new list specified in the override *completely replaces* the list defined in the template. It is not merged or appended.
 -----
 
+#### System Catalog Smart Defaulting
+
+To handle the "System Catalog" requirements automatically, the webhook applies specific defaulting logic:
+
+1.  **System Database Injection:** If the `spec.databases` list is empty, the webhook automatically injects the System Database (`Name: "postgres"`, `Default: true`).
+2.  **Default TableGroup Injection:** For every database, if the `tableGroups` list is empty, the webhook automatically injects the Default TableGroup (`Name: "default"`, `Default: true`).
+
+This ensures that a minimal `MultigresCluster` with only `cells` defined is instantly functional.
+
 ### 2\. Synchronous Validating Webhooks
 
 Webhooks are used *only* for fast, synchronous, and semantic validation to prevent invalid configurations from being accepted by the API server.
@@ -1029,6 +1060,11 @@ Webhooks are used *only* for fast, synchronous, and semantic validation to preve
       * **Topology Integrity:** Verifies that if a Shard is pinned to a specific cell (via overrides), that cell exists in the `spec.cells` list.
       * **Name Length Safety:** Validates that the combined length of `ClusterName` + `DatabaseName` + `TableGroupName` does not exceed **50 characters**.
           * *Reasoning:* These names are concatenated to form the TableGroup and Shard names. Kubernetes labels and StatefulSet service names have a strict 63-character limit. Enforcing this limit early prevents downstream deployment failures (e.g., `example-cluster-production-db-orders-tg-0-main-app` must be < 63 chars).
+      * **v1alpha1 Constraints (CEL Rules):** Due to current Multigres Gateway limitations, the following strict validations are applied via CEL:
+          * `MaxItems: 1` for `spec.databases`.
+          * The single database MUST be named `"postgres"` and marked `default: true`.
+          * Any TableGroup marked `default: true` MUST be named `"default"`.
+          * **Mandatory Default TableGroup:** Every defined database must contain exactly one TableGroup marked `default: true`. This prevents users from defining custom tablegroups while forgetting the mandatory "default" catch-all group required by the Gateway.
 
 -----
 
@@ -1064,12 +1100,12 @@ Asynchronous logic is used for operations that depend on external state or requi
         * If the query returns any results (meaning the template is in use), the webhook **rejects** the deletion request with a `403 Forbidden` error.
     3.  **Benefit:** This prevents the Template from ever entering a "Terminating" state, ensuring it remains fully editable and active even if a user accidentally tries to delete it.
     4.  **Race Condition Handling (Fail Safe):** In the rare race condition where a template is deleted immediately after a cluster is created (before the controller applies tracking labels), the Cluster Controller handles the missing template gracefully by setting the Cluster Status Condition to `Ready=False` (Reason: `TemplateMissing`) and pausing reconciliation. This ensures no data loss or configuration drift occurs; the operator simply waits for the user to restore the template or update the reference.
-  
+
 ## End-User Examples
 
 ### 1\. The Ultra-Minimalist (Relying on Namespace/Webhook Defaults)
 
-This creates Multigres cluster with one cell and one database, one tablegroup and one shard.
+This creates a functioning Multigres cluster by only defining the physical topology (cells). The operator's "Smart Defaulting" logic automatically injects the system database (`postgres`).
 
 The defaults for this ultra-minimalistic example can be fetched in two ways:
 
@@ -1119,10 +1155,16 @@ spec:
       zone: "us-west-2a"
       # 'spec' and 'cellTemplate' are omitted, so "dev-defaults-cell" is used.
 
+  # NOTE: v1alpha1 Constraint
+  # This example uses logical names ("db1", "tg1") to demonstrate API flexibility.
+  # However, in v1alpha1, strict validation requires the database to be named "postgres"
+  # and the tablegroup to be named "default".
   databases:
-    - name: "db1"
+    - name: "postgres" # Was "db1"
+      default: true    # Added for v1alpha1 validity
       tablegroups:
-      - name: "tg1"
+      - name: "default" # Was "tg1"
+        default: true   # Added for v1alpha1 validity
         shards:
           - name: "0"
             # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
@@ -1130,14 +1172,14 @@ spec:
             overrides:
               pools:
                 main-app:
-                  cells: 
+                  cells:
                     - "us-east-1a"
           - name: "1"
             # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
             overrides:
               pools:
                 main-app:
-                  cells: 
+                  cells:
                     - "us-west-2a"
 ```
 
@@ -1156,16 +1198,16 @@ spec:
     coreTemplate: "cluster-default-core"
     cellTemplate: "cluster-default-cell"
     shardTemplate: "cluster-default-shard"
-  
+
   globalTopoServer:
     external:
-      endpoints: 
+      endpoints:
         - "https://my-etcd-1.infra:2379"
         - "https://my-etcd-2.infra:2379"
         - "https://my-etcd-3.infra:2379"
       caSecret: "etcd-ca"
       clientCertSecret: "etcd-client-cert"
-  
+
   multiadmin:
     spec:
       replicas: 1
@@ -1203,7 +1245,7 @@ spec:
              limits:
                cpu: "1"
                memory: "4Gi"
-          # Affinity can be configured too by user if desired    
+          # Affinity can be configured too by user if desired
           # affinity:
           #   podAntiAffinity:
           #     preferredDuringSchedulingIgnoredDuringExecution:
@@ -1214,10 +1256,15 @@ spec:
           #               app.kubernetes.io/component: multiadmin
           #           topologyKey: "kubernetes.io/hostname"
 
+  # [NOTE: v1alpha1 Constraint]
+  # This example uses a custom logical database ("users_db") and tablegroup ("auth").
+  # In v1alpha1, this must be changed to "postgres" and "default" respectively.
   databases:
-    - name: "users_db"
+    - name: "postgres" # Was "users_db"
+      default: true    # Added for v1alpha1 validity
       tablegroups:
-        - name: "auth"
+        - name: "default" # Was "auth"
+          default: true   # Added for v1alpha1 validity
           shards:
             - name: "0"
               shardTemplate: "geo-distributed-shard"
@@ -1226,7 +1273,7 @@ spec:
                 pools:
                   main-app:
                     # Partial override of a simple field
-                    cells: 
+                    cells:
                       - "us-east-1a"
                     # OVERRIDE of Postgres compute for this specific shard
                     postgres:
@@ -1258,6 +1305,7 @@ spec:
   * **2025-11-14:** Explored a multi-CRD "claim" model (`MultigresDatabase` + `MultigresDatabaseResources`) to support DDL-driven workflows and strong RBAC separation.
   * **2025-11-18:** Reverted to the 2025-11-11 monolithic `MultigresCluster` design to align with client requirements for Postgres-native "System Catalog" management. The `MultigresDatabase` CRD was rejected. We will instead support the DDL workflow via a synchronization controller that patches the monolithic `MultigresCluster` CR based on the `SystemCatalog` state.
   * **2025-11-25:** Moved `multiorch` and `pool` placement from single `cell` fields to explicit `cells` lists. This supports multi-cell pool definitions (e.g., for uniform read replicas) and decouples MultiOrch placement from pool presence, while maintaining safety via a "defaults to all" logic.
+  * **2026-01-02:** Introduced "System Catalog Smart Defaulting" and strict CEL validation for v1alpha1 to align the API with the current single-database routing limitations of the Multigres Gateway.
 
 ## Drawbacks
 
