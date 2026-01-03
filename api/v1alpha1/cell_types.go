@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -45,9 +46,8 @@ type CellSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	Region string `json:"region,omitempty"`
 
-	// MultiGatewayImage is the image used for the gateway in this cell.
-	// +kubebuilder:validation:MaxLength=512
-	MultiGatewayImage string `json:"multigatewayImage"`
+	// Images defines the container images used in this cell.
+	Images CellImages `json:"images"`
 
 	// MultiGateway fully resolved config.
 	MultiGateway StatelessSpec `json:"multigateway"`
@@ -67,6 +67,22 @@ type CellSpec struct {
 	// TopologyReconciliation flags.
 	// +optional
 	TopologyReconciliation TopologyReconciliation `json:"topologyReconciliation,omitempty"`
+}
+
+// CellImages defines the images required for a Cell.
+type CellImages struct {
+	// ImagePullPolicy overrides the default image pull policy.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// ImagePullSecrets is a list of references to secrets in the same namespace.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// MultiGateway is the image used for the gateway.
+	// +kubebuilder:validation:MaxLength=512
+	MultiGateway string `json:"multigateway"`
 }
 
 // TopologyReconciliation defines flags for the cell controller.
