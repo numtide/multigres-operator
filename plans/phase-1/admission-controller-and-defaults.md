@@ -24,8 +24,14 @@ This layered approach uses the most efficient tool for each task, from basic fie
 A review of classic operators like `vitess-operator` highlights a major user-facing weakness: applying complex defaults *in-memory* during reconciliation.
 
 * **The "Classic" Problem:** The `vitess-operator` avoids webhooks entirely. It uses simple OpenAPI v3 CRD defaults (Level 1) for static values but applies all complex, dynamic defaults (like images and resource requests) via Go code *after* fetching the object (Level 2).
-* **The User-Facing Confusion:** Because these Level 2 defaults are not persisted back to `etcd`, a user running `kubectl get` on a CR sees a spec that does **not** match the functional state the operator is enforcing. This is confirmed by a 6-year-old `TODO` in their code explicitly mentioning the lack of mutating webhook support in Operator SDK as a blocker.
-* **Our Motivation:** This "invisible" default pattern is unacceptable for `multigres-operator`. Our API relies on a sophisticated **4-Level Override Chain** (Inline -> Cluster Default -> Namespace Default -> Operator Hardcoded). We *must* make sure our manifests are fully declarative and the user sees the complete, resolved CR with `kubectl get`. A **mutating webhook** is the correct solution, as it applies all defaults and persists them to `etcd` *before* the reconciler ever sees the object.
+* **The User-Facing Confusion:** Because these Level 2 defaults are not persisted back to `etcd`, a user running `kubectl get` on a CR sees a spec that does **not** match the functional state the operator is enforcing.
+
+**Our Approach: Visible Defaults with Invisible Fallback**
+While relying *solely* on invisible defaults is unacceptable for the production user experience, the operator must not strictly depend on the webhook for basic functionality. In development scenarios (e.g., local testing) or failure modes where the webhook is disabled, the operator must still function.
+
+Therefore, we will implement a **Shared Resolver Pattern**:
+1.  **Primary Path (Webhook):** The Mutating Webhook uses the resolver to calculate and persist defaults to `etcd`. This solves the "Invisible Defaults" problem for users.
+2.  **Fallback Path (Reconciler):** The Controller uses the *exact same* resolver logic to apply defaults in-memory. This ensures the system functions correctly even if the webhook is bypassed, albeit with "invisible" defaults in that specific scenario.
 
 ### Motivation 2: The Need for Powerful, Multi-Layered Validation
 
@@ -39,17 +45,18 @@ Our API design (Design 6) requires validation logic that is too complex for a si
 
 ## Goals
 
-* Implement a **mutating webhook** to execute the **4-Level Override Chain**, resolving defaults for `GlobalTopoServer`, `MultiAdmin`, `Cells`, and `Shards` into the `MultigresCluster` spec, solving the "invisible defaults" problem.
+* **Implement a Shared `resolver` Package:** Create a centralized logic package that implements the **4-Level Override Chain**. This package must be usable by:
+    * **The Webhook:** To persist defaults to `etcd` (Primary User Experience).
+    * **The Controller:** To apply defaults in-memory if the webhook is disabled (Dev/Test/Fallback).
+* Implement a **mutating webhook** that utilizes the `resolver` to strictly enforce visible defaults for `GlobalTopoServer`, `MultiAdmin`, `Cells`, and `Shards` in the `MultigresCluster` spec.
 * Implement a **stateful validating webhook** for rules that require cluster-awareness (querying other objects), such as:
-* Preventing the deletion of a `CoreTemplate`, `CellTemplate`, or `ShardTemplate` that is in use by any `MultigresCluster`.
-* Validating that referenced templates exist upon `MultigresCluster` creation or update.
-
-
+    * Preventing the deletion of a `CoreTemplate`, `CellTemplate`, or `ShardTemplate` that is in use by any `MultigresCluster`.
+    * Validating that referenced templates exist upon `MultigresCluster` creation or update.
 * Utilize **CRD-Embedded CEL (`XValidation`)** for all advanced *stateless, object-only* validation (e.g., mutual exclusion, name length limits).
 * Utilize **`ValidatingAdmissionPolicy` (CEL)** for *stateless, context-aware* validation that needs access to `request.userInfo` (specifically to enforce read-only child resources).
+* **Backward Compatibility Strategy (K8s < 1.30):** Implement critical "Level 3" validation logic (like Read-Only Child Resources) inside the **validating webhook** as a fallback. This allows the operator to support older Kubernetes versions while paving the way for `ValidatingAdmissionPolicy` as the future standard.
 * Provide clear, actionable error messages at admission time.
 * Support multiple certificate management strategies (cert-manager and self-contained).
-* Keep webhook logic in the `data-handler` module.
 
 ---
 
@@ -100,7 +107,13 @@ This uses separate, cluster-level resources to apply validation. These policies 
 The `MultigresCluster` is the single source of truth. The child resources (`Cell`, `TableGroup`, `Shard`, `TopoServer`) reflect realized state and should not be edited by users.
 * **Use Case 2: Accessing `oldObject`:** Enforcing safe updates, like preventing storage shrinking.
 * **Implementation:** `ValidatingAdmissionPolicy` and `ValidatingAdmissionPolicyBinding` manifests shipped with the operator.
-* **Trade-off:** This introduces a dependency on Kubernetes **v1.30+** (where `ValidatingAdmissionPolicy` is GA).
+
+**Version Compatibility & Fallback Strategy**
+Since `ValidatingAdmissionPolicy` is only stable (GA) in **Kubernetes v1.30+**, we cannot rely on it exclusively if we wish to support older clusters (e.g., v1.28, v1.29).
+
+* **Strategy:** We will implement the "Read-Only Child" checks **redundantly** in the Validating Webhook (Level 4).
+* **Logic:** The Webhook checks will mirror the CEL policy logic.
+* **Outcome:** On K8s v1.30+, the API server rejects the request cheaply (Level 3). On older versions, the Webhook catches it (Level 4). This ensures safety across all versions.
 
 ### Level 4: Webhook Server (Stateful & Mutating)
 
@@ -453,9 +466,8 @@ Since we **must** run a webhook server (Layer 4), we must manage TLS certificate
 ## Drawbacks
 
 1. **Webhook Complexity**: We accept the complexity of running a webhook server (certificates, networking) because our stateful validation requirements (template protection) and complex defaulting (override chain) make it unavoidable.
-2. **Version Lock-in**: Using `ValidatingAdmissionPolicy` (Layer 3) requires Kubernetes v1.30+ for GA stability, limiting the cluster versions our operator can support.
+2. **Duplicate Logic (Temporary):** To mitigate the version lock-in of `ValidatingAdmissionPolicy` (which requires K8s v1.30+), we must duplicate the "Read-Only Child" validation logic inside the Webhook. This adds a maintenance burden to keep the Go code and CEL policy in sync until we drop support for older K8s versions.
 3. **Performance Impact**: Every `MultigresCluster` create/update now takes a small network hop to the webhook server. The "In-Use" check (Listing all clusters) scales linearly with the number of clusters, but template deletion is a rare event, making this acceptable.
-
 ---
 
 ## Alternatives Considered
