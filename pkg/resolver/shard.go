@@ -8,40 +8,69 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 )
 
-// ResolveShardTemplate fetches and resolves a ShardTemplate by name, handling defaults.
+// ResolveShard determines the final configuration for a specific Shard.
+// It orchestrates: Template Lookup -> Fetch -> Merge -> Defaulting.
+func (r *Resolver) ResolveShard(
+	ctx context.Context,
+	shardSpec *multigresv1alpha1.ShardConfig,
+) (*multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec, error) {
+	// 1. Fetch Template (Logic handles defaults)
+	templateName := shardSpec.ShardTemplate
+	tpl, err := r.ResolveShardTemplate(ctx, templateName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 2. Merge Logic
+	multiOrch, pools := mergeShardConfig(tpl, shardSpec.Overrides, shardSpec.Spec)
+
+	// 3. Apply Deep Defaults (Level 4)
+	defaultStatelessSpec(&multiOrch.StatelessSpec, corev1.ResourceRequirements{}, 1)
+
+	// Note: We do not apply strict defaults to Pools here yet,
+	// as Pool defaults are often highly context-specific (storage class, etc).
+	// However, we could apply safety defaults if needed.
+
+	return &multiOrch, pools, nil
+}
+
+// ResolveShardTemplate fetches and resolves a ShardTemplate by name.
+// If name is empty, it resolves using the Cluster Defaults, then the Namespace Default.
 func (r *Resolver) ResolveShardTemplate(
 	ctx context.Context,
-	templateName string,
+	name string,
 ) (*multigresv1alpha1.ShardTemplate, error) {
-	name := templateName
+	resolvedName := name
 	isImplicitFallback := false
 
-	if name == "" {
-		name = r.TemplateDefaults.ShardTemplate
+	if resolvedName == "" {
+		resolvedName = r.TemplateDefaults.ShardTemplate
 	}
-	if name == "" {
-		name = FallbackShardTemplate
+	if resolvedName == "" {
+		resolvedName = FallbackShardTemplate
 		isImplicitFallback = true
 	}
 
 	tpl := &multigresv1alpha1.ShardTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: resolvedName, Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
+				// We return an empty struct instead of nil to satisfy tests expecting non-nil structure.
 				return &multigresv1alpha1.ShardTemplate{}, nil
 			}
-			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found: %w", name, err)
+			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found: %w", resolvedName, err)
 		}
 		return nil, fmt.Errorf("failed to get ShardTemplate: %w", err)
 	}
 	return tpl, nil
 }
 
-// MergeShardConfig merges a template spec with overrides and an inline spec to produce the final configuration.
-func MergeShardConfig(
+// mergeShardConfig merges a template spec with overrides and an inline spec.
+func mergeShardConfig(
 	template *multigresv1alpha1.ShardTemplate,
 	overrides *multigresv1alpha1.ShardOverrides,
 	inline *multigresv1alpha1.ShardInlineSpec,

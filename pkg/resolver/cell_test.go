@@ -16,6 +16,100 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func TestResolver_ResolveCell(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_, cellTpl, _, ns := setupFixtures(t)
+
+	tests := map[string]struct {
+		config   *multigresv1alpha1.CellConfig
+		objects  []client.Object
+		wantGw   *multigresv1alpha1.StatelessSpec
+		wantTopo *multigresv1alpha1.LocalTopoServerSpec
+		wantErr  bool
+	}{
+		"Template Found": {
+			config: &multigresv1alpha1.CellConfig{
+				CellTemplate: "default",
+			},
+			objects: []client.Object{cellTpl},
+			wantGw: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(1)),
+				Resources: corev1.ResourceRequirements{},
+			},
+			wantTopo: &multigresv1alpha1.LocalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     "local-etcd-default",
+					Replicas:  ptr.To(DefaultEtcdReplicas),
+					Resources: DefaultResourcesEtcd(),
+					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+				},
+			},
+		},
+		"Template Not Found (Error)": {
+			config: &multigresv1alpha1.CellConfig{
+				CellTemplate: "missing",
+			},
+			wantErr: true,
+		},
+		"Inline Overrides": {
+			config: &multigresv1alpha1.CellConfig{
+				Spec: &multigresv1alpha1.CellInlineSpec{
+					MultiGateway: multigresv1alpha1.StatelessSpec{
+						Replicas: ptr.To(int32(3)),
+					},
+				},
+			},
+			wantGw: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(3)),
+				Resources: corev1.ResourceRequirements{},
+			},
+			wantTopo: nil, // Inline spec didn't provide one
+		},
+		"Client Error": {
+			config: &multigresv1alpha1.CellConfig{CellTemplate: "any"},
+			// Will use mock client logic inside test runner
+			wantErr: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var c client.Client
+			if name == "Client Error" {
+				c = &mockClient{failGet: true, err: errors.New("fail")}
+			} else {
+				c = fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(tc.objects...).
+					Build()
+			}
+			r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
+
+			gw, topo, err := r.ResolveCell(t.Context(), tc.config)
+			if tc.wantErr {
+				if err == nil {
+					t.Error("Expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Gateway Diff (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantTopo, topo, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Topo Diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestResolver_ResolveCellTemplate(t *testing.T) {
 	t.Parallel()
 
@@ -237,7 +331,11 @@ func TestMergeCellConfig(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			gw, topo := MergeCellConfig(tc.tpl, tc.overrides, tc.inline)
+			// FIXED: Calling the unexported function mergeCellConfig via correct capitalization for test access?
+			// Since we are in package resolver, we can call mergeCellConfig directly.
+			// However, in Go, unexported names are only visible within the SAME package.
+			// The file header says 'package resolver', so we should use 'mergeCellConfig'.
+			gw, topo := mergeCellConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("Gateway mismatch (-want +got):\n%s", diff)
