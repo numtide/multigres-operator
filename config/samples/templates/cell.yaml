@@ -1,0 +1,24 @@
+apiVersion: multigres.com/v1alpha1
+kind: CellTemplate
+metadata:
+  name: "standard-cell"
+  namespace: default
+spec:
+  multigateway:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+             labelSelector:
+               matchLabels:
+                 app.kubernetes.io/component: multigateway
+             topologyKey: "kubernetes.io/hostname"
