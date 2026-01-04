@@ -16,6 +16,80 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func TestResolver_ResolveShard(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_, _, shardTpl, ns := setupFixtures(t)
+
+	tests := map[string]struct {
+		config    *multigresv1alpha1.ShardConfig
+		objects   []client.Object
+		wantOrch  *multigresv1alpha1.MultiOrchSpec
+		wantPools map[string]multigresv1alpha1.PoolSpec
+		wantErr   bool
+	}{
+		"Template Found": {
+			config:  &multigresv1alpha1.ShardConfig{ShardTemplate: "default"},
+			objects: []client.Object{shardTpl},
+			wantOrch: &multigresv1alpha1.MultiOrchSpec{
+				StatelessSpec: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(1)),
+					Resources: corev1.ResourceRequirements{},
+				},
+			},
+			wantPools: map[string]multigresv1alpha1.PoolSpec{},
+		},
+		"Template Not Found": {
+			config:  &multigresv1alpha1.ShardConfig{ShardTemplate: "missing"},
+			wantErr: true,
+		},
+		"Inline Overrides": {
+			config: &multigresv1alpha1.ShardConfig{
+				Spec: &multigresv1alpha1.ShardInlineSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{"p": {}},
+				},
+			},
+			wantOrch: &multigresv1alpha1.MultiOrchSpec{
+				StatelessSpec: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(5)),
+					Resources: corev1.ResourceRequirements{},
+				},
+			},
+			wantPools: map[string]multigresv1alpha1.PoolSpec{"p": {}},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
+			r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
+
+			orch, pools, err := r.ResolveShard(t.Context(), tc.config)
+			if tc.wantErr {
+				if err == nil {
+					t.Error("Expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Orch Diff (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantPools, pools, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Pools Diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestResolver_ResolveShardTemplate(t *testing.T) {
 	t.Parallel()
 
@@ -291,7 +365,8 @@ func TestMergeShardConfig(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			orch, pools := MergeShardConfig(tc.tpl, tc.overrides, tc.inline)
+			// FIXED: Use correct internal function name
+			orch, pools := mergeShardConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
 				t.Errorf("Orch mismatch (-want +got):\n%s", diff)

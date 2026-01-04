@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +32,9 @@ func setupFixtures(t testing.TB) (
 			GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{Image: "core-default"},
 			},
+			MultiAdmin: &multigresv1alpha1.StatelessSpec{
+				// Image is not in StatelessSpec, it is global
+			},
 		},
 	}
 
@@ -39,6 +44,9 @@ func setupFixtures(t testing.TB) (
 			MultiGateway: &multigresv1alpha1.StatelessSpec{
 				Replicas: ptr.To(int32(1)),
 			},
+			LocalTopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{Image: "local-etcd-default"},
+			},
 		},
 	}
 
@@ -46,7 +54,9 @@ func setupFixtures(t testing.TB) (
 		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
 		Spec: multigresv1alpha1.ShardTemplateSpec{
 			MultiOrch: &multigresv1alpha1.MultiOrchSpec{
-				StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+				StatelessSpec: multigresv1alpha1.StatelessSpec{
+					Replicas: ptr.To(int32(1)),
+				},
 			},
 		},
 	}
@@ -70,6 +80,97 @@ func TestNewResolver(t *testing.T) {
 	if got, want := r.TemplateDefaults.CoreTemplate, "foo"; got != want {
 		t.Errorf("Defaults mismatch: got %q, want %q", got, want)
 	}
+}
+
+func TestSharedHelpers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("isResourcesZero", func(t *testing.T) {
+		tests := []struct {
+			name string
+			res  corev1.ResourceRequirements
+			want bool
+		}{
+			{"Zero", corev1.ResourceRequirements{}, true},
+			{"Requests Set", corev1.ResourceRequirements{Requests: corev1.ResourceList{}}, false},
+			{"Limits Set", corev1.ResourceRequirements{Limits: corev1.ResourceList{}}, false},
+			{"Claims Set", corev1.ResourceRequirements{Claims: []corev1.ResourceClaim{}}, false},
+		}
+		for _, tc := range tests {
+			if got := isResourcesZero(tc.res); got != tc.want {
+				t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("defaultEtcdSpec", func(t *testing.T) {
+		spec := &multigresv1alpha1.EtcdSpec{}
+		defaultEtcdSpec(spec)
+
+		if spec.Image != DefaultEtcdImage {
+			t.Errorf("Image: got %q, want %q", spec.Image, DefaultEtcdImage)
+		}
+		if spec.Storage.Size != DefaultEtcdStorageSize {
+			t.Errorf("Storage: got %q, want %q", spec.Storage.Size, DefaultEtcdStorageSize)
+		}
+		if *spec.Replicas != DefaultEtcdReplicas {
+			t.Errorf("Replicas: got %d, want %d", *spec.Replicas, DefaultEtcdReplicas)
+		}
+		if isResourcesZero(spec.Resources) {
+			t.Error("Resources should be defaulted")
+		}
+
+		// Test Preservation
+		spec2 := &multigresv1alpha1.EtcdSpec{Image: "custom"}
+		defaultEtcdSpec(spec2)
+		if spec2.Image != "custom" {
+			t.Error("Should preserve existing image")
+		}
+	})
+
+	t.Run("defaultStatelessSpec", func(t *testing.T) {
+		spec := &multigresv1alpha1.StatelessSpec{}
+		res := corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+		}
+		defaultStatelessSpec(spec, res, 5)
+
+		if *spec.Replicas != 5 {
+			t.Errorf("Replicas: got %d, want 5", *spec.Replicas)
+		}
+		if cmp.Diff(spec.Resources, res) != "" {
+			t.Error("Resources not copied correctly")
+		}
+
+		// Test DeepCopy independence
+		res.Requests[corev1.ResourceCPU] = parseQty("999")
+		// Cannot call String() directly on map index result in one line effectively if we want addressability
+		// But String() is on *Quantity usually? Actually Quantity is a struct.
+		// Wait, Requests[...] returns a Value.
+		// We need to capture it to check it.
+		val := spec.Resources.Requests[corev1.ResourceCPU]
+		if val.String() == "999" {
+			t.Error("Shared pointer detected in defaultStatelessSpec")
+		}
+	})
+
+	t.Run("mergeStatelessSpec", func(t *testing.T) {
+		base := &multigresv1alpha1.StatelessSpec{
+			PodAnnotations: map[string]string{"a": "1"},
+		}
+		override := &multigresv1alpha1.StatelessSpec{
+			PodAnnotations: map[string]string{"b": "2"},
+			Replicas:       ptr.To(int32(3)),
+		}
+		mergeStatelessSpec(base, override)
+
+		if len(base.PodAnnotations) != 2 {
+			t.Errorf("Map merge failed, got %v", base.PodAnnotations)
+		}
+		if *base.Replicas != 3 {
+			t.Error("Replicas not merged")
+		}
+	})
 }
 
 // mockClient is a partial implementation of client.Client to force errors.
