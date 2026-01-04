@@ -80,6 +80,44 @@ spec:
                 - implementation
                 - rootPath
                 type: object
+              images:
+                description: Images defines the container images used in this cell.
+                properties:
+                  imagePullPolicy:
+                    description: ImagePullPolicy overrides the default image pull
+                      policy.
+                    enum:
+                    - Always
+                    - Never
+                    - IfNotPresent
+                    type: string
+                  imagePullSecrets:
+                    description: ImagePullSecrets is a list of references to secrets
+                      in the same namespace.
+                    items:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
+                  multigateway:
+                    description: MultiGateway is the image used for the gateway.
+                    maxLength: 512
+                    type: string
+                required:
+                - multigateway
+                type: object
               multigateway:
                 description: MultiGateway fully resolved config.
                 properties:
@@ -1085,11 +1123,6 @@ spec:
                         type: object
                     type: object
                 type: object
-              multigatewayImage:
-                description: MultiGatewayImage is the image used for the gateway in
-                  this cell.
-                maxLength: 512
-                type: string
               name:
                 description: Name is the logical name of the cell.
                 maxLength: 63
@@ -1246,8 +1279,8 @@ spec:
                 type: string
             required:
             - globalTopoServer
+            - images
             - multigateway
-            - multigatewayImage
             - name
             type: object
             x-kubernetes-validations:
