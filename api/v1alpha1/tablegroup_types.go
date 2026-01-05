@@ -21,6 +21,19 @@ import (
 )
 
 // ============================================================================
+// RBAC Markers (Temporary Location)
+// ============================================================================
+//
+// TODO: Move these RBAC markers to the controller implementation
+// (pkg/cluster-handler/controller/tablegroup/tablegroup_controller.go)
+// to follow kubebuilder conventions. They are temporarily placed here because
+// controller-gen cannot process files in go.work modules.
+//
+// +kubebuilder:rbac:groups=multigres.com,resources=tablegroups,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=tablegroups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
+
+// ============================================================================
 // TableGroup Spec (Read-only API)
 // ============================================================================
 //

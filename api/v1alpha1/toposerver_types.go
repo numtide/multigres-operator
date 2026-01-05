@@ -22,6 +22,21 @@ import (
 )
 
 // ============================================================================
+// RBAC Markers (Temporary Location)
+// ============================================================================
+//
+// TODO: Move these RBAC markers to the controller implementation
+// (pkg/resource-handler/controller/toposerver/toposerver_controller.go)
+// to follow kubebuilder conventions. They are temporarily placed here because
+// controller-gen cannot process files in go.work modules.
+//
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=toposervers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+
+// ============================================================================
 // TopoServer Spec (Read-only API)
 // ============================================================================
 //

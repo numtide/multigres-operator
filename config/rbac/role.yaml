@@ -33,7 +33,9 @@ rules:
   - multigres.com
   resources:
   - cells
+  - multigresclusters
   - shards
+  - tablegroups
   - toposervers
   verbs:
   - create
@@ -47,6 +49,7 @@ rules:
   - multigres.com
   resources:
   - cells/finalizers
+  - multigresclusters/finalizers
   - shards/finalizers
   - toposervers/finalizers
   verbs:
@@ -55,9 +58,21 @@ rules:
   - multigres.com
   resources:
   - cells/status
+  - multigresclusters/status
   - shards/status
+  - tablegroups/status
   - toposervers/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - multigres.com
+  resources:
+  - celltemplates
+  - coretemplates
+  - shardtemplates
+  verbs:
+  - get
+  - list
+  - watch

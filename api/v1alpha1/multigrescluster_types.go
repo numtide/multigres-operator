@@ -22,6 +22,22 @@ import (
 )
 
 // ============================================================================
+// RBAC Markers (Temporary Location)
+// ============================================================================
+//
+// TODO: Move these RBAC markers to the controller implementation
+// (pkg/cluster-handler/controller/multigrescluster/multigrescluster_controller.go)
+// to follow kubebuilder conventions. They are temporarily placed here because
+// controller-gen cannot process files in go.work modules.
+//
+// +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters/finalizers,verbs=update
+// +kubebuilder:rbac:groups=multigres.com,resources=coretemplates;celltemplates;shardtemplates,verbs=get;list;watch
+// +kubebuilder:rbac:groups=multigres.com,resources=cells;tablegroups;toposervers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+
+// ============================================================================
 // MultigresClusterSpec Spec (User-editable API)
 // ============================================================================
 
