@@ -347,6 +347,7 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone1",
+					"--watch-targets", "postgres",
 				},
 				Ports:     buildMultiOrchContainerPorts(),
 				Resources: corev1.ResourceRequirements{},

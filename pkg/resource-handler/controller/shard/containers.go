@@ -141,9 +141,14 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 	}
 
 	// TODO: Add remaining command line arguments:
-	// --watch-targets, --log-level, --log-output, --hostname
+	// --log-level, --log-output, --hostname
 	// --cluster-metadata-refresh-interval, --pooler-health-check-interval, --recovery-cycle-interval
 
+	// TODO: Verify correct format for --watch-targets flag.
+	// Currently using static "postgres" based on demo, but may need to be:
+	// - Just database name (e.g., "postgres")
+	// - Full path (e.g., "database/tablegroup/shard")
+	// - Multiple targets (e.g., "postgres,otherdb")
 	args := []string{
 		"multiorch", // Subcommand
 		"--http-port", "15300",
@@ -151,6 +156,7 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
 		"--cell", cellName,
+		"--watch-targets", "postgres",
 	}
 
 	return corev1.Container{

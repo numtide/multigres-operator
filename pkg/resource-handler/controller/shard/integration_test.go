@@ -123,6 +123,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "us-west-1a",
+											"--watch-targets", "postgres",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -180,6 +181,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "us-west-1b",
+											"--watch-targets", "postgres",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -390,6 +392,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone1",
+											"--watch-targets", "postgres",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -447,6 +450,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone2",
+											"--watch-targets", "postgres",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
