@@ -22,6 +22,21 @@ import (
 )
 
 // ============================================================================
+// RBAC Markers (Temporary Location)
+// ============================================================================
+//
+// TODO: Move these RBAC markers to the controller implementation
+// (pkg/resource-handler/controller/shard/shard_controller.go)
+// to follow kubebuilder conventions. They are temporarily placed here because
+// controller-gen cannot process files in go.work modules.
+//
+// +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=shards/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=shards/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+
+// ============================================================================
 // Shard Component Specs (Reusable)
 // ============================================================================
 //
