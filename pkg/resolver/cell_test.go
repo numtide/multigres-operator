@@ -331,10 +331,6 @@ func TestMergeCellConfig(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			// FIXED: Calling the unexported function mergeCellConfig via correct capitalization for test access?
-			// Since we are in package resolver, we can call mergeCellConfig directly.
-			// However, in Go, unexported names are only visible within the SAME package.
-			// The file header says 'package resolver', so we should use 'mergeCellConfig'.
 			gw, topo := mergeCellConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {

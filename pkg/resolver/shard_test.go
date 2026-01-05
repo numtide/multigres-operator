@@ -365,7 +365,6 @@ func TestMergeShardConfig(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			// FIXED: Use correct internal function name
 			orch, pools := mergeShardConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
