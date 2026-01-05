@@ -196,6 +196,69 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 		},
+		// ADDED: This covers the "else" branches where we skip defaulting
+		"Pre-populated Fields: Preserves Values": {
+			input: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        "custom/postgres:16",
+						MultiAdmin:      "custom/admin:1",
+						MultiOrch:       "custom/orch:1",
+						MultiPooler:     "custom/pooler:1",
+						MultiGateway:    "custom/gateway:1",
+						ImagePullPolicy: "Always",
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  "custom-core",
+						CellTemplate:  "custom-cell",
+						ShardTemplate: "custom-shard",
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name: "custom-db",
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name: "custom-tg",
+									Shards: []multigresv1alpha1.ShardConfig{
+										{Name: "custom-0"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        "custom/postgres:16",
+						MultiAdmin:      "custom/admin:1",
+						MultiOrch:       "custom/orch:1",
+						MultiPooler:     "custom/pooler:1",
+						MultiGateway:    "custom/gateway:1",
+						ImagePullPolicy: "Always",
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  "custom-core",
+						CellTemplate:  "custom-cell",
+						ShardTemplate: "custom-shard",
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name: "custom-db",
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name: "custom-tg",
+									Shards: []multigresv1alpha1.ShardConfig{
+										{Name: "custom-0"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -371,6 +434,19 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 				},
 			},
 			wantErr: true,
+		},
+		// ADDED: This covers the "else" fallback path in ResolveMultiAdmin
+		"Fallback (No Spec, No Template) -> Defaults": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					MultiAdmin: multigresv1alpha1.MultiAdminConfig{}, // Empty
+				},
+			},
+			objects: nil, // No core template found
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(DefaultAdminReplicas),
+				Resources: DefaultResourcesAdmin(),
+			},
 		},
 	}
 
