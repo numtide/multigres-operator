@@ -420,10 +420,10 @@ kind-load: container ## Build and load image into kind cluster
 .PHONY: kind-deploy
 kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cluster
 	@echo "==> Installing CRDs..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply -f -
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply -f -
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator-system"
 
