@@ -4,11 +4,27 @@ metadata:
   name: kind-shard-sample
   namespace: default
 spec:
-  # Shard identification
-  # Note: v1alpha1 API enforces "postgres" database and "default" tablegroup
+  # ============================================================================
+  # MVP Configuration (Currently Active)
+  # ============================================================================
+  # The MVP (Minimum Viable Product) has strict validation requirements:
+  # - Database must be "postgres"
+  # - TableGroup must be "default"
+  # - Shard name must be "0-inf" for default tablegroup (unsharded/range mode)
+
   databaseName: postgres
   tableGroupName: default
-  shardName: "0"
+  shardName: "0-inf"
+
+  # ============================================================================
+  # Original E2E Configuration (Commented Out)
+  # ============================================================================
+  # For future e2e testing with custom databases/tablegroups, uncomment below
+  # and comment out the MVP config above:
+  #
+  # databaseName: mydb
+  # tableGroupName: users
+  # shardName: "0"
 
   # Container images for shard components
   images:

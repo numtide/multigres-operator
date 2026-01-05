@@ -4,6 +4,11 @@ metadata:
   name: kind-cell-sample
   namespace: default
 spec:
+  # ============================================================================
+  # MVP Configuration (Currently Active)
+  # ============================================================================
+  # This configuration is compatible with the MVP (Minimum Viable Product)
+
   # Logical name of the cell
   name: zone-a
 
