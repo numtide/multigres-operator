@@ -50,6 +50,13 @@ func buildPostgresContainer(
 		Name:      "postgres",
 		Image:     image,
 		Resources: pool.Postgres.Resources,
+		Env: []corev1.EnvVar{
+			// NOTE: This is for MVP demo setup.
+			{
+				Name:  "POSTGRES_HOST_AUTH_METHOD",
+				Value: "trust",
+			},
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      DataVolumeName,
