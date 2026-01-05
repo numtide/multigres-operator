@@ -10,8 +10,9 @@ spec:
   # Physical zone placement (use either 'zone' or 'region', not both)
   zone: us-west-1a
 
-  # Container image for multigateway
-  multigatewayImage: ghcr.io/multigres/multigres:main
+  # Container images for cell components
+  images:
+    multigateway: ghcr.io/multigres/multigres:main
 
   # MultiGateway deployment - query routing
   multigateway:
