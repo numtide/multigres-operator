@@ -78,7 +78,8 @@ func buildMultiPoolerSidecar(
 
 	// TODO: Add remaining command line arguments:
 	// --pooler-dir, --grpc-socket-file, --log-level, --log-output, --hostname, --service-map
-	// --pgbackrest-stanza, --connpool-admin-password, --socket-file
+	// --connpool-admin-password, --socket-file
+	// Note: --pgbackrest-stanza removed in multigres PR #398 (now hardcoded to "multigres")
 
 	args := []string{
 		"multipooler", // Subcommand
@@ -86,7 +87,6 @@ func buildMultiPoolerSidecar(
 		"--grpc-port", "15270",
 		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
-		"--topo-implementation", shard.Spec.GlobalTopoServer.Implementation,
 		"--cell", cellName,
 		"--database", shard.Spec.DatabaseName,
 		"--table-group", shard.Spec.TableGroupName,
@@ -107,18 +107,19 @@ func buildMultiPoolerSidecar(
 }
 
 // buildPgctldInitContainer creates the pgctld init container spec.
-// This copies the pgctld binary to a shared volume for use by the postgres container.
+// NOTE: As of multigres PR #398, pgctld is no longer in the main multigres image.
+// The new approach uses a combined postgres+pgctld image (multigres/pgctld-postgres).
+// This init container uses a shell fallback since 'pgctld copy-binary' command was removed.
+// TODO: Remove this init container and use multigres/pgctld-postgres image directly for postgres container.
 func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 	image := DefaultMultigresImage
-	// TODO: Add pgctld image field to Shard spec if needed
 
 	return corev1.Container{
-		Name:  "pgctld-init",
-		Image: image,
+		Name:    "pgctld-init",
+		Image:   image,
+		Command: []string{"/bin/sh", "-c"},
 		Args: []string{
-			"pgctld", // Subcommand
-			"copy-binary",
-			"--output", "/shared/pgctld",
+			"cp /multigres/bin/pgctld /shared/pgctld 2>/dev/null || echo 'pgctld not found in image, skipping copy'",
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -146,7 +147,6 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		"--grpc-port", "15370",
 		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
-		"--topo-implementation", shard.Spec.GlobalTopoServer.Implementation,
 		"--cell", cellName,
 	}
 

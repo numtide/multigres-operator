@@ -153,7 +153,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--grpc-port", "15270",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
-					"--topo-implementation", "etcd2",
 					"--cell", "zone1",
 					"--database", "testdb",
 					"--table-group", "default",
@@ -197,7 +196,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--grpc-port", "15270",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
-					"--topo-implementation", "etcd2",
 					"--cell", "zone2",
 					"--database", "proddb",
 					"--table-group", "orders",
@@ -250,7 +248,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--grpc-port", "15270",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
-					"--topo-implementation", "etcd2",
 					"--cell", "zone1",
 					"--database", "mydb",
 					"--table-group", "default",
@@ -296,12 +293,11 @@ func TestBuildPgctldInitContainer(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{},
 			},
 			want: corev1.Container{
-				Name:  "pgctld-init",
-				Image: DefaultMultigresImage,
+				Name:    "pgctld-init",
+				Image:   DefaultMultigresImage,
+				Command: []string{"/bin/sh", "-c"},
 				Args: []string{
-					"pgctld",
-					"copy-binary",
-					"--output", "/shared/pgctld",
+					"cp /multigres/bin/pgctld /shared/pgctld 2>/dev/null || echo 'pgctld not found in image, skipping copy'",
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -350,7 +346,6 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 					"--grpc-port", "15370",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
-					"--topo-implementation", "etcd2",
 					"--cell", "zone1",
 				},
 				Ports:     buildMultiOrchContainerPorts(),
