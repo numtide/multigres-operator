@@ -69,6 +69,9 @@ func TestCellReconciliation(t *testing.T) {
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
 					Zone: "us-west-1a",
+					Images: multigresv1alpha1.CellImages{
+						MultiGateway: "ghcr.io/multigres/multigres:main",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 					},
@@ -153,6 +156,9 @@ func TestCellReconciliation(t *testing.T) {
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
 					Zone: "us-west-1b",
+					Images: multigresv1alpha1.CellImages{
+						MultiGateway: "ghcr.io/multigres/multigres:main",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(3)),
 					},
@@ -235,9 +241,11 @@ func TestCellReconciliation(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name:              "zone3",
-					Zone:              "us-west-1c",
-					MultiGatewayImage: "custom/multigateway:v1.0.0",
+					Name: "zone3",
+					Zone: "us-west-1c",
+					Images: multigresv1alpha1.CellImages{
+						MultiGateway: "custom/multigateway:v1.0.0",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 					},
@@ -322,6 +330,9 @@ func TestCellReconciliation(t *testing.T) {
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone4",
 					Zone: "us-west-1d",
+					Images: multigresv1alpha1.CellImages{
+						MultiGateway: "ghcr.io/multigres/multigres:main",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(2)),
 						Affinity: &corev1.Affinity{

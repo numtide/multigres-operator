@@ -45,8 +45,8 @@ func BuildMultiGatewayDeployment(
 	}
 
 	image := DefaultMultiGatewayImage
-	if cell.Spec.MultiGatewayImage != "" {
-		image = cell.Spec.MultiGatewayImage
+	if cell.Spec.Images.MultiGateway != "" {
+		image = cell.Spec.Images.MultiGateway
 	}
 
 	name := cell.Name + "-multigateway"

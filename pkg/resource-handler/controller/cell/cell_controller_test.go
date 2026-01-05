@@ -94,10 +94,12 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
+					Images: multigresv1alpha1.CellImages{
+						MultiGateway: "custom/multigateway:v1.0.0",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(5)),
 					},
-					MultiGatewayImage: "custom/multigateway:v1.0.0",
 				},
 			},
 			existingObjects: []client.Object{

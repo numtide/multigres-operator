@@ -236,8 +236,10 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					UID:       "image-uid",
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name:              "zone3",
-					MultiGatewayImage: "custom/multigateway:v1.2.3",
+					Name: "zone3",
+					Images: multigresv1alpha1.CellImages{
+						MultiGateway: "custom/multigateway:v1.2.3",
+					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
