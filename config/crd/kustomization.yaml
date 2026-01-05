@@ -2,11 +2,15 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
+# Parent CRDs
+- bases/multigres.com_multigresclusters.yaml
+- bases/multigres.com_tablegroups.yaml
+# Template CRDs
+- bases/multigres.com_celltemplates.yaml
+- bases/multigres.com_coretemplates.yaml
+- bases/multigres.com_shardtemplates.yaml
+# Child CRDs
 - bases/multigres.com_cells.yaml
-- bases/multigres.com_etcds.yaml
-- bases/multigres.com_multigateways.yaml
-- bases/multigres.com_multiorches.yaml
-- bases/multigres.com_multipoolers.yaml
 - bases/multigres.com_shards.yaml
 - bases/multigres.com_toposervers.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
