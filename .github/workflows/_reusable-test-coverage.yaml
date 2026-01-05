@@ -66,8 +66,9 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             bin
-          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum', 'Makefile') }}
+          key: ${{ runner.os }}-go-coverage-${{ hashFiles('**/go.sum', 'Makefile') }}
           restore-keys: |
+            ${{ runner.os }}-go-coverage-
             ${{ runner.os }}-go-build-
 
       - name: Build
@@ -246,11 +247,12 @@ jobs:
       - name: Save cache
         if: always() &&
           github.event_name != 'pull_request'
-        uses: actions/cache/save@v3
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+          key: ${{ runner.os }}-go-coverage-${{ hashFiles('**/go.sum', 'Makefile') }}
           # Any location that we generate the test coverage report in
           path: |
             ~/.cache/coverage.txt
             ~/.cache/go-build
             ~/go/pkg/mod
+            bin
