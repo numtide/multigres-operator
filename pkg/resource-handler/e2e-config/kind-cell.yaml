@@ -32,7 +32,7 @@ spec:
 
   # Reference to the global topology server
   globalTopoServer:
-    address: kind-global-topo:2379
+    address: kind-toposerver-sample:2379
     rootPath: /multigres/global
     implementation: etcd2
 
