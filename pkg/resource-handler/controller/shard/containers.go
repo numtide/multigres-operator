@@ -9,9 +9,12 @@ import (
 )
 
 const (
-	// DefaultMultigresImage is the base image for all Multigres components (multipooler, multiorch, pgctld)
+	// DefaultMultigresImage is the base image for all Multigres components (multipooler, multiorch)
 	// Different components use different subcommands.
 	DefaultMultigresImage = "ghcr.io/multigres/multigres:main"
+
+	// DefaultPgctldImage is the image containing the pgctld binary
+	DefaultPgctldImage = "ghcr.io/multigres/pgctld:main"
 
 	// DefaultPostgresImage is the default PostgreSQL database container image
 	DefaultPostgresImage = "postgres:17"
@@ -78,8 +81,7 @@ func buildMultiPoolerSidecar(
 
 	// TODO: Add remaining command line arguments:
 	// --pooler-dir, --grpc-socket-file, --log-level, --log-output, --hostname, --service-map
-	// --connpool-admin-password, --socket-file
-	// Note: --pgbackrest-stanza removed in multigres PR #398 (now hardcoded to "multigres")
+	// --pgbackrest-stanza, --connpool-admin-password, --socket-file
 
 	args := []string{
 		"multipooler", // Subcommand
@@ -107,19 +109,20 @@ func buildMultiPoolerSidecar(
 }
 
 // buildPgctldInitContainer creates the pgctld init container spec.
-// NOTE: As of multigres PR #398, pgctld is no longer in the main multigres image.
-// The new approach uses a combined postgres+pgctld image (multigres/pgctld-postgres).
-// This init container uses a shell fallback since 'pgctld copy-binary' command was removed.
-// TODO: Remove this init container and use multigres/pgctld-postgres image directly for postgres container.
+// This copies the pgctld binary from the dedicated pgctld image to a shared volume
+// for use by the postgres container.
 func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
-	image := DefaultMultigresImage
+	// Use dedicated pgctld image (ghcr.io/multigres/pgctld:main)
+	// TODO: Add pgctld image field to Shard spec if users need to override
+	image := DefaultPgctldImage
 
 	return corev1.Container{
 		Name:    "pgctld-init",
 		Image:   image,
 		Command: []string{"/bin/sh", "-c"},
 		Args: []string{
-			"cp /multigres/bin/pgctld /shared/pgctld 2>/dev/null || echo 'pgctld not found in image, skipping copy'",
+			// Copy pgctld from /usr/local/bin/pgctld (location in pgctld image) to shared volume
+			"cp /usr/local/bin/pgctld /shared/pgctld",
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{

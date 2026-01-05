@@ -294,10 +294,10 @@ func TestBuildPgctldInitContainer(t *testing.T) {
 			},
 			want: corev1.Container{
 				Name:    "pgctld-init",
-				Image:   DefaultMultigresImage,
+				Image:   DefaultPgctldImage,
 				Command: []string{"/bin/sh", "-c"},
 				Args: []string{
-					"cp /multigres/bin/pgctld /shared/pgctld 2>/dev/null || echo 'pgctld not found in image, skipping copy'",
+					"cp /usr/local/bin/pgctld /shared/pgctld",
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{

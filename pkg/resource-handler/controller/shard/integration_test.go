@@ -233,10 +233,10 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/multigres:main",
+										Image:   "ghcr.io/multigres/pgctld:main",
 										Command: []string{"/bin/sh", "-c"},
 										Args: []string{
-											"cp /multigres/bin/pgctld /shared/pgctld 2>/dev/null || echo 'pgctld not found in image, skipping copy'",
+											"cp /usr/local/bin/pgctld /shared/pgctld",
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
@@ -505,10 +505,10 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/multigres:main",
+										Image:   "ghcr.io/multigres/pgctld:main",
 										Command: []string{"/bin/sh", "-c"},
 										Args: []string{
-											"cp /multigres/bin/pgctld /shared/pgctld 2>/dev/null || echo 'pgctld not found in image, skipping copy'",
+											"cp /usr/local/bin/pgctld /shared/pgctld",
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
@@ -622,10 +622,10 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/multigres:main",
+										Image:   "ghcr.io/multigres/pgctld:main",
 										Command: []string{"/bin/sh", "-c"},
 										Args: []string{
-											"cp /multigres/bin/pgctld /shared/pgctld 2>/dev/null || echo 'pgctld not found in image, skipping copy'",
+											"cp /usr/local/bin/pgctld /shared/pgctld",
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgctld-bin", MountPath: "/shared"},
