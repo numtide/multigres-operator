@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -206,6 +207,15 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				if got, want := tg.Spec.Images.ImagePullPolicy, corev1.PullAlways; got != want {
 					t.Errorf("TableGroup pull policy mismatch got %q, want %q", got, want)
 				}
+
+				// Verify MultiAdmin Image
+				deploy := &appsv1.Deployment{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
+					t.Fatal("Expected MultiAdmin deployment to exist")
+				}
+				if got, want := deploy.Spec.Template.Spec.Containers[0].Image, "admin:latest"; got != want {
+					t.Errorf("MultiAdmin image mismatch got %q, want %q", got, want)
+				}
 			},
 		},
 		"Create: Ultra-Minimalist (Shard Injection)": {
@@ -329,6 +339,157 @@ func TestMultigresClusterReconciler_Reconcile_Success(t *testing.T) {
 				}
 				if got := tg.Spec.Shards[0].MultiOrch.Cells[0]; got != "zone-custom" {
 					t.Errorf("Expected explicit cell 'zone-custom', got %s", got)
+				}
+			},
+		},
+		"Reconcile: Prune Orphaned Resources": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				// Orphaned Cell (not in spec)
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-orphaned-cell",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+					Spec: multigresv1alpha1.CellSpec{Name: "orphaned-cell"},
+				},
+				// Orphaned TableGroup (not in spec)
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-orphaned-tg",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			validate: func(t testing.TB, c client.Client) {
+				ctx := t.Context()
+				cell := &multigresv1alpha1.Cell{}
+				err := c.Get(
+					ctx,
+					types.NamespacedName{
+						Name:      clusterName + "-orphaned-cell",
+						Namespace: namespace,
+					},
+					cell,
+				)
+				if !apierrors.IsNotFound(err) {
+					t.Errorf("Expected orphaned cell to be deleted, got error: %v", err)
+				}
+
+				tg := &multigresv1alpha1.TableGroup{}
+				err = c.Get(
+					ctx,
+					types.NamespacedName{Name: clusterName + "-orphaned-tg", Namespace: namespace},
+					tg,
+				)
+				if !apierrors.IsNotFound(err) {
+					t.Errorf("Expected orphaned tablegroup to be deleted, got error: %v", err)
+				}
+			},
+		},
+		"Reconcile: Status Available (All Ready)": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				// Existing Cell that is Ready (Mocking status from child controller)
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-zone-a",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+					Spec: multigresv1alpha1.CellSpec{Name: "zone-a"},
+					Status: multigresv1alpha1.CellStatus{
+						Conditions: []metav1.Condition{
+							{Type: "Available", Status: metav1.ConditionTrue},
+						},
+						GatewayReplicas: 2,
+					},
+				},
+			},
+			validate: func(t testing.TB, c client.Client) {
+				ctx := t.Context()
+				cluster := &multigresv1alpha1.MultigresCluster{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, cluster); err != nil {
+					t.Fatal(err)
+				}
+
+				// Verify Aggregated Status
+				cond := meta.FindStatusCondition(cluster.Status.Conditions, "Available")
+				if cond == nil {
+					t.Fatal("Available condition not found")
+					return // explicit return to satisfy linter
+				}
+				if cond.Status != metav1.ConditionTrue {
+					t.Errorf("Expected Available=True, got %s", cond.Status)
+				}
+
+				// Verify Cell Summary
+				summary, ok := cluster.Status.Cells["zone-a"]
+				if !ok {
+					t.Fatal("Cell zone-a summary missing")
+				}
+				if !summary.Ready {
+					t.Error("Expected Cell summary Ready=true")
+				}
+				if summary.GatewayReplicas != 2 {
+					t.Errorf("Expected GatewayReplicas=2, got %d", summary.GatewayReplicas)
+				}
+			},
+		},
+		"Reconcile: Implicit Cell Sorting": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				// Define 2 cells to force multi-cell expansion
+				c.Spec.Cells = []multigresv1alpha1.CellConfig{
+					{Name: "zone-b", Zone: "us-east-1b"}, // b comes after a
+					{Name: "zone-a", Zone: "us-east-1a"},
+				}
+				// We do NOT set Shard.Spec.MultiOrch.Cells explicitly.
+			},
+			// FIX: Use a ShardTemplate that HAS explicit pool cells, so the controller finds them
+			// and populates MultiOrch.Cells, triggering the sort logic.
+			existingObjects: []client.Object{
+				coreTpl, cellTpl,
+				&multigresv1alpha1.ShardTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "default-shard", Namespace: namespace},
+					Spec: multigresv1alpha1.ShardTemplateSpec{
+						MultiOrch: &multigresv1alpha1.MultiOrchSpec{
+							StatelessSpec: multigresv1alpha1.StatelessSpec{
+								Replicas: ptr.To(int32(3)),
+							},
+							// Cells EMPTY to trigger defaulting logic
+						},
+						Pools: map[string]multigresv1alpha1.PoolSpec{
+							"primary": {
+								ReplicasPerCell: ptr.To(int32(2)),
+								Type:            "readWrite",
+								// Explicit cells to be aggregated
+								Cells: []multigresv1alpha1.CellName{"zone-b", "zone-a"},
+							},
+						},
+					},
+				},
+			},
+			validate: func(t testing.TB, c client.Client) {
+				ctx := t.Context()
+				tg := &multigresv1alpha1.TableGroup{}
+				tgName := clusterName + "-db1-tg1"
+				if err := c.Get(ctx, types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
+					t.Fatal(err)
+				}
+
+				shards := tg.Spec.Shards
+				if len(shards) == 0 {
+					t.Fatal("No shards found")
+				}
+				cells := shards[0].MultiOrch.Cells
+				if len(cells) != 2 {
+					t.Fatalf("Expected 2 cells, got %d", len(cells))
+				}
+				// Verify Order (Must be sorted alphabetically: zone-a, zone-b)
+				if cells[0] != "zone-a" || cells[1] != "zone-b" {
+					t.Errorf("Cells not sorted: %v", cells)
 				}
 			},
 		},
