@@ -425,12 +425,12 @@ kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cl
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deployment complete!"
-	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator-system"
+	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
 .PHONY: kind-redeploy
 kind-redeploy: kind-load ## Rebuild image, reload to kind, and restart pods
 	@echo "==> Restarting operator pods..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) rollout restart deployment -n multigres-operator-system
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) rollout restart deployment -n multigres-operator
 
 .PHONY: kind-down
 kind-down: ## Delete the kind cluster
