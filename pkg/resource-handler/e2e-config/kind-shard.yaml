@@ -5,8 +5,9 @@ metadata:
   namespace: default
 spec:
   # Shard identification
-  databaseName: mydb
-  tableGroupName: users
+  # Note: v1alpha1 API enforces "postgres" database and "default" tablegroup
+  databaseName: postgres
+  tableGroupName: default
   shardName: "0"
 
   # Container images for shard components
