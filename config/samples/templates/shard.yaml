@@ -1,0 +1,38 @@
+apiVersion: multigres.com/v1alpha1
+kind: ShardTemplate
+metadata:
+  name: "standard-shard"
+  namespace: default
+spec:
+  multiorch:
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+
+  pools:
+    main-app:
+      type: "readWrite"
+      replicasPerCell: 2
+      storage:
+        class: "gp3"
+        size: "100Gi"
+      postgres:
+         resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+      multipooler:
+         resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"

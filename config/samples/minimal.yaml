@@ -1,0 +1,18 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: minimal-cluster
+  namespace: default
+spec:
+  # A minimal cluster requires at least one cell definition.
+  #
+  # The operator will resolve configuration defaults in this order:
+  # 1. Namespace Defaults: If a template named "default" exists in this namespace
+  #    (e.g., CoreTemplate/default, CellTemplate/default), it will be used.
+  # 2. Hardcoded Defaults: If no template is found, the operator injects:
+  #    - Default GlobalTopoServer (Managed Etcd, 3 replicas)
+  #    - Default MultiAdmin (1 replica)
+  #    - Default Database ("postgres") with Default TableGroup ("default")
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"

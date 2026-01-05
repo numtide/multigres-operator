@@ -1,0 +1,100 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: advanced-cluster
+  namespace: default
+spec:
+  # ----------------------------------------------------------------
+  # 1. Global Components (Inline)
+  # ----------------------------------------------------------------
+  globalTopoServer:
+    etcd:
+      image: "quay.io/coreos/etcd:v3.5"
+      replicas: 3
+      storage:
+        size: "10Gi"
+        class: "standard-gp3"
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+
+  multiadmin:
+    spec:
+      replicas: 2
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+  # ----------------------------------------------------------------
+  # 2. Cell Definitions (Inline)
+  # ----------------------------------------------------------------
+  cells:
+    - name: "us-east-1a"
+      zone: "us-east-1a"
+      spec:
+         multigateway:
+           replicas: 2
+           resources:
+             requests:
+               cpu: "1"
+               memory: "2Gi"
+             limits:
+               cpu: "2"
+               memory: "4Gi"
+
+  # ----------------------------------------------------------------
+  # 3. Database Topology (Inline)
+  # ----------------------------------------------------------------
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default" # Gateway requires this name at the moment.
+          default: true
+          shards:
+            - name: "0"
+              spec:
+                multiorch:
+                  cells:
+                    - "us-east-1a"
+                  resources:
+                    requests:
+                      cpu: "200m"
+                      memory: "256Mi"
+                    limits:
+                      cpu: "500m"
+                      memory: "512Mi"
+
+                pools:
+                  main-app:
+                    type: "readWrite"
+                    cells:
+                      - "us-east-1a"
+                    replicasPerCell: 2
+                    storage:
+                      class: "gp3"
+                      size: "100Gi"
+                    postgres:
+                       resources:
+                          requests:
+                            cpu: "2"
+                            memory: "4Gi"
+                          limits:
+                            cpu: "4"
+                            memory: "8Gi"
+                    multipooler:
+                       resources:
+                          requests:
+                            cpu: "500m"
+                            memory: "1Gi"
+                          limits:
+                            cpu: "1"
+                            memory: "2Gi"
