@@ -439,6 +439,66 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			},
 			wantErrMsg: "failed to list toposervers",
 		},
+		"Error: Delete Child Cell Failed": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{finalizerName}
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-zone-a",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
+			},
+			wantErrMsg: "failed to delete child",
+		},
+		"Error: Delete Child TableGroup Failed": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{finalizerName}
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-db1-tg1",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+			},
+			wantErrMsg: "failed to delete child",
+		},
+		"Error: Delete Child TopoServer Failed": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{finalizerName}
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.TopoServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-global-topo",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
+			},
+			wantErrMsg: "failed to delete child",
+		},
 		"Object Not Found (Clean Exit)": {
 			skipClusterCreation: true,
 			existingObjects:     []client.Object{},

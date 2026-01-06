@@ -67,6 +67,25 @@ func TestReconcile_Global(t *testing.T) {
 				}
 			},
 		},
+		"Create: MultiAdmin with PodLabels": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.MultiAdmin = &multigresv1alpha1.MultiAdminConfig{
+					Spec: &multigresv1alpha1.StatelessSpec{
+						PodLabels: map[string]string{"custom": "label"},
+					},
+				}
+			},
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			validate: func(t testing.TB, c client.Client) {
+				deploy := &appsv1.Deployment{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
+					t.Fatal(err)
+				}
+				if deploy.Spec.Template.Labels["custom"] != "label" {
+					t.Error("PodLabels were not applied")
+				}
+			},
+		},
 		"Create: External Topo Integration": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
@@ -139,6 +158,23 @@ func TestReconcile_Global(t *testing.T) {
 		"Error: Create MultiAdmin Failed": {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errSimulated),
+			},
+			wantErrMsg: "failed to create/update multiadmin",
+		},
+		"Error: Update MultiAdmin Failed": {
+			// Pre-create the MultiAdmin Deployment so CreateOrUpdate goes to Update path
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-multiadmin",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(clusterName+"-multiadmin", errSimulated),
 			},
 			wantErrMsg: "failed to create/update multiadmin",
 		},

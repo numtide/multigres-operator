@@ -103,9 +103,14 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 		},
-		"Existing TableGroup but No Shards: Inject Shard 0": {
+		"Existing TableGroup but No Shards: Inject Shard 0 with Default Cells": {
 			input: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
+					// Adding Cells here triggers the loop to build defaultCells
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-a"},
+						{Name: "zone-b"},
+					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
 							Name: "custom-db",
@@ -131,6 +136,10 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  FallbackCellTemplate,
 						ShardTemplate: FallbackShardTemplate,
 					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-a"},
+						{Name: "zone-b"},
+					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
 							Name: "custom-db",
@@ -138,7 +147,18 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 								{
 									Name: "my-tg",
 									Shards: []multigresv1alpha1.ShardConfig{
-										{Name: "0"},
+										{
+											Name: "0",
+											// Expect MultiOrch.Cells to be populated from cluster.Spec.Cells
+											Spec: &multigresv1alpha1.ShardInlineSpec{
+												MultiOrch: multigresv1alpha1.MultiOrchSpec{
+													Cells: []multigresv1alpha1.CellName{
+														"zone-a",
+														"zone-b",
+													},
+												},
+											},
+										},
 									},
 								},
 							},
@@ -434,7 +454,6 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		// ADDED: This covers the "else" fallback path in ResolveMultiAdmin
 		"Fallback (No Spec, No Template) -> Defaults": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
