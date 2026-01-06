@@ -14,7 +14,7 @@ const (
 	DefaultMultigresImage = "ghcr.io/multigres/multigres:main"
 
 	// DefaultPgctldImage is the image containing the pgctld binary
-	DefaultPgctldImage = "ghcr.io/multigres/pgctld:main"
+	DefaultPgctldImage = "ghcr.io/multigres/multigres/pgctld:main"
 
 	// DefaultPostgresImage is the default PostgreSQL database container image
 	DefaultPostgresImage = "postgres:17"
@@ -119,7 +119,7 @@ func buildMultiPoolerSidecar(
 // This copies the pgctld binary from the dedicated pgctld image to a shared volume
 // for use by the postgres container.
 func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
-	// Use dedicated pgctld image (ghcr.io/multigres/pgctld:main)
+	// Use dedicated pgctld image (ghcr.io/multigres/multigres/pgctld:main)
 	// TODO: Add pgctld image field to Shard spec if users need to override
 	image := DefaultPgctldImage
 
