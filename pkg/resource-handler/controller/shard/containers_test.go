@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
@@ -31,6 +32,11 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "POSTGRES_HOST_AUTH_METHOD",
 						Value: "trust",
 					},
+				},
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:    ptr.To(int64(999)),
+					RunAsGroup:   ptr.To(int64(999)),
+					RunAsNonRoot: ptr.To(true),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -62,6 +68,11 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "POSTGRES_HOST_AUTH_METHOD",
 						Value: "trust",
 					},
+				},
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:    ptr.To(int64(999)),
+					RunAsGroup:   ptr.To(int64(999)),
+					RunAsNonRoot: ptr.To(true),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -111,6 +122,11 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "POSTGRES_HOST_AUTH_METHOD",
 						Value: "trust",
 					},
+				},
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:    ptr.To(int64(999)),
+					RunAsGroup:   ptr.To(int64(999)),
+					RunAsNonRoot: ptr.To(true),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{

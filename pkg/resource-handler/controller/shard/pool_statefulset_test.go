@@ -105,6 +105,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
@@ -242,6 +245,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
@@ -378,6 +384,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
@@ -529,6 +538,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{

@@ -263,6 +263,11 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										Ports:         multipoolerPorts(t),
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
+										},
 									},
 								},
 								Containers: []corev1.Container{
@@ -271,6 +276,10 @@ func TestShardReconciliation(t *testing.T) {
 										Image: "postgres:17",
 										Env: []corev1.EnvVar{
 											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},
@@ -501,6 +510,9 @@ func TestShardReconciliation(t *testing.T) {
 								Labels: shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
 							},
 							Spec: corev1.PodSpec{
+								SecurityContext: &corev1.PodSecurityContext{
+									FSGroup: ptr.To(int64(999)),
+								},
 								Volumes: []corev1.Volume{
 									{
 										Name: "pgctld-bin",
@@ -544,6 +556,11 @@ func TestShardReconciliation(t *testing.T) {
 											tcpPort(t, "postgres", 5432),
 										},
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
+										},
 									},
 								},
 								Containers: []corev1.Container{
@@ -552,6 +569,10 @@ func TestShardReconciliation(t *testing.T) {
 										Image: "postgres:17",
 										Env: []corev1.EnvVar{
 											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},
@@ -621,6 +642,9 @@ func TestShardReconciliation(t *testing.T) {
 								Labels: shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
 							},
 							Spec: corev1.PodSpec{
+								SecurityContext: &corev1.PodSecurityContext{
+									FSGroup: ptr.To(int64(999)),
+								},
 								Volumes: []corev1.Volume{
 									{
 										Name: "pgctld-bin",
@@ -664,6 +688,11 @@ func TestShardReconciliation(t *testing.T) {
 											tcpPort(t, "postgres", 5432),
 										},
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
+										},
 									},
 								},
 								Containers: []corev1.Container{
@@ -672,6 +701,11 @@ func TestShardReconciliation(t *testing.T) {
 										Image: "postgres:17",
 										Env: []corev1.EnvVar{
 											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
+										},
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},

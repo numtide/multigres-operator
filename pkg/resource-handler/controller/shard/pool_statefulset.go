@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -67,7 +68,11 @@ func BuildPoolStatefulSet(
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					// Init containers: pgctld copies binary, multipooler is a native sidecar
+					// Set fsGroup so PVC volumes are writable by postgres user
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
+					},
+					// Init containers: copy pgctld binary, multipooler is a native sidecar
 					InitContainers: []corev1.Container{
 						buildPgctldInitContainer(shard),
 						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),

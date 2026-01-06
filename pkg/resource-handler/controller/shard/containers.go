@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
@@ -56,6 +57,11 @@ func buildPostgresContainer(
 				Name:  "POSTGRES_HOST_AUTH_METHOD",
 				Value: "trust",
 			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:    ptr.To(int64(999)), // postgres user in postgres:17 image
+			RunAsGroup:   ptr.To(int64(999)),
+			RunAsNonRoot: ptr.To(true),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -112,6 +118,11 @@ func buildMultiPoolerSidecar(
 		Ports:         buildMultiPoolerContainerPorts(),
 		Resources:     pool.Multipooler.Resources,
 		RestartPolicy: &sidecarRestartPolicy,
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:    ptr.To(int64(999)), // Run as postgres user to access pg_data
+			RunAsGroup:   ptr.To(int64(999)),
+			RunAsNonRoot: ptr.To(true),
+		},
 	}
 }
 
