@@ -119,10 +119,8 @@ func buildPostgresContainer(
 }
 
 // buildMultiPoolerSidecar creates the multipooler sidecar container spec.
-// This is implemented as a native sidecar using init container with
-// restartPolicy: Always (K8s 1.28+).
-// cellName specifies which cell this container is running in.
-// If cellName is empty, defaults to the global topology cell.
+// Implemented as native sidecar (init container with restartPolicy: Always) because
+// multipooler must restart with postgres to maintain connection pool consistency.
 func buildMultiPoolerSidecar(
 	shard *multigresv1alpha1.Shard,
 	pool multigresv1alpha1.PoolSpec,
@@ -177,19 +175,13 @@ func buildMultiPoolerSidecar(
 }
 
 // buildPgctldInitContainer creates the pgctld init container spec.
-// This copies the pgctld binary from the dedicated pgctld image to a shared volume
-// for use by the postgres container.
+// Copies pgctld binary to shared volume because postgres image doesn't include it.
 func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
-	// Use dedicated pgctld image (ghcr.io/multigres/multigres/pgctld:main)
-	// TODO: Add pgctld image field to Shard spec if users need to override
-	image := DefaultPgctldImage
-
 	return corev1.Container{
 		Name:    "pgctld-init",
 		Image:   DefaultPgctldImage,
 		Command: []string{"/bin/sh", "-c"},
 		Args: []string{
-			// Copy pgctld from /usr/local/bin/pgctld (location in pgctld image) to shared volume
 			"cp /usr/local/bin/pgctld /shared/pgctld",
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -233,6 +225,17 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		Args:      args,
 		Ports:     buildMultiOrchContainerPorts(),
 		Resources: shard.Spec.MultiOrch.Resources,
+	}
+}
+
+// buildPoolerDirVolume creates the emptyDir volume for multipooler working directory.
+// This provides writable space for multipooler to create pgbackrest config and other files.
+func buildPoolerDirVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: PoolerDirVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
 	}
 }
 
