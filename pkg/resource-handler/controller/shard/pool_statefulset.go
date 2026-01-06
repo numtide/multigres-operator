@@ -68,22 +68,21 @@ func BuildPoolStatefulSet(
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					// Set fsGroup so PVC volumes are writable by postgres user
+					// FSGroup ensures PVC is writable by postgres user (required for initdb)
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
 					},
-					// Init containers: copy pgctld binary, multipooler is a native sidecar
 					InitContainers: []corev1.Container{
 						buildPgctldInitContainer(shard),
 						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 					},
-					// Postgres is the main container (runs pgctld binary)
 					Containers: []corev1.Container{
 						buildPostgresContainer(shard, poolSpec),
 					},
-					// Shared volume for pgctld binary
 					Volumes: []corev1.Volume{
 						buildPgctldVolume(),
+						// Single PVC shared by both postgres and multipooler because both need
+						// access to pgbackrest configs, sockets, and postgres data directory
 					},
 					Affinity: poolSpec.Affinity,
 				},

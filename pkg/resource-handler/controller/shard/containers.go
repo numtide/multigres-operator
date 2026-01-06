@@ -62,7 +62,8 @@ const (
 var sidecarRestartPolicy = corev1.ContainerRestartPolicyAlways
 
 // buildPostgresContainer creates the postgres container spec for a pool.
-// This runs pgctld binary (which wraps postgres) and mounts persistent data storage.
+// Uses pgctld server instead of running postgres directly because pgctld provides
+// lifecycle management (init, start, stop, status) via gRPC for multiorch/multipooler.
 func buildPostgresContainer(
 	shard *multigresv1alpha1.Shard,
 	pool multigresv1alpha1.PoolSpec,
@@ -101,9 +102,9 @@ func buildPostgresContainer(
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(999)), // postgres user in postgres:17 image
+			RunAsUser:    ptr.To(int64(999)), // Must match postgres:17 image UID for file access
 			RunAsGroup:   ptr.To(int64(999)),
-			RunAsNonRoot: ptr.To(true),
+			RunAsNonRoot: ptr.To(true), // pgctld refuses to run as root
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -133,8 +134,8 @@ func buildMultiPoolerSidecar(
 	}
 
 	// TODO: Add remaining command line arguments:
-	// --pooler-dir, --grpc-socket-file, --log-level, --log-output, --hostname, --service-map
-	// --pgbackrest-stanza, --connpool-admin-password, --socket-file
+	// --grpc-socket-file, --log-level, --log-output, --hostname, --service-map
+	// --pgbackrest-stanza, --connpool-admin-password
 
 	args := []string{
 		"multipooler", // Subcommand
@@ -161,7 +162,7 @@ func buildMultiPoolerSidecar(
 		Resources:     pool.Multipooler.Resources,
 		RestartPolicy: &sidecarRestartPolicy,
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(999)), // Run as postgres user to access pg_data
+			RunAsUser:    ptr.To(int64(999)), // Must match postgres UID to access pg_data directory
 			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
 		},

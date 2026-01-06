@@ -110,10 +110,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
+									Spec: multigresv1alpha1.ShardSpec{},
 								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
@@ -131,10 +128,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							Containers: []corev1.Container{
 								buildPostgresContainer(
 									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
-										},
+										Spec: multigresv1alpha1.ShardSpec{},
 									},
 									multigresv1alpha1.PoolSpec{},
 								),
@@ -250,10 +244,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
+									Spec: multigresv1alpha1.ShardSpec{},
 								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
@@ -273,10 +264,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							Containers: []corev1.Container{
 								buildPostgresContainer(
 									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
-										},
+										Spec: multigresv1alpha1.ShardSpec{},
 									},
 									multigresv1alpha1.PoolSpec{},
 								),
@@ -389,10 +377,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
+									Spec: multigresv1alpha1.ShardSpec{},
 								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
@@ -410,10 +395,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							Containers: []corev1.Container{
 								buildPostgresContainer(
 									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
-										},
+										Spec: multigresv1alpha1.ShardSpec{},
 									},
 									multigresv1alpha1.PoolSpec{},
 								),
@@ -543,10 +525,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							InitContainers: []corev1.Container{
 								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
+									Spec: multigresv1alpha1.ShardSpec{},
 								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
@@ -564,10 +543,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							Containers: []corev1.Container{
 								buildPostgresContainer(
 									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
-										},
+										Spec: multigresv1alpha1.ShardSpec{},
 									},
 									multigresv1alpha1.PoolSpec{},
 								),

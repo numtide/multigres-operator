@@ -24,13 +24,30 @@ func TestBuildPostgresContainer(t *testing.T) {
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: corev1.Container{
-				Name:      "postgres",
-				Image:     DefaultPostgresImage,
+				Name:    "postgres",
+				Image:   DefaultPostgresImage,
+				Command: []string{PgctldMountPath},
+				Args: []string{
+					"server",
+					"--pooler-dir=" + PoolerDirMountPath,
+					"--grpc-port=15470",
+					"--pg-port=5432",
+					"--pg-listen-addresses=*",
+					"--pg-database=postgres",
+					"--pg-user=postgres",
+					"--timeout=30",
+					"--log-level=info",
+					"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
+				},
 				Resources: corev1.ResourceRequirements{},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "POSTGRES_HOST_AUTH_METHOD",
 						Value: "trust",
+					},
+					{
+						Name:  "PGDATA",
+						Value: PgDataPath,
 					},
 				},
 				SecurityContext: &corev1.SecurityContext{
@@ -45,7 +62,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 					},
 					{
 						Name:      PgctldVolumeName,
-						MountPath: PgctldMountPath,
+						MountPath: PgctldBinDir,
 					},
 				},
 			},
@@ -60,13 +77,30 @@ func TestBuildPostgresContainer(t *testing.T) {
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: corev1.Container{
-				Name:      "postgres",
-				Image:     "postgres:16",
+				Name:    "postgres",
+				Image:   "postgres:16",
+				Command: []string{PgctldMountPath},
+				Args: []string{
+					"server",
+					"--pooler-dir=" + PoolerDirMountPath,
+					"--grpc-port=15470",
+					"--pg-port=5432",
+					"--pg-listen-addresses=*",
+					"--pg-database=postgres",
+					"--pg-user=postgres",
+					"--timeout=30",
+					"--log-level=info",
+					"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
+				},
 				Resources: corev1.ResourceRequirements{},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "POSTGRES_HOST_AUTH_METHOD",
 						Value: "trust",
+					},
+					{
+						Name:  "PGDATA",
+						Value: PgDataPath,
 					},
 				},
 				SecurityContext: &corev1.SecurityContext{
@@ -81,7 +115,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 					},
 					{
 						Name:      PgctldVolumeName,
-						MountPath: PgctldMountPath,
+						MountPath: PgctldBinDir,
 					},
 				},
 			},
@@ -105,8 +139,21 @@ func TestBuildPostgresContainer(t *testing.T) {
 				},
 			},
 			want: corev1.Container{
-				Name:  "postgres",
-				Image: DefaultPostgresImage,
+				Name:    "postgres",
+				Image:   DefaultPostgresImage,
+				Command: []string{PgctldMountPath},
+				Args: []string{
+					"server",
+					"--pooler-dir=" + PoolerDirMountPath,
+					"--grpc-port=15470",
+					"--pg-port=5432",
+					"--pg-listen-addresses=*",
+					"--pg-database=postgres",
+					"--pg-user=postgres",
+					"--timeout=30",
+					"--log-level=info",
+					"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
+				},
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -122,6 +169,10 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "POSTGRES_HOST_AUTH_METHOD",
 						Value: "trust",
 					},
+					{
+						Name:  "PGDATA",
+						Value: PgDataPath,
+					},
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsUser:    ptr.To(int64(999)),
@@ -135,7 +186,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 					},
 					{
 						Name:      PgctldVolumeName,
-						MountPath: PgctldMountPath,
+						MountPath: PgctldBinDir,
 					},
 				},
 			},
@@ -185,6 +236,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"multipooler",
 					"--http-port", "15200",
 					"--grpc-port", "15270",
+					"--pooler-dir", PoolerDirMountPath,
+					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone1",
@@ -198,6 +251,17 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
 				RestartPolicy: &sidecarRestartPolicy,
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:    ptr.To(int64(999)),
+					RunAsGroup:   ptr.To(int64(999)),
+					RunAsNonRoot: ptr.To(true),
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      DataVolumeName,
+						MountPath: PoolerDirMountPath,
+					},
+				},
 			},
 		},
 		"custom multipooler image": {
@@ -228,6 +292,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"multipooler",
 					"--http-port", "15200",
 					"--grpc-port", "15270",
+					"--pooler-dir", PoolerDirMountPath,
+					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone2",
@@ -241,6 +307,17 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
 				RestartPolicy: &sidecarRestartPolicy,
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:    ptr.To(int64(999)),
+					RunAsGroup:   ptr.To(int64(999)),
+					RunAsNonRoot: ptr.To(true),
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      DataVolumeName,
+						MountPath: PoolerDirMountPath,
+					},
+				},
 			},
 		},
 		"with resource requirements": {
@@ -280,6 +357,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"multipooler",
 					"--http-port", "15200",
 					"--grpc-port", "15270",
+					"--pooler-dir", PoolerDirMountPath,
+					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone1",
@@ -302,6 +381,17 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					},
 				},
 				RestartPolicy: &sidecarRestartPolicy,
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser:    ptr.To(int64(999)),
+					RunAsGroup:   ptr.To(int64(999)),
+					RunAsNonRoot: ptr.To(true),
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      DataVolumeName,
+						MountPath: PoolerDirMountPath,
+					},
+				},
 			},
 		},
 	}
