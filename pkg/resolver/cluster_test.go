@@ -196,7 +196,6 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 		},
-		// ADDED: This covers the "else" branches where we skip defaulting
 		"Pre-populated Fields: Preserves Values": {
 			input: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
@@ -290,7 +289,7 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 		"Inline Takes Precedence": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{Image: "inline"},
 					},
 				},
@@ -307,7 +306,7 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 		"Template Reference": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
 						TemplateRef: "default",
 					},
 				},
@@ -355,7 +354,7 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 		"Missing Explicit Template -> Error": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
 						TemplateRef: "missing",
 					},
 				},
@@ -402,7 +401,7 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 		"Inline": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					MultiAdmin: multigresv1alpha1.MultiAdminConfig{
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
 						Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(10))},
 					},
 				},
@@ -415,7 +414,7 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 		"Template": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					MultiAdmin: multigresv1alpha1.MultiAdminConfig{
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
 						TemplateRef: "default",
 					},
 				},
@@ -430,7 +429,7 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 		"Missing Template": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					MultiAdmin: multigresv1alpha1.MultiAdminConfig{TemplateRef: "gone"},
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{TemplateRef: "gone"},
 				},
 			},
 			wantErr: true,
@@ -439,7 +438,7 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 		"Fallback (No Spec, No Template) -> Defaults": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					MultiAdmin: multigresv1alpha1.MultiAdminConfig{}, // Empty
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{}, // Empty
 				},
 			},
 			objects: nil, // No core template found

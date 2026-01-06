@@ -672,8 +672,16 @@ func (in *MultigresClusterSpec) DeepCopyInto(out *MultigresClusterSpec) {
 	*out = *in
 	in.Images.DeepCopyInto(&out.Images)
 	out.TemplateDefaults = in.TemplateDefaults
-	in.GlobalTopoServer.DeepCopyInto(&out.GlobalTopoServer)
-	in.MultiAdmin.DeepCopyInto(&out.MultiAdmin)
+	if in.GlobalTopoServer != nil {
+		in, out := &in.GlobalTopoServer, &out.GlobalTopoServer
+		*out = new(GlobalTopoServerSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.MultiAdmin != nil {
+		in, out := &in.MultiAdmin, &out.MultiAdmin
+		*out = new(MultiAdminConfig)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Cells != nil {
 		in, out := &in.Cells, &out.Cells
 		*out = make([]CellConfig, len(*in))

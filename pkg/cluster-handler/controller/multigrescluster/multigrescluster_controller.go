@@ -3,14 +3,10 @@ package multigrescluster
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,7 +67,6 @@ func (r *MultigresClusterReconciler) Reconcile(
 	res := resolver.NewResolver(r.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
 
 	// Apply defaults (in-memory) to ensure we have images/configs/system-catalog even if webhook didn't run.
-	// This makes the controller robust against webhook failure or disabled states.
 	res.PopulateClusterDefaults(cluster)
 
 	if err := r.reconcileGlobalComponents(ctx, cluster, res); err != nil {
@@ -117,429 +112,68 @@ func (r *MultigresClusterReconciler) checkChildrenDeleted(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) error {
+	childrenStillExist := false
+
+	// Helper to delete a list of objects
+	deleteObjects := func(objects []client.Object) error {
+		for _, obj := range objects {
+			if obj.GetDeletionTimestamp().IsZero() {
+				if err := r.Delete(ctx, obj); err != nil {
+					if !errors.IsNotFound(err) {
+						return fmt.Errorf("failed to delete child %s: %w", obj.GetName(), err)
+					}
+				}
+			}
+		}
+		if len(objects) > 0 {
+			childrenStillExist = true
+		}
+		return nil
+	}
+
+	// 1. Check Cells
 	cells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return fmt.Errorf("failed to list cells: %w", err)
 	}
-	if len(cells.Items) > 0 {
-		return fmt.Errorf("cells still exist")
+	cellObjs := make([]client.Object, len(cells.Items))
+	for i := range cells.Items {
+		cellObjs[i] = &cells.Items[i]
+	}
+	if err := deleteObjects(cellObjs); err != nil {
+		return err
 	}
 
+	// 2. Check TableGroups
 	tgs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(ctx, tgs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return fmt.Errorf("failed to list tablegroups: %w", err)
 	}
-	if len(tgs.Items) > 0 {
-		return fmt.Errorf("tablegroups still exist")
+	tgObjs := make([]client.Object, len(tgs.Items))
+	for i := range tgs.Items {
+		tgObjs[i] = &tgs.Items[i]
+	}
+	if err := deleteObjects(tgObjs); err != nil {
+		return err
 	}
 
+	// 3. Check TopoServers
 	ts := &multigresv1alpha1.TopoServerList{}
 	if err := r.List(ctx, ts, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
 		return fmt.Errorf("failed to list toposervers: %w", err)
 	}
-	if len(ts.Items) > 0 {
-		return fmt.Errorf("toposervers still exist")
+	tsObjs := make([]client.Object, len(ts.Items))
+	for i := range ts.Items {
+		tsObjs[i] = &ts.Items[i]
 	}
-
-	return nil
-}
-
-func (r *MultigresClusterReconciler) reconcileGlobalComponents(
-	ctx context.Context,
-	cluster *multigresv1alpha1.MultigresCluster,
-	res *resolver.Resolver,
-) error {
-	if err := r.reconcileGlobalTopoServer(ctx, cluster, res); err != nil {
+	if err := deleteObjects(tsObjs); err != nil {
 		return err
 	}
-	if err := r.reconcileMultiAdmin(ctx, cluster, res); err != nil {
-		return err
-	}
-	return nil
-}
 
-func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
-	ctx context.Context,
-	cluster *multigresv1alpha1.MultigresCluster,
-	res *resolver.Resolver,
-) error {
-	// Use Granular Resolver
-	spec, err := res.ResolveGlobalTopo(ctx, cluster)
-	if err != nil {
-		return fmt.Errorf("failed to resolve global topo: %w", err)
-	}
-
-	// If Etcd is nil, it means we are using External topology (or invalid config handled by validations).
-	// We only create a TopoServer CR if we are managing Etcd.
-	if spec.Etcd != nil {
-		ts := &multigresv1alpha1.TopoServer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cluster.Name + "-global-topo",
-				Namespace: cluster.Namespace,
-				Labels:    map[string]string{"multigres.com/cluster": cluster.Name},
-			},
-		}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
-			// ResolveGlobalTopo guarantees spec.Etcd.Replicas is set via deep defaults
-			ts.Spec.Etcd = &multigresv1alpha1.EtcdSpec{
-				Image:     spec.Etcd.Image, // Use resolved image (from template or inline)
-				Replicas:  spec.Etcd.Replicas,
-				Storage:   spec.Etcd.Storage,
-				Resources: spec.Etcd.Resources,
-			}
-			return controllerutil.SetControllerReference(cluster, ts, r.Scheme)
-		}); err != nil {
-			return fmt.Errorf("failed to create/update global topo: %w", err)
-		}
-	}
-	return nil
-}
-
-func (r *MultigresClusterReconciler) reconcileMultiAdmin(
-	ctx context.Context,
-	cluster *multigresv1alpha1.MultigresCluster,
-	res *resolver.Resolver,
-) error {
-	// Use Granular Resolver
-	spec, err := res.ResolveMultiAdmin(ctx, cluster)
-	if err != nil {
-		return fmt.Errorf("failed to resolve multiadmin: %w", err)
-	}
-
-	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-multiadmin",
-			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				"multigres.com/cluster": cluster.Name,
-				"app":                   "multiadmin",
-			},
-		},
-	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-		// ResolveMultiAdmin guarantees Replicas is set
-		deploy.Spec.Replicas = spec.Replicas
-		deploy.Spec.Selector = &metav1.LabelSelector{
-			MatchLabels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
-		}
-		deploy.Spec.Template = corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
-			},
-			Spec: corev1.PodSpec{
-				ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
-				Containers: []corev1.Container{
-					{
-						Name: "multiadmin",
-						// Force Global Image for consistency
-						Image:     cluster.Spec.Images.MultiAdmin,
-						Resources: spec.Resources,
-					},
-				},
-				Affinity: spec.Affinity,
-			},
-		}
-		return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
-	}); err != nil {
-		return fmt.Errorf("failed to create/update multiadmin: %w", err)
-	}
-
-	return nil
-}
-
-func (r *MultigresClusterReconciler) reconcileCells(
-	ctx context.Context,
-	cluster *multigresv1alpha1.MultigresCluster,
-	res *resolver.Resolver,
-) error {
-	existingCells := &multigresv1alpha1.CellList{}
-	if err := r.List(ctx, existingCells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return fmt.Errorf("failed to list existing cells: %w", err)
-	}
-
-	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, res)
-	if err != nil {
-		return fmt.Errorf("failed to get global topo ref: %w", err)
-	}
-
-	activeCellNames := make(map[string]bool, len(cluster.Spec.Cells))
-
-	allCellNames := []multigresv1alpha1.CellName{}
-	for _, cellCfg := range cluster.Spec.Cells {
-		allCellNames = append(allCellNames, multigresv1alpha1.CellName(cellCfg.Name))
-	}
-
-	for _, cellCfg := range cluster.Spec.Cells {
-		activeCellNames[cellCfg.Name] = true
-
-		// Use Granular Resolver
-		gatewaySpec, localTopoSpec, err := res.ResolveCell(ctx, &cellCfg)
-		if err != nil {
-			return fmt.Errorf("failed to resolve cell '%s': %w", cellCfg.Name, err)
-		}
-
-		cellCR := &multigresv1alpha1.Cell{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cluster.Name + "-" + cellCfg.Name,
-				Namespace: cluster.Namespace,
-				Labels: map[string]string{
-					"multigres.com/cluster": cluster.Name,
-					"multigres.com/cell":    cellCfg.Name,
-				},
-			},
-		}
-
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, cellCR, func() error {
-			cellCR.Spec.Name = cellCfg.Name
-			cellCR.Spec.Zone = cellCfg.Zone
-			cellCR.Spec.Region = cellCfg.Region
-
-			// Updated API: Use Images struct, not flat field
-			cellCR.Spec.Images = multigresv1alpha1.CellImages{
-				MultiGateway:     cluster.Spec.Images.MultiGateway,
-				ImagePullPolicy:  cluster.Spec.Images.ImagePullPolicy,
-				ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
-			}
-
-			cellCR.Spec.MultiGateway = *gatewaySpec
-			cellCR.Spec.AllCells = allCellNames
-			cellCR.Spec.GlobalTopoServer = globalTopoRef
-			cellCR.Spec.TopoServer = localTopoSpec
-			cellCR.Spec.TopologyReconciliation = multigresv1alpha1.TopologyReconciliation{
-				RegisterCell: true,
-				PrunePoolers: true,
-			}
-
-			return controllerutil.SetControllerReference(cluster, cellCR, r.Scheme)
-		}); err != nil {
-			return fmt.Errorf("failed to create/update cell '%s': %w", cellCfg.Name, err)
-		}
-	}
-
-	for _, item := range existingCells.Items {
-		if !activeCellNames[item.Spec.Name] {
-			if err := r.Delete(ctx, &item); err != nil {
-				return fmt.Errorf("failed to delete orphaned cell '%s': %w", item.Name, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (r *MultigresClusterReconciler) reconcileDatabases(
-	ctx context.Context,
-	cluster *multigresv1alpha1.MultigresCluster,
-	res *resolver.Resolver,
-) error {
-	existingTGs := &multigresv1alpha1.TableGroupList{}
-	if err := r.List(ctx, existingTGs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return fmt.Errorf("failed to list existing tablegroups: %w", err)
-	}
-
-	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, res)
-	if err != nil {
-		return fmt.Errorf("failed to get global topo ref: %w", err)
-	}
-
-	activeTGNames := make(map[string]bool)
-
-	for _, db := range cluster.Spec.Databases {
-		for _, tg := range db.TableGroups {
-			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, db.Name, tg.Name)
-			if len(tgNameFull) > 50 {
-				return fmt.Errorf(
-					"TableGroup name '%s' exceeds 50 characters; limit required to allow for shard resource suffixing",
-					tgNameFull,
-				)
-			}
-
-			activeTGNames[tgNameFull] = true
-
-			resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
-
-			for _, shard := range tg.Shards {
-				// Use Granular Resolver
-				orch, pools, err := res.ResolveShard(ctx, &shard)
-				if err != nil {
-					return fmt.Errorf(
-						"failed to resolve shard '%s': %w",
-						shard.Name,
-						err,
-					)
-				}
-
-				// Default MultiOrch Cells if empty (Consensus safety)
-				// If 'cells' is empty, it defaults to all cells where pools are defined.
-				if len(orch.Cells) == 0 {
-					uniqueCells := make(map[string]bool)
-					for _, pool := range pools {
-						for _, cell := range pool.Cells {
-							uniqueCells[string(cell)] = true
-						}
-					}
-					for c := range uniqueCells {
-						orch.Cells = append(orch.Cells, multigresv1alpha1.CellName(c))
-					}
-					// Sort for deterministic output
-					sort.Slice(orch.Cells, func(i, j int) bool {
-						return string(orch.Cells[i]) < string(orch.Cells[j])
-					})
-				}
-
-				resolvedShards = append(resolvedShards, multigresv1alpha1.ShardResolvedSpec{
-					Name:      shard.Name,
-					MultiOrch: *orch,
-					Pools:     pools,
-				})
-			}
-
-			tgCR := &multigresv1alpha1.TableGroup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      tgNameFull,
-					Namespace: cluster.Namespace,
-					Labels: map[string]string{
-						"multigres.com/cluster":    cluster.Name,
-						"multigres.com/database":   db.Name,
-						"multigres.com/tablegroup": tg.Name,
-					},
-				},
-			}
-
-			if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, tgCR, func() error {
-				tgCR.Spec.DatabaseName = db.Name
-				tgCR.Spec.TableGroupName = tg.Name
-				tgCR.Spec.IsDefault = tg.Default
-
-				// Updated API: Propagate global images including pull config
-				tgCR.Spec.Images = multigresv1alpha1.ShardImages{
-					MultiOrch:        cluster.Spec.Images.MultiOrch,
-					MultiPooler:      cluster.Spec.Images.MultiPooler,
-					Postgres:         cluster.Spec.Images.Postgres,
-					ImagePullPolicy:  cluster.Spec.Images.ImagePullPolicy,
-					ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
-				}
-
-				tgCR.Spec.GlobalTopoServer = globalTopoRef
-				tgCR.Spec.Shards = resolvedShards
-
-				return controllerutil.SetControllerReference(cluster, tgCR, r.Scheme)
-			}); err != nil {
-				return fmt.Errorf("failed to create/update tablegroup '%s': %w", tgNameFull, err)
-			}
-		}
-	}
-
-	for _, item := range existingTGs.Items {
-		if !activeTGNames[item.Name] {
-			if err := r.Delete(ctx, &item); err != nil {
-				return fmt.Errorf("failed to delete orphaned tablegroup '%s': %w", item.Name, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (r *MultigresClusterReconciler) getGlobalTopoRef(
-	ctx context.Context,
-	cluster *multigresv1alpha1.MultigresCluster,
-	res *resolver.Resolver,
-) (multigresv1alpha1.GlobalTopoServerRef, error) {
-	// Use Granular Resolver
-	spec, err := res.ResolveGlobalTopo(ctx, cluster)
-	if err != nil {
-		return multigresv1alpha1.GlobalTopoServerRef{}, err
-	}
-
-	address := ""
-	if spec.Etcd != nil {
-		address = fmt.Sprintf("%s-global-topo-client.%s.svc:2379", cluster.Name, cluster.Namespace)
-	} else if spec.External != nil && len(spec.External.Endpoints) > 0 {
-		address = string(spec.External.Endpoints[0])
-	}
-
-	return multigresv1alpha1.GlobalTopoServerRef{
-		Address:        address,
-		RootPath:       "/multigres/global",
-		Implementation: "etcd2",
-	}, nil
-}
-
-func (r *MultigresClusterReconciler) updateStatus(
-	ctx context.Context,
-	cluster *multigresv1alpha1.MultigresCluster,
-) error {
-	cluster.Status.ObservedGeneration = cluster.Generation
-	cluster.Status.Cells = make(map[string]multigresv1alpha1.CellStatusSummary)
-	cluster.Status.Databases = make(map[string]multigresv1alpha1.DatabaseStatusSummary)
-
-	cells := &multigresv1alpha1.CellList{}
-	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return fmt.Errorf("failed to list cells for status: %w", err)
-	}
-
-	for _, c := range cells.Items {
-		ready := false
-		for _, cond := range c.Status.Conditions {
-			if cond.Type == "Available" && cond.Status == "True" {
-				ready = true
-				break
-			}
-		}
-		cluster.Status.Cells[c.Spec.Name] = multigresv1alpha1.CellStatusSummary{
-			Ready:           ready,
-			GatewayReplicas: c.Status.GatewayReplicas,
-		}
-	}
-
-	tgs := &multigresv1alpha1.TableGroupList{}
-	if err := r.List(ctx, tgs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
-		return fmt.Errorf("failed to list tablegroups for status: %w", err)
-	}
-
-	dbShards := make(map[string]struct {
-		Ready int32
-		Total int32
-	})
-
-	for _, tg := range tgs.Items {
-		stat := dbShards[tg.Spec.DatabaseName]
-		stat.Ready += tg.Status.ReadyShards
-		stat.Total += tg.Status.TotalShards
-		dbShards[tg.Spec.DatabaseName] = stat
-	}
-
-	for dbName, stat := range dbShards {
-		cluster.Status.Databases[dbName] = multigresv1alpha1.DatabaseStatusSummary{
-			ReadyShards: stat.Ready,
-			TotalShards: stat.Total,
-		}
-	}
-
-	allCellsReady := true
-	for _, c := range cluster.Status.Cells {
-		if !c.Ready {
-			allCellsReady = false
-			break
-		}
-	}
-
-	statusStr := metav1.ConditionFalse
-	if allCellsReady && len(cluster.Status.Cells) > 0 {
-		statusStr = metav1.ConditionTrue
-	}
-
-	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               "Available",
-		Status:             statusStr,
-		Reason:             "AggregatedStatus",
-		Message:            "Aggregation of cell availability",
-		LastTransitionTime: metav1.Now(),
-	})
-
-	if err := r.Status().Update(ctx, cluster); err != nil {
-		return fmt.Errorf("failed to update cluster status: %w", err)
+	if childrenStillExist {
+		return fmt.Errorf(
+			"waiting for children to be deleted (cells, tablegroups, or toposervers still exist)",
+		)
 	}
 
 	return nil
