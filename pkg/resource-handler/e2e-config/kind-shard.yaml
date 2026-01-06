@@ -58,7 +58,7 @@ spec:
       type: readWrite
       cells:
         - zone-a
-      replicasPerCell: 1
+      replicasPerCell: 3
 
       # Storage configuration - kind uses local storage provisioner
       storage:
@@ -89,7 +89,7 @@ spec:
       type: readOnly
       cells:
         - zone-a
-      replicasPerCell: 1
+      replicasPerCell: 3
 
       storage:
         size: 1Gi
