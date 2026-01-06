@@ -23,14 +23,39 @@ const (
 	// PgctldVolumeName is the name of the shared volume for pgctld binary
 	PgctldVolumeName = "pgctld-bin"
 
-	// PgctldMountPath is the mount path for pgctld binary in postgres container
-	PgctldMountPath = "/usr/local/bin/pgctld"
+	// PgctldBinDir is the directory where pgctld binary is mounted
+	// Subdirectory avoids shadowing postgres binaries in /usr/local/bin
+	PgctldBinDir = "/usr/local/bin/multigres"
+
+	// PgctldMountPath is the full path to pgctld binary
+	PgctldMountPath = PgctldBinDir + "/pgctld"
 
 	// DataVolumeName is the name of the data volume for PostgreSQL
 	DataVolumeName = "pgdata"
 
-	// DataMountPath is the mount path for PostgreSQL data
-	DataMountPath = "/var/lib/postgresql/data"
+	// DataMountPath is where the PVC is mounted
+	// Mounted at parent directory because mounting directly at pg_data/ prevents
+	// initdb from setting directory permissions (non-root can't chmod mount points).
+	// pgctld creates pg_data/ subdirectory with proper 0700/0750 permissions.
+	DataMountPath = "/var/lib/pooler"
+
+	// PgDataPath is the actual postgres data directory (PGDATA env var value)
+	// pgctld expects postgres data at <pooler-dir>/pg_data
+	PgDataPath = "/var/lib/pooler/pg_data"
+
+	// PoolerDirVolumeName exists for historical reasons but shares the same PVC as DataVolumeName
+	// Both postgres and multipooler mount the same PVC to share pgbackrest configs and sockets
+	PoolerDirVolumeName = "pooler-dir"
+
+	// PoolerDirMountPath must equal DataMountPath because both containers share the PVC
+	// and pgctld derives postgres data directory as <pooler-dir>/pg_data
+	PoolerDirMountPath = "/var/lib/pooler"
+
+	// SocketDirVolumeName is the name of the shared volume for unix sockets
+	SocketDirVolumeName = "socket-dir"
+
+	// SocketDirMountPath is the mount path for unix sockets (postgres and pgctld communicate here)
+	SocketDirMountPath = "/var/run/sockets"
 )
 
 // sidecarRestartPolicy is the restart policy for native sidecar containers
@@ -48,14 +73,31 @@ func buildPostgresContainer(
 	}
 
 	return corev1.Container{
-		Name:      "postgres",
-		Image:     image,
+		Name:    "postgres",
+		Image:   image,
+		Command: []string{PgctldMountPath},
+		Args: []string{
+			"server",
+			"--pooler-dir=" + PoolerDirMountPath,
+			"--grpc-port=15470",
+			"--pg-port=5432",
+			"--pg-listen-addresses=*",
+			"--pg-database=postgres",
+			"--pg-user=postgres",
+			"--timeout=30",
+			"--log-level=info",
+			"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
+		},
 		Resources: pool.Postgres.Resources,
 		Env: []corev1.EnvVar{
 			// NOTE: This is for MVP demo setup.
 			{
 				Name:  "POSTGRES_HOST_AUTH_METHOD",
 				Value: "trust",
+			},
+			{
+				Name:  "PGDATA",
+				Value: PgDataPath,
 			},
 		},
 		SecurityContext: &corev1.SecurityContext{
@@ -70,7 +112,7 @@ func buildPostgresContainer(
 			},
 			{
 				Name:      PgctldVolumeName,
-				MountPath: PgctldMountPath,
+				MountPath: PgctldBinDir,
 			},
 		},
 	}
@@ -100,6 +142,8 @@ func buildMultiPoolerSidecar(
 		"multipooler", // Subcommand
 		"--http-port", "15200",
 		"--grpc-port", "15270",
+		"--pooler-dir", PoolerDirMountPath,
+		"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432", // Unix socket uses trust auth (no password)
 		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
 		"--cell", cellName,
@@ -123,6 +167,12 @@ func buildMultiPoolerSidecar(
 			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
 		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      DataVolumeName, // Shares PVC with postgres for pgbackrest configs and sockets
+				MountPath: PoolerDirMountPath,
+			},
+		},
 	}
 }
 
@@ -136,7 +186,7 @@ func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 
 	return corev1.Container{
 		Name:    "pgctld-init",
-		Image:   image,
+		Image:   DefaultPgctldImage,
 		Command: []string{"/bin/sh", "-c"},
 		Args: []string{
 			// Copy pgctld from /usr/local/bin/pgctld (location in pgctld image) to shared volume
