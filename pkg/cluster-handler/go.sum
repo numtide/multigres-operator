@@ -96,6 +96,8 @@ github.com/numtide/multigres-operator/api v0.0.0-20251224124005-355869230728 h1:
 github.com/numtide/multigres-operator/api v0.0.0-20251224124005-355869230728/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/api v0.0.0-20260103140733-0f8c992a263e h1:n7/k6uSSbT62anG0oAasouosUb0M9euHBZzCnoV2rcc=
 github.com/numtide/multigres-operator/api v0.0.0-20260103140733-0f8c992a263e/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
+github.com/numtide/multigres-operator/api v0.0.0-20260105144757-e2b8632f1d7d h1:LKKRQdcmXnrURweVRnfJMudMFuE8AeIb06KB+VPw43c=
+github.com/numtide/multigres-operator/api v0.0.0-20260105144757-e2b8632f1d7d/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260102120521-b5526742f4d1 h1:ZIni3ZVAryKwv8Mo1B/wzffZaY+yOmqwMgiOGpp0lfU=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260102120521-b5526742f4d1/go.mod h1:sM5pJBpBfMmU4IY8prQLBPilNtVk9XVlkn5iphJ0TxA=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260104102817-8d88e85c84f8 h1:XB9WePp8DydQEEXnqANAkMeHmAK0vqFX/30FH2mnSC4=

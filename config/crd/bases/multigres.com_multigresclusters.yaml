@@ -6866,7 +6866,8 @@ spec:
                         type: object
                         x-kubernetes-validations:
                         - message: the default tablegroup must be named 'default'
-                          rule: '!self.default || self.name == ''default'''
+                          rule: '!has(self.default) || !self.default || self.name
+                            == ''default'''
                       maxItems: 20
                       type: array
                       x-kubernetes-list-map-keys:

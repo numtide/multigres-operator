@@ -54,11 +54,11 @@ type MultigresClusterSpec struct {
 
 	// GlobalTopoServer defines the cluster-wide global topology server.
 	// +optional
-	GlobalTopoServer GlobalTopoServerSpec `json:"globalTopoServer,omitempty"`
+	GlobalTopoServer *GlobalTopoServerSpec `json:"globalTopoServer,omitempty"`
 
 	// MultiAdmin defines the configuration for the MultiAdmin component.
 	// +optional
-	MultiAdmin MultiAdminConfig `json:"multiadmin,omitempty"`
+	MultiAdmin *MultiAdminConfig `json:"multiadmin,omitempty"`
 
 	// Cells defines the list of cells (failure domains) in the cluster.
 	// +optional
@@ -239,7 +239,7 @@ type DatabaseConfig struct {
 }
 
 // TableGroupConfig defines a table group within a database.
-// +kubebuilder:validation:XValidation:rule="!self.default || self.name == 'default'",message="the default tablegroup must be named 'default'"
+// +kubebuilder:validation:XValidation:rule="!has(self.default) || !self.default || self.name == 'default'",message="the default tablegroup must be named 'default'"
 type TableGroupConfig struct {
 	// Name is the logical name of the table group.
 	// +kubebuilder:validation:MinLength=1
