@@ -1,14 +1,10 @@
-// Package resolver provides the central logic for resolving MultigresCluster
-// defaults, templates, and configurations.
-//
-// It serves as the single source of truth for merging user inputs,
-// cluster-level defaults, and external templates into a final resource specification.
 package resolver
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Resolver handles the logic for fetching templates and calculating defaults.
@@ -68,5 +64,52 @@ func mergeStatelessSpec(
 			base.PodLabels = make(map[string]string)
 		}
 		base.PodLabels[k] = v
+	}
+}
+
+// isResourcesZero checks if the resource requirements are strictly the zero value (nil maps).
+// This mimics reflect.DeepEqual(res, corev1.ResourceRequirements{}) but is safer and faster.
+// It is used for merging logic where we want to distinguish "inherit" (nil) from "empty" (set to empty).
+func isResourcesZero(res corev1.ResourceRequirements) bool {
+	return res.Requests == nil && res.Limits == nil && res.Claims == nil
+}
+
+// ============================================================================
+// Shared Defaulting Helpers
+// ============================================================================
+
+// defaultEtcdSpec applies hardcoded safety defaults to an inline Etcd spec.
+func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec) {
+	if spec.Image == "" {
+		spec.Image = DefaultEtcdImage
+	}
+	if spec.Storage.Size == "" {
+		spec.Storage.Size = DefaultEtcdStorageSize
+	}
+	if spec.Replicas == nil {
+		r := DefaultEtcdReplicas
+		spec.Replicas = &r
+	}
+	// Use isResourcesZero to ensure we respect overrides that only have Claims
+	if isResourcesZero(spec.Resources) {
+		// Safety: DefaultResourcesEtcd() returns a fresh struct, so no DeepCopy needed.
+		spec.Resources = DefaultResourcesEtcd()
+	}
+}
+
+// defaultStatelessSpec applies hardcoded safety defaults to any stateless spec.
+func defaultStatelessSpec(
+	spec *multigresv1alpha1.StatelessSpec,
+	defaultRes corev1.ResourceRequirements,
+	defaultReplicas int32,
+) {
+	if spec.Replicas == nil {
+		spec.Replicas = &defaultReplicas
+	}
+	// Use isResourcesZero to ensure we respect overrides that only have Claims
+	if isResourcesZero(spec.Resources) {
+		// Safety: We assume defaultRes is passed by value (a fresh copy from the default function).
+		// We perform a DeepCopy to ensure spec.Resources owns its own maps, independent of the input defaultRes.
+		spec.Resources = *defaultRes.DeepCopy()
 	}
 }

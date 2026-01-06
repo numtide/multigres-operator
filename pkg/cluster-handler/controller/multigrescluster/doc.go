@@ -6,17 +6,19 @@
 //
 //  1. Global Component Management:
 //     It directly manages singleton resources defined at the cluster level, such as the
-//     Global TopoServer (via a child TopoServer CR) and the MultiAdmin deployment.
+//     MultiAdmin deployment. It also manages the Global TopoServer (via a child TopoServer CR)
+//     when the cluster is configured for managed topology (Etcd).
 //
 //  2. Resource Fan-Out (Child CR Management):
 //     It projects the configuration defined in the MultigresCluster spec (Cells and Databases)
 //     into discrete child Custom Resources (Cell and TableGroup). These child resources are
 //     then reconciled by their own respective controllers.
 //
-//  3. Template Resolution:
-//     It leverages the 'pkg/resolver' module to fetch CoreTemplates, CellTemplates, and
-//     ShardTemplates, merging them with user-defined overrides to produce the final
-//     specifications for child resources.
+//  3. Defaulting and Template Resolution:
+//     It applies in-memory defaults (robustness against webhook unavailability) and leverages
+//     the 'pkg/resolver' module to fetch CoreTemplates, CellTemplates, and ShardTemplates,
+//     merging them with user-defined overrides to produce the final specifications for
+//     child resources.
 //
 //  4. Status Aggregation:
 //     It continually observes the status of its child resources to produce a high-level

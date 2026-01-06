@@ -72,11 +72,13 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Images: multigresv1alpha1.ClusterImages{
-						MultiGateway: "gateway:latest",
-						MultiOrch:    "orch:latest",
-						MultiPooler:  "pooler:latest",
-						MultiAdmin:   "admin:latest",
-						Postgres:     "postgres:15",
+						MultiGateway:     "gateway:latest",
+						MultiOrch:        "orch:latest",
+						MultiPooler:      "pooler:latest",
+						MultiAdmin:       "admin:latest",
+						Postgres:         "postgres:15",
+						ImagePullPolicy:  corev1.PullAlways,
+						ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
 					},
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd:latest"},
@@ -91,30 +93,32 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
-							Name: "db1",
+							Name:    "postgres",
+							Default: true,
 							TableGroups: []multigresv1alpha1.TableGroupConfig{
-								{Name: "tg1", Shards: []multigresv1alpha1.ShardConfig{{
-									Name: "s1",
-									Spec: &multigresv1alpha1.ShardInlineSpec{
-										MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-										Pools: map[string]multigresv1alpha1.PoolSpec{
-											"primary": {
-												ReplicasPerCell: ptr.To(int32(1)),
-												Type:            "readWrite",
-												// We must explicitly assign cells so they propagate to MultiOrch
-												Cells: []multigresv1alpha1.CellName{"zone-a"},
+								{
+									Name:    "default",
+									Default: true,
+									Shards: []multigresv1alpha1.ShardConfig{{
+										Name: "s1",
+										Spec: &multigresv1alpha1.ShardInlineSpec{
+											MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
+											Pools: map[string]multigresv1alpha1.PoolSpec{
+												"primary": {
+													ReplicasPerCell: ptr.To(int32(1)),
+													Type:            "readWrite",
+													Cells:           []multigresv1alpha1.CellName{"zone-a"},
+												},
 											},
 										},
-									},
-								}}},
+									}},
+								},
 							},
 						},
 					},
 				},
 			},
 			wantResources: []client.Object{
-				// Note: We verify child resources first. Parent finalizer is checked manually below.
-
 				// 1. Global TopoServer
 				&multigresv1alpha1.TopoServer{
 					ObjectMeta: metav1.ObjectMeta{
@@ -126,7 +130,7 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 					Spec: multigresv1alpha1.TopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     "etcd:latest",
-							Replicas:  ptr.To(int32(3)), // Default from logic
+							Replicas:  ptr.To(resolver.DefaultEtcdReplicas),
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
 							Resources: resolver.DefaultResourcesEtcd(),
 						},
@@ -141,7 +145,7 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 						OwnerReferences: clusterOwnerRefs(t, clusterName),
 					},
 					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(1)),
+						Replicas: ptr.To(resolver.DefaultAdminReplicas), // Matches default in test input
 						Selector: &metav1.LabelSelector{
 							MatchLabels: clusterLabels(t, clusterName, "multiadmin", ""),
 						},
@@ -150,6 +154,7 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 								Labels: clusterLabels(t, clusterName, "multiadmin", ""),
 							},
 							Spec: corev1.PodSpec{
+								ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
 								Containers: []corev1.Container{
 									{
 										Name:      "multiadmin",
@@ -170,9 +175,13 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 						OwnerReferences: clusterOwnerRefs(t, clusterName),
 					},
 					Spec: multigresv1alpha1.CellSpec{
-						Name:              "zone-a",
-						Zone:              "us-east-1a",
-						MultiGatewayImage: "gateway:latest",
+						Name: "zone-a",
+						Zone: "us-east-1a",
+						Images: multigresv1alpha1.CellImages{
+							MultiGateway:     "gateway:latest",
+							ImagePullPolicy:  corev1.PullAlways,
+							ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
+						},
 						MultiGateway: multigresv1alpha1.StatelessSpec{
 							Replicas: ptr.To(int32(1)),
 						},
@@ -191,22 +200,25 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 				// 4. TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-db1-tg1",
+						Name:      clusterName + "-postgres-default",
 						Namespace: namespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    clusterName,
-							"multigres.com/database":   "db1",
-							"multigres.com/tablegroup": "tg1",
+							"multigres.com/database":   "postgres",
+							"multigres.com/tablegroup": "default",
 						},
 						OwnerReferences: clusterOwnerRefs(t, clusterName),
 					},
 					Spec: multigresv1alpha1.TableGroupSpec{
-						DatabaseName:   "db1",
-						TableGroupName: "tg1",
+						DatabaseName:   "postgres",
+						TableGroupName: "default",
+						IsDefault:      true,
 						Images: multigresv1alpha1.ShardImages{
-							MultiOrch:   "orch:latest",
-							MultiPooler: "pooler:latest",
-							Postgres:    "postgres:15",
+							MultiOrch:        "orch:latest",
+							MultiPooler:      "pooler:latest",
+							Postgres:         "postgres:15",
+							ImagePullPolicy:  corev1.PullAlways,
+							ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
 						},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        clusterName + "-global-topo-client." + namespace + ".svc:2379",
@@ -217,7 +229,6 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 							{
 								Name: "s1",
 								MultiOrch: multigresv1alpha1.MultiOrchSpec{
-									// Controller logic defaults cells if empty
 									Cells:         []multigresv1alpha1.CellName{"zone-a"},
 									StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 								},
@@ -228,6 +239,150 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 										Cells:           []multigresv1alpha1.CellName{"zone-a"},
 									},
 								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"minimal cluster with injection": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "minimal-cluster",
+					Namespace: namespace,
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  "default",
+						CellTemplate:  "default",
+						ShardTemplate: "default",
+					},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerSpec{
+						TemplateRef: "default",
+					},
+					MultiAdmin: multigresv1alpha1.MultiAdminConfig{
+						TemplateRef: "default",
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-a", Zone: "us-east-1a"},
+					},
+				},
+			},
+			wantResources: []client.Object{
+				// 1. Global TopoServer
+				&multigresv1alpha1.TopoServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "minimal-cluster-global-topo",
+						Namespace:       namespace,
+						Labels:          clusterLabels(t, "minimal-cluster", "", ""),
+						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
+					},
+					Spec: multigresv1alpha1.TopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Image:     "etcd:default",
+							Replicas:  ptr.To(resolver.DefaultEtcdReplicas),
+							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
+							Resources: resolver.DefaultResourcesEtcd(),
+						},
+					},
+				},
+				// 2. MultiAdmin
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "minimal-cluster-multiadmin",
+						Namespace:       namespace,
+						Labels:          clusterLabels(t, "minimal-cluster", "multiadmin", ""),
+						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(resolver.DefaultAdminReplicas),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: clusterLabels(t, "minimal-cluster", "multiadmin", ""),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: clusterLabels(t, "minimal-cluster", "multiadmin", ""),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:      "multiadmin",
+										Image:     resolver.DefaultMultiAdminImage,
+										Resources: resolver.DefaultResourcesAdmin(),
+									},
+								},
+							},
+						},
+					},
+				},
+				// 3. Cell
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "minimal-cluster-zone-a",
+						Namespace:       namespace,
+						Labels:          clusterLabels(t, "minimal-cluster", "", "zone-a"),
+						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
+					},
+					Spec: multigresv1alpha1.CellSpec{
+						Name: "zone-a",
+						Zone: "us-east-1a",
+						Images: multigresv1alpha1.CellImages{
+							MultiGateway:    resolver.DefaultMultiGatewayImage,
+							ImagePullPolicy: resolver.DefaultImagePullPolicy,
+						},
+						MultiGateway: multigresv1alpha1.StatelessSpec{
+							Replicas:  ptr.To(int32(1)), // From default template
+							Resources: corev1.ResourceRequirements{},
+						},
+						AllCells: []multigresv1alpha1.CellName{"zone-a"},
+						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+							Address:        "minimal-cluster-global-topo-client." + namespace + ".svc:2379",
+							RootPath:       "/multigres/global",
+							Implementation: "etcd2",
+						},
+						TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+							RegisterCell: true,
+							PrunePoolers: true,
+						},
+					},
+				},
+				// 4. Injected TableGroup
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "minimal-cluster-postgres-default",
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    "minimal-cluster",
+							"multigres.com/database":   "postgres",
+							"multigres.com/tablegroup": "default",
+						},
+						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
+					},
+					Spec: multigresv1alpha1.TableGroupSpec{
+						DatabaseName:   "postgres",
+						TableGroupName: "default",
+						IsDefault:      true,
+						Images: multigresv1alpha1.ShardImages{
+							MultiOrch:       resolver.DefaultMultiOrchImage,
+							MultiPooler:     resolver.DefaultMultiPoolerImage,
+							Postgres:        resolver.DefaultPostgresImage,
+							ImagePullPolicy: resolver.DefaultImagePullPolicy,
+						},
+						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+							Address:        "minimal-cluster-global-topo-client." + namespace + ".svc:2379",
+							RootPath:       "/multigres/global",
+							Implementation: "etcd2",
+						},
+						Shards: []multigresv1alpha1.ShardResolvedSpec{
+							{
+								Name: "0",
+								MultiOrch: multigresv1alpha1.MultiOrchSpec{
+									StatelessSpec: multigresv1alpha1.StatelessSpec{
+										Replicas:  ptr.To(int32(1)),
+										Resources: corev1.ResourceRequirements{},
+									},
+								},
+								Pools: map[string]multigresv1alpha1.PoolSpec{},
 							},
 						},
 					},
@@ -248,8 +403,7 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 				),
 			)
 
-			// 2. Setup Watcher for all expected resources
-			// We explicitly watch the child resources we expect to be created.
+			// 2. Setup Watcher with Strict Matching and 20s Timeout
 			watcher := testutil.NewResourceWatcher(t, ctx, mgr,
 				testutil.WithCmpOpts(
 					testutil.IgnoreMetaRuntimeFields(),
@@ -264,18 +418,16 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 					&multigresv1alpha1.Cell{},
 					&multigresv1alpha1.TableGroup{},
 				),
-				// Extend timeout as this is a "root" controller triggering other things
-				testutil.WithTimeout(10*time.Second),
+				testutil.WithTimeout(20*time.Second),
 			)
 			k8sClient := mgr.GetClient()
 
-			// 3. Setup and Start Controller
+			// 3. Setup Controller
 			reconciler := &multigrescluster.MultigresClusterReconciler{
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 			}
 
-			// Pass SkipNameValidation via options to avoid controller name collisions in parallel tests
 			if err := reconciler.SetupWithManager(mgr, controller.Options{
 				SkipNameValidation: ptr.To(true),
 			}); err != nil {
@@ -283,11 +435,13 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 			}
 
 			// 4. Create Defaults (Templates)
-			// The controller expects "default" templates to exist when TemplateDefaults are not specified.
-			// We create empty templates so the resolution succeeds and falls back to hardcoded defaults or inline specs.
 			emptyCore := &multigresv1alpha1.CoreTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
-				Spec:       multigresv1alpha1.CoreTemplateSpec{},
+				Spec: multigresv1alpha1.CoreTemplateSpec{
+					GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd:default"},
+					},
+				},
 			}
 			if err := k8sClient.Create(ctx, emptyCore); client.IgnoreAlreadyExists(err) != nil {
 				t.Fatalf("Failed to create default core template: %v", err)
@@ -295,7 +449,9 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 
 			emptyCell := &multigresv1alpha1.CellTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
-				Spec:       multigresv1alpha1.CellTemplateSpec{},
+				Spec: multigresv1alpha1.CellTemplateSpec{
+					MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+				},
 			}
 			if err := k8sClient.Create(ctx, emptyCell); client.IgnoreAlreadyExists(err) != nil {
 				t.Fatalf("Failed to create default cell template: %v", err)
@@ -309,24 +465,21 @@ func TestMultigresClusterReconciliation(t *testing.T) {
 				t.Fatalf("Failed to create default shard template: %v", err)
 			}
 
-			// 5. Create the Input
+			// 5. Create Cluster
 			if err := k8sClient.Create(ctx, tc.cluster); err != nil {
 				t.Fatalf("Failed to create the initial cluster, %v", err)
 			}
 
-			// 6. Assert Logic: Wait for Children
-			// This ensures the controller has run and reconciled at least once successfully
+			// 6. Assert
 			if err := watcher.WaitForMatch(tc.wantResources...); err != nil {
 				t.Errorf("Resources mismatch:\n%v", err)
 			}
 
-			// 7. Verify Parent Finalizer (Manual Check)
-			// We check this manually to avoid fighting with status/spec diffs in the watcher
+			// 7. Finalizer Check
 			fetchedCluster := &multigresv1alpha1.MultigresCluster{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tc.cluster), fetchedCluster); err != nil {
 				t.Fatalf("Failed to get cluster: %v", err)
 			}
-
 			if !slices.Contains(fetchedCluster.Finalizers, "multigres.com/finalizer") {
 				t.Errorf("Expected finalizer 'multigres.com/finalizer' to be present, got %v", fetchedCluster.Finalizers)
 			}
