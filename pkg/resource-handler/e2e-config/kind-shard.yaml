@@ -53,8 +53,8 @@ spec:
 
   # Shard pools - different types of PostgreSQL replicas
   pools:
-    # Primary replica pool
-    primary:
+    # Primary "eligible" pool, with unique name
+    pool-1:
       type: readWrite
       cells:
         - zone-a
@@ -85,7 +85,7 @@ spec:
             memory: 128Mi
 
     # Read replica pool
-    replica:
+    pool-readonly:
       type: readOnly
       cells:
         - zone-a
