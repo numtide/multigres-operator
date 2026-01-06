@@ -269,6 +269,9 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name:  "postgres",
 										Image: "postgres:17",
+										Env: []corev1.EnvVar{
+											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
+										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},
 											{Name: "pgctld-bin", MountPath: "/usr/local/bin/pgctld"},
@@ -547,6 +550,9 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name:  "postgres",
 										Image: "postgres:17",
+										Env: []corev1.EnvVar{
+											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
+										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},
 											{Name: "pgctld-bin", MountPath: "/usr/local/bin/pgctld"},
@@ -664,6 +670,9 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name:  "postgres",
 										Image: "postgres:17",
+										Env: []corev1.EnvVar{
+											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
+										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/postgresql/data"},
 											{Name: "pgctld-bin", MountPath: "/usr/local/bin/pgctld"},

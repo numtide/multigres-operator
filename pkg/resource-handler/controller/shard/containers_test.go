@@ -26,6 +26,12 @@ func TestBuildPostgresContainer(t *testing.T) {
 				Name:      "postgres",
 				Image:     DefaultPostgresImage,
 				Resources: corev1.ResourceRequirements{},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "POSTGRES_HOST_AUTH_METHOD",
+						Value: "trust",
+					},
+				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      DataVolumeName,
@@ -51,6 +57,12 @@ func TestBuildPostgresContainer(t *testing.T) {
 				Name:      "postgres",
 				Image:     "postgres:16",
 				Resources: corev1.ResourceRequirements{},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "POSTGRES_HOST_AUTH_METHOD",
+						Value: "trust",
+					},
+				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      DataVolumeName,
@@ -92,6 +104,12 @@ func TestBuildPostgresContainer(t *testing.T) {
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("2"),
 						corev1.ResourceMemory: resource.MustParse("4Gi"),
+					},
+				},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "POSTGRES_HOST_AUTH_METHOD",
+						Value: "trust",
 					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
