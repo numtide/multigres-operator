@@ -84,30 +84,31 @@ spec:
             cpu: 200m
             memory: 128Mi
 
-    # Read replica pool
-    pool-readonly:
-      type: readOnly
-      cells:
-        - zone-a
-      replicasPerCell: 3
+    # Commenting out for isolated testing
+    # # Read replica pool
+    # pool-readonly:
+    #   type: readOnly
+    #   cells:
+    #     - zone-a
+    #   replicasPerCell: 3
 
-      storage:
-        size: 1Gi
+    #   storage:
+    #     size: 1Gi
 
-      postgres:
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+    #   postgres:
+    #     resources:
+    #       requests:
+    #         cpu: 100m
+    #         memory: 256Mi
+    #       limits:
+    #         cpu: 500m
+    #         memory: 512Mi
 
-      multipooler:
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 200m
-            memory: 128Mi
+    #   multipooler:
+    #     resources:
+    #       requests:
+    #         cpu: 50m
+    #         memory: 64Mi
+    #       limits:
+    #         cpu: 200m
+    #         memory: 128Mi
