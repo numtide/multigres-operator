@@ -1,8 +1,6 @@
 package shard
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
@@ -130,7 +128,7 @@ func buildMultiPoolerSidecar(
 	}
 
 	// TODO: Add remaining command line arguments:
-	// --grpc-socket-file, --log-level, --log-output, --hostname, --service-map
+	// --grpc-socket-file, --log-level, --log-output, --hostname
 	// --pgbackrest-stanza, --connpool-admin-password
 
 	args := []string{
@@ -139,13 +137,14 @@ func buildMultiPoolerSidecar(
 		"--grpc-port", "15270",
 		"--pooler-dir", PoolerDirMountPath,
 		"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432", // Unix socket uses trust auth (no password)
+		"--service-map", "grpc-pooler", // Only enable grpc-pooler service (disables auto-restore service)
 		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
 		"--cell", cellName,
 		"--database", shard.Spec.DatabaseName,
 		"--table-group", shard.Spec.TableGroupName,
 		"--shard", shard.Spec.ShardName,
-		"--service-id", getPoolServiceID(shard.Name, poolName),
+		"--service-id", "$(POD_NAME)", // Use pod name as unique service ID
 		"--pgctld-addr", "localhost:15470",
 		"--pg-port", "5432",
 	}
@@ -161,6 +160,16 @@ func buildMultiPoolerSidecar(
 			RunAsUser:    ptr.To(int64(999)), // Must match postgres UID to access pg_data directory
 			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -233,12 +242,4 @@ func buildPgctldVolume() corev1.Volume {
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
-}
-
-// getPoolServiceID generates a unique service ID for a pool.
-// This is used in multipooler and pgctld arguments.
-func getPoolServiceID(shardName string, poolName string) string {
-	// TODO: Use proper ID generation (UUID or consistent hash)
-	// For now, use simple format
-	return fmt.Sprintf("%s-pool-%s", shardName, poolName)
 }

@@ -238,13 +238,14 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--grpc-port", "15270",
 					"--pooler-dir", PoolerDirMountPath,
 					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
+					"--service-map", "grpc-pooler",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone1",
 					"--database", "testdb",
 					"--table-group", "default",
 					"--shard", "0",
-					"--service-id", "test-shard-pool-primary",
+					"--service-id", "$(POD_NAME)",
 					"--pgctld-addr", "localhost:15470",
 					"--pg-port", "5432",
 				},
@@ -255,6 +256,16 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					RunAsUser:    ptr.To(int64(999)),
 					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
+				},
+				Env: []corev1.EnvVar{
+					{
+						Name: "POD_NAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.name",
+							},
+						},
+					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -294,13 +305,14 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--grpc-port", "15270",
 					"--pooler-dir", PoolerDirMountPath,
 					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
+					"--service-map", "grpc-pooler",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone2",
 					"--database", "proddb",
 					"--table-group", "orders",
 					"--shard", "1",
-					"--service-id", "custom-shard-pool-primary",
+					"--service-id", "$(POD_NAME)",
 					"--pgctld-addr", "localhost:15470",
 					"--pg-port", "5432",
 				},
@@ -311,6 +323,16 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					RunAsUser:    ptr.To(int64(999)),
 					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
+				},
+				Env: []corev1.EnvVar{
+					{
+						Name: "POD_NAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.name",
+							},
+						},
+					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -359,13 +381,14 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--grpc-port", "15270",
 					"--pooler-dir", PoolerDirMountPath,
 					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
+					"--service-map", "grpc-pooler",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone1",
 					"--database", "mydb",
 					"--table-group", "default",
 					"--shard", "0",
-					"--service-id", "resource-shard-pool-primary",
+					"--service-id", "$(POD_NAME)",
 					"--pgctld-addr", "localhost:15470",
 					"--pg-port", "5432",
 				},
@@ -385,6 +408,16 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					RunAsUser:    ptr.To(int64(999)),
 					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
+				},
+				Env: []corev1.EnvVar{
+					{
+						Name: "POD_NAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.name",
+							},
+						},
+					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
