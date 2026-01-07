@@ -50,6 +50,13 @@ const (
 
 	// SocketDirMountPath is the mount path for unix sockets (postgres and pgctld communicate here)
 	SocketDirMountPath = "/var/run/sockets"
+
+	// BackupVolumeName is the name of the backup volume for pgbackrest
+	BackupVolumeName = "backup-data"
+
+	// BackupMountPath is where the backup volume is mounted
+	// pgbackrest stores backups here via --repo1-path
+	BackupMountPath = "/backups"
 )
 
 // sidecarRestartPolicy is the restart policy for native sidecar containers
@@ -108,6 +115,10 @@ func buildPostgresContainer(
 			{
 				Name:      PgctldVolumeName,
 				MountPath: PgctldBinDir,
+			},
+			{
+				Name:      BackupVolumeName,
+				MountPath: BackupMountPath,
 			},
 		},
 	}
@@ -176,6 +187,10 @@ func buildMultiPoolerSidecar(
 				Name:      DataVolumeName, // Shares PVC with postgres for pgbackrest configs and sockets
 				MountPath: PoolerDirMountPath,
 			},
+			{
+				Name:      BackupVolumeName,
+				MountPath: BackupMountPath,
+			},
 		},
 	}
 }
@@ -238,6 +253,18 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 func buildPgctldVolume() corev1.Volume {
 	return corev1.Volume{
 		Name: PgctldVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+}
+
+// buildBackupVolume creates the backup volume for pgbackrest.
+// Uses emptyDir for development/testing. For production, this should be
+// replaced with persistent storage (PVC or cloud storage).
+func buildBackupVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: BackupVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},

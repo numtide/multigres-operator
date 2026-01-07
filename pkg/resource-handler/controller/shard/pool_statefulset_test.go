@@ -135,6 +135,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
+								buildBackupVolume(),
 							},
 						},
 					},
@@ -271,6 +272,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
+								buildBackupVolume(),
 							},
 						},
 					},
@@ -402,6 +404,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
+								buildBackupVolume(),
 							},
 						},
 					},
@@ -550,6 +553,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 							Volumes: []corev1.Volume{
 								buildPgctldVolume(),
+								buildBackupVolume(),
 							},
 							Affinity: &corev1.Affinity{
 								NodeAffinity: &corev1.NodeAffinity{

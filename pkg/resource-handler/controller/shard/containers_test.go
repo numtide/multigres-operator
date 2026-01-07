@@ -64,6 +64,10 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:      PgctldVolumeName,
 						MountPath: PgctldBinDir,
 					},
+					{
+						Name:      BackupVolumeName,
+						MountPath: BackupMountPath,
+					},
 				},
 			},
 		},
@@ -116,6 +120,10 @@ func TestBuildPostgresContainer(t *testing.T) {
 					{
 						Name:      PgctldVolumeName,
 						MountPath: PgctldBinDir,
+					},
+					{
+						Name:      BackupVolumeName,
+						MountPath: BackupMountPath,
 					},
 				},
 			},
@@ -187,6 +195,10 @@ func TestBuildPostgresContainer(t *testing.T) {
 					{
 						Name:      PgctldVolumeName,
 						MountPath: PgctldBinDir,
+					},
+					{
+						Name:      BackupVolumeName,
+						MountPath: BackupMountPath,
 					},
 				},
 			},
@@ -272,6 +284,10 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						Name:      DataVolumeName,
 						MountPath: PoolerDirMountPath,
 					},
+					{
+						Name:      BackupVolumeName,
+						MountPath: BackupMountPath,
+					},
 				},
 			},
 		},
@@ -338,6 +354,10 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					{
 						Name:      DataVolumeName,
 						MountPath: PoolerDirMountPath,
+					},
+					{
+						Name:      BackupVolumeName,
+						MountPath: BackupMountPath,
 					},
 				},
 			},
@@ -423,6 +443,10 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					{
 						Name:      DataVolumeName,
 						MountPath: PoolerDirMountPath,
+					},
+					{
+						Name:      BackupVolumeName,
+						MountPath: BackupMountPath,
 					},
 				},
 			},

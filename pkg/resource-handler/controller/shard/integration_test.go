@@ -273,6 +273,7 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
+											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
 								},
@@ -305,12 +306,19 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
+											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
 								},
 								Volumes: []corev1.Volume{
 									{
 										Name: "pgctld-bin",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+									{
+										Name: "backup-data",
 										VolumeSource: corev1.VolumeSource{
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
@@ -541,6 +549,12 @@ func TestShardReconciliation(t *testing.T) {
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
 									},
+									{
+										Name: "backup-data",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
 								},
 								InitContainers: []corev1.Container{
 									{
@@ -587,6 +601,7 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
+											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
 								},
@@ -619,6 +634,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
+											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
 								},
@@ -694,6 +710,12 @@ func TestShardReconciliation(t *testing.T) {
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
 									},
+									{
+										Name: "backup-data",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
 								},
 								InitContainers: []corev1.Container{
 									{
@@ -740,6 +762,7 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
+											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
 								},
@@ -772,6 +795,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
+											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
 								},
