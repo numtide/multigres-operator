@@ -57,13 +57,21 @@ func TestManager_EnsureCerts(t *testing.T) {
 		&admissionregistrationv1.MutatingWebhookConfiguration{
 			ObjectMeta: metav1.ObjectMeta{Name: WebhookConfigNameMutating},
 			Webhooks: []admissionregistrationv1.MutatingWebhook{
-				{ClientConfig: admissionregistrationv1.WebhookClientConfig{CABundle: []byte("old-bundle")}},
+				{
+					ClientConfig: admissionregistrationv1.WebhookClientConfig{
+						CABundle: []byte("old-bundle"),
+					},
+				},
 			},
 		},
 		&admissionregistrationv1.ValidatingWebhookConfiguration{
 			ObjectMeta: metav1.ObjectMeta{Name: WebhookConfigNameValidating},
 			Webhooks: []admissionregistrationv1.ValidatingWebhook{
-				{ClientConfig: admissionregistrationv1.WebhookClientConfig{CABundle: []byte("old-bundle")}},
+				{
+					ClientConfig: admissionregistrationv1.WebhookClientConfig{
+						CABundle: []byte("old-bundle"),
+					},
+				},
 			},
 		},
 	}
@@ -116,13 +124,21 @@ func TestManager_EnsureCerts(t *testing.T) {
 				&admissionregistrationv1.MutatingWebhookConfiguration{
 					ObjectMeta: metav1.ObjectMeta{Name: WebhookConfigNameMutating},
 					Webhooks: []admissionregistrationv1.MutatingWebhook{
-						{ClientConfig: admissionregistrationv1.WebhookClientConfig{CABundle: []byte("matching-ca")}},
+						{
+							ClientConfig: admissionregistrationv1.WebhookClientConfig{
+								CABundle: []byte("matching-ca"),
+							},
+						},
 					},
 				},
 				&admissionregistrationv1.ValidatingWebhookConfiguration{
 					ObjectMeta: metav1.ObjectMeta{Name: WebhookConfigNameValidating},
 					Webhooks: []admissionregistrationv1.ValidatingWebhook{
-						{ClientConfig: admissionregistrationv1.WebhookClientConfig{CABundle: []byte("matching-ca")}},
+						{
+							ClientConfig: admissionregistrationv1.WebhookClientConfig{
+								CABundle: []byte("matching-ca"),
+							},
+						},
 					},
 				},
 			},
@@ -130,7 +146,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 			wantGenerated: false,
 			// Ensure we don't try to update
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(WebhookConfigNameMutating, errors.New("should not happen")),
+				OnUpdate: testutil.FailOnObjectName(
+					WebhookConfigNameMutating,
+					errors.New("should not happen"),
+				),
 			},
 		},
 		"Rotation: Expired Cert": {
@@ -222,7 +241,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 		"Error: Create Secret Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(SecretName, errors.New("injected create error")),
+				OnCreate: testutil.FailOnObjectName(
+					SecretName,
+					errors.New("injected create error"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to create cert secret",
@@ -238,7 +260,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 				},
 			}, baseWebhooks...),
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(SecretName, errors.New("injected update error")),
+				OnUpdate: testutil.FailOnObjectName(
+					SecretName,
+					errors.New("injected update error"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to update cert secret",
@@ -252,7 +277,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 		"Error: Patch MutatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(WebhookConfigNameMutating, errors.New("injected webhook update error")),
+				OnUpdate: testutil.FailOnObjectName(
+					WebhookConfigNameMutating,
+					errors.New("injected webhook update error"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to patch webhook configurations",
@@ -260,7 +288,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 		"Error: Patch ValidatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(WebhookConfigNameValidating, errors.New("injected webhook update error")),
+				OnUpdate: testutil.FailOnObjectName(
+					WebhookConfigNameValidating,
+					errors.New("injected webhook update error"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to patch webhook configurations",
@@ -268,7 +299,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 		"Error: Get MutatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(WebhookConfigNameMutating, errors.New("injected webhook get error")),
+				OnGet: testutil.FailOnKeyName(
+					WebhookConfigNameMutating,
+					errors.New("injected webhook get error"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to patch webhook configurations",
@@ -276,7 +310,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 		"Error: Get ValidatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(WebhookConfigNameValidating, errors.New("injected webhook get error")),
+				OnGet: testutil.FailOnKeyName(
+					WebhookConfigNameValidating,
+					errors.New("injected webhook get error"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to patch webhook configurations",
@@ -323,7 +360,11 @@ func TestManager_EnsureCerts(t *testing.T) {
 					t.Fatal("Expected error, got nil")
 				}
 				if tc.errContains != "" && !strings.Contains(err.Error(), tc.errContains) {
-					t.Errorf("Error message mismatch. Got: %v, Want substring: %s", err, tc.errContains)
+					t.Errorf(
+						"Error message mismatch. Got: %v, Want substring: %s",
+						err,
+						tc.errContains,
+					)
 				}
 				return
 			}
@@ -343,9 +384,17 @@ func TestManager_EnsureCerts(t *testing.T) {
 				// Check CA Bundle Injection IF webhooks existed
 				if len(tc.existingObjects) > 0 {
 					mutating := &admissionregistrationv1.MutatingWebhookConfiguration{}
-					err := fakeClient.Get(context.Background(), types.NamespacedName{Name: WebhookConfigNameMutating}, mutating)
+					err := fakeClient.Get(
+						context.Background(),
+						types.NamespacedName{Name: WebhookConfigNameMutating},
+						mutating,
+					)
 					if err == nil {
-						if len(mutating.Webhooks) > 0 && bytes.Equal(mutating.Webhooks[0].ClientConfig.CABundle, []byte("old-bundle")) {
+						if len(mutating.Webhooks) > 0 &&
+							bytes.Equal(
+								mutating.Webhooks[0].ClientConfig.CABundle,
+								[]byte("old-bundle"),
+							) {
 							t.Error("MutatingWebhookConfiguration CA bundle was NOT updated")
 						}
 					}
@@ -355,7 +404,11 @@ func TestManager_EnsureCerts(t *testing.T) {
 			if tc.wantGenerated {
 				// Verify secret content changed
 				secret := &corev1.Secret{}
-				_ = fakeClient.Get(context.Background(), types.NamespacedName{Name: SecretName, Namespace: namespace}, secret)
+				_ = fakeClient.Get(
+					context.Background(),
+					types.NamespacedName{Name: SecretName, Namespace: namespace},
+					secret,
+				)
 
 				// Find original cert from inputs
 				var original []byte
@@ -367,7 +420,9 @@ func TestManager_EnsureCerts(t *testing.T) {
 				}
 
 				if bytes.Equal(secret.Data["tls.crt"], original) {
-					t.Error("Expected certificate to be rotated (changed), but it matches the existing one")
+					t.Error(
+						"Expected certificate to be rotated (changed), but it matches the existing one",
+					)
 				}
 			}
 		})

@@ -98,7 +98,11 @@ func (m *Manager) EnsureCerts(ctx context.Context) error {
 func (m *Manager) ensureSecret(ctx context.Context) (*Artifacts, error) {
 	logger := log.FromContext(ctx)
 	secret := &corev1.Secret{}
-	err := m.Client.Get(ctx, types.NamespacedName{Name: SecretName, Namespace: m.Options.Namespace}, secret)
+	err := m.Client.Get(
+		ctx,
+		types.NamespacedName{Name: SecretName, Namespace: m.Options.Namespace},
+		secret,
+	)
 
 	secretFound := false
 	if err == nil {
@@ -115,7 +119,9 @@ func (m *Manager) ensureSecret(ctx context.Context) (*Artifacts, error) {
 			return artifacts, nil
 		}
 
-		logger.Info("existing webhook certificates are missing, expired, or near expiration; rotating")
+		logger.Info(
+			"existing webhook certificates are missing, expired, or near expiration; rotating",
+		)
 		// Fall through to regeneration
 	} else if !errors.IsNotFound(err) {
 		return nil, err
@@ -193,7 +199,7 @@ func (m *Manager) writeCertsToDisk(ctx context.Context, artifacts *Artifacts) er
 	logger := log.FromContext(ctx)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(m.Options.CertDir, 0755); err != nil {
+	if err := os.MkdirAll(m.Options.CertDir, 0o755); err != nil {
 		return err
 	}
 
@@ -203,12 +209,12 @@ func (m *Manager) writeCertsToDisk(ctx context.Context, artifacts *Artifacts) er
 	logger.Info("writing certificates to disk", "dir", m.Options.CertDir)
 
 	// Write Cert (0644)
-	if err := os.WriteFile(certPath, artifacts.ServerCertPEM, 0644); err != nil { //nolint:gosec // Cert is public
+	if err := os.WriteFile(certPath, artifacts.ServerCertPEM, 0o644); err != nil { //nolint:gosec // Cert is public
 		return err
 	}
 
 	// Write Key (0600 - strict permissions)
-	if err := os.WriteFile(keyPath, artifacts.ServerKeyPEM, 0600); err != nil {
+	if err := os.WriteFile(keyPath, artifacts.ServerKeyPEM, 0o600); err != nil {
 		return err
 	}
 
@@ -230,7 +236,13 @@ func (m *Manager) patchWebhookConfigurations(ctx context.Context, caCert []byte)
 			}
 		}
 		if updated {
-			logger.Info("patching CA bundle", "kind", "MutatingWebhookConfiguration", "name", WebhookConfigNameMutating)
+			logger.Info(
+				"patching CA bundle",
+				"kind",
+				"MutatingWebhookConfiguration",
+				"name",
+				WebhookConfigNameMutating,
+			)
 			if err := m.Client.Update(ctx, mutatingCfg); err != nil {
 				return err
 			}
@@ -251,7 +263,13 @@ func (m *Manager) patchWebhookConfigurations(ctx context.Context, caCert []byte)
 			}
 		}
 		if updated {
-			logger.Info("patching CA bundle", "kind", "ValidatingWebhookConfiguration", "name", WebhookConfigNameValidating)
+			logger.Info(
+				"patching CA bundle",
+				"kind",
+				"ValidatingWebhookConfiguration",
+				"name",
+				WebhookConfigNameValidating,
+			)
 			if err := m.Client.Update(ctx, validatingCfg); err != nil {
 				return err
 			}

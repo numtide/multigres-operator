@@ -1,4 +1,3 @@
-// Package webhook provides the entry point for the Multigres Operator's admission control layer.
 package webhook
 
 import (
@@ -7,6 +6,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/webhook/cert"
@@ -15,26 +15,23 @@ import (
 
 // Options contains the configuration required to set up the webhook server.
 type Options struct {
-	// Enable indicates whether to start the webhook server.
-	Enable bool
-	// CertStrategy defines how certificates are managed ("external" or "self-signed").
-	CertStrategy string
-	// CertDir is the directory where certificates should be read/written.
-	CertDir string
-	// Namespace is the operator's namespace (required for self-signed strategy).
-	Namespace string
-	// ServiceName is the operator's service name (required for self-signed strategy).
-	ServiceName string
-	// ServiceAccountName is the name of the operator's service account.
-	// Used to exempt the operator from child resource validation blocks.
+	Enable             bool
+	CertStrategy       string
+	CertDir            string
+	Namespace          string
+	ServiceName        string
 	ServiceAccountName string
 }
 
-// Setup configures the webhook server, handles certificate generation (if requested),
-// and registers the admission handlers with the manager.
+// Setup configures the webhook server.
 func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 	if !opts.Enable {
 		return nil
+	}
+
+	// SAFETY CHECK: Ensure resolver is provided
+	if res == nil {
+		return fmt.Errorf("webhook setup failed: resolver cannot be nil")
 	}
 
 	logger := mgr.GetLogger().WithName("webhook-setup")
@@ -47,69 +44,84 @@ func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 			ServiceName: opts.ServiceName,
 			CertDir:     opts.CertDir,
 		})
-
-		// Use a temporary context as the manager's context isn't started yet
 		if err := certMgr.EnsureCerts(context.Background()); err != nil {
 			return fmt.Errorf("failed to bootstrap self-signed certificates: %w", err)
 		}
 	}
 
-	// 2. Register Webhooks
+	// 2. Prepare Decoder
+	// Since we manually register handlers, we must manually inject the decoder.
+	decoder := admission.NewDecoder(mgr.GetScheme())
+
+	// 3. Initialize Handlers & Inject Decoder
+
+	// -- Mutating --
+	defaulter := handlers.NewMultigresClusterDefaulter(res)
+	if err := defaulter.InjectDecoder(decoder); err != nil {
+		return fmt.Errorf("failed to inject decoder into defaulter: %w", err)
+	}
+
+	// -- Validating (Cluster) --
+	clusterValidator := handlers.NewMultigresClusterValidator(mgr.GetClient())
+	if err := clusterValidator.InjectDecoder(decoder); err != nil {
+		return fmt.Errorf("failed to inject decoder into cluster validator: %w", err)
+	}
+
+	// -- Validating (Templates) --
+	coreTplValidator := handlers.NewTemplateValidator(mgr.GetClient(), "CoreTemplate")
+	// TemplateValidators don't strictly need a decoder if they only read Req.Name,
+	// but it's good practice if they ever read the body.
+
+	cellTplValidator := handlers.NewTemplateValidator(mgr.GetClient(), "CellTemplate")
+	shardTplValidator := handlers.NewTemplateValidator(mgr.GetClient(), "ShardTemplate")
+
+	// -- Validating (Child Resources) --
+	operatorPrincipal := fmt.Sprintf(
+		"system:serviceaccount:%s:%s",
+		opts.Namespace,
+		opts.ServiceAccountName,
+	)
+	if opts.ServiceAccountName == "" {
+		operatorPrincipal = fmt.Sprintf(
+			"system:serviceaccount:%s:multigres-operator",
+			opts.Namespace,
+		)
+	}
+	childValidator := handlers.NewChildResourceValidator(operatorPrincipal)
+	if err := childValidator.InjectDecoder(decoder); err != nil {
+		return fmt.Errorf("failed to inject decoder into child validator: %w", err)
+	}
+
+	// 4. Register Webhooks
 	server := mgr.GetWebhookServer()
 
-	// -- Mutating Webhook (Defaulter) --
 	server.Register(
 		"/mutate-multigres-com-v1alpha1-multigrescluster",
-		&webhook.Admission{
-			Handler: handlers.NewMultigresClusterDefaulter(res),
-		},
+		&webhook.Admission{Handler: defaulter},
 	)
 
-	// -- Validating Webhook (MultigresCluster) --
 	server.Register(
 		"/validate-multigres-com-v1alpha1-multigrescluster",
-		&webhook.Admission{
-			Handler: handlers.NewMultigresClusterValidator(mgr.GetClient()),
-		},
+		&webhook.Admission{Handler: clusterValidator},
 	)
 
-	// -- Validating Webhook (Templates - In-Use Protection) --
 	server.Register(
 		"/validate-multigres-com-v1alpha1-coretemplate",
-		&webhook.Admission{
-			Handler: handlers.NewTemplateValidator(mgr.GetClient(), "CoreTemplate"),
-		},
+		&webhook.Admission{Handler: coreTplValidator},
 	)
 	server.Register(
 		"/validate-multigres-com-v1alpha1-celltemplate",
-		&webhook.Admission{
-			Handler: handlers.NewTemplateValidator(mgr.GetClient(), "CellTemplate"),
-		},
+		&webhook.Admission{Handler: cellTplValidator},
 	)
 	server.Register(
 		"/validate-multigres-com-v1alpha1-shardtemplate",
-		&webhook.Admission{
-			Handler: handlers.NewTemplateValidator(mgr.GetClient(), "ShardTemplate"),
-		},
+		&webhook.Admission{Handler: shardTplValidator},
 	)
 
-	// -- Validating Webhook (Child Resources) --
-	// Construct the validator with the operator's service account as the exempt principal.
-	operatorPrincipal := fmt.Sprintf("system:serviceaccount:%s:%s", opts.Namespace, opts.ServiceAccountName)
-	if opts.ServiceAccountName == "" {
-		// Fallback defaults if not provided
-		operatorPrincipal = fmt.Sprintf("system:serviceaccount:%s:multigres-operator", opts.Namespace)
-	}
-
-	childValidator := &webhook.Admission{
-		Handler: handlers.NewChildResourceValidator(operatorPrincipal),
-	}
-
-	// Paths must match the ValidatingWebhookConfiguration
 	childResources := []string{"cell", "shard", "toposerver", "tablegroup"}
 	for _, res := range childResources {
 		path := fmt.Sprintf("/validate-multigres-com-v1alpha1-%s", res)
-		server.Register(path, childValidator)
+		server.Register(path, &webhook.Admission{Handler: childValidator})
 	}
 
 	return nil

@@ -35,7 +35,11 @@ type Artifacts struct {
 // 1. A new Root CA.
 // 2. A Server Certificate signed by that CA for the given Common Name and DNS names.
 // It accepts a random number generator (rng) to allow for secure testing/fault injection.
-func GenerateSelfSignedArtifacts(rng io.Reader, commonName string, dnsNames []string) (*Artifacts, error) {
+func GenerateSelfSignedArtifacts(
+	rng io.Reader,
+	commonName string,
+	dnsNames []string,
+) (*Artifacts, error) {
 	// 1. Generate CA (returns PEMs and the parsed object for signing)
 	caCertPEM, caKeyPEM, caCert, caPrivKey, err := generateCA(rng)
 	if err != nil {
@@ -43,7 +47,13 @@ func GenerateSelfSignedArtifacts(rng io.Reader, commonName string, dnsNames []st
 	}
 
 	// 2. Generate Server Certificate signed by CA (uses parsed object directly)
-	serverCertPEM, serverKeyPEM, err := generateServerCert(rng, commonName, dnsNames, caCert, caPrivKey)
+	serverCertPEM, serverKeyPEM, err := generateServerCert(
+		rng,
+		commonName,
+		dnsNames,
+		caCert,
+		caPrivKey,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate server certificate: %w", err)
 	}
@@ -68,10 +78,13 @@ func generateCA(rng io.Reader) ([]byte, []byte, *x509.Certificate, *rsa.PrivateK
 			CommonName:   "Multigres Operator CA",
 			Organization: []string{Organization},
 		},
-		NotBefore:             time.Now().Add(-1 * time.Hour), // Backdate for clock skew
-		NotAfter:              time.Now().Add(CAValidityDuration),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		NotBefore: time.Now().Add(-1 * time.Hour), // Backdate for clock skew
+		NotAfter:  time.Now().Add(CAValidityDuration),
+		KeyUsage:  x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth,
+		},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 	}
@@ -88,12 +101,20 @@ func generateCA(rng io.Reader) ([]byte, []byte, *x509.Certificate, *rsa.PrivateK
 	}
 
 	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	caKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
+	caKeyPEM := pem.EncodeToMemory(
+		&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)},
+	)
 
 	return caCertPEM, caKeyPEM, caCert, privKey, nil
 }
 
-func generateServerCert(rng io.Reader, commonName string, dnsNames []string, caCert *x509.Certificate, caKey *rsa.PrivateKey) ([]byte, []byte, error) {
+func generateServerCert(
+	rng io.Reader,
+	commonName string,
+	dnsNames []string,
+	caCert *x509.Certificate,
+	caKey *rsa.PrivateKey,
+) ([]byte, []byte, error) {
 	// Generate Server Key
 	privKey, err := rsa.GenerateKey(rng, RSAKeySize)
 	if err != nil {
@@ -124,7 +145,9 @@ func generateServerCert(rng io.Reader, commonName string, dnsNames []string, caC
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
+	keyPEM := pem.EncodeToMemory(
+		&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)},
+	)
 
 	return certPEM, keyPEM, nil
 }

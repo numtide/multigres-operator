@@ -2,12 +2,10 @@ module github.com/numtide/multigres-operator/pkg/webhook
 
 go 1.25.0
 
-replace github.com/numtide/multigres-operator/pkg/resolver => ../resolver
-
 require (
-	github.com/google/go-cmp v0.7.0
-	github.com/numtide/multigres-operator/api v0.0.0-20251229104516-c9d07419a88e
-	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-00010101000000-000000000000
+	github.com/numtide/multigres-operator/api v0.0.0-20260106180404-c02430f41b11
+	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260106180404-c02430f41b11
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260106180404-c02430f41b11
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.3
@@ -41,6 +39,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

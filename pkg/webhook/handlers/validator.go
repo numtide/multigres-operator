@@ -19,6 +19,8 @@ import (
 // MultigresCluster Validator
 // ============================================================================
 
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-multigrescluster,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=multigresclusters,verbs=create;update,versions=v1alpha1,name=vmultigrescluster.kb.io,admissionReviewVersions=v1
+
 // MultigresClusterValidator validates Create and Update events for MultigresClusters.
 type MultigresClusterValidator struct {
 	Client  client.Client
@@ -37,37 +39,32 @@ func (v *MultigresClusterValidator) InjectDecoder(decoder admission.Decoder) err
 }
 
 // Handle implements the admission.Handler interface.
-func (v *MultigresClusterValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
+func (v *MultigresClusterValidator) Handle(
+	ctx context.Context,
+	req admission.Request,
+) admission.Response {
 	cluster := &multigresv1alpha1.MultigresCluster{}
 	if err := v.decoder.Decode(req, cluster); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// 1. Stateful Validation (Level 4): Referential Integrity
-	// Ensure that all referenced templates actually exist.
 	if err := v.validateTemplatesExist(ctx, cluster); err != nil {
 		return admission.Denied(err.Error())
-	}
-
-	// 2. Fallback Context-Aware Validation (Level 3): Safe Updates
-	// Ideally handled by ValidatingAdmissionPolicy, but included here for K8s < 1.30 support.
-	if req.Operation == admissionv1.Update {
-		// Example: Check for unsafe changes that CEL cannot easily catch involving oldObject state
-		// For now, most logic is covered by CEL, but this block remains for future extension.
 	}
 
 	return admission.Allowed("")
 }
 
-func (v *MultigresClusterValidator) validateTemplatesExist(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) error {
-	// Helper to check existence of a generic template
+func (v *MultigresClusterValidator) validateTemplatesExist(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) error {
 	check := func(kind, name string) error {
 		if name == "" {
 			return nil
 		}
 		key := types.NamespacedName{Name: name, Namespace: cluster.Namespace}
-		// We use a partial object or Unstructured, or the actual type.
-		// Since we have the types, we use them.
 		var obj client.Object
 		switch kind {
 		case "CoreTemplate":
@@ -82,14 +79,18 @@ func (v *MultigresClusterValidator) validateTemplatesExist(ctx context.Context, 
 
 		if err := v.Client.Get(ctx, key, obj); err != nil {
 			if errors.IsNotFound(err) {
-				return fmt.Errorf("referenced %s '%s' not found in namespace '%s'", kind, name, cluster.Namespace)
+				return fmt.Errorf(
+					"referenced %s '%s' not found in namespace '%s'",
+					kind,
+					name,
+					cluster.Namespace,
+				)
 			}
 			return fmt.Errorf("failed to check %s '%s': %w", kind, name, err)
 		}
 		return nil
 	}
 
-	// 1. Check Template Defaults
 	if err := check("CoreTemplate", cluster.Spec.TemplateDefaults.CoreTemplate); err != nil {
 		return err
 	}
@@ -100,21 +101,18 @@ func (v *MultigresClusterValidator) validateTemplatesExist(ctx context.Context, 
 		return err
 	}
 
-	// 2. Check Component Specific References
-	if cluster.Spec.MultiAdmin.TemplateRef != "" {
+	if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef != "" {
 		if err := check("CoreTemplate", cluster.Spec.MultiAdmin.TemplateRef); err != nil {
 			return err
 		}
 	}
 
-	// 3. Check Cell Templates
 	for _, cell := range cluster.Spec.Cells {
 		if err := check("CellTemplate", cell.CellTemplate); err != nil {
 			return err
 		}
 	}
 
-	// 4. Check Shard Templates
 	for _, db := range cluster.Spec.Databases {
 		for _, tg := range db.TableGroups {
 			for _, shard := range tg.Shards {
@@ -132,10 +130,14 @@ func (v *MultigresClusterValidator) validateTemplatesExist(ctx context.Context, 
 // Template Validators (In-Use Protection)
 // ============================================================================
 
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-coretemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=coretemplates,verbs=delete,versions=v1alpha1,name=vcoretemplate.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-celltemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=celltemplates,verbs=delete,versions=v1alpha1,name=vcelltemplate.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-shardtemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=shardtemplates,verbs=delete,versions=v1alpha1,name=vshardtemplate.kb.io,admissionReviewVersions=v1
+
 // TemplateValidator validates Delete events to ensure templates are not in use.
 type TemplateValidator struct {
 	Client client.Client
-	Kind   string // "CoreTemplate", "CellTemplate", or "ShardTemplate"
+	Kind   string
 }
 
 func NewTemplateValidator(c client.Client, kind string) *TemplateValidator {
@@ -143,7 +145,6 @@ func NewTemplateValidator(c client.Client, kind string) *TemplateValidator {
 }
 
 func (v *TemplateValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
-	// We only care about DELETE operations
 	if req.Operation != admissionv1.Delete {
 		return admission.Allowed("")
 	}
@@ -151,11 +152,12 @@ func (v *TemplateValidator) Handle(ctx context.Context, req admission.Request) a
 	templateName := req.Name
 	namespace := req.Namespace
 
-	// List all clusters in the namespace to check for usage.
-	// optimization: In the future, we could rely on a tracking label on the Cluster CR.
 	clusters := &multigresv1alpha1.MultigresClusterList{}
 	if err := v.Client.List(ctx, clusters, client.InNamespace(namespace)); err != nil {
-		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("failed to list clusters for validation: %w", err))
+		return admission.Errored(
+			http.StatusInternalServerError,
+			fmt.Errorf("failed to list clusters for validation: %w", err),
+		)
 	}
 
 	for _, cluster := range clusters.Items {
@@ -170,37 +172,31 @@ func (v *TemplateValidator) Handle(ctx context.Context, req admission.Request) a
 	return admission.Allowed("")
 }
 
-func (v *TemplateValidator) isTemplateInUse(cluster *multigresv1alpha1.MultigresCluster, name string) bool {
+func (v *TemplateValidator) isTemplateInUse(
+	cluster *multigresv1alpha1.MultigresCluster,
+	name string,
+) bool {
 	switch v.Kind {
 	case "CoreTemplate":
-		// Check defaults
 		if cluster.Spec.TemplateDefaults.CoreTemplate == name {
 			return true
 		}
-		// Check explicit MultiAdmin ref
-		if cluster.Spec.MultiAdmin.TemplateRef == name {
+		if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef == name {
 			return true
 		}
-		// Check GlobalTopoServer (if it supported templateRef in the future, currently it doesn't in v1alpha1 spec)
-
 	case "CellTemplate":
-		// Check defaults
 		if cluster.Spec.TemplateDefaults.CellTemplate == name {
 			return true
 		}
-		// Check explicit Cell refs
 		for _, cell := range cluster.Spec.Cells {
 			if cell.CellTemplate == name {
 				return true
 			}
 		}
-
 	case "ShardTemplate":
-		// Check defaults
 		if cluster.Spec.TemplateDefaults.ShardTemplate == name {
 			return true
 		}
-		// Check explicit Shard refs
 		for _, db := range cluster.Spec.Databases {
 			for _, tg := range db.TableGroups {
 				for _, shard := range tg.Shards {
@@ -218,14 +214,17 @@ func (v *TemplateValidator) isTemplateInUse(cluster *multigresv1alpha1.Multigres
 // Child Resource Validator (Fallback)
 // ============================================================================
 
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-cell,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=cells,verbs=create;update;delete,versions=v1alpha1,name=vcell.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-shard,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=shards,verbs=create;update;delete,versions=v1alpha1,name=vshard.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-toposerver,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=toposervers,verbs=create;update;delete,versions=v1alpha1,name=vtoposerver.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-tablegroup,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=tablegroups,verbs=create;update;delete,versions=v1alpha1,name=vtablegroup.kb.io,admissionReviewVersions=v1
+
 // ChildResourceValidator prevents direct modification of managed child resources.
 type ChildResourceValidator struct {
 	decoder          admission.Decoder
 	exemptPrincipals []string
 }
 
-// NewChildResourceValidator creates a validator that blocks modification of child resources
-// unless the user matches one of the exemptPrincipals.
 func NewChildResourceValidator(exemptPrincipals ...string) *ChildResourceValidator {
 	return &ChildResourceValidator{
 		exemptPrincipals: exemptPrincipals,
@@ -237,8 +236,10 @@ func (v *ChildResourceValidator) InjectDecoder(decoder admission.Decoder) error 
 	return nil
 }
 
-func (v *ChildResourceValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
-	// Allow the operator (or other exempt principals) to make changes.
+func (v *ChildResourceValidator) Handle(
+	ctx context.Context,
+	req admission.Request,
+) admission.Response {
 	if slices.Contains(v.exemptPrincipals, req.UserInfo.Username) {
 		return admission.Allowed("")
 	}
