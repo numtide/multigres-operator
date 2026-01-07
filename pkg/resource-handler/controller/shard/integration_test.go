@@ -235,7 +235,7 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/multigres/pgctld:main",
+										Image:   "ghcr.io/multigres/pgctld:main",
 										Command: []string{"/bin/sh", "-c"},
 										Args: []string{
 											"cp /usr/local/bin/pgctld /shared/pgctld",
@@ -545,7 +545,7 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/multigres/pgctld:main",
+										Image:   "ghcr.io/multigres/pgctld:main",
 										Command: []string{"/bin/sh", "-c"},
 										Args: []string{
 											"cp /usr/local/bin/pgctld /shared/pgctld",
@@ -698,7 +698,7 @@ func TestShardReconciliation(t *testing.T) {
 								InitContainers: []corev1.Container{
 									{
 										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/multigres/pgctld:main",
+										Image:   "ghcr.io/multigres/pgctld:main",
 										Command: []string{"/bin/sh", "-c"},
 										Args: []string{
 											"cp /usr/local/bin/pgctld /shared/pgctld",

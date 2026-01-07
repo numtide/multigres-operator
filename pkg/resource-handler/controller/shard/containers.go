@@ -13,7 +13,7 @@ const (
 	DefaultMultigresImage = "ghcr.io/multigres/multigres:main"
 
 	// DefaultPgctldImage is the image containing the pgctld binary
-	DefaultPgctldImage = "ghcr.io/multigres/multigres/pgctld:main"
+	DefaultPgctldImage = "ghcr.io/multigres/pgctld:main"
 
 	// DefaultPostgresImage is the default PostgreSQL database container image
 	DefaultPostgresImage = "postgres:17"
