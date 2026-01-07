@@ -43,10 +43,6 @@ const (
 	// pgctld expects postgres data at <pooler-dir>/pg_data
 	PgDataPath = "/var/lib/pooler/pg_data"
 
-	// PoolerDirVolumeName exists for historical reasons but shares the same PVC as DataVolumeName
-	// Both postgres and multipooler mount the same PVC to share pgbackrest configs and sockets
-	PoolerDirVolumeName = "pooler-dir"
-
 	// PoolerDirMountPath must equal DataMountPath because both containers share the PVC
 	// and pgctld derives postgres data directory as <pooler-dir>/pg_data
 	PoolerDirMountPath = "/var/lib/pooler"
@@ -226,17 +222,6 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		Args:      args,
 		Ports:     buildMultiOrchContainerPorts(),
 		Resources: shard.Spec.MultiOrch.Resources,
-	}
-}
-
-// buildPoolerDirVolume creates the emptyDir volume for multipooler working directory.
-// This provides writable space for multipooler to create pgbackrest config and other files.
-func buildPoolerDirVolume() corev1.Volume {
-	return corev1.Volume{
-		Name: PoolerDirVolumeName,
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		},
 	}
 }
 
