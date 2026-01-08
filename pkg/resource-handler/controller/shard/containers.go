@@ -64,6 +64,18 @@ const (
 	// BackupMountPath is where the backup volume is mounted
 	// pgbackrest stores backups here via --repo1-path
 	BackupMountPath = "/backups"
+
+	// PgHbaConfigMapName is the name of the ConfigMap containing pg_hba template
+	PgHbaConfigMapName = "pg-hba-template"
+
+	// PgHbaVolumeName is the name of the volume for pg_hba template
+	PgHbaVolumeName = "pg-hba-template"
+
+	// PgHbaMountPath is where the pg_hba template is mounted
+	PgHbaMountPath = "/etc/pgctld"
+
+	// PgHbaTemplatePath is the full path to the pg_hba template file
+	PgHbaTemplatePath = PgHbaMountPath + "/pg_hba_template.conf"
 )
 
 // buildSocketDirVolume creates the shared emptyDir volume for unix sockets.
@@ -72,6 +84,20 @@ func buildSocketDirVolume() corev1.Volume {
 		Name: SocketDirVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+}
+
+// buildPgHbaVolume creates the volume for pg_hba template from ConfigMap.
+func buildPgHbaVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: PgHbaVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: PgHbaConfigMapName,
+				},
+			},
 		},
 	}
 }
@@ -176,6 +202,7 @@ func buildPgctldContainer(
 			"--timeout=30",
 			"--log-level=info",
 			"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
+			"--pg-hba-template=" + PgHbaTemplatePath,
 		},
 		Resources: pool.Postgres.Resources,
 		Env: []corev1.EnvVar{
@@ -201,6 +228,11 @@ func buildPgctldContainer(
 			{
 				Name:      SocketDirVolumeName,
 				MountPath: SocketDirMountPath,
+			},
+			{
+				Name:      PgHbaVolumeName,
+				MountPath: PgHbaMountPath,
+				ReadOnly:  true,
 			},
 		},
 	}

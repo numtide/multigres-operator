@@ -89,6 +89,7 @@ func BuildPoolStatefulSet(
 						// buildPgctldVolume(),
 						buildBackupVolume(name, poolSpec.BackupStorageType),
 						buildSocketDirVolume(),
+						buildPgHbaVolume(),
 						// Single PVC shared by both postgres and multipooler because both need
 						// access to pgbackrest configs, sockets, and postgres data directory
 					},
