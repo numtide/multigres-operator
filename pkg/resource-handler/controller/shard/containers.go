@@ -360,9 +360,21 @@ func buildPgctldVolume() corev1.Volume {
 }
 
 // buildBackupVolume creates the backup volume for pgbackrest.
-// Uses emptyDir for development/testing. For production, this should be
-// replaced with persistent storage (PVC or cloud storage).
-func buildBackupVolume() corev1.Volume {
+// Uses either hostPath (for single-node testing) or PVC (for production) based on backupStorageType.
+func buildBackupVolume(poolName string, backupStorageType string) corev1.Volume {
+	if backupStorageType == "pvc" {
+		return corev1.Volume{
+			Name: BackupVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: "backup-data-" + poolName,
+				},
+			},
+		}
+	}
+
+	// Default to hostPath for single-node testing (kind, minikube, etc.)
+	pathType := corev1.HostPathDirectoryOrCreate
 	return corev1.Volume{
 		Name: BackupVolumeName,
 		VolumeSource: corev1.VolumeSource{
