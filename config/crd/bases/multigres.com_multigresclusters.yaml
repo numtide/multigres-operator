@@ -4401,6 +4401,16 @@ spec:
                                                     x-kubernetes-list-type: atomic
                                                 type: object
                                             type: object
+                                          backupStorageType:
+                                            default: hostPath
+                                            description: |-
+                                              BackupStorageType defines how backup storage is provided.
+                                              Valid values are "hostPath" (for single-node testing) and "pvc" (for production).
+                                              Defaults to "hostPath".
+                                            enum:
+                                            - hostPath
+                                            - pvc
+                                            type: string
                                           cells:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
@@ -6669,6 +6679,16 @@ spec:
                                                     x-kubernetes-list-type: atomic
                                                 type: object
                                             type: object
+                                          backupStorageType:
+                                            default: hostPath
+                                            description: |-
+                                              BackupStorageType defines how backup storage is provided.
+                                              Valid values are "hostPath" (for single-node testing) and "pvc" (for production).
+                                              Defaults to "hostPath".
+                                            enum:
+                                            - hostPath
+                                            - pvc
+                                            type: string
                                           cells:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
