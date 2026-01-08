@@ -141,8 +141,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
+								buildBackupVolume("test-shard-pool-primary-zone1"),
 								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 						},
 					},
@@ -289,8 +290,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
+								buildBackupVolume("test-shard-pool-primary-zone1"),
 								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 						},
 					},
@@ -426,8 +428,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
+								buildBackupVolume("test-shard-pool-primary-zone1"),
 								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 						},
 					},
@@ -616,8 +619,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
+								buildBackupVolume("test-shard-pool-primary-zone1"),
 								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 							Affinity: &corev1.Affinity{
 								NodeAffinity: &corev1.NodeAffinity{

@@ -60,6 +60,12 @@ func (r *ShardReconciler) Reconcile(
 		}
 	}
 
+	// Reconcile pg_hba ConfigMap first (required by all pools before StatefulSets start)
+	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
+		logger.Error(err, "Failed to reconcile pg_hba ConfigMap")
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	multiOrchCells, err := getMultiOrchCells(shard)
 	if err != nil {
@@ -156,6 +162,44 @@ func (r *ShardReconciler) reconcileMultiOrchDeployment(
 	existing.Labels = desired.Labels
 	if err := r.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update MultiOrch Deployment: %w", err)
+	}
+
+	return nil
+}
+
+// reconcilePgHbaConfigMap creates or updates the pg_hba ConfigMap for a shard.
+// This ConfigMap is shared across all pools and contains the authentication template.
+func (r *ShardReconciler) reconcilePgHbaConfigMap(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	desired, err := BuildPgHbaConfigMap(shard, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build pg_hba ConfigMap: %w", err)
+	}
+
+	existing := &corev1.ConfigMap{}
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
+		existing,
+	)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new ConfigMap
+			if err := r.Create(ctx, desired); err != nil {
+				return fmt.Errorf("failed to create pg_hba ConfigMap: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get pg_hba ConfigMap: %w", err)
+	}
+
+	// Update existing ConfigMap
+	existing.Data = desired.Data
+	existing.Labels = desired.Labels
+	if err := r.Update(ctx, existing); err != nil {
+		return fmt.Errorf("failed to update pg_hba ConfigMap: %w", err)
 	}
 
 	return nil
