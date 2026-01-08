@@ -5,6 +5,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -86,7 +87,7 @@ func BuildPoolStatefulSet(
 					Volumes: []corev1.Volume{
 						// ALTERNATIVE APPROACH: Uncomment below for binary-copy approach
 						// buildPgctldVolume(),
-						buildBackupVolume(),
+						buildBackupVolume(name, poolSpec.BackupStorageType),
 						buildSocketDirVolume(),
 						// Single PVC shared by both postgres and multipooler because both need
 						// access to pgbackrest configs, sockets, and postgres data directory
@@ -123,4 +124,54 @@ func buildPoolVolumeClaimTemplates(
 	return []corev1.PersistentVolumeClaim{
 		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize),
 	}
+}
+
+// BuildBackupPVC creates a standalone PVC for backup storage shared across all pods in a pool.
+// This PVC is created independently of the StatefulSet and referenced by all pods.
+func BuildBackupPVC(
+	shard *multigresv1alpha1.Shard,
+	poolName string,
+	cellName string,
+	poolSpec multigresv1alpha1.PoolSpec,
+	scheme *runtime.Scheme,
+) (*corev1.PersistentVolumeClaim, error) {
+	name := buildPoolNameWithCell(shard.Name, poolName, cellName)
+	pvcName := "backup-data-" + name
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
+
+	var storageClass *string
+	storageSize := "10Gi" // Default backup storage size
+
+	if poolSpec.Storage.Class != "" {
+		storageClass = &poolSpec.Storage.Class
+	}
+	// TODO: Add backup-specific storage size configuration to PoolSpec
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: shard.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce, // For single-node clusters like kind. Use ReadWriteMany for multi-node production.
+			},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(storageSize),
+				},
+			},
+		},
+	}
+
+	if storageClass != nil {
+		pvc.Spec.StorageClassName = storageClass
+	}
+
+	if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	return pvc, nil
 }

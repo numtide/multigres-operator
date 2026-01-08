@@ -141,7 +141,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(),
+								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
 								buildSocketDirVolume(),
 							},
 						},
@@ -289,7 +289,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(),
+								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
 								buildSocketDirVolume(),
 							},
 						},
@@ -426,7 +426,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(),
+								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
 								buildSocketDirVolume(),
 							},
 						},
@@ -616,7 +616,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(),
+								buildBackupVolume("test-shard-pool-primary-zone1", "hostPath"),
 								buildSocketDirVolume(),
 							},
 							Affinity: &corev1.Affinity{

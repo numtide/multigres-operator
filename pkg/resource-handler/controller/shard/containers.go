@@ -238,7 +238,7 @@ func buildMultiPoolerSidecar(
 		"--http-port", "15200",
 		"--grpc-port", "15270",
 		"--pooler-dir", PoolerDirMountPath,
-		"--socket-file", SocketDirMountPath + "/.s.PGSQL.5432", // Unix socket uses trust auth (no password)
+		"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432", // Unix socket uses trust auth (no password)
 		"--service-map", "grpc-pooler", // Only enable grpc-pooler service (disables auto-restore service)
 		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
@@ -366,7 +366,10 @@ func buildBackupVolume() corev1.Volume {
 	return corev1.Volume{
 		Name: BackupVolumeName,
 		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
+			HostPath: &corev1.HostPathVolumeSource{
+				Path: "/data/backups",
+				Type: &pathType,
+			},
 		},
 	}
 }
