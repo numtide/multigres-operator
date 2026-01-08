@@ -74,24 +74,22 @@ func BuildPoolStatefulSet(
 						FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
 					},
 					InitContainers: []corev1.Container{
-						// ALTERNATIVE APPROACH: Uncomment below for stock postgres:17 + binary copy
-						// buildPgctldInitContainer(shard),
+						// ALTERNATIVE: Add init container to copy pgctld and pgbackrest binaries
+						// to emptyDir, enabling use of stock postgres:17 image
+						// buildBinaryCopyInitContainer(shard),
 						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 					},
 					Containers: []corev1.Container{
-						// CURRENT: Uses ghcr.io/multigres/pgctld:main with built-in pgctld + pgbackrest
 						buildPgctldContainer(shard, poolSpec),
-						// ALTERNATIVE: Use stock postgres:17 + binary-copy approach
+						// ALTERNATIVE: Use stock postgres:17 with copied binaries
 						// buildPostgresContainer(shard, poolSpec),
 					},
 					Volumes: []corev1.Volume{
-						// ALTERNATIVE APPROACH: Uncomment below for binary-copy approach
-						// buildPgctldVolume(),
-						buildBackupVolume(name, poolSpec.BackupStorageType),
+						// ALTERNATIVE: Add emptyDir volume for binary copy
+						// buildBinariesVolume(),
+						buildBackupVolume(name),
 						buildSocketDirVolume(),
 						buildPgHbaVolume(),
-						// Single PVC shared by both postgres and multipooler because both need
-						// access to pgbackrest configs, sockets, and postgres data directory
 					},
 					Affinity: poolSpec.Affinity,
 				},
@@ -129,6 +127,8 @@ func buildPoolVolumeClaimTemplates(
 
 // BuildBackupPVC creates a standalone PVC for backup storage shared across all pods in a pool.
 // This PVC is created independently of the StatefulSet and referenced by all pods.
+// For single-node clusters (kind, minikube), uses ReadWriteOnce (all pods on same node).
+// For multi-node production, configure BackupStorage.Class to a storage class supporting ReadWriteMany.
 func BuildBackupPVC(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
@@ -140,13 +140,27 @@ func BuildBackupPVC(
 	pvcName := "backup-data-" + name
 	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
 
+	// Use BackupStorage if specified, otherwise inherit from Storage
 	var storageClass *string
 	storageSize := "10Gi" // Default backup storage size
 
-	if poolSpec.Storage.Class != "" {
+	if poolSpec.BackupStorage.Class != "" {
+		storageClass = &poolSpec.BackupStorage.Class
+	} else if poolSpec.Storage.Class != "" {
 		storageClass = &poolSpec.Storage.Class
 	}
-	// TODO: Add backup-specific storage size configuration to PoolSpec
+
+	if poolSpec.BackupStorage.Size != "" {
+		storageSize = poolSpec.BackupStorage.Size
+	}
+
+	// Default to ReadWriteOnce for single-node clusters.
+	// TODO: When StorageSpec.AccessMode is added, use:
+	//   accessMode := corev1.ReadWriteOnce
+	//   if poolSpec.BackupStorage.AccessMode != "" {
+	//       accessMode = poolSpec.BackupStorage.AccessMode
+	//   }
+	accessMode := corev1.ReadWriteOnce
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -156,7 +170,7 @@ func BuildBackupPVC(
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce, // For single-node clusters like kind. Use ReadWriteMany for multi-node production.
+				accessMode,
 			},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{

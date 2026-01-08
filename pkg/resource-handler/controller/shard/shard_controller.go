@@ -265,11 +265,9 @@ func (r *ShardReconciler) reconcilePool(
 	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
 
-		// Reconcile backup PVC before StatefulSet (PVC must exist first) - only if using PVC storage
-		if poolSpec.BackupStorageType == "pvc" {
-			if err := r.reconcilePoolBackupPVC(ctx, shard, poolName, cellName, poolSpec); err != nil {
-				return fmt.Errorf("failed to reconcile backup PVC for cell %s: %w", cellName, err)
-			}
+		// Reconcile backup PVC before StatefulSet (PVC must exist first)
+		if err := r.reconcilePoolBackupPVC(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf("failed to reconcile backup PVC for cell %s: %w", cellName, err)
 		}
 
 		// Reconcile pool StatefulSet for this cell

@@ -383,27 +383,14 @@ func buildPgctldVolume() corev1.Volume {
 }
 
 // buildBackupVolume creates the backup volume for pgbackrest.
-// Uses either hostPath (for single-node testing) or PVC (for production) based on backupStorageType.
-func buildBackupVolume(poolName string, backupStorageType string) corev1.Volume {
-	if backupStorageType == "pvc" {
-		return corev1.Volume{
-			Name: BackupVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "backup-data-" + poolName,
-				},
-			},
-		}
-	}
-
-	// Default to hostPath for single-node testing (kind, minikube, etc.)
-	pathType := corev1.HostPathDirectoryOrCreate
+// References a PVC that is created separately and shared across all pods in a pool.
+// For single-node clusters (kind), ReadWriteOnce works since all pods are on the same node.
+func buildBackupVolume(poolName string) corev1.Volume {
 	return corev1.Volume{
 		Name: BackupVolumeName,
 		VolumeSource: corev1.VolumeSource{
-			HostPath: &corev1.HostPathVolumeSource{
-				Path: "/data/backups",
-				Type: &pathType,
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: "backup-data-" + poolName,
 			},
 		},
 	}
