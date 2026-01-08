@@ -26,7 +26,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			want: corev1.Container{
 				Name:    "postgres",
 				Image:   DefaultPostgresImage,
-				Command: []string{PgctldMountPath},
+				Command: []string{"/usr/local/bin/pgctld"},
 				Args: []string{
 					"server",
 					"--pooler-dir=" + PoolerDirMountPath,
@@ -61,12 +61,12 @@ func TestBuildPostgresContainer(t *testing.T) {
 						MountPath: DataMountPath,
 					},
 					{
-						Name:      PgctldVolumeName,
-						MountPath: PgctldBinDir,
-					},
-					{
 						Name:      BackupVolumeName,
 						MountPath: BackupMountPath,
+					},
+					{
+						Name:      SocketDirVolumeName,
+						MountPath: SocketDirMountPath,
 					},
 				},
 			},
@@ -83,7 +83,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			want: corev1.Container{
 				Name:    "postgres",
 				Image:   "postgres:16",
-				Command: []string{PgctldMountPath},
+				Command: []string{"/usr/local/bin/pgctld"},
 				Args: []string{
 					"server",
 					"--pooler-dir=" + PoolerDirMountPath,
@@ -118,12 +118,12 @@ func TestBuildPostgresContainer(t *testing.T) {
 						MountPath: DataMountPath,
 					},
 					{
-						Name:      PgctldVolumeName,
-						MountPath: PgctldBinDir,
-					},
-					{
 						Name:      BackupVolumeName,
 						MountPath: BackupMountPath,
+					},
+					{
+						Name:      SocketDirVolumeName,
+						MountPath: SocketDirMountPath,
 					},
 				},
 			},
@@ -149,7 +149,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			want: corev1.Container{
 				Name:    "postgres",
 				Image:   DefaultPostgresImage,
-				Command: []string{PgctldMountPath},
+				Command: []string{"/usr/local/bin/pgctld"},
 				Args: []string{
 					"server",
 					"--pooler-dir=" + PoolerDirMountPath,
@@ -193,12 +193,12 @@ func TestBuildPostgresContainer(t *testing.T) {
 						MountPath: DataMountPath,
 					},
 					{
-						Name:      PgctldVolumeName,
-						MountPath: PgctldBinDir,
-					},
-					{
 						Name:      BackupVolumeName,
 						MountPath: BackupMountPath,
+					},
+					{
+						Name:      SocketDirVolumeName,
+						MountPath: SocketDirMountPath,
 					},
 				},
 			},
@@ -249,7 +249,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--http-port", "15200",
 					"--grpc-port", "15270",
 					"--pooler-dir", PoolerDirMountPath,
-					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
+					"--socket-file", SocketDirMountPath + "/.s.PGSQL.5432",
 					"--service-map", "grpc-pooler",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
@@ -288,6 +288,10 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						Name:      BackupVolumeName,
 						MountPath: BackupMountPath,
 					},
+					{
+						Name:      SocketDirVolumeName,
+						MountPath: SocketDirMountPath,
+					},
 				},
 			},
 		},
@@ -320,7 +324,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--http-port", "15200",
 					"--grpc-port", "15270",
 					"--pooler-dir", PoolerDirMountPath,
-					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
+					"--socket-file", SocketDirMountPath + "/.s.PGSQL.5432",
 					"--service-map", "grpc-pooler",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
@@ -358,6 +362,10 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					{
 						Name:      BackupVolumeName,
 						MountPath: BackupMountPath,
+					},
+					{
+						Name:      SocketDirVolumeName,
+						MountPath: SocketDirMountPath,
 					},
 				},
 			},
@@ -400,7 +408,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--http-port", "15200",
 					"--grpc-port", "15270",
 					"--pooler-dir", PoolerDirMountPath,
-					"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432",
+					"--socket-file", SocketDirMountPath + "/.s.PGSQL.5432",
 					"--service-map", "grpc-pooler",
 					"--topo-global-server-addresses", "global-topo:2379",
 					"--topo-global-root", "/multigres/global",
@@ -447,6 +455,10 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					{
 						Name:      BackupVolumeName,
 						MountPath: BackupMountPath,
+					},
+					{
+						Name:      SocketDirVolumeName,
+						MountPath: SocketDirMountPath,
 					},
 				},
 			},
@@ -529,6 +541,9 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 					"--topo-global-root", "/multigres/global",
 					"--cell", "zone1",
 					"--watch-targets", "postgres",
+					"--cluster-metadata-refresh-interval", "500ms",
+					"--pooler-health-check-interval", "500ms",
+					"--recovery-cycle-interval", "500ms",
 				},
 				Ports:     buildMultiOrchContainerPorts(),
 				Resources: corev1.ResourceRequirements{},
@@ -561,3 +576,4 @@ func TestBuildPgctldVolume(t *testing.T) {
 		t.Errorf("buildPgctldVolume() mismatch (-want +got):\n%s", diff)
 	}
 }
+

@@ -233,17 +233,18 @@ func TestShardReconciliation(t *testing.T) {
 							},
 							Spec: corev1.PodSpec{
 								InitContainers: []corev1.Container{
-									{
-										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/pgctld:main",
-										Command: []string{"/bin/sh", "-c"},
-										Args: []string{
-											"cp /usr/local/bin/pgctld /shared/pgctld",
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgctld-bin", MountPath: "/shared"},
-										},
-									},
+									// ALTERNATIVE: Uncomment for binary-copy approach
+									// {
+									// 	Name:    "pgctld-init",
+									// 	Image:   "ghcr.io/multigres/pgctld:main",
+									// 	Command: []string{"/bin/sh", "-c"},
+									// 	Args: []string{
+									// 		"cp /usr/local/bin/pgctld /shared/pgctld",
+									// 	},
+									// 	VolumeMounts: []corev1.VolumeMount{
+									// 		{Name: "pgctld-bin", MountPath: "/shared"},
+									// 	},
+									// },
 									{
 										Name:  "multipooler",
 										Image: "ghcr.io/multigres/multigres:main",
@@ -281,7 +282,7 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name:    "postgres",
 										Image:   "postgres:17",
-										Command: []string{"/usr/local/bin/multigres/pgctld"},
+										Command: []string{"/usr/local/bin/pgctld"},
 										Args: []string{
 											"server",
 											"--pooler-dir=/var/lib/pooler",
@@ -305,18 +306,20 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											{Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
+											// ALTERNATIVE: Uncomment for binary-copy approach
+											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
 								},
 								Volumes: []corev1.Volume{
-									{
-										Name: "pgctld-bin",
-										VolumeSource: corev1.VolumeSource{
-											EmptyDir: &corev1.EmptyDirVolumeSource{},
-										},
-									},
+									// ALTERNATIVE: Uncomment for binary-copy approach
+									// {
+									// 	Name: "pgctld-bin",
+									// 	VolumeSource: corev1.VolumeSource{
+									// 		EmptyDir: &corev1.EmptyDirVolumeSource{},
+									// 	},
+									// },
 									{
 										Name: "backup-data",
 										VolumeSource: corev1.VolumeSource{
@@ -543,12 +546,13 @@ func TestShardReconciliation(t *testing.T) {
 									FSGroup: ptr.To(int64(999)),
 								},
 								Volumes: []corev1.Volume{
-									{
-										Name: "pgctld-bin",
-										VolumeSource: corev1.VolumeSource{
-											EmptyDir: &corev1.EmptyDirVolumeSource{},
-										},
-									},
+									// ALTERNATIVE: Uncomment for binary-copy approach
+									// {
+									// 	Name: "pgctld-bin",
+									// 	VolumeSource: corev1.VolumeSource{
+									// 		EmptyDir: &corev1.EmptyDirVolumeSource{},
+									// 	},
+									// },
 									{
 										Name: "backup-data",
 										VolumeSource: corev1.VolumeSource{
@@ -557,17 +561,6 @@ func TestShardReconciliation(t *testing.T) {
 									},
 								},
 								InitContainers: []corev1.Container{
-									{
-										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/pgctld:main",
-										Command: []string{"/bin/sh", "-c"},
-										Args: []string{
-											"cp /usr/local/bin/pgctld /shared/pgctld",
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgctld-bin", MountPath: "/shared"},
-										},
-									},
 									{
 										Name:  "multipooler",
 										Image: "ghcr.io/multigres/multigres:main",
@@ -609,7 +602,7 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name:    "postgres",
 										Image:   "postgres:17",
-										Command: []string{"/usr/local/bin/multigres/pgctld"},
+										Command: []string{"/usr/local/bin/pgctld"},
 										Args: []string{
 											"server",
 											"--pooler-dir=/var/lib/pooler",
@@ -633,7 +626,8 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											{Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
+											// ALTERNATIVE: Uncomment for binary-copy approach
+											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},
@@ -704,12 +698,13 @@ func TestShardReconciliation(t *testing.T) {
 									FSGroup: ptr.To(int64(999)),
 								},
 								Volumes: []corev1.Volume{
-									{
-										Name: "pgctld-bin",
-										VolumeSource: corev1.VolumeSource{
-											EmptyDir: &corev1.EmptyDirVolumeSource{},
-										},
-									},
+									// ALTERNATIVE: Uncomment for binary-copy approach
+									// {
+									// 	Name: "pgctld-bin",
+									// 	VolumeSource: corev1.VolumeSource{
+									// 		EmptyDir: &corev1.EmptyDirVolumeSource{},
+									// 	},
+									// },
 									{
 										Name: "backup-data",
 										VolumeSource: corev1.VolumeSource{
@@ -718,17 +713,6 @@ func TestShardReconciliation(t *testing.T) {
 									},
 								},
 								InitContainers: []corev1.Container{
-									{
-										Name:    "pgctld-init",
-										Image:   "ghcr.io/multigres/pgctld:main",
-										Command: []string{"/bin/sh", "-c"},
-										Args: []string{
-											"cp /usr/local/bin/pgctld /shared/pgctld",
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgctld-bin", MountPath: "/shared"},
-										},
-									},
 									{
 										Name:  "multipooler",
 										Image: "ghcr.io/multigres/multigres:main",
@@ -770,7 +754,7 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name:    "postgres",
 										Image:   "postgres:17",
-										Command: []string{"/usr/local/bin/multigres/pgctld"},
+										Command: []string{"/usr/local/bin/pgctld"},
 										Args: []string{
 											"server",
 											"--pooler-dir=/var/lib/pooler",
@@ -794,7 +778,8 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											{Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
+											// ALTERNATIVE: Uncomment for binary-copy approach
+											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
 										},
 									},

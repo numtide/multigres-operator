@@ -30,7 +30,7 @@ spec:
   images:
     multiorch: ghcr.io/multigres/multigres:main
     multipooler: ghcr.io/multigres/multigres:main
-    postgres: postgres:17
+    postgres: ghcr.io/multigres/pgctld:main
 
   # Reference to the global topology server
   globalTopoServer:

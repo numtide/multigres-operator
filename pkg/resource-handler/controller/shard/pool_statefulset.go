@@ -73,15 +73,21 @@ func BuildPoolStatefulSet(
 						FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
 					},
 					InitContainers: []corev1.Container{
-						buildPgctldInitContainer(shard),
+						// ALTERNATIVE APPROACH: Uncomment below for stock postgres:17 + binary copy
+						// buildPgctldInitContainer(shard),
 						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 					},
 					Containers: []corev1.Container{
-						buildPostgresContainer(shard, poolSpec),
+						// CURRENT: Uses ghcr.io/multigres/pgctld:main with built-in pgctld + pgbackrest
+						buildPgctldContainer(shard, poolSpec),
+						// ALTERNATIVE: Use stock postgres:17 + binary-copy approach
+						// buildPostgresContainer(shard, poolSpec),
 					},
 					Volumes: []corev1.Volume{
-						buildPgctldVolume(),
+						// ALTERNATIVE APPROACH: Uncomment below for binary-copy approach
+						// buildPgctldVolume(),
 						buildBackupVolume(),
+						buildSocketDirVolume(),
 						// Single PVC shared by both postgres and multipooler because both need
 						// access to pgbackrest configs, sockets, and postgres data directory
 					},

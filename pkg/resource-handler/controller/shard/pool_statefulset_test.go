@@ -109,9 +109,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								FSGroup: ptr.To(int64(999)),
 							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
@@ -120,7 +117,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Type: "replica",
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "10Gi",
+										},
+									},
 									"primary",
 									"zone1",
 								),
@@ -130,12 +132,17 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									&multigresv1alpha1.Shard{
 										Spec: multigresv1alpha1.ShardSpec{},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Type: "replica",
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "10Gi",
+										},
+									},
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
 								buildBackupVolume(),
+								buildSocketDirVolume(),
 							},
 						},
 					},
@@ -244,9 +251,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								FSGroup: ptr.To(int64(999)),
 							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-001"},
@@ -256,7 +260,13 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 										},
 									},
 									multigresv1alpha1.PoolSpec{
-										Cells: []multigresv1alpha1.CellName{"zone-west"},
+										Type:            "readOnly",
+										Cells:           []multigresv1alpha1.CellName{"zone-west"},
+										ReplicasPerCell: ptr.To(int32(3)),
+										Storage: multigresv1alpha1.StorageSpec{
+											Class: "fast-ssd",
+											Size:  "20Gi",
+										},
 									},
 									"replica",
 									"zone-west",
@@ -267,12 +277,20 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									&multigresv1alpha1.Shard{
 										Spec: multigresv1alpha1.ShardSpec{},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Type:            "readOnly",
+										Cells:           []multigresv1alpha1.CellName{"zone-west"},
+										ReplicasPerCell: ptr.To(int32(3)),
+										Storage: multigresv1alpha1.StorageSpec{
+											Class: "fast-ssd",
+											Size:  "20Gi",
+										},
+									},
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
 								buildBackupVolume(),
+								buildSocketDirVolume(),
 							},
 						},
 					},
@@ -378,9 +396,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								FSGroup: ptr.To(int64(999)),
 							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-002"},
@@ -389,7 +404,11 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "5Gi",
+										},
+									},
 									"readOnly",
 									"zone1",
 								),
@@ -399,12 +418,16 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									&multigresv1alpha1.Shard{
 										Spec: multigresv1alpha1.ShardSpec{},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "5Gi",
+										},
+									},
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
 								buildBackupVolume(),
+								buildSocketDirVolume(),
 							},
 						},
 					},
@@ -527,9 +550,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								FSGroup: ptr.To(int64(999)),
 							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity"},
@@ -538,7 +558,29 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Type: "replica",
+										Affinity: &corev1.Affinity{
+											NodeAffinity: &corev1.NodeAffinity{
+												RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+													NodeSelectorTerms: []corev1.NodeSelectorTerm{
+														{
+															MatchExpressions: []corev1.NodeSelectorRequirement{
+																{
+																	Key:      "disk-type",
+																	Operator: corev1.NodeSelectorOpIn,
+																	Values:   []string{"ssd"},
+																},
+															},
+														},
+													},
+												},
+											},
+										},
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "10Gi",
+										},
+									},
 									"primary",
 									"zone1",
 								),
@@ -548,12 +590,34 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									&multigresv1alpha1.Shard{
 										Spec: multigresv1alpha1.ShardSpec{},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Type: "replica",
+										Affinity: &corev1.Affinity{
+											NodeAffinity: &corev1.NodeAffinity{
+												RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+													NodeSelectorTerms: []corev1.NodeSelectorTerm{
+														{
+															MatchExpressions: []corev1.NodeSelectorRequirement{
+																{
+																	Key:      "disk-type",
+																	Operator: corev1.NodeSelectorOpIn,
+																	Values:   []string{"ssd"},
+																},
+															},
+														},
+													},
+												},
+											},
+										},
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "10Gi",
+										},
+									},
 								),
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
 								buildBackupVolume(),
+								buildSocketDirVolume(),
 							},
 							Affinity: &corev1.Affinity{
 								NodeAffinity: &corev1.NodeAffinity{
