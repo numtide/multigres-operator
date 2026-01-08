@@ -296,7 +296,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
 										},
 										Env: []corev1.EnvVar{
-											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
 										},
 										SecurityContext: &corev1.SecurityContext{
@@ -616,7 +615,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
 										},
 										Env: []corev1.EnvVar{
-											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
 										},
 										SecurityContext: &corev1.SecurityContext{
@@ -768,7 +766,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
 										},
 										Env: []corev1.EnvVar{
-											{Name: "POSTGRES_HOST_AUTH_METHOD", Value: "trust"},
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
 										},
 										SecurityContext: &corev1.SecurityContext{

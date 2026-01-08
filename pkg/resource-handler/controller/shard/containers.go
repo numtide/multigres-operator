@@ -114,11 +114,6 @@ func buildPostgresContainer(
 		},
 		Resources: pool.Postgres.Resources,
 		Env: []corev1.EnvVar{
-			// NOTE: This is for MVP demo setup.
-			{
-				Name:  "POSTGRES_HOST_AUTH_METHOD",
-				Value: "trust",
-			},
 			{
 				Name:  "PGDATA",
 				Value: PgDataPath,
@@ -184,10 +179,6 @@ func buildPgctldContainer(
 		},
 		Resources: pool.Postgres.Resources,
 		Env: []corev1.EnvVar{
-			{
-				Name:  "POSTGRES_HOST_AUTH_METHOD",
-				Value: "trust",
-			},
 			{
 				Name:  "PGDATA",
 				Value: PgDataPath,

@@ -42,10 +42,6 @@ func TestBuildPostgresContainer(t *testing.T) {
 				Resources: corev1.ResourceRequirements{},
 				Env: []corev1.EnvVar{
 					{
-						Name:  "POSTGRES_HOST_AUTH_METHOD",
-						Value: "trust",
-					},
-					{
 						Name:  "PGDATA",
 						Value: PgDataPath,
 					},
@@ -98,10 +94,6 @@ func TestBuildPostgresContainer(t *testing.T) {
 				},
 				Resources: corev1.ResourceRequirements{},
 				Env: []corev1.EnvVar{
-					{
-						Name:  "POSTGRES_HOST_AUTH_METHOD",
-						Value: "trust",
-					},
 					{
 						Name:  "PGDATA",
 						Value: PgDataPath,
@@ -173,10 +165,6 @@ func TestBuildPostgresContainer(t *testing.T) {
 					},
 				},
 				Env: []corev1.EnvVar{
-					{
-						Name:  "POSTGRES_HOST_AUTH_METHOD",
-						Value: "trust",
-					},
 					{
 						Name:  "PGDATA",
 						Value: PgDataPath,
