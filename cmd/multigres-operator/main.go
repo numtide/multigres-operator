@@ -82,30 +82,89 @@ func main() {
 	var defaultCellTemplate string
 	var defaultShardTemplate string
 
+	defaultNS := os.Getenv("POD_NAMESPACE")
+	if defaultNS == "" {
+		defaultNS = "multigres-system"
+	}
+
 	// General Flags
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
-		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(
+		&metricsAddr,
+		"metrics-bind-address",
+		"0",
+		"The address the metrics endpoint binds to. "+
+			"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.",
+	)
+	flag.StringVar(
+		&probeAddr,
+		"health-probe-bind-address",
+		":8081",
+		"The address the probe endpoint binds to.",
+	)
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&secureMetrics, "metrics-secure", true,
-		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP.")
+	flag.BoolVar(
+		&secureMetrics,
+		"metrics-secure",
+		true,
+		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP.",
+	)
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
 	// Webhook Flag Configuration
 	flag.BoolVar(&webhookEnabled, "webhook-enable", true, "Enable the admission webhook server")
-	flag.StringVar(&webhookCertStrategy, "webhook-cert-strategy", "self-signed", "Certificate management strategy: 'self-signed', 'cert-manager', or 'external'")
-	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs", "Directory to store/read webhook certificates")
-	flag.StringVar(&webhookServiceName, "webhook-service-name", "multigres-operator-webhook", "Name of the Kubernetes Service for the webhook")
-	flag.StringVar(&webhookServiceNamespace, "webhook-service-namespace", "multigres-system", "Namespace where the webhook service resides")
-	flag.StringVar(&webhookServiceAccount, "webhook-service-account", "multigres-operator", "Service Account name of the operator (exempt from child resource validation)")
+	flag.StringVar(
+		&webhookCertStrategy,
+		"webhook-cert-strategy",
+		"self-signed",
+		"Certificate management strategy: 'self-signed', 'cert-manager', or 'external'",
+	)
+	flag.StringVar(
+		&webhookCertDir,
+		"webhook-cert-dir",
+		"/var/run/secrets/webhook",
+		"Directory to store/read webhook certificates",
+	)
+	flag.StringVar(
+		&webhookServiceName,
+		"webhook-service-name",
+		"multigres-operator-webhook",
+		"Name of the Kubernetes Service for the webhook",
+	)
+	flag.StringVar(
+		&webhookServiceNamespace,
+		"webhook-service-namespace",
+		defaultNS,
+		"Namespace where the webhook service resides",
+	)
+	flag.StringVar(
+		&webhookServiceAccount,
+		"webhook-service-account",
+		"multigres-operator",
+		"Service Account name of the operator (exempt from child resource validation)",
+	)
 
 	// Template Defaults Configuration
-	flag.StringVar(&defaultCoreTemplate, "default-core-template", "default", "Default CoreTemplate name to use if not specified in CR")
-	flag.StringVar(&defaultCellTemplate, "default-cell-template", "default", "Default CellTemplate name to use if not specified in CR")
-	flag.StringVar(&defaultShardTemplate, "default-shard-template", "default", "Default ShardTemplate name to use if not specified in CR")
+	flag.StringVar(
+		&defaultCoreTemplate,
+		"default-core-template",
+		"default",
+		"Default CoreTemplate name to use if not specified in CR",
+	)
+	flag.StringVar(
+		&defaultCellTemplate,
+		"default-cell-template",
+		"default",
+		"Default CellTemplate name to use if not specified in CR",
+	)
+	flag.StringVar(
+		&defaultShardTemplate,
+		"default-shard-template",
+		"default",
+		"Default ShardTemplate name to use if not specified in CR",
+	)
 
 	opts := zap.Options{
 		Development: true,
