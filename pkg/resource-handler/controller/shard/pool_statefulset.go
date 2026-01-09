@@ -76,7 +76,7 @@ func BuildPoolStatefulSet(
 					InitContainers: []corev1.Container{
 						// ALTERNATIVE: Add init container to copy pgctld and pgbackrest binaries
 						// to emptyDir, enabling use of stock postgres:17 image
-						// buildBinaryCopyInitContainer(shard),
+						// buildPgctldInitContainer(shard),
 						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 					},
 					Containers: []corev1.Container{
@@ -86,7 +86,7 @@ func BuildPoolStatefulSet(
 					},
 					Volumes: []corev1.Volume{
 						// ALTERNATIVE: Add emptyDir volume for binary copy
-						// buildBinariesVolume(),
+						// buildPgctldVolume(),
 						buildBackupVolume(name),
 						buildSocketDirVolume(),
 						buildPgHbaVolume(),
