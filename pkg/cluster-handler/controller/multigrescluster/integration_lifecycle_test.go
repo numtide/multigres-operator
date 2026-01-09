@@ -1,0 +1,313 @@
+//go:build integration
+// +build integration
+
+package multigrescluster_test
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resolver"
+)
+
+func TestMultigresCluster_Lifecycle(t *testing.T) {
+	t.Parallel()
+
+	t.Run("TableGroup Name Length Limit", func(t *testing.T) {
+		t.Parallel()
+		k8sClient, _ := setupIntegration(t)
+		// Name length math: 18 (cluster) + 10 (db) + 30 (tg) + 2 (hyphens) = 60 chars > 50 chars
+		longClusterName := "validation-cluster"
+		longTGName := "this-is-a-very-long-tablegroup" // 30 chars
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: longClusterName, Namespace: testNamespace},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{
+						Name:    "postgres",
+						Default: true,
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							// Must provide the mandatory default one to pass "system catalog" validation
+							{Name: "default", Default: true},
+							// And the one that triggers length limit (Default: false to avoid "must be named default" rule)
+							{Name: longTGName, Default: false},
+						},
+					},
+				},
+			},
+		}
+
+		if err := k8sClient.Create(t.Context(), cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		// Verify the TableGroup does NOT exist
+		time.Sleep(2 * time.Second)
+		tgName := longClusterName + "-postgres-" + longTGName
+		err := k8sClient.Get(t.Context(), client.ObjectKey{Name: tgName, Namespace: testNamespace}, &multigresv1alpha1.TableGroup{})
+		if !apierrors.IsNotFound(err) {
+			t.Errorf("Expected TableGroup %s to NOT be created due to length limit, but it exists (err: %v)", tgName, err)
+		}
+
+		// Ensure Cluster exists
+		fetchedCluster := &multigresv1alpha1.MultigresCluster{}
+		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), fetchedCluster); err != nil {
+			t.Error("Cluster should exist")
+		}
+	})
+
+	t.Run("Annotation Limit (Bombing)", func(t *testing.T) {
+		t.Parallel()
+		k8sClient, watcher := setupIntegration(t)
+		// 250 chars is near limit (256). If controller appends to this value, it might fail.
+		longAnnotation := strings.Repeat("a", 250)
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "annotation-bomb", Namespace: testNamespace},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+					Spec: &multigresv1alpha1.StatelessSpec{
+						PodAnnotations: map[string]string{"heavy-annotation": longAnnotation},
+					},
+				},
+			},
+		}
+		if err := k8sClient.Create(t.Context(), cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		// Verify MultiAdmin Deployment created successfully WITH annotation
+		deploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "annotation-bomb-multiadmin",
+				Namespace:       testNamespace,
+				Labels:          clusterLabels(t, "annotation-bomb", "multiadmin", ""),
+				OwnerReferences: clusterOwnerRefs(t, "annotation-bomb"),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(resolver.DefaultAdminReplicas),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: clusterLabels(t, "annotation-bomb", "multiadmin", ""),
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:      clusterLabels(t, "annotation-bomb", "multiadmin", ""),
+						Annotations: map[string]string{"heavy-annotation": longAnnotation},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:      "multiadmin",
+								Image:     resolver.DefaultMultiAdminImage,
+								Resources: resolver.DefaultResourcesAdmin(),
+							},
+						},
+					},
+				},
+			},
+		}
+		if err := watcher.WaitForMatch(deploy); err != nil {
+			t.Errorf("MultiAdmin deployment failed to create with massive annotation: %v", err)
+		}
+	})
+
+	t.Run("Cell Renaming (Zombie Cell)", func(t *testing.T) {
+		t.Parallel()
+		k8sClient, watcher := setupIntegration(t)
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "zombie-test", Namespace: testNamespace},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{{Name: "zone-a", Zone: "us-east-1a"}},
+			},
+		}
+		if err := k8sClient.Create(t.Context(), cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		// Wait for zone-a
+		zoneA := &multigresv1alpha1.Cell{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "zombie-test-zone-a",
+				Namespace:       testNamespace,
+				Labels:          clusterLabels(t, "zombie-test", "", "zone-a"),
+				OwnerReferences: clusterOwnerRefs(t, "zombie-test"),
+			},
+			Spec: multigresv1alpha1.CellSpec{
+				Name: "zone-a",
+				Zone: "us-east-1a",
+				Images: multigresv1alpha1.CellImages{
+					MultiGateway:    resolver.DefaultMultiGatewayImage,
+					ImagePullPolicy: resolver.DefaultImagePullPolicy,
+				},
+				MultiGateway: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(1)),
+					Resources: corev1.ResourceRequirements{},
+				},
+				AllCells: []multigresv1alpha1.CellName{"zone-a"},
+				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+					Address:        "zombie-test-global-topo-client.default.svc:2379",
+					RootPath:       "/multigres/global",
+					Implementation: "etcd2",
+				},
+				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+					RegisterCell: true,
+					PrunePoolers: true,
+				},
+			},
+		}
+		if err := watcher.WaitForMatch(zoneA); err != nil {
+			t.Fatalf("Failed to wait for initial cell: %v", err)
+		}
+
+		// Rename Cell
+		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), cluster); err != nil {
+			t.Fatal(err)
+		}
+		cluster.Spec.Cells = []multigresv1alpha1.CellConfig{{Name: "zone-b", Zone: "us-east-1b"}}
+		if err := k8sClient.Update(t.Context(), cluster); err != nil {
+			t.Fatalf("Failed to update cluster: %v", err)
+		}
+
+		// Wait for zone-b creation
+		zoneB := &multigresv1alpha1.Cell{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "zombie-test-zone-b",
+				Namespace:       testNamespace,
+				Labels:          clusterLabels(t, "zombie-test", "", "zone-b"),
+				OwnerReferences: clusterOwnerRefs(t, "zombie-test"),
+			},
+			Spec: multigresv1alpha1.CellSpec{
+				Name: "zone-b",
+				Zone: "us-east-1b",
+				Images: multigresv1alpha1.CellImages{
+					MultiGateway:    resolver.DefaultMultiGatewayImage,
+					ImagePullPolicy: resolver.DefaultImagePullPolicy,
+				},
+				MultiGateway: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(1)),
+					Resources: corev1.ResourceRequirements{},
+				},
+				AllCells: []multigresv1alpha1.CellName{"zone-b"},
+				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+					Address:        "zombie-test-global-topo-client.default.svc:2379",
+					RootPath:       "/multigres/global",
+					Implementation: "etcd2",
+				},
+				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+					RegisterCell: true,
+					PrunePoolers: true,
+				},
+			},
+		}
+		if err := watcher.WaitForMatch(zoneB); err != nil {
+			t.Fatalf("Failed to wait for new cell: %v", err)
+		}
+
+		// Verify zone-a deletion (Zombie Check)
+		deleted := false
+		for i := 0; i < 20; i++ {
+			err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(zoneA), &multigresv1alpha1.Cell{})
+			if apierrors.IsNotFound(err) {
+				deleted = true
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		if !deleted {
+			t.Error("Zombie Cell 'zone-a' was not deleted after rename")
+		}
+	})
+
+	t.Run("Mutability (Image Update)", func(t *testing.T) {
+		t.Parallel()
+		k8sClient, watcher := setupIntegration(t)
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "mutability-test", Namespace: testNamespace},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Images: multigresv1alpha1.ClusterImages{MultiAdmin: "admin:v1"},
+			},
+		}
+		if err := k8sClient.Create(t.Context(), cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		// Wait for v1
+		deploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "mutability-test-multiadmin",
+				Namespace:       testNamespace,
+				Labels:          clusterLabels(t, "mutability-test", "multiadmin", ""),
+				OwnerReferences: clusterOwnerRefs(t, "mutability-test"),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(resolver.DefaultAdminReplicas),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name:      "multiadmin",
+							Image:     "admin:v1",
+							Resources: resolver.DefaultResourcesAdmin(),
+						}},
+					},
+				},
+			},
+		}
+		if err := watcher.WaitForMatch(deploy); err != nil {
+			t.Fatalf("Failed to wait for initial deployment v1: %v", err)
+		}
+
+		// Update Image
+		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), cluster); err != nil {
+			t.Fatal(err)
+		}
+		cluster.Spec.Images.MultiAdmin = "admin:v2"
+		if err := k8sClient.Update(t.Context(), cluster); err != nil {
+			t.Fatalf("Failed to update cluster: %v", err)
+		}
+
+		// Verify v2
+		deployV2 := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "mutability-test-multiadmin",
+				Namespace:       testNamespace,
+				Labels:          clusterLabels(t, "mutability-test", "multiadmin", ""),
+				OwnerReferences: clusterOwnerRefs(t, "mutability-test"),
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(resolver.DefaultAdminReplicas),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name:      "multiadmin",
+							Image:     "admin:v2",
+							Resources: resolver.DefaultResourcesAdmin(),
+						}},
+					},
+				},
+			},
+		}
+		if err := watcher.WaitForMatch(deployV2); err != nil {
+			t.Errorf("Deployment failed to update to v2: %v", err)
+		}
+	})
+}

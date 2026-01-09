@@ -1,0 +1,444 @@
+//go:build integration
+// +build integration
+
+package multigrescluster_test
+
+import (
+	"strings"
+	"testing"
+
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/testutil"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// TestMultigresCluster_ResolutionLogic validates the "4-Level Override Chain"
+// and complex list merging behaviors specified in the architecture design.
+func TestMultigresCluster_ResolutionLogic(t *testing.T) {
+	t.Parallel()
+
+	t.Run("4-Level Override Precedence", func(t *testing.T) {
+		t.Parallel()
+		k8sClient, watcher := setupIntegration(t)
+
+		// 1. Setup Templates
+		// "Small" Template (Cluster Default) -> Replicas: 1
+		smallTpl := &multigresv1alpha1.CellTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "small", Namespace: testNamespace},
+			Spec: multigresv1alpha1.CellTemplateSpec{
+				MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+			},
+		}
+		// "Large" Template -> Replicas: 5
+		largeTpl := &multigresv1alpha1.CellTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "large", Namespace: testNamespace},
+			Spec: multigresv1alpha1.CellTemplateSpec{
+				MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
+			},
+		}
+
+		if err := k8sClient.Create(t.Context(), smallTpl); err != nil {
+			t.Fatal(err)
+		}
+		if err := k8sClient.Create(t.Context(), largeTpl); err != nil {
+			t.Fatal(err)
+		}
+
+		// 2. Create Cluster with various levels of overrides
+		clusterName := "precedence-test"
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: testNamespace},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				// Level 2: Cluster Default is "small" (1 replica)
+				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+					CellTemplate: "small",
+				},
+				Cells: []multigresv1alpha1.CellConfig{
+					// Case A: Fallback to Cluster Default (Expect 1)
+					{Name: "zone-a", Zone: "us-east-1a"},
+
+					// Case B: Explicit Template Ref (Expect 5)
+					{
+						Name:         "zone-b",
+						Zone:         "us-east-1b",
+						CellTemplate: "large",
+					},
+
+					// Case C: Explicit Template Ref + Inline Override (Expect 3)
+					{
+						Name:         "zone-c",
+						Zone:         "us-east-1c",
+						CellTemplate: "large",
+						Overrides: &multigresv1alpha1.CellOverrides{
+							MultiGateway: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
+						},
+					},
+
+					// Case D: Inline Spec (Highest Priority) (Expect 9)
+					{
+						Name: "zone-d",
+						Zone: "us-east-1d",
+						Spec: &multigresv1alpha1.CellInlineSpec{
+							MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(9))},
+						},
+					},
+				},
+			},
+		}
+
+		if err := k8sClient.Create(t.Context(), cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		// 3. Verify Results
+		// Use CompareSpecOnly to avoid needing to construct OwnerRefs/UIDs manually
+		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
+
+		// Helper to build expectation
+		makeExpected := func(zone string, replicas int32, allCells []string) *multigresv1alpha1.Cell {
+			cellNames := make([]multigresv1alpha1.CellName, len(allCells))
+			for i, c := range allCells {
+				cellNames[i] = multigresv1alpha1.CellName(c)
+			}
+			return &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName + "-" + zone,
+					Namespace: testNamespace,
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: zone,
+					Zone: "us-east-1" + zone[len(zone)-1:], // construct zone from name (e.g. zone-a -> us-east-1a)
+					Images: multigresv1alpha1.CellImages{
+						MultiGateway:    resolver.DefaultMultiGatewayImage,
+						ImagePullPolicy: resolver.DefaultImagePullPolicy,
+					},
+					MultiGateway: multigresv1alpha1.StatelessSpec{
+						Replicas:  ptr.To(replicas),
+						Resources: corev1.ResourceRequirements{},
+					},
+					AllCells: cellNames,
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
+					TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+						RegisterCell: true,
+						PrunePoolers: true,
+					},
+				},
+			}
+		}
+
+		allCells := []string{"zone-a", "zone-b", "zone-c", "zone-d"}
+		cases := []struct {
+			zone         string
+			wantReplicas int32
+		}{
+			{"zone-a", 1},
+			{"zone-b", 5},
+			{"zone-c", 3},
+			{"zone-d", 9},
+		}
+
+		for _, tc := range cases {
+			if err := watcher.WaitForMatch(makeExpected(tc.zone, tc.wantReplicas, allCells)); err != nil {
+				t.Errorf("Precedence failed for %s: %v", tc.zone, err)
+			}
+		}
+	})
+
+	t.Run("Implicit Namespace Defaulting", func(t *testing.T) {
+		t.Parallel()
+		k8sClient, watcher := setupIntegration(t)
+		clusterName := "implicit-default-test"
+
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: testNamespace},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				TemplateDefaults: multigresv1alpha1.TemplateDefaults{}, // Empty, relying on implicit "default"
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "zone-a", Zone: "us-east-1a"},
+				},
+			},
+		}
+
+		if err := k8sClient.Create(t.Context(), cluster); err != nil {
+			t.Fatal(err)
+		}
+
+		// We expect the "default" template (created in setupIntegration) to be used.
+		// That template has Replicas: 1.
+		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
+		wantCell := &multigresv1alpha1.Cell{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: testNamespace},
+			Spec: multigresv1alpha1.CellSpec{
+				Name: "zone-a",
+				Zone: "us-east-1a",
+				Images: multigresv1alpha1.CellImages{
+					MultiGateway:    resolver.DefaultMultiGatewayImage,
+					ImagePullPolicy: resolver.DefaultImagePullPolicy,
+				},
+				MultiGateway: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(1)),
+					Resources: corev1.ResourceRequirements{},
+				},
+				AllCells: []multigresv1alpha1.CellName{"zone-a"},
+				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+					Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+					RootPath:       "/multigres/global",
+					Implementation: "etcd2",
+				},
+				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+					RegisterCell: true,
+					PrunePoolers: true,
+				},
+			},
+		}
+
+		if err := watcher.WaitForMatch(wantCell); err != nil {
+			t.Error("Failed to implicitly resolve namespace 'default' template")
+		}
+	})
+
+	t.Run("List Replacement Logic (Cells)", func(t *testing.T) {
+		t.Parallel()
+		k8sClient, watcher := setupIntegration(t)
+
+		// Setup ShardTemplate
+		tplName := "multi-cell-shard"
+		tpl := &multigresv1alpha1.ShardTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: tplName, Namespace: testNamespace},
+			Spec: multigresv1alpha1.ShardTemplateSpec{
+				MultiOrch: &multigresv1alpha1.MultiOrchSpec{
+					Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
+				},
+			},
+		}
+		if err := k8sClient.Create(t.Context(), tpl); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create cluster
+		clusterName := "list-replace-test"
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: testNamespace},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "zone-a", Zone: "us-east-1a"},
+					{Name: "zone-c", Zone: "us-east-1c"},
+				},
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{
+						Name: "postgres", Default: true,
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Name: "default", Default: true,
+								Shards: []multigresv1alpha1.ShardConfig{
+									{
+										Name:          "0",
+										ShardTemplate: tplName,
+										Overrides: &multigresv1alpha1.ShardOverrides{
+											MultiOrch: &multigresv1alpha1.MultiOrchSpec{
+												// Should REPLACE, not append
+												Cells: []multigresv1alpha1.CellName{"zone-c"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if err := k8sClient.Create(t.Context(), cluster); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify by checking the TableGroup (since Shard controller isn't running)
+		// We expect the resolved Spec in TableGroup to have the correct list.
+		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
+
+		wantTG := &multigresv1alpha1.TableGroup{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-postgres-default", Namespace: testNamespace},
+			Spec: multigresv1alpha1.TableGroupSpec{
+				DatabaseName:   "postgres",
+				TableGroupName: "default",
+				IsDefault:      true,
+				Images: multigresv1alpha1.ShardImages{
+					MultiOrch:       resolver.DefaultMultiOrchImage,
+					MultiPooler:     resolver.DefaultMultiPoolerImage,
+					Postgres:        resolver.DefaultPostgresImage,
+					ImagePullPolicy: resolver.DefaultImagePullPolicy,
+				},
+				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+					Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+					RootPath:       "/multigres/global",
+					Implementation: "etcd2",
+				},
+				Shards: []multigresv1alpha1.ShardResolvedSpec{
+					{
+						Name: "0",
+						MultiOrch: multigresv1alpha1.MultiOrchSpec{
+							// VERIFICATION: Only zone-c should be present
+							Cells: []multigresv1alpha1.CellName{"zone-c"},
+							StatelessSpec: multigresv1alpha1.StatelessSpec{
+								Replicas:  ptr.To(int32(1)), // From implicit defaults
+								Resources: corev1.ResourceRequirements{},
+							},
+						},
+						Pools: map[string]multigresv1alpha1.PoolSpec{},
+					},
+				},
+			},
+		}
+
+		if err := watcher.WaitForMatch(wantTG); err != nil {
+			t.Error("List replacement failed: TableGroup spec does not match expected state")
+		}
+	})
+}
+
+// TestMultigresCluster_EnforcementLogic verifies that the controller actively
+// enforces the desired state, including reverting manual changes (immutability).
+func TestMultigresCluster_EnforcementLogic(t *testing.T) {
+	t.Parallel()
+	k8sClient, watcher := setupIntegration(t)
+	clusterName := "enforcement-test"
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: testNamespace},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			Cells: []multigresv1alpha1.CellConfig{
+				{
+					Name: "zone-a", Zone: "us-east-1a",
+					Spec: &multigresv1alpha1.CellInlineSpec{
+						MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(2))},
+					},
+				},
+			},
+		},
+	}
+
+	if err := k8sClient.Create(t.Context(), cluster); err != nil {
+		t.Fatal(err)
+	}
+
+	watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
+
+	// 1. Expected Cell state
+	wantCell := &multigresv1alpha1.Cell{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: testNamespace},
+		Spec: multigresv1alpha1.CellSpec{
+			Name: "zone-a",
+			Zone: "us-east-1a",
+			Images: multigresv1alpha1.CellImages{
+				MultiGateway:    resolver.DefaultMultiGatewayImage,
+				ImagePullPolicy: resolver.DefaultImagePullPolicy,
+			},
+			MultiGateway: multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(2)),
+				Resources: corev1.ResourceRequirements{},
+			},
+			AllCells: []multigresv1alpha1.CellName{"zone-a"},
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+				RootPath:       "/multigres/global",
+				Implementation: "etcd2",
+			},
+			TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+				RegisterCell: true,
+				PrunePoolers: true,
+			},
+		},
+	}
+
+	if err := watcher.WaitForMatch(wantCell); err != nil {
+		t.Fatal("Initial cell creation failed")
+	}
+
+	// 2. Tamper (Scale up manually)
+	cellKey := client.ObjectKey{Name: wantCell.Name, Namespace: wantCell.Namespace}
+	cell := &multigresv1alpha1.Cell{}
+	if err := k8sClient.Get(t.Context(), cellKey, cell); err != nil {
+		t.Fatal(err)
+	}
+	cell.Spec.MultiGateway.Replicas = ptr.To(int32(999))
+	if err := k8sClient.Update(t.Context(), cell); err != nil {
+		t.Fatal("Failed to tamper with cell")
+	}
+
+	// 3. Verify Reversion
+	// We wait for the object to match 'wantCell' again.
+	// Since client.Update succeeded, the object *was* changed. The fact that it matches
+	// wantCell (2 replicas) afterwards proves the controller reverted it.
+	if err := watcher.WaitForMatch(wantCell); err != nil {
+		t.Errorf("Controller failed to revert manual change: %v", err)
+	}
+}
+
+// TestMultigresCluster_V1Alpha1Constraints verifies strict v1alpha1 validations
+func TestMultigresCluster_V1Alpha1Constraints(t *testing.T) {
+	t.Parallel()
+	k8sClient, _ := setupIntegration(t)
+
+	cases := []struct {
+		name        string
+		clusterSpec multigresv1alpha1.MultigresClusterSpec
+		errContains string
+	}{
+		{
+			name: "Wrong Database Name",
+			clusterSpec: multigresv1alpha1.MultigresClusterSpec{
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{Name: "my-db", Default: true}, // Should be "postgres"
+				},
+			},
+			errContains: "postgres",
+		},
+		{
+			name: "Wrong TableGroup Name",
+			clusterSpec: multigresv1alpha1.MultigresClusterSpec{
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{
+						Name: "postgres", Default: true,
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{Name: "analytics", Default: true}, // Should be "default"
+						},
+					},
+				},
+			},
+			errContains: "default",
+		},
+		{
+			name: "Default False for System DB",
+			clusterSpec: multigresv1alpha1.MultigresClusterSpec{
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{Name: "postgres", Default: false}, // Should be true
+				},
+			},
+			errContains: "default",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cluster := &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(strings.ReplaceAll(tc.name, " ", "-")), Namespace: testNamespace},
+				Spec:       tc.clusterSpec,
+			}
+			err := k8sClient.Create(t.Context(), cluster)
+			if err == nil {
+				t.Error("Expected validation error, got nil")
+			} else if !strings.Contains(strings.ToLower(err.Error()), tc.errContains) {
+				t.Errorf("Expected error to contain %q, got: %v", tc.errContains, err)
+			}
+		})
+	}
+}

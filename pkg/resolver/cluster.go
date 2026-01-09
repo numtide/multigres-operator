@@ -55,6 +55,12 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 		})
 	}
 
+	// Capture all defined cell names for default placement
+	var defaultCells []multigresv1alpha1.CellName
+	for _, c := range cluster.Spec.Cells {
+		defaultCells = append(defaultCells, multigresv1alpha1.CellName(c.Name))
+	}
+
 	// Iterate databases to ensure TableGroups and Shards exist
 	for i := range cluster.Spec.Databases {
 		// If any database has no tablegroups, inject the mandatory default tablegroup "default".
@@ -72,13 +78,22 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 		// This ensures minimal configs result in actual running pods.
 		for j := range cluster.Spec.Databases[i].TableGroups {
 			if len(cluster.Spec.Databases[i].TableGroups[j].Shards) == 0 {
+				// Create the default shard config
+				shardCfg := multigresv1alpha1.ShardConfig{
+					Name: "0",
+				}
+
+				if len(defaultCells) > 0 {
+					shardCfg.Spec = &multigresv1alpha1.ShardInlineSpec{
+						MultiOrch: multigresv1alpha1.MultiOrchSpec{
+							Cells: defaultCells,
+						},
+					}
+				}
+
 				cluster.Spec.Databases[i].TableGroups[j].Shards = append(
 					cluster.Spec.Databases[i].TableGroups[j].Shards,
-					multigresv1alpha1.ShardConfig{
-						Name: "0",
-						// ShardTemplate defaults to "" here, which will be resolved
-						// to "default" (FallbackShardTemplate) by ResolveShard logic later.
-					},
+					shardCfg,
 				)
 			}
 		}
@@ -93,7 +108,14 @@ func (r *Resolver) ResolveGlobalTopo(
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (*multigresv1alpha1.GlobalTopoServerSpec, error) {
 	// 1. Fetch Template (Logic handles defaults)
-	templateName := cluster.Spec.GlobalTopoServer.TemplateRef
+	var templateName string
+	var spec *multigresv1alpha1.GlobalTopoServerSpec
+
+	if cluster.Spec.GlobalTopoServer != nil {
+		templateName = cluster.Spec.GlobalTopoServer.TemplateRef
+		spec = cluster.Spec.GlobalTopoServer
+	}
+
 	coreTemplate, err := r.ResolveCoreTemplate(ctx, templateName)
 	if err != nil {
 		return nil, err
@@ -101,9 +123,8 @@ func (r *Resolver) ResolveGlobalTopo(
 
 	// 2. Merge Config
 	var finalSpec *multigresv1alpha1.GlobalTopoServerSpec
-	spec := cluster.Spec.GlobalTopoServer
 
-	if spec.Etcd != nil || spec.External != nil {
+	if spec != nil && (spec.Etcd != nil || spec.External != nil) {
 		// Inline definition takes precedence
 		finalSpec = spec.DeepCopy()
 	} else if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
@@ -133,7 +154,14 @@ func (r *Resolver) ResolveMultiAdmin(
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (*multigresv1alpha1.StatelessSpec, error) {
 	// 1. Fetch Template (Logic handles defaults)
-	templateName := cluster.Spec.MultiAdmin.TemplateRef
+	var templateName string
+	var spec *multigresv1alpha1.MultiAdminConfig
+
+	if cluster.Spec.MultiAdmin != nil {
+		templateName = cluster.Spec.MultiAdmin.TemplateRef
+		spec = cluster.Spec.MultiAdmin
+	}
+
 	coreTemplate, err := r.ResolveCoreTemplate(ctx, templateName)
 	if err != nil {
 		return nil, err
@@ -141,9 +169,8 @@ func (r *Resolver) ResolveMultiAdmin(
 
 	// 2. Merge Config
 	var finalSpec *multigresv1alpha1.StatelessSpec
-	spec := cluster.Spec.MultiAdmin
 
-	if spec.Spec != nil {
+	if spec != nil && spec.Spec != nil {
 		finalSpec = spec.Spec.DeepCopy()
 	} else if coreTemplate != nil && coreTemplate.Spec.MultiAdmin != nil {
 		finalSpec = coreTemplate.Spec.MultiAdmin.DeepCopy()
