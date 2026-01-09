@@ -128,17 +128,56 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{},
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
 									},
-									multigresv1alpha1.PoolSpec{
-										Type: "replica",
-										Storage: multigresv1alpha1.StorageSpec{
-											Size: "10Gi",
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
 								buildBackupVolume("test-shard-pool-primary-zone1"),
@@ -274,23 +313,59 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{},
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
 									},
-									multigresv1alpha1.PoolSpec{
-										Type:            "readOnly",
-										Cells:           []multigresv1alpha1.CellName{"zone-west"},
-										ReplicasPerCell: ptr.To(int32(3)),
-										Storage: multigresv1alpha1.StorageSpec{
-											Class: "fast-ssd",
-											Size:  "20Gi",
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume("test-shard-pool-primary-zone1"),
+								buildBackupVolume("shard-001-pool-replica-zone-west"),
 								buildSocketDirVolume(),
 								buildPgHbaVolume(),
 							},
@@ -416,19 +491,59 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{},
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
 									},
-									multigresv1alpha1.PoolSpec{
-										Storage: multigresv1alpha1.StorageSpec{
-											Size: "5Gi",
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume("test-shard-pool-primary-zone1"),
+								buildBackupVolume("shard-002-pool-readOnly-zone1"),
 								buildSocketDirVolume(),
 								buildPgHbaVolume(),
 							},
@@ -589,37 +704,59 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{},
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
 									},
-									multigresv1alpha1.PoolSpec{
-										Type: "replica",
-										Affinity: &corev1.Affinity{
-											NodeAffinity: &corev1.NodeAffinity{
-												RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-													NodeSelectorTerms: []corev1.NodeSelectorTerm{
-														{
-															MatchExpressions: []corev1.NodeSelectorRequirement{
-																{
-																	Key:      "disk-type",
-																	Operator: corev1.NodeSelectorOpIn,
-																	Values:   []string{"ssd"},
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-										Storage: multigresv1alpha1.StorageSpec{
-											Size: "10Gi",
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume("test-shard-pool-primary-zone1"),
+								buildBackupVolume("shard-affinity-pool-primary-zone1"),
 								buildSocketDirVolume(),
 								buildPgHbaVolume(),
 							},
