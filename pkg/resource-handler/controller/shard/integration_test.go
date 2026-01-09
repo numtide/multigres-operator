@@ -79,11 +79,11 @@ func TestShardReconciliation(t *testing.T) {
 						Implementation: "etcd2",
 					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"us-west-1a", "us-west-1b"},
+						Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
 					},
 					Pools: map[string]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells:           []multigresv1alpha1.CellName{"us-west-1a"},
+							Cells:           []multigresv1alpha1.CellName{"zone-a"},
 							Type:            "readWrite",
 							ReplicasPerCell: ptr.To(int32(2)),
 							Storage: multigresv1alpha1.StorageSpec{
@@ -94,22 +94,22 @@ func TestShardReconciliation(t *testing.T) {
 				},
 			},
 			wantResources: []client.Object{
-				// MultiOrch Deployment for us-west-1a
+				// MultiOrch Deployment for zone-a
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-multiorch-us-west-1a",
+						Name:            "test-shard-multiorch-zone-a",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
+							MatchLabels: shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
+								Labels: shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -122,7 +122,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--grpc-port", "15370",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
-											"--cell", "us-west-1a",
+											"--cell", "zone-a",
 											"--watch-targets", "postgres",
 										},
 										Ports: []corev1.ContainerPort{
@@ -135,12 +135,12 @@ func TestShardReconciliation(t *testing.T) {
 						},
 					},
 				},
-				// MultiOrch Service for us-west-1a
+				// MultiOrch Service for zone-a
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-multiorch-us-west-1a",
+						Name:            "test-shard-multiorch-zone-a",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -149,25 +149,25 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						Selector: shardLabels(t, "test-shard-multiorch-us-west-1a", "multiorch", "us-west-1a"),
+						Selector: shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
 					},
 				},
-				// MultiOrch Deployment for us-west-1b
+				// MultiOrch Deployment for zone-b
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-multiorch-us-west-1b",
+						Name:            "test-shard-multiorch-zone-b",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+						Labels:          shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+							MatchLabels: shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+								Labels: shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -180,7 +180,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--grpc-port", "15370",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
-											"--cell", "us-west-1b",
+											"--cell", "zone-b",
 											"--watch-targets", "postgres",
 										},
 										Ports: []corev1.ContainerPort{
@@ -193,12 +193,12 @@ func TestShardReconciliation(t *testing.T) {
 						},
 					},
 				},
-				// MultiOrch Service for us-west-1b
+				// MultiOrch Service for zone-b
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-multiorch-us-west-1b",
+						Name:            "test-shard-multiorch-zone-b",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+						Labels:          shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -207,21 +207,21 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						Selector: shardLabels(t, "test-shard-multiorch-us-west-1b", "multiorch", "us-west-1b"),
+						Selector: shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-pool-primary-us-west-1a",
+						Name:            "test-shard-pool-primary-zone-a",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "test-shard-pool-primary-us-west-1a-headless",
+						ServiceName: "test-shard-pool-primary-zone-a-headless",
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
+							MatchLabels: shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
 						},
 						PodManagementPolicy: appsv1.ParallelPodManagement,
 						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -229,7 +229,7 @@ func TestShardReconciliation(t *testing.T) {
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
+								Labels: shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
 							},
 							Spec: corev1.PodSpec{
 								InitContainers: []corev1.Container{
@@ -257,7 +257,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--service-map", "grpc-pooler",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
-											"--cell", "us-west-1a",
+											"--cell", "zone-a",
 											"--database", "testdb",
 											"--table-group", "default",
 											"--shard", "0",
@@ -351,9 +351,9 @@ func TestShardReconciliation(t *testing.T) {
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-pool-primary-us-west-1a-headless",
+						Name:            "test-shard-pool-primary-zone-a-headless",
 						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
+						Labels:          shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
 						OwnerReferences: shardOwnerRefs(t, "test-shard"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -364,7 +364,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15270),
 							tcpServicePort(t, "postgres", 5432),
 						},
-						Selector:                 shardLabels(t, "test-shard-pool-primary-us-west-1a", "shard-pool", "us-west-1a"),
+						Selector:                 shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
 						PublishNotReadyAddresses: true,
 					},
 				},
