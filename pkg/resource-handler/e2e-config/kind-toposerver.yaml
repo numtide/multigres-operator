@@ -21,6 +21,8 @@ spec:
     # Storage configuration for etcd data - kind uses local storage provisioner
     storage:
       size: 1Gi
+      accessModes:
+        - ReadWriteOnce
 
     # Resource requirements for etcd containers - lower for kind
     resources:

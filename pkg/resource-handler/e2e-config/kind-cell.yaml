@@ -44,6 +44,8 @@ spec:
       replicas: 1
       storage:
         size: 1Gi
+        accessModes:
+          - ReadWriteOnce
       resources:
         requests:
           cpu: 50m

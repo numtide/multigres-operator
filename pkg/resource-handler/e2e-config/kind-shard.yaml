@@ -63,6 +63,8 @@ spec:
       # Storage configuration - kind uses local storage provisioner
       storage:
         size: 1Gi
+        accessModes:
+          - ReadWriteOnce
 
       # PostgreSQL container configuration - lower resources for kind
       postgres:
