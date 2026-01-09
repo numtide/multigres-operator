@@ -26,7 +26,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			want: corev1.Container{
 				Name:    "postgres",
 				Image:   DefaultPostgresImage,
-				Command: []string{"/usr/local/bin/pgctld"},
+				Command: []string{"/usr/local/bin/multigres/pgctld"},
 				Args: []string{
 					"server",
 					"--pooler-dir=" + PoolerDirMountPath,
@@ -58,17 +58,8 @@ func TestBuildPostgresContainer(t *testing.T) {
 						MountPath: DataMountPath,
 					},
 					{
-						Name:      BackupVolumeName,
-						MountPath: BackupMountPath,
-					},
-					{
-						Name:      SocketDirVolumeName,
-						MountPath: SocketDirMountPath,
-					},
-					{
-						Name:      PgHbaVolumeName,
-						MountPath: PgHbaMountPath,
-						ReadOnly:  true,
+						Name:      "pgctld-bin",
+						MountPath: "/usr/local/bin/multigres",
 					},
 				},
 			},
@@ -85,7 +76,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			want: corev1.Container{
 				Name:    "postgres",
 				Image:   "postgres:16",
-				Command: []string{"/usr/local/bin/pgctld"},
+				Command: []string{"/usr/local/bin/multigres/pgctld"},
 				Args: []string{
 					"server",
 					"--pooler-dir=" + PoolerDirMountPath,
@@ -117,17 +108,8 @@ func TestBuildPostgresContainer(t *testing.T) {
 						MountPath: DataMountPath,
 					},
 					{
-						Name:      BackupVolumeName,
-						MountPath: BackupMountPath,
-					},
-					{
-						Name:      SocketDirVolumeName,
-						MountPath: SocketDirMountPath,
-					},
-					{
-						Name:      PgHbaVolumeName,
-						MountPath: PgHbaMountPath,
-						ReadOnly:  true,
+						Name:      "pgctld-bin",
+						MountPath: "/usr/local/bin/multigres",
 					},
 				},
 			},
@@ -153,7 +135,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			want: corev1.Container{
 				Name:    "postgres",
 				Image:   DefaultPostgresImage,
-				Command: []string{"/usr/local/bin/pgctld"},
+				Command: []string{"/usr/local/bin/multigres/pgctld"},
 				Args: []string{
 					"server",
 					"--pooler-dir=" + PoolerDirMountPath,
@@ -194,17 +176,8 @@ func TestBuildPostgresContainer(t *testing.T) {
 						MountPath: DataMountPath,
 					},
 					{
-						Name:      BackupVolumeName,
-						MountPath: BackupMountPath,
-					},
-					{
-						Name:      SocketDirVolumeName,
-						MountPath: SocketDirMountPath,
-					},
-					{
-						Name:      PgHbaVolumeName,
-						MountPath: PgHbaMountPath,
-						ReadOnly:  true,
+						Name:      "pgctld-bin",
+						MountPath: "/usr/local/bin/multigres",
 					},
 				},
 			},
