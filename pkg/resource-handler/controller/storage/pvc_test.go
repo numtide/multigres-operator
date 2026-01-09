@@ -17,6 +17,7 @@ func TestBuildPVCTemplate(t *testing.T) {
 		name             string
 		storageClassName *string
 		storageSize      string
+		accessModes      []corev1.PersistentVolumeAccessMode
 		want             corev1.PersistentVolumeClaim
 	}{
 		"basic case with storage class and size": {
@@ -122,11 +123,35 @@ func TestBuildPVCTemplate(t *testing.T) {
 				},
 			},
 		},
+		"custom access modes": {
+			name:             "backup-data",
+			storageClassName: &storageClassStandard,
+			storageSize:      "50Gi",
+			accessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteMany,
+			},
+			want: corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "backup-data",
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					AccessModes: []corev1.PersistentVolumeAccessMode{
+						corev1.ReadWriteMany,
+					},
+					StorageClassName: &storageClassStandard,
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("50Gi"),
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := BuildPVCTemplate(tc.name, tc.storageClassName, tc.storageSize)
+			got := BuildPVCTemplate(tc.name, tc.storageClassName, tc.storageSize, tc.accessModes)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("BuildPVCTemplate() mismatch (-want +got):\n%s", diff)
 			}
