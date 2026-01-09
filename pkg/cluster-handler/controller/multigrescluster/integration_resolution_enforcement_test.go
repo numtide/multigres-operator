@@ -10,7 +10,6 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -118,7 +117,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas:  ptr.To(replicas),
-						Resources: corev1.ResourceRequirements{},
+						Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
 					},
 					AllCells: cellNames,
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -185,7 +184,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				},
 				MultiGateway: multigresv1alpha1.StatelessSpec{
 					Replicas:  ptr.To(int32(1)),
-					Resources: corev1.ResourceRequirements{},
+					Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
 				},
 				AllCells: []multigresv1alpha1.CellName{"zone-a"},
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -289,8 +288,8 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 							// VERIFICATION: Only zone-c should be present
 							Cells: []multigresv1alpha1.CellName{"zone-c"},
 							StatelessSpec: multigresv1alpha1.StatelessSpec{
-								Replicas:  ptr.To(int32(1)), // From implicit defaults
-								Resources: corev1.ResourceRequirements{},
+								Replicas:  ptr.To(int32(1)),                // From implicit defaults
+								Resources: resolver.DefaultResourcesOrch(), // FIX: Expect defaults
 							},
 						},
 						Pools: map[string]multigresv1alpha1.PoolSpec{},
@@ -344,7 +343,7 @@ func TestMultigresCluster_EnforcementLogic(t *testing.T) {
 			},
 			MultiGateway: multigresv1alpha1.StatelessSpec{
 				Replicas:  ptr.To(int32(2)),
-				Resources: corev1.ResourceRequirements{},
+				Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
 			},
 			AllCells: []multigresv1alpha1.CellName{"zone-a"},
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{

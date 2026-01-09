@@ -1,0 +1,14 @@
+apiVersion: multigres.com/v1alpha1
+kind: CellTemplate
+metadata:
+  name: default
+  namespace: default
+spec:
+  multigateway:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        memory: "512Mi"

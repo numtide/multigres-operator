@@ -1,0 +1,26 @@
+apiVersion: multigres.com/v1alpha1
+kind: CoreTemplate
+metadata:
+  name: default
+  namespace: default
+spec:
+  globalTopoServer:
+    etcd:
+      replicas: 1
+      storage:
+        size: "500Mi"
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "128Mi"
+        limits:
+          memory: "256Mi"
+
+  multiadmin:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "150m"
+        memory: "200Mi"
+      limits:
+        memory: "400Mi"

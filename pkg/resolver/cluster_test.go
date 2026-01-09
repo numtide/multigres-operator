@@ -157,6 +157,16 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 														"zone-b",
 													},
 												},
+												// FIX: Expect the default pool to be injected
+												Pools: map[string]multigresv1alpha1.PoolSpec{
+													"default": {
+														Type: "readWrite",
+														Cells: []multigresv1alpha1.CellName{
+															"zone-a",
+															"zone-b",
+														},
+													},
+												},
 											},
 										},
 									},

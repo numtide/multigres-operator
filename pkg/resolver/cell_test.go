@@ -36,8 +36,9 @@ func TestResolver_ResolveCell(t *testing.T) {
 			},
 			objects: []client.Object{cellTpl},
 			wantGw: &multigresv1alpha1.StatelessSpec{
-				Replicas:  ptr.To(int32(1)),
-				Resources: corev1.ResourceRequirements{},
+				Replicas: ptr.To(int32(1)),
+				// Expect default resources to be applied
+				Resources: DefaultResourcesGateway(),
 			},
 			wantTopo: &multigresv1alpha1.LocalTopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{
@@ -63,8 +64,9 @@ func TestResolver_ResolveCell(t *testing.T) {
 				},
 			},
 			wantGw: &multigresv1alpha1.StatelessSpec{
-				Replicas:  ptr.To(int32(3)),
-				Resources: corev1.ResourceRequirements{},
+				Replicas: ptr.To(int32(3)),
+				// Expect default resources to be applied here too
+				Resources: DefaultResourcesGateway(),
 			},
 			wantTopo: nil, // Inline spec didn't provide one
 		},

@@ -73,7 +73,6 @@ func main() {
 	var webhookEnabled bool
 	var webhookCertStrategy string
 	var webhookCertDir string
-	var webhookServiceName string
 	var webhookServiceNamespace string
 	var webhookServiceAccount string
 
@@ -85,6 +84,11 @@ func main() {
 	defaultNS := os.Getenv("POD_NAMESPACE")
 	if defaultNS == "" {
 		defaultNS = "multigres-system"
+	}
+
+	defaultSA := os.Getenv("POD_SERVICE_ACCOUNT")
+	if defaultSA == "" {
+		defaultSA = "controller-manager" // Fallback to standard kubebuilder name
 	}
 
 	// General Flags
@@ -128,12 +132,6 @@ func main() {
 		"Directory to store/read webhook certificates",
 	)
 	flag.StringVar(
-		&webhookServiceName,
-		"webhook-service-name",
-		"multigres-operator-webhook",
-		"Name of the Kubernetes Service for the webhook",
-	)
-	flag.StringVar(
 		&webhookServiceNamespace,
 		"webhook-service-namespace",
 		defaultNS,
@@ -142,7 +140,7 @@ func main() {
 	flag.StringVar(
 		&webhookServiceAccount,
 		"webhook-service-account",
-		"multigres-operator",
+		defaultSA, // Uses the discovered name (e.g. "multigres-operator-controller-manager")
 		"Service Account name of the operator (exempt from child resource validation)",
 	)
 
@@ -296,7 +294,6 @@ func main() {
 		CertStrategy:       webhookCertStrategy,
 		CertDir:            webhookCertDir,
 		Namespace:          webhookServiceNamespace,
-		ServiceName:        webhookServiceName,
 		ServiceAccountName: webhookServiceAccount,
 	}); err != nil {
 		setupLog.Error(err, "unable to set up webhook")

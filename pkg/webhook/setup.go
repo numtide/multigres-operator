@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -19,7 +20,6 @@ type Options struct {
 	CertStrategy       string
 	CertDir            string
 	Namespace          string
-	ServiceName        string
 	ServiceAccountName string
 }
 
@@ -39,10 +39,17 @@ func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 
 	// 1. Certificate Management
 	if opts.CertStrategy == "self-signed" {
-		certMgr := cert.NewManager(mgr.GetClient(), cert.Options{
-			Namespace:   opts.Namespace,
-			ServiceName: opts.ServiceName,
-			CertDir:     opts.CertDir,
+		directClient, err := client.New(mgr.GetConfig(), client.Options{
+			Scheme: mgr.GetScheme(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create direct client for cert bootstrap: %w", err)
+		}
+
+		certMgr := cert.NewManager(directClient, cert.Options{
+			Namespace: opts.Namespace,
+			// ServiceName is auto-discovered by the manager using the direct client
+			CertDir: opts.CertDir,
 		})
 		if err := certMgr.EnsureCerts(context.Background()); err != nil {
 			return fmt.Errorf("failed to bootstrap self-signed certificates: %w", err)

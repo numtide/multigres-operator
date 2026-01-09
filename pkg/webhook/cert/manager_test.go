@@ -21,11 +21,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/numtide/multigres-operator/pkg/testutil"
+)
+
+const (
+	WebhookConfigNameMutating   = "multigres-mutating-webhook"
+	WebhookConfigNameValidating = "multigres-validating-webhook"
 )
 
 func TestManager_EnsureCerts(t *testing.T) {
@@ -53,12 +59,28 @@ func TestManager_EnsureCerts(t *testing.T) {
 	})
 
 	// Base fixtures
+	// We MUST include a Service so that findMyService (auto-discovery) works.
 	baseWebhooks := []client.Object{
+		&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: namespace},
+			Spec: corev1.ServiceSpec{
+				Selector: map[string]string{
+					OperatorPodLabelKey: OperatorPodLabelValue, // "control-plane": "controller-manager"
+				},
+				Ports: []corev1.ServicePort{
+					{Port: 443, TargetPort: intstr.FromInt(9443)},
+				},
+			},
+		},
 		&admissionregistrationv1.MutatingWebhookConfiguration{
 			ObjectMeta: metav1.ObjectMeta{Name: WebhookConfigNameMutating},
 			Webhooks: []admissionregistrationv1.MutatingWebhook{
 				{
 					ClientConfig: admissionregistrationv1.WebhookClientConfig{
+						Service: &admissionregistrationv1.ServiceReference{
+							Name:      serviceName,
+							Namespace: namespace,
+						},
 						CABundle: []byte("old-bundle"),
 					},
 				},
@@ -69,6 +91,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 			Webhooks: []admissionregistrationv1.ValidatingWebhook{
 				{
 					ClientConfig: admissionregistrationv1.WebhookClientConfig{
+						Service: &admissionregistrationv1.ServiceReference{
+							Name:      serviceName,
+							Namespace: namespace,
+						},
 						CABundle: []byte("old-bundle"),
 					},
 				},
@@ -111,6 +137,8 @@ func TestManager_EnsureCerts(t *testing.T) {
 		},
 		"Idempotency: Up-to-Date Webhooks (No Patch)": {
 			existingObjects: []client.Object{
+				// Service required for discovery
+				baseWebhooks[0], // Service
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{Name: SecretName, Namespace: namespace},
 					Type:       corev1.SecretTypeTLS,
@@ -126,6 +154,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 					Webhooks: []admissionregistrationv1.MutatingWebhook{
 						{
 							ClientConfig: admissionregistrationv1.WebhookClientConfig{
+								Service: &admissionregistrationv1.ServiceReference{
+									Name:      serviceName,
+									Namespace: namespace,
+								},
 								CABundle: []byte("matching-ca"),
 							},
 						},
@@ -136,6 +168,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 					Webhooks: []admissionregistrationv1.ValidatingWebhook{
 						{
 							ClientConfig: admissionregistrationv1.WebhookClientConfig{
+								Service: &admissionregistrationv1.ServiceReference{
+									Name:      serviceName,
+									Namespace: namespace,
+								},
 								CABundle: []byte("matching-ca"),
 							},
 						},
@@ -144,12 +180,11 @@ func TestManager_EnsureCerts(t *testing.T) {
 			},
 			checkFiles:    true,
 			wantGenerated: false,
-			// Ensure we don't try to update
+			// Ensure we don't try to update. Since we use Patch, checking OnPatch is safer.
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(
-					WebhookConfigNameMutating,
-					errors.New("should not happen"),
-				),
+				OnPatch: func(obj client.Object) error {
+					return errors.New("should not happen")
+				},
 			},
 		},
 		"Rotation: Expired Cert": {
@@ -226,7 +261,8 @@ func TestManager_EnsureCerts(t *testing.T) {
 			errContains:      "failed to ensure cert secret: failed to generate CA",
 		},
 		"Patch: Webhooks Missing (Ignore)": {
-			existingObjects: []client.Object{},
+			// Provide service but no webhooks
+			existingObjects: []client.Object{baseWebhooks[0]},
 			checkFiles:      true,
 			wantGenerated:   true,
 		},
@@ -277,7 +313,8 @@ func TestManager_EnsureCerts(t *testing.T) {
 		"Error: Patch MutatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(
+				// FIX: Use OnPatch instead of OnUpdate
+				OnPatch: testutil.FailOnObjectName(
 					WebhookConfigNameMutating,
 					errors.New("injected webhook update error"),
 				),
@@ -288,7 +325,8 @@ func TestManager_EnsureCerts(t *testing.T) {
 		"Error: Patch ValidatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(
+				// FIX: Use OnPatch instead of OnUpdate
+				OnPatch: testutil.FailOnObjectName(
 					WebhookConfigNameValidating,
 					errors.New("injected webhook update error"),
 				),
@@ -296,24 +334,30 @@ func TestManager_EnsureCerts(t *testing.T) {
 			wantErr:     true,
 			errContains: "failed to patch webhook configurations",
 		},
-		"Error: Get MutatingWebhook Failed": {
+		"Error: List MutatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(
-					WebhookConfigNameMutating,
-					errors.New("injected webhook get error"),
-				),
+				// FIX: Use OnList instead of OnGet, as Manager lists configurations
+				OnList: func(list client.ObjectList) error {
+					if _, ok := list.(*admissionregistrationv1.MutatingWebhookConfigurationList); ok {
+						return errors.New("injected webhook list error")
+					}
+					return nil
+				},
 			},
 			wantErr:     true,
 			errContains: "failed to patch webhook configurations",
 		},
-		"Error: Get ValidatingWebhook Failed": {
+		"Error: List ValidatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(
-					WebhookConfigNameValidating,
-					errors.New("injected webhook get error"),
-				),
+				// FIX: Use OnList instead of OnGet
+				OnList: func(list client.ObjectList) error {
+					if _, ok := list.(*admissionregistrationv1.ValidatingWebhookConfigurationList); ok {
+						return errors.New("injected webhook list error")
+					}
+					return nil
+				},
 			},
 			wantErr:     true,
 			errContains: "failed to patch webhook configurations",
@@ -342,9 +386,8 @@ func TestManager_EnsureCerts(t *testing.T) {
 			}
 
 			mgr := NewManager(cl, Options{
-				ServiceName: serviceName,
-				Namespace:   namespace,
-				CertDir:     certDir,
+				Namespace: namespace,
+				CertDir:   certDir,
 			})
 
 			// INJECT FAILING RNG HERE

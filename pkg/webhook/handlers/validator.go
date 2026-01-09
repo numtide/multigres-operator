@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resolver"
 )
 
 // ============================================================================
@@ -64,6 +65,25 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 		if name == "" {
 			return nil
 		}
+
+		// Identify if this reference is a "Fallback" (e.g., "default").
+		// If it is, we allow it to be missing because the Resolver has hardcoded logic to handle that case.
+		isFallback := false
+		switch kind {
+		case "CoreTemplate":
+			if name == resolver.FallbackCoreTemplate {
+				isFallback = true
+			}
+		case "CellTemplate":
+			if name == resolver.FallbackCellTemplate {
+				isFallback = true
+			}
+		case "ShardTemplate":
+			if name == resolver.FallbackShardTemplate {
+				isFallback = true
+			}
+		}
+
 		key := types.NamespacedName{Name: name, Namespace: cluster.Namespace}
 		var obj client.Object
 		switch kind {
@@ -79,6 +99,9 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 
 		if err := v.Client.Get(ctx, key, obj); err != nil {
 			if errors.IsNotFound(err) {
+				if isFallback {
+					return nil
+				}
 				return fmt.Errorf(
 					"referenced %s '%s' not found in namespace '%s'",
 					kind,

@@ -1,0 +1,17 @@
+namespace: multigres-operator
+
+resources:
+- ../crd
+- ../rbac
+- ../manager
+
+namePrefix: multigres-operator-
+
+patches:
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: "--webhook-enable=false"

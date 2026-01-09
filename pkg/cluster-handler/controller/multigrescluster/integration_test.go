@@ -271,7 +271,8 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
 						},
 						MultiGateway: multigresv1alpha1.StatelessSpec{
-							Replicas: ptr.To(int32(1)),
+							Replicas:  ptr.To(int32(1)),
+							Resources: resolver.DefaultResourcesGateway(), // Expected default
 						},
 						AllCells: []multigresv1alpha1.CellName{"zone-a"},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -317,14 +318,21 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							{
 								Name: "s1",
 								MultiOrch: multigresv1alpha1.MultiOrchSpec{
-									Cells:         []multigresv1alpha1.CellName{"zone-a"},
-									StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+									Cells: []multigresv1alpha1.CellName{"zone-a"},
+									StatelessSpec: multigresv1alpha1.StatelessSpec{
+										Replicas:  ptr.To(int32(1)),
+										Resources: resolver.DefaultResourcesOrch(), // FIX: Expect defaults
+									},
 								},
 								Pools: map[string]multigresv1alpha1.PoolSpec{
 									"primary": {
 										ReplicasPerCell: ptr.To(int32(1)),
 										Type:            "readWrite",
 										Cells:           []multigresv1alpha1.CellName{"zone-a"},
+										// FIX: Expect defaults for pool resources
+										Storage:     multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
+										Postgres:    multigresv1alpha1.ContainerConfig{Resources: resolver.DefaultResourcesPostgres()},
+										Multipooler: multigresv1alpha1.ContainerConfig{Resources: resolver.DefaultResourcesPooler()},
 									},
 								},
 							},
@@ -420,7 +428,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 						MultiGateway: multigresv1alpha1.StatelessSpec{
 							Replicas:  ptr.To(int32(1)), // From default template
-							Resources: corev1.ResourceRequirements{},
+							Resources: resolver.DefaultResourcesGateway(),
 						},
 						AllCells: []multigresv1alpha1.CellName{"zone-a"},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -468,10 +476,24 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									Cells: []multigresv1alpha1.CellName{"zone-a"},
 									StatelessSpec: multigresv1alpha1.StatelessSpec{
 										Replicas:  ptr.To(int32(1)),
-										Resources: corev1.ResourceRequirements{},
+										Resources: resolver.DefaultResourcesOrch(),
 									},
 								},
-								Pools: map[string]multigresv1alpha1.PoolSpec{},
+								// FIX: Expect the injected default pool
+								Pools: map[string]multigresv1alpha1.PoolSpec{
+									"default": {
+										Type:            "readWrite",
+										Cells:           []multigresv1alpha1.CellName{"zone-a"},
+										ReplicasPerCell: ptr.To(int32(1)),
+										Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize}, // "1Gi"
+										Postgres: multigresv1alpha1.ContainerConfig{
+											Resources: resolver.DefaultResourcesPostgres(),
+										},
+										Multipooler: multigresv1alpha1.ContainerConfig{
+											Resources: resolver.DefaultResourcesPooler(),
+										},
+									},
+								},
 							},
 						},
 					},
@@ -479,8 +501,6 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 			},
 		},
 		"minimal cluster (lazy user) - regression": {
-			// This test intentionally omits GlobalTopoServer and MultiAdmin to verify
-			// that the zero-value structs don't cause validation errors (regression test).
 			cluster: &multigresv1alpha1.MultigresCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "lazy-cluster",
@@ -492,17 +512,12 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						CellTemplate:  "default",
 						ShardTemplate: "default",
 					},
-					// GlobalTopoServer is NOT set (Zero Value)
-					// MultiAdmin is NOT set (Zero Value)
 					Cells: []multigresv1alpha1.CellConfig{
 						{Name: "zone-a", Zone: "us-east-1a"},
 					},
 				},
 			},
 			wantResources: []client.Object{
-				// The controller should effectively behave identical to the explicit minimal cluster above
-				// because it should fallback to TemplateDefaults when these fields are empty/nil.
-				//
 				// 1. Global TopoServer (Resolved from default template)
 				&multigresv1alpha1.TopoServer{
 					ObjectMeta: metav1.ObjectMeta{
@@ -566,7 +581,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 						MultiGateway: multigresv1alpha1.StatelessSpec{
 							Replicas:  ptr.To(int32(1)),
-							Resources: corev1.ResourceRequirements{},
+							Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
 						},
 						AllCells: []multigresv1alpha1.CellName{"zone-a"},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -614,10 +629,24 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									Cells: []multigresv1alpha1.CellName{"zone-a"},
 									StatelessSpec: multigresv1alpha1.StatelessSpec{
 										Replicas:  ptr.To(int32(1)),
-										Resources: corev1.ResourceRequirements{},
+										Resources: resolver.DefaultResourcesOrch(), // FIX: Expect defaults
 									},
 								},
-								Pools: map[string]multigresv1alpha1.PoolSpec{},
+								// FIX: Expect the injected default pool
+								Pools: map[string]multigresv1alpha1.PoolSpec{
+									"default": {
+										Type:            "readWrite",
+										Cells:           []multigresv1alpha1.CellName{"zone-a"},
+										ReplicasPerCell: ptr.To(int32(1)),
+										Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize}, // "1Gi"
+										Postgres: multigresv1alpha1.ContainerConfig{
+											Resources: resolver.DefaultResourcesPostgres(),
+										},
+										Multipooler: multigresv1alpha1.ContainerConfig{
+											Resources: resolver.DefaultResourcesPooler(),
+										},
+									},
+								},
 							},
 						},
 					},

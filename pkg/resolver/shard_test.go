@@ -35,7 +35,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			wantOrch: &multigresv1alpha1.MultiOrchSpec{
 				StatelessSpec: multigresv1alpha1.StatelessSpec{
 					Replicas:  ptr.To(int32(1)),
-					Resources: corev1.ResourceRequirements{},
+					Resources: DefaultResourcesOrch(),
 				},
 			},
 			wantPools: map[string]multigresv1alpha1.PoolSpec{},
@@ -56,10 +56,24 @@ func TestResolver_ResolveShard(t *testing.T) {
 			wantOrch: &multigresv1alpha1.MultiOrchSpec{
 				StatelessSpec: multigresv1alpha1.StatelessSpec{
 					Replicas:  ptr.To(int32(5)),
-					Resources: corev1.ResourceRequirements{},
+					Resources: DefaultResourcesOrch(),
 				},
 			},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{"p": {}},
+			// FIX: Updated to expect fully hydrated defaults for pool "p"
+			wantPools: map[string]multigresv1alpha1.PoolSpec{
+				"p": {
+					ReplicasPerCell: ptr.To(int32(1)),
+					Storage: multigresv1alpha1.StorageSpec{
+						Size: DefaultEtcdStorageSize, // "1Gi"
+					},
+					Postgres: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPostgres(),
+					},
+					Multipooler: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPooler(),
+					},
+				},
+			},
 		},
 	}
 

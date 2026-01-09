@@ -149,7 +149,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 				},
 				MultiGateway: multigresv1alpha1.StatelessSpec{
 					Replicas:  ptr.To(int32(1)),
-					Resources: corev1.ResourceRequirements{},
+					Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
 				},
 				AllCells: []multigresv1alpha1.CellName{"zone-a"},
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
@@ -193,7 +193,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 				},
 				MultiGateway: multigresv1alpha1.StatelessSpec{
 					Replicas:  ptr.To(int32(1)),
-					Resources: corev1.ResourceRequirements{},
+					Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
 				},
 				AllCells: []multigresv1alpha1.CellName{"zone-b"},
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{

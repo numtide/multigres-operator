@@ -54,7 +54,6 @@ func (d *MultigresClusterDefaulter) Handle(
 			return admission.Errored(http.StatusBadRequest, err)
 		}
 	} else {
-		// Fallback if decoder not injected (should be caught by setup, but safe for unit tests)
 		if err := json.Unmarshal(req.Object.Raw, cluster); err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
@@ -64,15 +63,15 @@ func (d *MultigresClusterDefaulter) Handle(
 	d.Resolver.PopulateClusterDefaults(cluster)
 
 	// 2. Create a "Request Scoped" Resolver
+	// CRITICAL FIX: We must copy the resolver and point it to the Request's Namespace.
+	// Otherwise, it looks for templates in the Operator's namespace and finds nothing.
 	scopedResolver := *d.Resolver
+	scopedResolver.Namespace = req.Namespace
 	scopedResolver.TemplateDefaults = cluster.Spec.TemplateDefaults
 
 	// 3. Stateful Resolution (Visible Defaults)
-	// NOTE: We only hydrate the 'Spec'/Inline fields if the user has NOT provided an explicit TemplateRef.
-	// Doing otherwise would violate the API's "Mutex" validation rules (cannot have both Spec and TemplateRef).
 
 	// A. Resolve Global Topo Server
-	// Only hydrate if no explicit TemplateRef/External config is set
 	if cluster.Spec.GlobalTopoServer == nil ||
 		(cluster.Spec.GlobalTopoServer.TemplateRef == "" && cluster.Spec.GlobalTopoServer.External == nil) {
 		globalTopo, err := scopedResolver.ResolveGlobalTopo(ctx, cluster)
@@ -86,7 +85,6 @@ func (d *MultigresClusterDefaulter) Handle(
 	}
 
 	// B. Resolve MultiAdmin
-	// Only hydrate if no explicit TemplateRef is set
 	if cluster.Spec.MultiAdmin == nil || cluster.Spec.MultiAdmin.TemplateRef == "" {
 		multiAdmin, err := scopedResolver.ResolveMultiAdmin(ctx, cluster)
 		if err != nil {
@@ -104,7 +102,6 @@ func (d *MultigresClusterDefaulter) Handle(
 	// C. Resolve Cells
 	for i := range cluster.Spec.Cells {
 		cell := &cluster.Spec.Cells[i]
-		// Only hydrate if no specific CellTemplate is set
 		if cell.CellTemplate == "" {
 			gatewaySpec, localTopoSpec, err := scopedResolver.ResolveCell(ctx, cell)
 			if err != nil {
@@ -125,7 +122,6 @@ func (d *MultigresClusterDefaulter) Handle(
 		for j := range cluster.Spec.Databases[i].TableGroups {
 			for k := range cluster.Spec.Databases[i].TableGroups[j].Shards {
 				shard := &cluster.Spec.Databases[i].TableGroups[j].Shards[k]
-				// Only hydrate if no specific ShardTemplate is set
 				if shard.ShardTemplate == "" {
 					multiOrchSpec, poolsSpec, err := scopedResolver.ResolveShard(ctx, shard)
 					if err != nil {
