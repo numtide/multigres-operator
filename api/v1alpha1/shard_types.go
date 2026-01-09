@@ -36,6 +36,7 @@ import (
 // +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // ============================================================================
 // Shard Component Specs (Reusable)
@@ -77,13 +78,10 @@ type PoolSpec struct {
 	// +optional
 	Storage StorageSpec `json:"storage,omitempty"`
 
-	// BackupStorageType defines how backup storage is provided.
-	// Valid values are "hostPath" (for single-node testing) and "pvc" (for production).
-	// Defaults to "hostPath".
+	// BackupStorage defines the storage configuration for backup volumes.
+	// Shared across all pods in a pool. Defaults to same as Storage if not specified.
 	// +optional
-	// +kubebuilder:validation:Enum=hostPath;pvc
-	// +kubebuilder:default="hostPath"
-	BackupStorageType string `json:"backupStorageType,omitempty"`
+	BackupStorage StorageSpec `json:"backupStorage,omitempty"`
 
 	// Postgres container configuration.
 	// +optional
