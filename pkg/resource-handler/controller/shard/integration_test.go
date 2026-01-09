@@ -275,6 +275,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 										},
 									},
 								},
@@ -308,6 +309,7 @@ func TestShardReconciliation(t *testing.T) {
 											// ALTERNATIVE: Uncomment for binary-copy approach
 											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 										},
 									},
 								},
@@ -594,6 +596,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 										},
 									},
 								},
@@ -627,6 +630,7 @@ func TestShardReconciliation(t *testing.T) {
 											// ALTERNATIVE: Uncomment for binary-copy approach
 											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 										},
 									},
 								},
@@ -745,6 +749,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 										},
 									},
 								},
@@ -778,6 +783,7 @@ func TestShardReconciliation(t *testing.T) {
 											// ALTERNATIVE: Uncomment for binary-copy approach
 											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 										},
 									},
 								},
