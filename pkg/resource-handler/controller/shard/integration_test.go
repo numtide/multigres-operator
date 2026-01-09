@@ -295,6 +295,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--timeout=30",
 											"--log-level=info",
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -310,6 +311,7 @@ func TestShardReconciliation(t *testing.T) {
 											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
 										},
 									},
 								},
@@ -325,6 +327,17 @@ func TestShardReconciliation(t *testing.T) {
 										Name: "backup-data",
 										VolumeSource: corev1.VolumeSource{
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+									{
+										Name: "pg-hba-template",
+										VolumeSource: corev1.VolumeSource{
+											ConfigMap: &corev1.ConfigMapVolumeSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: "pg-hba-template",
+												},
+												DefaultMode: ptr.To(int32(420)),
+											},
 										},
 									},
 								},
@@ -560,6 +573,17 @@ func TestShardReconciliation(t *testing.T) {
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
 									},
+									{
+										Name: "pg-hba-template",
+										VolumeSource: corev1.VolumeSource{
+											ConfigMap: &corev1.ConfigMapVolumeSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: "pg-hba-template",
+												},
+												DefaultMode: ptr.To(int32(420)),
+											},
+										},
+									},
 								},
 								InitContainers: []corev1.Container{
 									{
@@ -616,6 +640,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--timeout=30",
 											"--log-level=info",
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -631,6 +656,7 @@ func TestShardReconciliation(t *testing.T) {
 											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
 										},
 									},
 								},
@@ -713,6 +739,17 @@ func TestShardReconciliation(t *testing.T) {
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
 									},
+									{
+										Name: "pg-hba-template",
+										VolumeSource: corev1.VolumeSource{
+											ConfigMap: &corev1.ConfigMapVolumeSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: "pg-hba-template",
+												},
+												DefaultMode: ptr.To(int32(420)),
+											},
+										},
+									},
 								},
 								InitContainers: []corev1.Container{
 									{
@@ -769,6 +806,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--timeout=30",
 											"--log-level=info",
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -784,6 +822,7 @@ func TestShardReconciliation(t *testing.T) {
 											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
 										},
 									},
 								},

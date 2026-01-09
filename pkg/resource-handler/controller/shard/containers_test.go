@@ -38,7 +38,6 @@ func TestBuildPostgresContainer(t *testing.T) {
 					"--timeout=30",
 					"--log-level=info",
 					"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
-					"--pg-hba-template=" + PgHbaTemplatePath,
 				},
 				Resources: corev1.ResourceRequirements{},
 				Env: []corev1.EnvVar{
@@ -88,7 +87,6 @@ func TestBuildPostgresContainer(t *testing.T) {
 					"--timeout=30",
 					"--log-level=info",
 					"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
-					"--pg-hba-template=" + PgHbaTemplatePath,
 				},
 				Resources: corev1.ResourceRequirements{},
 				Env: []corev1.EnvVar{
@@ -147,7 +145,6 @@ func TestBuildPostgresContainer(t *testing.T) {
 					"--timeout=30",
 					"--log-level=info",
 					"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
-					"--pg-hba-template=" + PgHbaTemplatePath,
 				},
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -555,4 +552,3 @@ func TestBuildPgctldVolume(t *testing.T) {
 		t.Errorf("buildPgctldVolume() mismatch (-want +got):\n%s", diff)
 	}
 }
-
