@@ -272,6 +272,17 @@ func TestShardReconciliation(t *testing.T) {
 											RunAsGroup:   ptr.To(int64(999)),
 											RunAsNonRoot: ptr.To(true),
 										},
+										Env: []corev1.EnvVar{
+											{
+												Name: "POD_NAME",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.name",
+													},
+												},
+											},
+										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
@@ -325,6 +336,14 @@ func TestShardReconciliation(t *testing.T) {
 									// },
 									{
 										Name: "backup-data",
+										VolumeSource: corev1.VolumeSource{
+											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+												ClaimName: "backup-data-test-shard-pool-primary-zone-a",
+											},
+										},
+									},
+									{
+										Name: "socket-dir",
 										VolumeSource: corev1.VolumeSource{
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
@@ -570,6 +589,14 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name: "backup-data",
 										VolumeSource: corev1.VolumeSource{
+											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+												ClaimName: "backup-data-multi-cell-shard-pool-primary-zone1",
+											},
+										},
+									},
+									{
+										Name: "socket-dir",
+										VolumeSource: corev1.VolumeSource{
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
 									},
@@ -616,6 +643,17 @@ func TestShardReconciliation(t *testing.T) {
 											RunAsUser:    ptr.To(int64(999)),
 											RunAsGroup:   ptr.To(int64(999)),
 											RunAsNonRoot: ptr.To(true),
+										},
+										Env: []corev1.EnvVar{
+											{
+												Name: "POD_NAME",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.name",
+													},
+												},
+											},
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
@@ -736,6 +774,14 @@ func TestShardReconciliation(t *testing.T) {
 									{
 										Name: "backup-data",
 										VolumeSource: corev1.VolumeSource{
+											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+												ClaimName: "backup-data-multi-cell-shard-pool-primary-zone2",
+											},
+										},
+									},
+									{
+										Name: "socket-dir",
+										VolumeSource: corev1.VolumeSource{
 											EmptyDir: &corev1.EmptyDirVolumeSource{},
 										},
 									},
@@ -782,6 +828,17 @@ func TestShardReconciliation(t *testing.T) {
 											RunAsUser:    ptr.To(int64(999)),
 											RunAsGroup:   ptr.To(int64(999)),
 											RunAsNonRoot: ptr.To(true),
+										},
+										Env: []corev1.EnvVar{
+											{
+												Name: "POD_NAME",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.name",
+													},
+												},
+											},
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
