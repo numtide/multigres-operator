@@ -758,6 +758,7 @@ func (in *PoolSpec) DeepCopyInto(out *PoolSpec) {
 		**out = **in
 	}
 	out.Storage = in.Storage
+	out.BackupStorage = in.BackupStorage
 	in.Postgres.DeepCopyInto(&out.Postgres)
 	in.Multipooler.DeepCopyInto(&out.Multipooler)
 	if in.Affinity != nil {
