@@ -120,6 +120,7 @@ func buildVolumeClaimTemplates(
 ) []corev1.PersistentVolumeClaim {
 	var storageClass *string
 	storageSize := DefaultStorageSize
+	var accessModes []corev1.PersistentVolumeAccessMode
 
 	if toposerver.Spec.Etcd != nil {
 		if toposerver.Spec.Etcd.Storage.Class != "" {
@@ -128,9 +129,10 @@ func buildVolumeClaimTemplates(
 		if toposerver.Spec.Etcd.Storage.Size != "" {
 			storageSize = toposerver.Spec.Etcd.Storage.Size
 		}
+		accessModes = toposerver.Spec.Etcd.Storage.AccessModes
 	}
 
 	return []corev1.PersistentVolumeClaim{
-		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize),
+		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize, accessModes),
 	}
 }

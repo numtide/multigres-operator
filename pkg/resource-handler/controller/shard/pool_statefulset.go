@@ -121,7 +121,7 @@ func buildPoolVolumeClaimTemplates(
 	}
 
 	return []corev1.PersistentVolumeClaim{
-		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize),
+		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize, pool.Storage.AccessModes),
 	}
 }
 
@@ -155,12 +155,13 @@ func BuildBackupPVC(
 	}
 
 	// Default to ReadWriteOnce for single-node clusters.
-	// TODO: When StorageSpec.AccessMode is added, use:
-	//   accessMode := corev1.ReadWriteOnce
-	//   if poolSpec.BackupStorage.AccessMode != "" {
-	//       accessMode = poolSpec.BackupStorage.AccessMode
-	//   }
-	accessMode := corev1.ReadWriteOnce
+	accessModes := []corev1.PersistentVolumeAccessMode{
+		corev1.ReadWriteOnce,
+	}
+
+	if len(poolSpec.BackupStorage.AccessModes) > 0 {
+		accessModes = poolSpec.BackupStorage.AccessModes
+	}
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -169,9 +170,7 @@ func BuildBackupPVC(
 			Labels:    labels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				accessMode,
-			},
+			AccessModes: accessModes,
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: resource.MustParse(storageSize),
