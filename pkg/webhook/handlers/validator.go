@@ -3,13 +3,13 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"slices"
 
-	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -24,37 +24,40 @@ import (
 
 // MultigresClusterValidator validates Create and Update events for MultigresClusters.
 type MultigresClusterValidator struct {
-	Client  client.Client
-	decoder admission.Decoder
+	Client client.Client
 }
+
+var _ webhook.CustomValidator = &MultigresClusterValidator{}
 
 // NewMultigresClusterValidator creates a new validator for MultigresClusters.
 func NewMultigresClusterValidator(c client.Client) *MultigresClusterValidator {
 	return &MultigresClusterValidator{Client: c}
 }
 
-// InjectDecoder injects the decoder.
-func (v *MultigresClusterValidator) InjectDecoder(decoder admission.Decoder) error {
-	v.decoder = decoder
-	return nil
+func (v *MultigresClusterValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return v.validate(ctx, obj)
 }
 
-// Handle implements the admission.Handler interface.
-func (v *MultigresClusterValidator) Handle(
-	ctx context.Context,
-	req admission.Request,
-) admission.Response {
-	cluster := &multigresv1alpha1.MultigresCluster{}
-	if err := v.decoder.Decode(req, cluster); err != nil {
-		return admission.Errored(http.StatusBadRequest, err)
+func (v *MultigresClusterValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	return v.validate(ctx, newObj)
+}
+
+func (v *MultigresClusterValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return nil, nil
+}
+
+func (v *MultigresClusterValidator) validate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	cluster, ok := obj.(*multigresv1alpha1.MultigresCluster)
+	if !ok {
+		return nil, fmt.Errorf("expected MultigresCluster, got %T", obj)
 	}
 
 	// 1. Stateful Validation (Level 4): Referential Integrity
 	if err := v.validateTemplatesExist(ctx, cluster); err != nil {
-		return admission.Denied(err.Error())
+		return nil, err
 	}
 
-	return admission.Allowed("")
+	return nil, nil
 }
 
 func (v *MultigresClusterValidator) validateTemplatesExist(
@@ -163,36 +166,44 @@ type TemplateValidator struct {
 	Kind   string
 }
 
+var _ webhook.CustomValidator = &TemplateValidator{}
+
 func NewTemplateValidator(c client.Client, kind string) *TemplateValidator {
 	return &TemplateValidator{Client: c, Kind: kind}
 }
 
-func (v *TemplateValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
-	if req.Operation != admissionv1.Delete {
-		return admission.Allowed("")
-	}
+func (v *TemplateValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return nil, nil
+}
 
-	templateName := req.Name
-	namespace := req.Namespace
+func (v *TemplateValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	return nil, nil
+}
+
+func (v *TemplateValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	// We need the Name and Namespace of the template being deleted
+	metaObj, ok := obj.(client.Object)
+	if !ok {
+		return nil, fmt.Errorf("expected client.Object, got %T", obj)
+	}
+	templateName := metaObj.GetName()
+	namespace := metaObj.GetNamespace()
 
 	clusters := &multigresv1alpha1.MultigresClusterList{}
 	if err := v.Client.List(ctx, clusters, client.InNamespace(namespace)); err != nil {
-		return admission.Errored(
-			http.StatusInternalServerError,
-			fmt.Errorf("failed to list clusters for validation: %w", err),
-		)
+		return nil, fmt.Errorf("failed to list clusters for validation: %w", err)
 	}
 
 	for _, cluster := range clusters.Items {
 		if v.isTemplateInUse(&cluster, templateName) {
-			return admission.Denied(fmt.Sprintf(
+			return nil, fmt.Errorf(
 				"cannot delete %s '%s' because it is in use by MultigresCluster '%s'",
 				v.Kind, templateName, cluster.Name,
-			))
+			)
 		}
 	}
 
-	return admission.Allowed("")
+	return nil, nil
 }
 
 func (v *TemplateValidator) isTemplateInUse(
@@ -244,9 +255,10 @@ func (v *TemplateValidator) isTemplateInUse(
 
 // ChildResourceValidator prevents direct modification of managed child resources.
 type ChildResourceValidator struct {
-	decoder          admission.Decoder
 	exemptPrincipals []string
 }
+
+var _ webhook.CustomValidator = &ChildResourceValidator{}
 
 func NewChildResourceValidator(exemptPrincipals ...string) *ChildResourceValidator {
 	return &ChildResourceValidator{
@@ -254,21 +266,40 @@ func NewChildResourceValidator(exemptPrincipals ...string) *ChildResourceValidat
 	}
 }
 
-func (v *ChildResourceValidator) InjectDecoder(decoder admission.Decoder) error {
-	v.decoder = decoder
-	return nil
+func (v *ChildResourceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return v.validate(ctx, obj)
 }
 
-func (v *ChildResourceValidator) Handle(
+func (v *ChildResourceValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	return v.validate(ctx, newObj)
+}
+
+func (v *ChildResourceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	return v.validate(ctx, obj)
+}
+
+func (v *ChildResourceValidator) validate(
 	ctx context.Context,
-	req admission.Request,
-) admission.Response {
-	if slices.Contains(v.exemptPrincipals, req.UserInfo.Username) {
-		return admission.Allowed("")
+	obj runtime.Object,
+) (admission.Warnings, error) {
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not get admission request: %w", err)
 	}
 
-	return admission.Denied(fmt.Sprintf(
+	if slices.Contains(v.exemptPrincipals, req.UserInfo.Username) {
+		return nil, nil
+	}
+
+	// Determine kind for error message
+	kind := obj.GetObjectKind().GroupVersionKind().Kind
+	if kind == "" {
+		// Fallback if GVK is not set on the object
+		kind = "Resource"
+	}
+
+	return nil, fmt.Errorf(
 		"Direct modification of %s is prohibited. This resource is managed by the MultigresCluster parent object.",
-		req.Kind.Kind,
-	))
+		kind,
+	)
 }
