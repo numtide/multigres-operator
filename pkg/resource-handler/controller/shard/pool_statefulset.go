@@ -5,8 +5,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -67,18 +69,25 @@ func BuildPoolStatefulSet(
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					// Init containers: pgctld copies binary, multipooler is a native sidecar
+					// FSGroup ensures PVC is writable by postgres user (required for initdb)
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
+					},
 					InitContainers: []corev1.Container{
-						buildPgctldInitContainer(shard),
+						// To use stock postgres:17 image instead, uncomment buildPgctldInitContainer,
+						// replace buildPgctldContainer with buildPostgresContainer, and add buildPgctldVolume.
+						// buildPgctldInitContainer(shard),
 						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 					},
-					// Postgres is the main container (runs pgctld binary)
 					Containers: []corev1.Container{
-						buildPostgresContainer(shard, poolSpec),
+						buildPgctldContainer(shard, poolSpec),
+						// buildPostgresContainer(shard, poolSpec),
 					},
-					// Shared volume for pgctld binary
 					Volumes: []corev1.Volume{
-						buildPgctldVolume(),
+						// buildPgctldVolume(),
+						buildBackupVolume(name),
+						buildSocketDirVolume(),
+						buildPgHbaVolume(),
 					},
 					Affinity: poolSpec.Affinity,
 				},
@@ -110,6 +119,76 @@ func buildPoolVolumeClaimTemplates(
 	}
 
 	return []corev1.PersistentVolumeClaim{
-		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize),
+		storage.BuildPVCTemplate(
+			DataVolumeName,
+			storageClass,
+			storageSize,
+			pool.Storage.AccessModes,
+		),
 	}
+}
+
+// BuildBackupPVC creates a standalone PVC for backup storage shared across all pods in a pool.
+// This PVC is created independently of the StatefulSet and referenced by all pods.
+// For single-node clusters (kind, minikube), uses ReadWriteOnce (all pods on same node).
+// For multi-node production, configure BackupStorage.Class to a storage class supporting ReadWriteMany.
+func BuildBackupPVC(
+	shard *multigresv1alpha1.Shard,
+	poolName string,
+	cellName string,
+	poolSpec multigresv1alpha1.PoolSpec,
+	scheme *runtime.Scheme,
+) (*corev1.PersistentVolumeClaim, error) {
+	name := buildPoolNameWithCell(shard.Name, poolName, cellName)
+	pvcName := "backup-data-" + name
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
+
+	// Use BackupStorage if specified, otherwise inherit from Storage
+	var storageClass *string
+	storageSize := "10Gi" // Default backup storage size
+
+	if poolSpec.BackupStorage.Class != "" {
+		storageClass = &poolSpec.BackupStorage.Class
+	} else if poolSpec.Storage.Class != "" {
+		storageClass = &poolSpec.Storage.Class
+	}
+
+	if poolSpec.BackupStorage.Size != "" {
+		storageSize = poolSpec.BackupStorage.Size
+	}
+
+	// Default to ReadWriteOnce for single-node clusters.
+	accessModes := []corev1.PersistentVolumeAccessMode{
+		corev1.ReadWriteOnce,
+	}
+
+	if len(poolSpec.BackupStorage.AccessModes) > 0 {
+		accessModes = poolSpec.BackupStorage.AccessModes
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: shard.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: accessModes,
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(storageSize),
+				},
+			},
+		},
+	}
+
+	if storageClass != nil {
+		pvc.Spec.StorageClassName = storageClass
+	}
+
+	if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	return pvc, nil
 }

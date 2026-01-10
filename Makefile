@@ -404,12 +404,12 @@ kind-up: ## Create a kind cluster for local development
 	}
 	@if $(KIND) get clusters | grep -q "^$(KIND_CLUSTER)$$"; then \
 		echo "Kind cluster '$(KIND_CLUSTER)' already exists."; \
+		echo "==> Exporting kubeconfig to $(KIND_KUBECONFIG)"; \
+		$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $(KIND_KUBECONFIG); \
 	else \
 		echo "Creating kind cluster '$(KIND_CLUSTER)'..."; \
-		$(KIND) create cluster --name $(KIND_CLUSTER); \
+		$(KIND) create cluster --name $(KIND_CLUSTER) --kubeconfig $(KIND_KUBECONFIG); \
 	fi
-	@echo "==> Exporting kubeconfig to $(KIND_KUBECONFIG)"
-	@$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $(KIND_KUBECONFIG)
 	@echo "==> Cluster ready. Use: export KUBECONFIG=$(KIND_KUBECONFIG)"
 
 .PHONY: kind-load
@@ -430,7 +430,7 @@ kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cl
 .PHONY: kind-redeploy
 kind-redeploy: kind-load ## Rebuild image, reload to kind, and restart pods
 	@echo "==> Restarting operator pods..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) rollout restart deployment -n multigres-operator-system
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) rollout restart deployment -n multigres-operator
 
 .PHONY: kind-down
 kind-down: ## Delete the kind cluster

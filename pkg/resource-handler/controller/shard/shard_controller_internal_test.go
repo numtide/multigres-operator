@@ -188,6 +188,22 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				return r.reconcilePoolHeadlessService(ctx, shard, "pool1", "", poolSpec)
 			},
 		},
+		"PoolBackupPVC": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				poolSpec := multigresv1alpha1.PoolSpec{
+					Cells: []multigresv1alpha1.CellName{"cell1"},
+				}
+				return r.reconcilePoolBackupPVC(ctx, shard, "pool1", "cell1", poolSpec)
+			},
+		},
 	}
 
 	for name, tc := range tests {
