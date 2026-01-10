@@ -2,20 +2,14 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
 	"strings"
 	"testing"
 
-	"gomodules.xyz/jsonpatch/v2"
-
-	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
@@ -37,7 +31,6 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 			MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr(int32(3))},
 		},
 	}
-	// FIX: Add default Cell/Shard templates because PopulateClusterDefaults will point to them
 	cellTemplate := &multigresv1alpha1.CellTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test-ns"},
 		Spec:       multigresv1alpha1.CellTemplateSpec{},
@@ -51,10 +44,9 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 		cluster       *multigresv1alpha1.MultigresCluster
 		existingObjs  []client.Object
 		failureConfig *testutil.FailureConfig
-		wantAllowed   bool
-		wantCode      int32
+		wantError     bool
 		wantMessage   string // substring match on error message
-		validatePatch func(t *testing.T, patch []jsonpatch.JsonPatchOperation)
+		validateObj   func(t *testing.T, c *multigresv1alpha1.MultigresCluster)
 	}{
 		"Happy Path: System Catalog Injection & Resolution": {
 			cluster: &multigresv1alpha1.MultigresCluster{
@@ -62,29 +54,24 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
 						CoreTemplate: "default-core",
-						// Cell/Shard templates empty -> PopulateClusterDefaults sets them to "default"
 					},
-					// Empty Databases -> Should trigger System Catalog Injection
 				},
 			},
 			existingObjs: []client.Object{coreTemplate, cellTemplate, shardTemplate},
-			wantAllowed:  true,
-			wantCode:     http.StatusOK,
-			validatePatch: func(t *testing.T, ops []jsonpatch.JsonPatchOperation) {
-				patchMap := mapPatches(ops)
-
+			wantError:    false,
+			validateObj: func(t *testing.T, c *multigresv1alpha1.MultigresCluster) {
 				// 1. Verify System Catalog Injection (databases list)
-				if _, ok := patchMap["/spec/databases"]; !ok {
+				if len(c.Spec.Databases) == 0 {
 					t.Error(
-						"Expected patch to inject /spec/databases (System Catalog), but it was missing",
+						"Expected spec.databases to be populated (System Catalog), but it was empty",
 					)
 				}
 
 				// 2. Verify Template Resolution (MultiAdmin resolved from CoreTemplate)
-				if _, ok := patchMap["/spec/multiadmin"]; !ok {
-					t.Error(
-						"Expected patch to resolve /spec/multiadmin from template, but it was missing",
-					)
+				if c.Spec.MultiAdmin == nil || c.Spec.MultiAdmin.Spec == nil {
+					t.Error("Expected spec.multiadmin to be resolved from template, but it was nil")
+				} else if *c.Spec.MultiAdmin.Spec.Replicas != 3 {
+					t.Errorf("Expected MultiAdmin replicas to be 3, got %v", c.Spec.MultiAdmin.Spec.Replicas)
 				}
 			},
 		},
@@ -98,10 +85,8 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 				},
 			},
 			existingObjs: []client.Object{}, // No templates exist
-			wantAllowed:  false,
-			wantCode:     http.StatusInternalServerError,
-			// FIX: The error happens on GlobalTopo (first call), not MultiAdmin
-			wantMessage: "failed to resolve globalTopoServer",
+			wantError:    true,
+			wantMessage:  "failed to resolve globalTopoServer",
 		},
 		"Error: Resolution Failed (Client Error Injection)": {
 			cluster: &multigresv1alpha1.MultigresCluster{
@@ -116,14 +101,16 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(_ client.ObjectKey) error { return testutil.ErrInjected },
 			},
-			wantAllowed: false,
-			wantCode:    http.StatusInternalServerError,
+			wantError:   true,
 			wantMessage: "failed to resolve globalTopoServer",
 		},
-		"Error: Decode Failed (Bad JSON)": {
-			// Handled by setup logic below
-			wantAllowed: false,
-			wantCode:    http.StatusBadRequest,
+		"Error: Decode Failed (Bad Object)": {
+			// This case is harder to simulate with strongly typed Default(obj) interface
+			// unless we pass the wrong type.
+			cluster:      nil, // Passing wrong type simulation
+			existingObjs: []client.Object{},
+			wantError:    true,
+			wantMessage:  "expected MultigresCluster",
 		},
 	}
 
@@ -146,54 +133,31 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 			res := resolver.NewResolver(cl, "test-ns", multigresv1alpha1.TemplateDefaults{})
 			defaulter := NewMultigresClusterDefaulter(res)
 
-			decoder := admission.NewDecoder(s)
-			_ = defaulter.InjectDecoder(decoder)
-
-			// Create Request
-			req := admission.Request{
-				AdmissionRequest: admissionv1.AdmissionRequest{
-					Operation: admissionv1.Create,
-					Namespace: "test-ns",
-				},
-			}
-
-			// Inject object into request if present
+			// Prepare Object
+			var obj runtime.Object
 			if tc.cluster != nil {
-				raw, _ := json.Marshal(tc.cluster)
-				req.Object = runtime.RawExtension{Raw: raw}
+				obj = tc.cluster.DeepCopy()
 			} else {
-				// Simulate Decode Error
-				req.Object = runtime.RawExtension{Raw: []byte("invalid-json")}
+				obj = &multigresv1alpha1.Cell{} // Wrong type
 			}
 
 			// Run
-			resp := defaulter.Handle(context.Background(), req)
+			err := defaulter.Default(context.Background(), obj)
 
 			// Assertions
-			if resp.Allowed != tc.wantAllowed {
-				t.Errorf("Allowed mismatch. Want: %v, Got: %v", tc.wantAllowed, resp.Allowed)
-			}
-
-			if resp.Result != nil {
-				if resp.Result.Code != tc.wantCode {
-					t.Errorf("Code mismatch. Want: %v, Got: %v", tc.wantCode, resp.Result.Code)
+			if tc.wantError {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+				} else if tc.wantMessage != "" && !strings.Contains(err.Error(), tc.wantMessage) {
+					t.Errorf("Error message mismatch. Want substring: '%s', Got: '%s'", tc.wantMessage, err.Error())
 				}
-				if tc.wantMessage != "" && !strings.Contains(resp.Result.Message, tc.wantMessage) {
-					t.Errorf(
-						"Message mismatch. Want substring: '%s', Got: '%s'",
-						tc.wantMessage,
-						resp.Result.Message,
-					)
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
 				}
-			} else if tc.wantCode != http.StatusOK {
-				t.Errorf("Expected error code %d but got nil Result (implies 200 OK)", tc.wantCode)
-			}
-
-			if tc.validatePatch != nil {
-				if len(resp.Patches) == 0 {
-					t.Error("Expected patches, got none")
-				} else {
-					tc.validatePatch(t, resp.Patches)
+				if tc.validateObj != nil {
+					// We know it's a cluster if we are in happy path
+					tc.validateObj(t, obj.(*multigresv1alpha1.MultigresCluster))
 				}
 			}
 		})
@@ -202,11 +166,3 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 
 // Helpers
 func ptr[T any](v T) *T { return &v }
-
-func mapPatches(ops []jsonpatch.JsonPatchOperation) map[string]interface{} {
-	m := make(map[string]interface{})
-	for _, op := range ops {
-		m[op.Path] = op.Value
-	}
-	return m
-}

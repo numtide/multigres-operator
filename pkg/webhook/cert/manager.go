@@ -32,7 +32,8 @@ const (
 	KeyFileName = "tls.key"
 
 	// RotationThreshold is the buffer period before expiration when we should rotate the cert.
-	RotationThreshold = 24 * time.Hour
+	// Best Practice: 30 days allows ample time for retry loops if the cluster is unstable.
+	RotationThreshold = 30 * 24 * time.Hour
 )
 
 // Options configuration for the certificate manager.
@@ -96,7 +97,11 @@ func (m *CertRotator) ensureCerts(ctx context.Context) error {
 
 	// 1. Fetch Secret
 	secret := &corev1.Secret{}
-	err := m.Client.Get(ctx, types.NamespacedName{Name: SecretName, Namespace: m.Options.Namespace}, secret)
+	err := m.Client.Get(
+		ctx,
+		types.NamespacedName{Name: SecretName, Namespace: m.Options.Namespace},
+		secret,
+	)
 
 	var artifacts *Artifacts
 	shouldRotate := false
@@ -223,7 +228,6 @@ func (m *CertRotator) saveSecret(ctx context.Context, artifacts *Artifacts) erro
 		}
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to sync cert secret: %w", err)
 	}

@@ -34,19 +34,31 @@ func NewMultigresClusterValidator(c client.Client) *MultigresClusterValidator {
 	return &MultigresClusterValidator{Client: c}
 }
 
-func (v *MultigresClusterValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MultigresClusterValidator) ValidateCreate(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	return v.validate(ctx, obj)
 }
 
-func (v *MultigresClusterValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *MultigresClusterValidator) ValidateUpdate(
+	ctx context.Context,
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
 	return v.validate(ctx, newObj)
 }
 
-func (v *MultigresClusterValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MultigresClusterValidator) ValidateDelete(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	return nil, nil
 }
 
-func (v *MultigresClusterValidator) validate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MultigresClusterValidator) validate(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	cluster, ok := obj.(*multigresv1alpha1.MultigresCluster)
 	if !ok {
 		return nil, fmt.Errorf("expected MultigresCluster, got %T", obj)
@@ -172,15 +184,24 @@ func NewTemplateValidator(c client.Client, kind string) *TemplateValidator {
 	return &TemplateValidator{Client: c, Kind: kind}
 }
 
-func (v *TemplateValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *TemplateValidator) ValidateCreate(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	return nil, nil
 }
 
-func (v *TemplateValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *TemplateValidator) ValidateUpdate(
+	ctx context.Context,
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
 	return nil, nil
 }
 
-func (v *TemplateValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *TemplateValidator) ValidateDelete(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	// We need the Name and Namespace of the template being deleted
 	metaObj, ok := obj.(client.Object)
 	if !ok {
@@ -266,15 +287,24 @@ func NewChildResourceValidator(exemptPrincipals ...string) *ChildResourceValidat
 	}
 }
 
-func (v *ChildResourceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *ChildResourceValidator) ValidateCreate(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	return v.validate(ctx, obj)
 }
 
-func (v *ChildResourceValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *ChildResourceValidator) ValidateUpdate(
+	ctx context.Context,
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
 	return v.validate(ctx, newObj)
 }
 
-func (v *ChildResourceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *ChildResourceValidator) ValidateDelete(
+	ctx context.Context,
+	obj runtime.Object,
+) (admission.Warnings, error) {
 	return v.validate(ctx, obj)
 }
 
@@ -298,8 +328,9 @@ func (v *ChildResourceValidator) validate(
 		kind = "Resource"
 	}
 
+	// FIX: ST1005: error strings should not be capitalized or end with punctuation
 	return nil, fmt.Errorf(
-		"Direct modification of %s is prohibited. This resource is managed by the MultigresCluster parent object.",
+		"direct modification of %s is prohibited; this resource is managed by the MultigresCluster parent object",
 		kind,
 	)
 }

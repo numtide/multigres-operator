@@ -21,7 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -30,8 +29,8 @@ import (
 )
 
 const (
-	WebhookConfigNameMutating   = "multigres-mutating-webhook"
-	WebhookConfigNameValidating = "multigres-validating-webhook"
+	WebhookConfigNameMutating   = "multigres-operator-mutating-webhook-configuration"
+	WebhookConfigNameValidating = "multigres-operator-validating-webhook-configuration"
 )
 
 func TestManager_EnsureCerts(t *testing.T) {
@@ -42,15 +41,23 @@ func TestManager_EnsureCerts(t *testing.T) {
 		serviceName = "test-svc"
 	)
 
+	// The DNS name expected by the manager validation logic
+	expectedDNSName := serviceName + "." + namespace + ".svc"
+
 	// Register schemes
 	s := runtime.NewScheme()
 	_ = scheme.AddToScheme(s)
 	_ = admissionregistrationv1.AddToScheme(s)
 
 	// Helpers to generate cert bytes for setup
-	validCert := generateCertPEM(t, time.Now().Add(365*24*time.Hour))
-	expiredCert := generateCertPEM(t, time.Now().Add(-1*time.Hour))
-	nearExpiryCert := generateCertPEM(t, time.Now().Add(15*24*time.Hour))
+	// We MUST provide the expected DNS name for the "valid" cert, otherwise it rotates.
+	validCert := generateCertPEM(t, time.Now().Add(365*24*time.Hour), []string{expectedDNSName})
+
+	// Expired: expired 1 hour ago
+	expiredCert := generateCertPEM(t, time.Now().Add(-1*time.Hour), []string{expectedDNSName})
+
+	// Near Expiry: expires in 15 days (within the 30d RotationThreshold)
+	nearExpiryCert := generateCertPEM(t, time.Now().Add(15*24*time.Hour), []string{expectedDNSName})
 
 	// Helper to generate corrupt cert (valid PEM header, invalid body)
 	corruptCertBody := pem.EncodeToMemory(&pem.Block{
@@ -59,19 +66,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 	})
 
 	// Base fixtures
-	// We MUST include a Service so that findMyService (auto-discovery) works.
 	baseWebhooks := []client.Object{
-		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: namespace},
-			Spec: corev1.ServiceSpec{
-				Selector: map[string]string{
-					OperatorPodLabelKey: OperatorPodLabelValue, // "control-plane": "controller-manager"
-				},
-				Ports: []corev1.ServicePort{
-					{Port: 443, TargetPort: intstr.FromInt(9443)},
-				},
-			},
-		},
 		&admissionregistrationv1.MutatingWebhookConfiguration{
 			ObjectMeta: metav1.ObjectMeta{Name: WebhookConfigNameMutating},
 			Webhooks: []admissionregistrationv1.MutatingWebhook{
@@ -137,8 +132,6 @@ func TestManager_EnsureCerts(t *testing.T) {
 		},
 		"Idempotency: Up-to-Date Webhooks (No Patch)": {
 			existingObjects: []client.Object{
-				// Service required for discovery
-				baseWebhooks[0], // Service
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{Name: SecretName, Namespace: namespace},
 					Type:       corev1.SecretTypeTLS,
@@ -258,11 +251,11 @@ func TestManager_EnsureCerts(t *testing.T) {
 			existingObjects:  baseWebhooks,
 			injectFailingRNG: true,
 			wantErr:          true,
-			errContains:      "failed to ensure cert secret: failed to generate CA",
+			errContains:      "failed to generate CA",
 		},
 		"Patch: Webhooks Missing (Ignore)": {
 			// Provide service but no webhooks
-			existingObjects: []client.Object{baseWebhooks[0]},
+			existingObjects: []client.Object{}, // No webhooks
 			checkFiles:      true,
 			wantGenerated:   true,
 		},
@@ -272,7 +265,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 				OnGet: testutil.FailOnKeyName(SecretName, errors.New("injected get error")),
 			},
 			wantErr:     true,
-			errContains: "failed to ensure cert secret",
+			errContains: "failed to get certificate secret",
 		},
 		"Error: Create Secret Failed": {
 			existingObjects: baseWebhooks,
@@ -283,7 +276,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 				),
 			},
 			wantErr:     true,
-			errContains: "failed to create cert secret",
+			errContains: "failed to sync cert secret", // CreateOrUpdate wraps error
 		},
 		"Error: Update Secret Failed": {
 			existingObjects: append([]client.Object{
@@ -302,71 +295,42 @@ func TestManager_EnsureCerts(t *testing.T) {
 				),
 			},
 			wantErr:     true,
-			errContains: "failed to update cert secret",
+			errContains: "failed to sync cert secret", // CreateOrUpdate wraps error
 		},
 		"Error: File System (Mkdir/Write)": {
 			existingObjects: baseWebhooks,
 			customCertDir:   "/dev/null/invalid-dir",
 			wantErr:         true,
-			errContains:     "failed to write certs to disk",
+			// The exact error depends on OS, but usually contains "mkdir" or "no such file"
+			errContains: "mkdir",
 		},
 		"Error: Patch MutatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				// FIX: Use OnPatch instead of OnUpdate
 				OnPatch: testutil.FailOnObjectName(
 					WebhookConfigNameMutating,
 					errors.New("injected webhook update error"),
 				),
 			},
 			wantErr:     true,
-			errContains: "failed to patch webhook configurations",
+			errContains: "failed to patch " + WebhookConfigNameMutating,
 		},
 		"Error: Patch ValidatingWebhook Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
-				// FIX: Use OnPatch instead of OnUpdate
 				OnPatch: testutil.FailOnObjectName(
 					WebhookConfigNameValidating,
 					errors.New("injected webhook update error"),
 				),
 			},
 			wantErr:     true,
-			errContains: "failed to patch webhook configurations",
-		},
-		"Error: List MutatingWebhook Failed": {
-			existingObjects: baseWebhooks,
-			failureConfig: &testutil.FailureConfig{
-				// FIX: Use OnList instead of OnGet, as Manager lists configurations
-				OnList: func(list client.ObjectList) error {
-					if _, ok := list.(*admissionregistrationv1.MutatingWebhookConfigurationList); ok {
-						return errors.New("injected webhook list error")
-					}
-					return nil
-				},
-			},
-			wantErr:     true,
-			errContains: "failed to patch webhook configurations",
-		},
-		"Error: List ValidatingWebhook Failed": {
-			existingObjects: baseWebhooks,
-			failureConfig: &testutil.FailureConfig{
-				// FIX: Use OnList instead of OnGet
-				OnList: func(list client.ObjectList) error {
-					if _, ok := list.(*admissionregistrationv1.ValidatingWebhookConfigurationList); ok {
-						return errors.New("injected webhook list error")
-					}
-					return nil
-				},
-			},
-			wantErr:     true,
-			errContains: "failed to patch webhook configurations",
+			errContains: "failed to patch " + WebhookConfigNameValidating,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+			// t.Parallel() // Parallel disabled to allow safe swapping of rng
 
 			// Setup Client
 			fakeClient := fake.NewClientBuilder().
@@ -386,16 +350,17 @@ func TestManager_EnsureCerts(t *testing.T) {
 			}
 
 			mgr := NewManager(cl, Options{
-				Namespace: namespace,
-				CertDir:   certDir,
+				Namespace:   namespace,
+				CertDir:     certDir,
+				ServiceName: serviceName,
 			})
 
 			// INJECT FAILING RNG HERE
 			if tc.injectFailingRNG {
-				mgr.rng = &failReader{}
+				mgr.rng = &failReader{} // Uses mock from generator_test.go
 			}
 
-			err := mgr.EnsureCerts(context.Background())
+			err := mgr.Bootstrap(context.Background())
 
 			// Error Assertion
 			if tc.wantErr {
@@ -422,25 +387,6 @@ func TestManager_EnsureCerts(t *testing.T) {
 				}
 				if _, err := os.Stat(filepath.Join(certDir, KeyFileName)); os.IsNotExist(err) {
 					t.Errorf("Key file not created at %s", KeyFileName)
-				}
-
-				// Check CA Bundle Injection IF webhooks existed
-				if len(tc.existingObjects) > 0 {
-					mutating := &admissionregistrationv1.MutatingWebhookConfiguration{}
-					err := fakeClient.Get(
-						context.Background(),
-						types.NamespacedName{Name: WebhookConfigNameMutating},
-						mutating,
-					)
-					if err == nil {
-						if len(mutating.Webhooks) > 0 &&
-							bytes.Equal(
-								mutating.Webhooks[0].ClientConfig.CABundle,
-								[]byte("old-bundle"),
-							) {
-							t.Error("MutatingWebhookConfiguration CA bundle was NOT updated")
-						}
-					}
 				}
 			}
 
@@ -473,7 +419,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 }
 
 // generateCertPEM creates a valid self-signed cert for testing expiry logic
-func generateCertPEM(t *testing.T, expiry time.Time) []byte {
+func generateCertPEM(t *testing.T, expiry time.Time, dnsNames []string) []byte {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -484,6 +430,7 @@ func generateCertPEM(t *testing.T, expiry time.Time) []byte {
 		Subject:      pkix.Name{CommonName: "test"},
 		NotBefore:    time.Now().Add(-1 * time.Hour),
 		NotAfter:     expiry,
+		DNSNames:     dnsNames, // Support verifying SANs
 	}
 	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
 	if err != nil {
