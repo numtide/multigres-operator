@@ -74,18 +74,16 @@ func BuildPoolStatefulSet(
 						FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
 					},
 					InitContainers: []corev1.Container{
-						// ALTERNATIVE: Add init container to copy pgctld and pgbackrest binaries
-						// to emptyDir, enabling use of stock postgres:17 image
+						// To use stock postgres:17 image instead, uncomment buildPgctldInitContainer,
+						// replace buildPgctldContainer with buildPostgresContainer, and add buildPgctldVolume.
 						// buildPgctldInitContainer(shard),
 						buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 					},
 					Containers: []corev1.Container{
 						buildPgctldContainer(shard, poolSpec),
-						// ALTERNATIVE: Use stock postgres:17 with copied binaries
 						// buildPostgresContainer(shard, poolSpec),
 					},
 					Volumes: []corev1.Volume{
-						// ALTERNATIVE: Add emptyDir volume for binary copy
 						// buildPgctldVolume(),
 						buildBackupVolume(name),
 						buildSocketDirVolume(),

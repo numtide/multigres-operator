@@ -106,13 +106,11 @@ func buildPgHbaVolume() corev1.Volume {
 var sidecarRestartPolicy = corev1.ContainerRestartPolicyAlways
 
 // buildPostgresContainer creates the postgres container spec for a pool.
-// ORIGINAL APPROACH: Uses stock postgres:17 image with pgctld binary copied via init container.
-// Currently unused - replaced by buildPgctldContainer. Kept for reference.
+// Uses stock postgres:17 image with pgctld and pgbackrest binaries copied via init container.
 //
 // This approach requires:
-//   - buildPgctldInitContainer() in InitContainers
+//   - buildPgctldInitContainer() in InitContainers (copies pgctld and pgbackrest)
 //   - buildPgctldVolume() in Volumes
-//   - Does NOT include pgbackrest (would need manual installation)
 func buildPostgresContainer(
 	shard *multigresv1alpha1.Shard,
 	pool multigresv1alpha1.PoolSpec,
@@ -137,6 +135,7 @@ func buildPostgresContainer(
 			"--timeout=30",
 			"--log-level=info",
 			"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
+			"--pg-hba-template=" + PgHbaTemplatePath,
 		},
 		Resources: pool.Postgres.Resources,
 		Env: []corev1.EnvVar{
@@ -159,12 +158,25 @@ func buildPostgresContainer(
 				Name:      PgctldVolumeName,
 				MountPath: PgctldBinDir,
 			},
+			{
+				Name:      BackupVolumeName,
+				MountPath: BackupMountPath,
+			},
+			{
+				Name:      SocketDirVolumeName,
+				MountPath: SocketDirMountPath,
+			},
+			{
+				Name:      PgHbaVolumeName,
+				MountPath: PgHbaMountPath,
+				ReadOnly:  true,
+			},
 		},
 	}
 }
 
 // buildPgctldContainer creates the postgres container spec using the pgctld image.
-// CURRENT APPROACH: Uses DefaultPgctldImage (ghcr.io/multigres/pgctld:main) which includes:
+// Uses DefaultPgctldImage (ghcr.io/multigres/pgctld:main) which includes:
 //   - PostgreSQL 17
 //   - pgctld binary at /usr/local/bin/pgctld
 //   - pgbackrest for backup/restore operations
@@ -172,12 +184,6 @@ func buildPostgresContainer(
 // This approach does NOT require:
 //   - buildPgctldInitContainer() (pgctld already in image)
 //   - buildPgctldVolume() (no binary copying needed)
-//
-// Key differences from buildPostgresContainer:
-//   - Uses DefaultPgctldImage instead of DefaultPostgresImage (stock postgres:17)
-//   - Includes backup volume mount (for pgbackrest)
-//   - Includes socket dir volume mount (for shared sockets)
-//   - Does NOT include pgctld-bin volume mount
 func buildPgctldContainer(
 	shard *multigresv1alpha1.Shard,
 	pool multigresv1alpha1.PoolSpec,
@@ -314,15 +320,15 @@ func buildMultiPoolerSidecar(
 }
 
 // buildPgctldInitContainer creates the pgctld init container spec.
-// ALTERNATIVE APPROACH: Copies pgctld binary to shared volume for stock postgres:17 image.
-// Currently unused - kept for reference. Active approach uses pgctld image with built-in pgctld.
+// Copies pgctld and pgbackrest binaries to shared volume for use with stock postgres:17 image.
+// Used with buildPostgresContainer() and buildPgctldVolume().
 func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 	return corev1.Container{
 		Name:    "pgctld-init",
 		Image:   DefaultPgctldImage,
 		Command: []string{"/bin/sh", "-c"},
 		Args: []string{
-			"cp /usr/local/bin/pgctld /shared/pgctld",
+			"cp /usr/local/bin/pgctld /usr/bin/pgbackrest /shared/",
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -370,9 +376,8 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 	}
 }
 
-// buildPgctldVolume creates the shared emptyDir volume for pgctld binary.
-// ALTERNATIVE APPROACH: Used only when copying pgctld via init container.
-// Currently unused - kept for reference. Active approach uses pgctld image.
+// buildPgctldVolume creates the shared emptyDir volume for pgctld and pgbackrest binaries.
+// Used with buildPgctldInitContainer() and buildPostgresContainer().
 func buildPgctldVolume() corev1.Volume {
 	return corev1.Volume{
 		Name: PgctldVolumeName,
