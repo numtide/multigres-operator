@@ -162,7 +162,11 @@ func TestDefaultPgHbaTemplateEmbedded(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("DefaultPgHbaTemplate missing %s (expected line containing all of: %v)", check.desc, check.mustContain)
+			t.Errorf(
+				"DefaultPgHbaTemplate missing %s (expected line containing all of: %v)",
+				check.desc,
+				check.mustContain,
+			)
 		}
 	}
 }

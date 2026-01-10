@@ -121,7 +121,12 @@ func buildPoolVolumeClaimTemplates(
 	}
 
 	return []corev1.PersistentVolumeClaim{
-		storage.BuildPVCTemplate(DataVolumeName, storageClass, storageSize, pool.Storage.AccessModes),
+		storage.BuildPVCTemplate(
+			DataVolumeName,
+			storageClass,
+			storageSize,
+			pool.Storage.AccessModes,
+		),
 	}
 }
 

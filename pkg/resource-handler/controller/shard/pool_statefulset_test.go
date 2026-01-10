@@ -1116,7 +1116,13 @@ func TestBuildBackupPVC_Error(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test"},
 	}
 	// Empty scheme causes SetControllerReference to fail
-	_, err := BuildBackupPVC(shard, "pool", "cell", multigresv1alpha1.PoolSpec{}, runtime.NewScheme())
+	_, err := BuildBackupPVC(
+		shard,
+		"pool",
+		"cell",
+		multigresv1alpha1.PoolSpec{},
+		runtime.NewScheme(),
+	)
 	if err == nil {
 		t.Error("BuildBackupPVC() expected error with empty scheme, got nil")
 	}
