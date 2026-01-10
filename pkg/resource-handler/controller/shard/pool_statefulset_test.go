@@ -931,3 +931,193 @@ func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildBackupPVC(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			UID:       "test-uid",
+		},
+	}
+
+	tests := map[string]struct {
+		poolSpec multigresv1alpha1.PoolSpec
+		want     *corev1.PersistentVolumeClaim
+	}{
+		"defaults": {
+			poolSpec: multigresv1alpha1.PoolSpec{},
+			want: &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "backup-data-test-shard-pool-primary-zone1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/component":  PoolComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "",
+						"multigres.com/tablegroup":     "",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "test-shard",
+							UID:                "test-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("10Gi"),
+						},
+					},
+				},
+			},
+		},
+		"inherit storage class": {
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Storage: multigresv1alpha1.StorageSpec{
+					Class: "fast-ssd",
+				},
+			},
+			want: &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "backup-data-test-shard-pool-primary-zone1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/component":  PoolComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "",
+						"multigres.com/tablegroup":     "",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "test-shard",
+							UID:                "test-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					StorageClassName: ptr.To("fast-ssd"),
+					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("10Gi"),
+						},
+					},
+				},
+			},
+		},
+		"override backup storage": {
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Storage: multigresv1alpha1.StorageSpec{
+					Class: "fast-ssd",
+				},
+				BackupStorage: multigresv1alpha1.StorageSpec{
+					Class:       "backup-nfs",
+					Size:        "100Gi",
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+				},
+			},
+			want: &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "backup-data-test-shard-pool-primary-zone1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/component":  PoolComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "",
+						"multigres.com/tablegroup":     "",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "test-shard",
+							UID:                "test-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					StorageClassName: ptr.To("backup-nfs"),
+					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("100Gi"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			testScheme := scheme
+			if name == "error on controller reference" {
+				testScheme = runtime.NewScheme() // Empty scheme triggers SetControllerReference error
+			}
+
+			got, err := BuildBackupPVC(
+				shard,
+				"primary",
+				"zone1",
+				tc.poolSpec,
+				testScheme,
+			)
+
+			if name == "error on controller reference" {
+				if err == nil {
+					t.Error("BuildBackupPVC() expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("BuildBackupPVC() error = %v", err)
+				return
+			}
+
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("BuildBackupPVC() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestBuildBackupPVC_Error(t *testing.T) {
+	// Separate test for error case to avoid messing with table driven test logic too much
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{Name: "test"},
+	}
+	// Empty scheme causes SetControllerReference to fail
+	_, err := BuildBackupPVC(shard, "pool", "cell", multigresv1alpha1.PoolSpec{}, runtime.NewScheme())
+	if err == nil {
+		t.Error("BuildBackupPVC() expected error with empty scheme, got nil")
+	}
+}
