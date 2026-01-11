@@ -9,7 +9,7 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema" // ADDED
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -70,7 +70,6 @@ func TestMultigresClusterValidator(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(existingObjs...).Build()
 			validator := NewMultigresClusterValidator(fakeClient)
 
-			// Call ValidateCreate directly
 			_, err := validator.ValidateCreate(context.Background(), tc.object)
 
 			if tc.wantAllowed && err != nil {
@@ -130,12 +129,10 @@ func TestTemplateValidator_InUseProtection(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithScheme(s).WithObjects(tc.existing...).Build()
 			validator := NewTemplateValidator(fakeClient, tc.kind)
 
-			// Create a fake object to delete
 			obj := &multigresv1alpha1.CoreTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: tc.targetName, Namespace: "default"},
 			}
 
-			// Call ValidateDelete directly
 			_, err := validator.ValidateDelete(context.Background(), obj)
 
 			if tc.wantAllowed && err != nil {
@@ -173,16 +170,13 @@ func TestChildResourceValidator_Permissions(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Construct context with UserInfo
 			ctx := admission.NewContextWithRequest(context.Background(), admission.Request{
 				AdmissionRequest: admissionv1.AdmissionRequest{
 					UserInfo: authenticationv1.UserInfo{Username: tc.user},
 				},
 			})
 
-			// Dummy object
 			obj := &multigresv1alpha1.Cell{}
-			// FIX: Use schema.GroupVersionKind
 			obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "multigres.com", Kind: "Cell"})
 
 			_, err := validator.ValidateUpdate(ctx, obj, obj)
@@ -193,7 +187,7 @@ func TestChildResourceValidator_Permissions(t *testing.T) {
 			if !tc.wantAllowed {
 				if err == nil {
 					t.Errorf("Expected denial, got allowed")
-				} else if !strings.Contains(err.Error(), "Direct modification of Cell is prohibited") {
+				} else if !strings.Contains(err.Error(), "direct modification of Cell is prohibited") { // FIXED: Lowercase "direct"
 					t.Errorf("Unexpected error message: %v", err)
 				}
 			}

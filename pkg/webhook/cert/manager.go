@@ -2,11 +2,9 @@ package cert
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,73 +15,73 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	// SecretName is the name of the Secret where we store the generated certs.
-	SecretName = "multigres-webhook-certs"
+	// CASecretName stores the Authority. NEVER mounted to the pod.
+	CASecretName = "multigres-operator-ca-secret"
+	// ServerSecretName stores the Leaf certs. Mounted to the pod.
+	ServerSecretName = "multigres-webhook-certs"
 
-	// CertFileName is the name of the certificate file.
 	CertFileName = "tls.crt"
-	// KeyFileName is the name of the key file.
-	KeyFileName = "tls.key"
+	KeyFileName  = "tls.key"
 
-	// RotationThreshold is the buffer period before expiration when we should rotate the cert.
-	// Best Practice: 30 days allows ample time for retry loops if the cluster is unstable.
+	// Rotation buffer: 30 days
 	RotationThreshold = 30 * 24 * time.Hour
 )
 
-// Options configuration for the certificate manager.
 type Options struct {
-	Namespace          string
-	ServiceName        string
-	CertDir            string
-	OperatorDeployment string // Name of the deployment to own the secret
+	Namespace             string
+	ServiceName           string
+	CertDir               string
+	OperatorDeployment    string
+	OperatorLabelSelector map[string]string
 }
 
-// CertRotator manages the lifecycle of the webhook certificates.
-// It implements controller-runtime's manager.Runnable interface.
 type CertRotator struct {
-	Client  client.Client
-	Options Options
-	rng     io.Reader
+	Client   client.Client
+	Recorder record.EventRecorder
+	Options  Options
 }
 
-// NewManager creates a new certificate rotator.
-func NewManager(c client.Client, opts Options) *CertRotator {
+func NewManager(c client.Client, recorder record.EventRecorder, opts Options) *CertRotator {
 	return &CertRotator{
-		Client:  c,
-		Options: opts,
-		// CRITICAL FIX: Initialize with crypto/rand.Reader to prevent nil pointer panic
-		rng: rand.Reader,
+		Client:   c,
+		Recorder: recorder,
+		Options:  opts,
 	}
 }
 
-// Bootstrap is called BEFORE the Manager starts. It uses a direct client
-// to ensure certificates exist on disk so the Webhook Server can bind to the port.
+// Bootstrap runs at startup to ensure PKI is healthy before the webhook server listens.
 func (m *CertRotator) Bootstrap(ctx context.Context) error {
-	logger := log.FromContext(ctx).WithName("cert-bootstrap")
-	logger.Info("bootstrapping webhook certificates")
-	return m.ensureCerts(ctx)
+	logger := log.FromContext(ctx).WithName("pki-bootstrap")
+	logger.Info("bootstrapping PKI infrastructure")
+
+	if err := os.MkdirAll(m.Options.CertDir, 0o755); err != nil {
+		return err
+	}
+
+	return m.reconcilePKI(ctx)
 }
 
-// Start implements manager.Runnable. It runs a background loop to rotate certificates.
+// Start kicks off the background rotation loop.
 func (m *CertRotator) Start(ctx context.Context) error {
-	logger := log.FromContext(ctx).WithName("cert-rotation")
-	logger.Info("starting certificate rotation loop")
+	logger := log.FromContext(ctx).WithName("pki-rotation")
+	logger.Info("starting PKI rotation loop")
 
-	// Check every hour
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			if err := m.ensureCerts(ctx); err != nil {
-				logger.Error(err, "failed to rotate certificates")
+			if err := m.reconcilePKI(ctx); err != nil {
+				logger.Error(err, "periodic PKI reconciliation failed")
 			}
 		case <-ctx.Done():
 			return nil
@@ -91,199 +89,328 @@ func (m *CertRotator) Start(ctx context.Context) error {
 	}
 }
 
-// ensureCerts checks state, generates if needed, writes to disk, and patches k8s.
-func (m *CertRotator) ensureCerts(ctx context.Context) error {
+// reconcilePKI is the main control loop.
+// 1. Ensure CA is valid.
+// 2. Ensure Server Cert is valid and signed by CA.
+// 3. Inject CA into Webhooks.
+// 4. Wait for Kubelet sync.
+func (m *CertRotator) reconcilePKI(ctx context.Context) error {
 	logger := log.FromContext(ctx)
 
-	// 1. Fetch Secret
+	// --- Step 1: Handle Root CA ---
+	caArtifacts, err := m.ensureCA(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to ensure CA: %w", err)
+	}
+
+	// --- Step 2: Handle Server Certificate ---
+	serverCertPEM, err := m.ensureServerCert(ctx, caArtifacts)
+	if err != nil {
+		return fmt.Errorf("failed to ensure server cert: %w", err)
+	}
+
+	// --- Step 3: Wait for File Propagation ---
+	// This ensures the webhook server reads the *new* files before we tell API server to talk to us.
+	if err := m.waitForKubelet(ctx, serverCertPEM); err != nil {
+		return fmt.Errorf("timeout waiting for kubelet to update secrets: %w", err)
+	}
+
+	// --- Step 4: Patch Webhook Configurations ---
+	if err := m.patchWebhooks(ctx, caArtifacts.CertPEM); err != nil {
+		return fmt.Errorf("failed to patch webhooks: %w", err)
+	}
+
+	logger.V(1).Info("PKI reconciliation complete")
+	return nil
+}
+
+func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
+	logger := log.FromContext(ctx)
 	secret := &corev1.Secret{}
 	err := m.Client.Get(
 		ctx,
-		types.NamespacedName{Name: SecretName, Namespace: m.Options.Namespace},
+		types.NamespacedName{Name: CASecretName, Namespace: m.Options.Namespace},
 		secret,
 	)
 
-	var artifacts *Artifacts
-	shouldRotate := false
-
+	generate := false
 	if errors.IsNotFound(err) {
-		logger.Info("certificate secret not found, generating new one")
-		shouldRotate = true
+		logger.Info("CA secret not found, generating new one")
+		generate = true
 	} else if err != nil {
-		return fmt.Errorf("failed to get certificate secret: %w", err)
+		return nil, err
 	} else {
-		// Secret exists, check validity
-		artifacts = &Artifacts{
-			CACertPEM:     secret.Data["ca.crt"],
-			CAKeyPEM:      secret.Data["ca.key"],
-			ServerCertPEM: secret.Data["tls.crt"],
-			ServerKeyPEM:  secret.Data["tls.key"],
-		}
+		// Validate existing CA
+		certPEM := secret.Data["ca.crt"]
+		keyPEM := secret.Data["ca.key"]
 
-		if m.isExpiringOrInvalid(artifacts) {
-			logger.Info("certificates are expiring or invalid, rotating")
-			shouldRotate = true
-		}
-	}
-
-	// 2. Generate if needed
-	if shouldRotate {
-		commonName := fmt.Sprintf("%s.%s.svc", m.Options.ServiceName, m.Options.Namespace)
-		dnsNames := []string{
-			m.Options.ServiceName,
-			fmt.Sprintf("%s.%s", m.Options.ServiceName, m.Options.Namespace),
-			commonName,
-			commonName + ".cluster.local",
-		}
-
-		var genErr error
-		artifacts, genErr = GenerateSelfSignedArtifacts(m.rng, commonName, dnsNames)
-		if genErr != nil {
-			return genErr
-		}
-
-		// Save to Secret (with OwnerRef)
-		if err := m.saveSecret(ctx, artifacts); err != nil {
-			return err
+		if len(certPEM) == 0 || len(keyPEM) == 0 {
+			generate = true
+		} else {
+			// Parse and Check Expiry
+			ca, err := ParseCA(certPEM, keyPEM)
+			if err != nil {
+				logger.Error(err, "existing CA is corrupt, rotating")
+				generate = true
+			} else {
+				if time.Now().Add(RotationThreshold).After(ca.Cert.NotAfter) {
+					logger.Info("CA is expiring, rotating")
+					generate = true
+				} else {
+					return ca, nil // Valid
+				}
+			}
 		}
 	}
 
-	// 3. Always write to disk (Handling the "Wait for Kubelet" race condition)
-	// We overwrite the files directly so the webhook server picks them up immediately.
-	if err := m.writeToDisk(artifacts); err != nil {
-		return err
+	if generate {
+		newCA, err := GenerateCA()
+		if err != nil {
+			return nil, err
+		}
+
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      CASecretName,
+				Namespace: m.Options.Namespace,
+			},
+			Type: corev1.SecretTypeOpaque, // CA secret is just data, not necessarily TLS type
+			Data: map[string][]byte{
+				"ca.crt": newCA.CertPEM,
+				"ca.key": newCA.KeyPEM,
+			},
+		}
+
+		// Set ownership
+		if err := m.setOwner(ctx, secret); err != nil {
+			return nil, err
+		}
+
+		if _, err := controllerutil.CreateOrUpdate(ctx, m.Client, secret, func() error {
+			secret.Data = map[string][]byte{
+				"ca.crt": newCA.CertPEM,
+				"ca.key": newCA.KeyPEM,
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		m.recorderEvent(secret, "Normal", "Rotated", "Created new CA certificate")
+		return newCA, nil
 	}
 
-	// 4. Always patch Webhook Configurations to ensure CA Bundle is correct
-	if err := m.patchWebhooks(ctx, artifacts.CACertPEM); err != nil {
-		return err
-	}
-
-	return nil
+	return nil, fmt.Errorf("unreachable in ensureCA")
 }
 
-func (m *CertRotator) isExpiringOrInvalid(a *Artifacts) bool {
-	if len(a.ServerCertPEM) == 0 || len(a.ServerKeyPEM) == 0 {
-		return true
+func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]byte, error) {
+	logger := log.FromContext(ctx)
+	secret := &corev1.Secret{}
+	err := m.Client.Get(
+		ctx,
+		types.NamespacedName{Name: ServerSecretName, Namespace: m.Options.Namespace},
+		secret,
+	)
+
+	generate := false
+	if errors.IsNotFound(err) {
+		generate = true
+	} else if err != nil {
+		return nil, err
+	} else {
+		// Check validity and if signed by current CA
+		certPEM := secret.Data["tls.crt"]
+		if len(certPEM) == 0 {
+			generate = true
+		} else {
+			block, _ := pem.Decode(certPEM)
+			if block == nil {
+				generate = true
+			} else {
+				cert, err := x509.ParseCertificate(block.Bytes)
+				if err != nil {
+					generate = true
+				} else {
+					// Check Expiry
+					if time.Now().Add(RotationThreshold).After(cert.NotAfter) {
+						logger.Info("Server cert expiring, rotating")
+						generate = true
+					}
+					// Check if signed by current CA
+					if err := cert.CheckSignatureFrom(ca.Cert); err != nil {
+						logger.Info("Server cert not signed by current CA, rotating")
+						generate = true
+					}
+				}
+			}
+		}
 	}
 
-	block, _ := pem.Decode(a.ServerCertPEM)
-	if block == nil {
-		return true
+	if !generate {
+		return secret.Data["tls.crt"], nil
 	}
 
-	cert, err := x509.ParseCertificate(block.Bytes)
+	// Generate new
+	commonName := fmt.Sprintf("%s.%s.svc", m.Options.ServiceName, m.Options.Namespace)
+	dnsNames := []string{
+		m.Options.ServiceName,
+		fmt.Sprintf("%s.%s", m.Options.ServiceName, m.Options.Namespace),
+		commonName,
+		commonName + ".cluster.local",
+	}
+
+	srv, err := GenerateServerCert(ca, commonName, dnsNames)
 	if err != nil {
-		return true
+		return nil, err
 	}
 
-	// Check Expiration
-	if time.Now().Add(RotationThreshold).After(cert.NotAfter) {
-		return true
-	}
-
-	// Check DNS name match (Simple check)
-	expectedName := fmt.Sprintf("%s.%s.svc", m.Options.ServiceName, m.Options.Namespace)
-	found := false
-	for _, name := range cert.DNSNames {
-		if name == expectedName {
-			found = true
-			break
-		}
-	}
-	return !found
-}
-
-func (m *CertRotator) saveSecret(ctx context.Context, artifacts *Artifacts) error {
-	secret := &corev1.Secret{
+	secret = &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      SecretName,
+			Name:      ServerSecretName,
 			Namespace: m.Options.Namespace,
 		},
 		Type: corev1.SecretTypeTLS,
-		Data: map[string][]byte{
-			"tls.crt": artifacts.ServerCertPEM,
-			"tls.key": artifacts.ServerKeyPEM,
-			"ca.crt":  artifacts.CACertPEM,
-			"ca.key":  artifacts.CAKeyPEM,
-		},
 	}
 
-	// Create or Update
-	op, err := controllerutil.CreateOrUpdate(ctx, m.Client, secret, func() error {
+	if err := m.setOwner(ctx, secret); err != nil {
+		return nil, err
+	}
+
+	if _, err := controllerutil.CreateOrUpdate(ctx, m.Client, secret, func() error {
 		secret.Data = map[string][]byte{
-			"tls.crt": artifacts.ServerCertPEM,
-			"tls.key": artifacts.ServerKeyPEM,
-			"ca.crt":  artifacts.CACertPEM,
-			"ca.key":  artifacts.CAKeyPEM,
-		}
-		// Attempt to set OwnerReference for Garbage Collection
-		if m.Options.OperatorDeployment != "" {
-			dep := &appsv1.Deployment{}
-			if err := m.Client.Get(ctx, types.NamespacedName{Name: m.Options.OperatorDeployment, Namespace: m.Options.Namespace}, dep); err == nil {
-				// We ignore errors here (e.g., if RBAC prevents reading deployments),
-				// as it's an optimization, not a hard requirement.
-				_ = controllerutil.SetControllerReference(dep, secret, m.Client.Scheme())
-			}
+			"tls.crt": srv.CertPEM,
+			"tls.key": srv.KeyPEM,
+			"ca.crt":  ca.CertPEM, // Helpful to have CA in here too for client verification if needed
 		}
 		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to sync cert secret: %w", err)
+	}); err != nil {
+		return nil, err
 	}
-	log.FromContext(ctx).Info("synced certificate secret", "operation", op)
-	return nil
+
+	m.recorderEvent(secret, "Normal", "Rotated", "Rotated webhook server certificate")
+	return srv.CertPEM, nil
 }
 
-func (m *CertRotator) writeToDisk(artifacts *Artifacts) error {
-	if err := os.MkdirAll(m.Options.CertDir, 0o755); err != nil {
-		return err
+func (m *CertRotator) waitForKubelet(ctx context.Context, expectedCertPEM []byte) error {
+	logger := log.FromContext(ctx)
+	// Exponential backoff to wait for Kubelet
+	// Start fast (100ms) and backoff up to 2m total wait.
+	backoff := wait.Backoff{
+		Duration: 100 * time.Millisecond,
+		Factor:   2,
+		Jitter:   0.1,
+		Steps:    12, // 100ms -> 200 -> 400 ... ~3-4 minutes max
 	}
 
-	certPath := filepath.Join(m.Options.CertDir, CertFileName)
-	keyPath := filepath.Join(m.Options.CertDir, KeyFileName)
+	return wait.ExponentialBackoff(backoff, func() (bool, error) {
+		certPath := filepath.Join(m.Options.CertDir, CertFileName)
+		diskBytes, err := os.ReadFile(certPath)
+		if err != nil {
+			// File might not exist yet if pod is just starting
+			logger.V(1).Info("Waiting for certificate file", "path", certPath, "err", err)
+			return false, nil
+		}
 
-	if err := os.WriteFile(certPath, artifacts.ServerCertPEM, 0o644); err != nil {
-		return err
+		if string(diskBytes) == string(expectedCertPEM) {
+			return true, nil
+		}
+
+		logger.V(1).Info("Certificate on disk does not match Secret yet")
+		return false, nil
+	})
+}
+
+func (m *CertRotator) setOwner(ctx context.Context, secret *corev1.Secret) error {
+	logger := log.FromContext(ctx)
+
+	dep, err := m.findOperatorDeployment(ctx)
+	if err != nil {
+		// Don't fail if we can't find it (e.g. running locally), but log it
+		logger.V(1).Info("Could not determine operator deployment for GC", "error", err)
+		return nil
 	}
-	if err := os.WriteFile(keyPath, artifacts.ServerKeyPEM, 0o600); err != nil {
-		return err
+
+	if dep == nil {
+		return nil
 	}
-	return nil
+
+	return controllerutil.SetControllerReference(dep, secret, m.Client.Scheme())
+}
+
+// findOperatorDeployment locates the deployment running this operator.
+func (m *CertRotator) findOperatorDeployment(ctx context.Context) (*appsv1.Deployment, error) {
+	// 1. Try Robust Label Selection (Preferred)
+	if len(m.Options.OperatorLabelSelector) > 0 {
+		list := &appsv1.DeploymentList{}
+		err := m.Client.List(ctx, list,
+			client.InNamespace(m.Options.Namespace),
+			client.MatchingLabels(m.Options.OperatorLabelSelector),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(list.Items) == 1 {
+			return &list.Items[0], nil
+		} else if len(list.Items) > 1 {
+			return nil, fmt.Errorf("found multiple deployments matching selector %v", m.Options.OperatorLabelSelector)
+		}
+		// If 0 found, fall through to legacy name check
+	}
+
+	// 2. Try Specific Name (Fallback)
+	if m.Options.OperatorDeployment != "" {
+		dep := &appsv1.Deployment{}
+		err := m.Client.Get(
+			ctx,
+			types.NamespacedName{
+				Name:      m.Options.OperatorDeployment,
+				Namespace: m.Options.Namespace,
+			},
+			dep,
+		)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return dep, nil
+	}
+
+	return nil, nil
 }
 
 func (m *CertRotator) patchWebhooks(ctx context.Context, caCert []byte) error {
 	logger := log.FromContext(ctx)
 
-	// Fallback strategy: Patch specific named configs found in standard manifests
 	configs := []struct {
-		Kind string
+		Kind client.Object
 		Name string
 	}{
-		{"MutatingWebhookConfiguration", "multigres-operator-mutating-webhook-configuration"},
-		{"ValidatingWebhookConfiguration", "multigres-operator-validating-webhook-configuration"},
+		{
+			&admissionregistrationv1.MutatingWebhookConfiguration{},
+			"multigres-operator-mutating-webhook-configuration",
+		},
+		{
+			&admissionregistrationv1.ValidatingWebhookConfiguration{},
+			"multigres-operator-validating-webhook-configuration",
+		},
 	}
 
 	for _, c := range configs {
-		var obj client.Object
-		if c.Kind == "MutatingWebhookConfiguration" {
-			obj = &admissionregistrationv1.MutatingWebhookConfiguration{}
-		} else {
-			obj = &admissionregistrationv1.ValidatingWebhookConfiguration{}
-		}
-
+		obj := c.Kind.DeepCopyObject().(client.Object)
 		if err := m.Client.Get(ctx, types.NamespacedName{Name: c.Name}, obj); err != nil {
 			if errors.IsNotFound(err) {
-				continue // Webhook might be disabled or not installed
+				continue
 			}
 			return err
 		}
 
-		base := obj.DeepCopyObject().(client.Object)
+		// Create copy for diffing
+		oldObj := obj.DeepCopyObject().(client.Object)
 		updated := false
 
-		// Naive patch: update ALL hooks in this config.
-		// Since this config belongs to the operator, this is safe.
 		switch r := obj.(type) {
 		case *admissionregistrationv1.MutatingWebhookConfiguration:
 			for i := range r.Webhooks {
@@ -302,12 +429,18 @@ func (m *CertRotator) patchWebhooks(ctx context.Context, caCert []byte) error {
 		}
 
 		if updated {
-			if err := m.Client.Patch(ctx, obj, client.MergeFrom(base)); err != nil {
+			logger.Info("Patching webhook configuration with new CA", "config", c.Name)
+			if err := m.Client.Patch(ctx, obj, client.MergeFrom(oldObj)); err != nil {
 				return fmt.Errorf("failed to patch %s: %w", c.Name, err)
 			}
-			logger.Info("patched CA bundle", "config", c.Name)
 		}
 	}
-
 	return nil
+}
+
+// recorderEvent emits a Kubernetes event.
+func (m *CertRotator) recorderEvent(obj client.Object, eventType, reason, message string) {
+	if m.Recorder != nil {
+		m.Recorder.Event(obj, eventType, reason, message)
+	}
 }

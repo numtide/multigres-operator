@@ -1,20 +1,19 @@
 package cert
 
 import (
-	"crypto/rsa"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"time"
 )
 
 const (
-	// RSAKeySize is the bit size for the RSA keys.
-	RSAKeySize = 2048
 	// Organization is the organization name used in the certificates.
 	Organization = "Multigres Operator"
 	// CAValidityDuration is the duration the CA certificate is valid for (10 years).
@@ -23,53 +22,25 @@ const (
 	ServerValidityDuration = 365 * 24 * time.Hour
 )
 
-// Artifacts holds the generated certificate and key data in PEM format.
-type Artifacts struct {
-	CACertPEM     []byte
-	CAKeyPEM      []byte
-	ServerCertPEM []byte
-	ServerKeyPEM  []byte
+// CAArtifacts holds the Certificate Authority keys.
+type CAArtifacts struct {
+	Cert    *x509.Certificate
+	Key     *ecdsa.PrivateKey
+	CertPEM []byte
+	KeyPEM  []byte
 }
 
-// GenerateSelfSignedArtifacts generates a complete set of self-signed artifacts:
-// 1. A new Root CA.
-// 2. A Server Certificate signed by that CA for the given Common Name and DNS names.
-// It accepts a random number generator (rng) to allow for secure testing/fault injection.
-func GenerateSelfSignedArtifacts(
-	rng io.Reader,
-	commonName string,
-	dnsNames []string,
-) (*Artifacts, error) {
-	// 1. Generate CA (returns PEMs and the parsed object for signing)
-	caCertPEM, caKeyPEM, caCert, caPrivKey, err := generateCA(rng)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate CA: %w", err)
-	}
-
-	// 2. Generate Server Certificate signed by CA (uses parsed object directly)
-	serverCertPEM, serverKeyPEM, err := generateServerCert(
-		rng,
-		commonName,
-		dnsNames,
-		caCert,
-		caPrivKey,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate server certificate: %w", err)
-	}
-
-	return &Artifacts{
-		CACertPEM:     caCertPEM,
-		CAKeyPEM:      caKeyPEM,
-		ServerCertPEM: serverCertPEM,
-		ServerKeyPEM:  serverKeyPEM,
-	}, nil
+// ServerArtifacts holds the Webhook Server keys.
+type ServerArtifacts struct {
+	CertPEM []byte
+	KeyPEM  []byte
 }
 
-func generateCA(rng io.Reader) ([]byte, []byte, *x509.Certificate, *rsa.PrivateKey, error) {
-	privKey, err := rsa.GenerateKey(rng, RSAKeySize)
+// GenerateCA creates a new self-signed Root CA using ECDSA P-256.
+func GenerateCA() (*CAArtifacts, error) {
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, fmt.Errorf("failed to generate CA private key: %w", err)
 	}
 
 	template := x509.Certificate{
@@ -78,7 +49,7 @@ func generateCA(rng io.Reader) ([]byte, []byte, *x509.Certificate, *rsa.PrivateK
 			CommonName:   "Multigres Operator CA",
 			Organization: []string{Organization},
 		},
-		NotBefore: time.Now().Add(-1 * time.Hour), // Backdate for clock skew
+		NotBefore: time.Now().Add(-1 * time.Hour),
 		NotAfter:  time.Now().Add(CAValidityDuration),
 		KeyUsage:  x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{
@@ -89,40 +60,56 @@ func generateCA(rng io.Reader) ([]byte, []byte, *x509.Certificate, *rsa.PrivateK
 		IsCA:                  true,
 	}
 
-	derBytes, err := x509.CreateCertificate(rng, &template, &template, &privKey.PublicKey, privKey)
+	derBytes, err := x509.CreateCertificate(
+		rand.Reader,
+		&template,
+		&template,
+		&privKey.PublicKey,
+		privKey,
+	)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, fmt.Errorf("failed to create CA certificate: %w", err)
 	}
 
-	// Parse it back to get the structural representation needed for signing the next cert
 	caCert, err := x509.ParseCertificate(derBytes)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, fmt.Errorf("failed to parse generated CA: %w", err)
 	}
 
-	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	caKeyPEM := pem.EncodeToMemory(
-		&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)},
-	)
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 
-	return caCertPEM, caKeyPEM, caCert, privKey, nil
+	keyBytes, err := x509.MarshalECPrivateKey(privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal CA key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+
+	return &CAArtifacts{
+		Cert:    caCert,
+		Key:     privKey,
+		CertPEM: certPEM,
+		KeyPEM:  keyPEM,
+	}, nil
 }
 
-func generateServerCert(
-	rng io.Reader,
+// GenerateServerCert creates a leaf certificate signed by the provided CA.
+func GenerateServerCert(
+	ca *CAArtifacts,
 	commonName string,
 	dnsNames []string,
-	caCert *x509.Certificate,
-	caKey *rsa.PrivateKey,
-) ([]byte, []byte, error) {
-	// Generate Server Key
-	privKey, err := rsa.GenerateKey(rng, RSAKeySize)
+) (*ServerArtifacts, error) {
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed to generate server private key: %w", err)
 	}
 
+	// Serial number should be unique. In a real PKI we'd track this,
+	// but for ephemeral K8s secrets using a large random int is standard practice.
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, _ := rand.Int(rand.Reader, serialNumberLimit)
+
 	template := x509.Certificate{
-		SerialNumber: big.NewInt(2), // Simple serial for self-signed
+		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName:   commonName,
 			Organization: []string{Organization},
@@ -134,20 +121,72 @@ func generateServerCert(
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 
-	// Add IP SANs if the common name looks like an IP (unlikely for K8s svc, but good practice)
 	if ip := net.ParseIP(commonName); ip != nil {
 		template.IPAddresses = append(template.IPAddresses, ip)
 	}
 
-	derBytes, err := x509.CreateCertificate(rng, &template, caCert, &privKey.PublicKey, caKey)
+	derBytes, err := x509.CreateCertificate(
+		rand.Reader,
+		&template,
+		ca.Cert,
+		&privKey.PublicKey,
+		ca.Key,
+	)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed to sign server certificate: %w", err)
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	keyPEM := pem.EncodeToMemory(
-		&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)},
-	)
 
-	return certPEM, keyPEM, nil
+	keyBytes, err := x509.MarshalECPrivateKey(privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal server key: %w", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+
+	return &ServerArtifacts{
+		CertPEM: certPEM,
+		KeyPEM:  keyPEM,
+	}, nil
+}
+
+// ParseCA decodes PEM data back into crypto objects for signing usage.
+func ParseCA(certPEM, keyPEM []byte) (*CAArtifacts, error) {
+	// Parse Cert
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode CA cert PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse CA cert: %w", err)
+	}
+
+	// Parse Key
+	block, _ = pem.Decode(keyPEM)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode CA key PEM")
+	}
+	// We optimistically try EC, then fallback to PKCS8 if needed, strictly P-256 for us.
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		// Fallback for older keys or PKCS8 wrapping
+		if k, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+			switch k := k.(type) {
+			case *ecdsa.PrivateKey:
+				key = k
+			default:
+				return nil, fmt.Errorf("found non-ECDSA private key type in CA secret")
+			}
+		} else {
+			return nil, fmt.Errorf("failed to parse CA private key: %w", err)
+		}
+	}
+
+	return &CAArtifacts{
+		Cert:    cert,
+		Key:     key,
+		CertPEM: certPEM,
+		KeyPEM:  keyPEM,
+	}, nil
 }

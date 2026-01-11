@@ -103,7 +103,6 @@ func main() {
 
 	// Webhook Flag Configuration
 	flag.BoolVar(&webhookEnabled, "webhook-enable", true, "Enable the admission webhook server")
-	// CHANGE: Aligned with config/manager/manager.yaml volumeMount
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/var/run/secrets/webhook", "Directory to store/read webhook certificates")
 	flag.StringVar(&webhookServiceNamespace, "webhook-service-namespace", defaultNS, "Namespace where the webhook service resides")
 	flag.StringVar(&webhookServiceAccount, "webhook-service-account", defaultSA, "Service Account name of the operator")
@@ -156,6 +155,8 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "multigres-operator.multigres.com",
+		// RELEASE LEADER ON CANCEL: Enables faster failover during rolling upgrades
+		LeaderElectionReleaseOnCancel: true,
 		WebhookServer: ctrlwebhook.NewServer(ctrlwebhook.Options{
 			Port:    9443,
 			CertDir: webhookCertDir,
@@ -187,12 +188,20 @@ func main() {
 			os.Exit(1)
 		}
 
-		rotator := cert.NewManager(tmpClient, cert.Options{
-			Namespace:          webhookServiceNamespace,
-			ServiceName:        webhookServiceName,
-			CertDir:            webhookCertDir,
-			OperatorDeployment: "multigres-operator-controller-manager", // Standard Kubebuilder deployment name
-		})
+		rotator := cert.NewManager(
+			tmpClient,
+			mgr.GetEventRecorderFor("cert-rotator"),
+			cert.Options{
+				Namespace:   webhookServiceNamespace,
+				ServiceName: webhookServiceName,
+				CertDir:     webhookCertDir,
+				// Use Label Selector to find our own deployment for OwnerRefs
+				// This works even if the deployment name is changed by Kustomize/Helm.
+				OperatorLabelSelector: map[string]string{
+					"app.kubernetes.io/name": "multigres-operator",
+				},
+			},
+		)
 
 		// Bootstrap immediately to unblock Webhook Server start
 		if err := rotator.Bootstrap(context.Background()); err != nil {

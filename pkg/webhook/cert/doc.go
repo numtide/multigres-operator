@@ -3,15 +3,23 @@
 // It supports two primary modes of operation:
 //
 //  1. Self-Signed (Auto-Bootstrap & Rotation):
-//     The package generates a Root CA and a Server Certificate in-memory, persists them
-//     to a Kubernetes Secret, and writes them to the local filesystem for controller-runtime.
-//     It also patches the MutatingWebhookConfiguration and ValidatingWebhookConfiguration
-//     resources with the generated CA Bundle.
+//     This package implements a production-grade Split-Secret PKI architecture.
 //
-//     Crucially, this mode handles AUTOMATIC ROTATION. On startup, it checks the
-//     expiration of the certificate stored in the Secret. If the certificate is expired
-//     or within the rotation threshold (30 days), it automatically regenerates the
-//     artifacts and updates the Secret and WebhookConfigurations.
+//     Architecture:
+//     - Root CA: Generated once and stored in 'multigres-operator-ca-secret'.
+//     This secret is NEVER mounted to the operator pod to prevent key compromise.
+//     - Server Cert: Signed by the Root CA and stored in 'multigres-webhook-certs'.
+//     This secret IS mounted to the pod via a Kubelet projected volume.
+//
+//     Lifecycle:
+//     - Bootstrap: On startup, it checks if the secrets exist. If not, it generates them.
+//     - Propagation: It waits for the Kubelet to project the secret files to disk before
+//     allowing the webhook server to start (preventing "split-brain" race conditions).
+//     - Rotation: A background loop checks for expiration hourly. If the server cert
+//     is expiring (or the CA changes), it automatically renews the secrets.
+//     - Injection: It patches the MutatingWebhookConfiguration and ValidatingWebhookConfiguration
+//     resources with the correct CA Bundle using conflict-free server-side patches.
+//     - Observability: Emits standard Kubernetes Events for all rotation actions.
 //
 //  2. External (e.g., cert-manager):
 //     In this mode, the package expects certificates to be provisioned by an external
@@ -20,8 +28,8 @@
 //
 // Usage:
 //
-//	mgr := cert.NewManager(client, options)
-//	if err := mgr.EnsureCerts(ctx); err != nil {
+//	mgr := cert.NewManager(client, recorder, options)
+//	if err := mgr.Bootstrap(ctx); err != nil {
 //	    // handle error
 //	}
 package cert
