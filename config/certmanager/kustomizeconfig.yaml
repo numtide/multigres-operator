@@ -1,0 +1,27 @@
+nameReference:
+- kind: Issuer
+  group: cert-manager.io
+  fieldSpecs:
+  - path: spec/issuerRef/name
+    kind: Certificate
+- kind: ClusterIssuer
+  group: cert-manager.io
+  fieldSpecs:
+  - path: spec/issuerRef/name
+    kind: Certificate
+- kind: Certificate
+  group: cert-manager.io
+  fieldSpecs:
+  - path: metadata/annotations/cert-manager.io\/inject-ca-from
+    kind: CustomResourceDefinition
+  - path: metadata/annotations/cert-manager.io\/inject-ca-from
+    kind: ValidatingWebhookConfiguration
+  - path: metadata/annotations/cert-manager.io\/inject-ca-from
+    kind: MutatingWebhookConfiguration
+varReference:
+- path: metadata/annotations/cert-manager.io\/inject-ca-from
+  kind: CustomResourceDefinition
+- path: metadata/annotations/cert-manager.io\/inject-ca-from
+  kind: ValidatingWebhookConfiguration
+- path: metadata/annotations/cert-manager.io\/inject-ca-from
+  kind: MutatingWebhookConfiguration
