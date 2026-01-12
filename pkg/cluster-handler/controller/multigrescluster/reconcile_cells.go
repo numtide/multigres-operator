@@ -39,6 +39,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 
 		gatewaySpec, localTopoSpec, err := res.ResolveCell(ctx, &cellCfg)
 		if err != nil {
+			r.Recorder.Event(cluster, "Warning", "TemplateMissing", err.Error())
 			return fmt.Errorf("failed to resolve cell '%s': %w", cellCfg.Name, err)
 		}
 
@@ -53,7 +54,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			},
 		}
 
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, cellCR, func() error {
+		op, err := controllerutil.CreateOrUpdate(ctx, r.Client, cellCR, func() error {
 			cellCR.Spec.Name = cellCfg.Name
 			cellCR.Spec.Zone = cellCfg.Zone
 			cellCR.Spec.Region = cellCfg.Region
@@ -74,8 +75,12 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			}
 
 			return controllerutil.SetControllerReference(cluster, cellCR, r.Scheme)
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("failed to create/update cell '%s': %w", cellCfg.Name, err)
+		}
+		if op == controllerutil.OperationResultCreated {
+			r.Recorder.Eventf(cluster, "Normal", "Created", "Created Cell %s", cellCR.Name)
 		}
 	}
 
@@ -84,6 +89,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			if err := r.Delete(ctx, &item); err != nil {
 				return fmt.Errorf("failed to delete orphaned cell '%s': %w", item.Name, err)
 			}
+			r.Recorder.Eventf(cluster, "Normal", "Deleted", "Deleted orphaned Cell %s", item.Name)
 		}
 	}
 

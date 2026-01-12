@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -252,8 +253,9 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			baseClient := clientBuilder.Build()
 
 			reconciler := &TableGroupReconciler{
-				Client: baseClient,
-				Scheme: scheme,
+				Client:   baseClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(100),
 			}
 
 			req := ctrl.Request{
@@ -387,8 +389,9 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			}
 
 			reconciler := &TableGroupReconciler{
-				Client: finalClient,
-				Scheme: scheme,
+				Client:   finalClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(100),
 			}
 
 			req := ctrl.Request{

@@ -31,6 +31,7 @@ import (
 // +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters/finalizers,verbs=update
 // +kubebuilder:rbac:groups=multigres.com,resources=coretemplates;celltemplates;shardtemplates,verbs=get;list;watch
 // +kubebuilder:rbac:groups=multigres.com,resources=cells;tablegroups;toposervers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // -- Certificate Manager Permissions (ADDED) --
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete

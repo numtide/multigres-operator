@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -25,7 +26,8 @@ const (
 // MultigresClusterReconciler reconciles a MultigresCluster object.
 type MultigresClusterReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile reads that state of the cluster for a MultigresCluster object and makes changes based on the state read
@@ -98,6 +100,13 @@ func (r *MultigresClusterReconciler) handleDelete(
 ) (ctrl.Result, error) {
 	if controllerutil.ContainsFinalizer(cluster, finalizerName) {
 		if err := r.checkChildrenDeleted(ctx, cluster); err != nil {
+			// If we are waiting for children, emit an event so the user knows why it's stuck in Terminating
+			r.Recorder.Event(
+				cluster,
+				"Normal",
+				"Cleanup",
+				"Waiting for child resources (Cells/TableGroups) to be deleted",
+			)
 			return ctrl.Result{}, err
 		}
 		controllerutil.RemoveFinalizer(cluster, finalizerName)

@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,7 +36,9 @@ type reconcileTestCase struct {
 	preReconcileUpdate  func(testing.TB, *multigresv1alpha1.MultigresCluster)
 	skipClusterCreation bool
 	wantErrMsg          string
-	validate            func(testing.TB, client.Client)
+	// NEW: Verify specific events were emitted
+	expectedEvents []string
+	validate       func(testing.TB, client.Client)
 }
 
 // runReconcileTest is the shared runner for all split test files
@@ -112,9 +115,12 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 				}
 			}
 
+			// Create a buffered fake recorder to capture events
+			fakeRecorder := record.NewFakeRecorder(100)
 			reconciler := &MultigresClusterReconciler{
-				Client: finalClient,
-				Scheme: scheme,
+				Client:   finalClient,
+				Scheme:   scheme,
+				Recorder: fakeRecorder,
 			}
 
 			req := ctrl.Request{
@@ -134,6 +140,32 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 				}
 			} else if err != nil {
 				t.Errorf("Unexpected error from Reconcile: %v", err)
+			}
+
+			// Verify Events
+			if len(tc.expectedEvents) > 0 {
+				close(fakeRecorder.Events)
+				var gotEvents []string
+				for evt := range fakeRecorder.Events {
+					gotEvents = append(gotEvents, evt)
+				}
+
+				for _, want := range tc.expectedEvents {
+					found := false
+					for _, got := range gotEvents {
+						if strings.Contains(got, want) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf(
+							"Expected event containing %q not found. Got events: %v",
+							want,
+							gotEvents,
+						)
+					}
+				}
 			}
 
 			if tc.validate != nil {
@@ -254,7 +286,7 @@ func parseQty(s string) resource.Quantity {
 // ============================================================================
 
 func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
-	_, _, _, _, clusterName, namespace, finalizerName := setupFixtures(t)
+	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, finalizerName := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]reconcileTestCase{
@@ -324,6 +356,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				},
 			},
 			wantErrMsg: "waiting for children to be deleted",
+			// VERIFY EVENT: Ensure the user sees why it's stuck
+			expectedEvents: []string{"Normal Cleanup Waiting for child resources"},
 		},
 		"Delete: Block Finalization if TableGroups Exist": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -498,6 +532,71 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				OnDelete: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
 			},
 			wantErrMsg: "failed to delete child",
+		},
+		"Error: TableGroup Name Too Long": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{
+					{
+						Name: "db1",
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Name:   "this-name-is-extremely-long-and-will-fail-validation",
+								Shards: []multigresv1alpha1.ShardConfig{{Name: "s1"}},
+							},
+						},
+					},
+				}
+			},
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			wantErrMsg:      "exceeds 50 characters",
+		},
+		"Error: Create TableGroup Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+			},
+			wantErrMsg: "failed to create/update tablegroup",
+		},
+		"Error: Delete Orphan TableGroup Failed": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-db1-orphan-tg",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(clusterName+"-db1-orphan-tg", errSimulated),
+			},
+			wantErrMsg: "failed to delete orphaned tablegroup",
+		},
+		"Success: Prune Orphan TableGroup": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-orphan-tg",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			// VERIFY EVENT: Ensure the event is emitted on success
+			expectedEvents: []string{"Normal Deleted Deleted orphaned TableGroup"},
+			validate: func(t testing.TB, c client.Client) {
+				tg := &multigresv1alpha1.TableGroup{}
+				err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: clusterName + "-orphan-tg", Namespace: namespace},
+					tg,
+				)
+				if !apierrors.IsNotFound(err) {
+					t.Error("Orphan TableGroup was not deleted")
+				}
+			},
 		},
 		"Object Not Found (Clean Exit)": {
 			skipClusterCreation: true,

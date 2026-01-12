@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -21,7 +22,8 @@ import (
 // TableGroupReconciler reconciles a TableGroup object.
 type TableGroupReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile reads the state of the TableGroup and ensures its child Shards are in the desired state.
@@ -63,7 +65,7 @@ func (r *TableGroupReconciler) Reconcile(
 			},
 		}
 
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, shardCR, func() error {
+		op, err := controllerutil.CreateOrUpdate(ctx, r.Client, shardCR, func() error {
 			shardCR.Spec.DatabaseName = tg.Spec.DatabaseName
 			shardCR.Spec.TableGroupName = tg.Spec.TableGroupName
 			shardCR.Spec.ShardName = shardSpec.Name
@@ -73,9 +75,13 @@ func (r *TableGroupReconciler) Reconcile(
 			shardCR.Spec.Pools = shardSpec.Pools
 
 			return controllerutil.SetControllerReference(tg, shardCR, r.Scheme)
-		}); err != nil {
+		})
+		if err != nil {
 			l.Error(err, "Failed to create/update shard", "shard", shardNameFull)
 			return ctrl.Result{}, fmt.Errorf("failed to create/update shard: %w", err)
+		}
+		if op == controllerutil.OperationResultCreated {
+			r.Recorder.Eventf(tg, "Normal", "Created", "Created Shard %s", shardCR.Name)
 		}
 	}
 
@@ -98,6 +104,7 @@ func (r *TableGroupReconciler) Reconcile(
 					err,
 				)
 			}
+			r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
 		}
 	}
 
