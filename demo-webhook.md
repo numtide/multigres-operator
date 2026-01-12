@@ -24,6 +24,14 @@ The Operator's `Makefile` handles most project-specific dependencies (Kustomize,
 
 *Note: The demo commands below will fail immediately if these tools are not found in your `$PATH`.*
 
+**Critical Setup (Go Workspace)**: Since this project uses multiple modules and the webhook is currently not merged or using the latest version of these modules you must do the following too:
+
+```bash
+go work init
+go work use -r .
+```
+
+
 ---
 
 ## 🏗️ Scenario 1: Robust Mode (Visible Defaults)
@@ -107,7 +115,7 @@ kubectl apply -f config/samples/templated-cluster.yaml
 The Webhook immediately rejects the request with a clear error.
 
 ```text
-Error from server (NotFound): error when creating "config/samples/templated-cluster.yaml": 
+Error from server (NotFound): error when creating "config/samples/templated-cluster.yaml":
 admission webhook "mmultigrescluster.kb.io" denied the request: CoreTemplate.multigres.com "standard-core" not found
 
 ```
@@ -147,7 +155,7 @@ kubectl delete celltemplate standard-cell
 The webhook blocks the deletion.
 
 ```text
-Error from server (Forbidden): admission webhook "vcelltemplate.kb.io" denied the request: 
+Error from server (Forbidden): admission webhook "vcelltemplate.kb.io" denied the request:
 cannot delete CellTemplate 'standard-cell' because it is in use by MultigresCluster 'standard-ha-cluster'
 
 ```
@@ -251,7 +259,7 @@ The child resources are created successfully.
 
 ```text
 NAME                                        GATEWAY   READY
-cell.multigres.com/minimal-cluster-zone-a   0         
+cell.multigres.com/minimal-cluster-zone-a   0
 
 NAME                                                        SHARDS
 tablegroup.multigres.com/minimal-cluster-postgres-default   0
@@ -333,11 +341,11 @@ func (r *MultigresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
     // ...
     // 1. Resolve State (using Shared Resolver)
     resolvedCluster, err := r.Resolver.Resolve(ctx, &cluster)
-    
+
     // 2. Reconcile Children based on Resolved State
     if err := r.reconcileCells(ctx, resolvedCluster); err != nil { return ... }
     if err := r.reconcileDatabase(ctx, resolvedCluster); err != nil { return ... }
-    
+
     return ctrl.Result{}, nil
 }
 
