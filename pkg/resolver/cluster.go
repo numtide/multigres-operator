@@ -32,16 +32,11 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 		cluster.Spec.Images.ImagePullPolicy = DefaultImagePullPolicy
 	}
 
-	// 2. Default Template Refs
-	if cluster.Spec.TemplateDefaults.CoreTemplate == "" {
-		cluster.Spec.TemplateDefaults.CoreTemplate = FallbackCoreTemplate
-	}
-	if cluster.Spec.TemplateDefaults.CellTemplate == "" {
-		cluster.Spec.TemplateDefaults.CellTemplate = FallbackCellTemplate
-	}
-	if cluster.Spec.TemplateDefaults.ShardTemplate == "" {
-		cluster.Spec.TemplateDefaults.ShardTemplate = FallbackShardTemplate
-	}
+	// 2. Default Template Refs - REMOVED
+	// We do NOT blindly default these to "default".
+	// If the user wants to use a template named "default", they can rely on the implicit lookup
+	// or specify it explicitly. Setting it here causes the spec to claim "default" is being used
+	// even when no such template exists.
 
 	// 3. Smart Defaulting: System Catalog
 	if len(cluster.Spec.Databases) == 0 {

@@ -48,34 +48,101 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	scopedResolver.Namespace = cluster.Namespace
 	scopedResolver.TemplateDefaults = cluster.Spec.TemplateDefaults
 
+	// 2.5 Promote Implicit Defaults to Explicit
+	// If the user hasn't specified a template, but a "default" one exists,
+	// we explicitly set it in the Spec. This ensures the user KNOWS a template is being used
+	// instead of it happening magically behind the scenes.
+	{
+		if cluster.Spec.TemplateDefaults.CoreTemplate == "" {
+			exists, _ := scopedResolver.CoreTemplateExists(ctx, resolver.FallbackCoreTemplate)
+			if exists {
+				cluster.Spec.TemplateDefaults.CoreTemplate = resolver.FallbackCoreTemplate
+				scopedResolver.TemplateDefaults.CoreTemplate = resolver.FallbackCoreTemplate
+			}
+		}
+		if cluster.Spec.TemplateDefaults.CellTemplate == "" {
+			exists, _ := scopedResolver.CellTemplateExists(ctx, resolver.FallbackCellTemplate)
+			if exists {
+				cluster.Spec.TemplateDefaults.CellTemplate = resolver.FallbackCellTemplate
+				scopedResolver.TemplateDefaults.CellTemplate = resolver.FallbackCellTemplate
+			}
+		}
+		if cluster.Spec.TemplateDefaults.ShardTemplate == "" {
+			exists, _ := scopedResolver.ShardTemplateExists(ctx, resolver.FallbackShardTemplate)
+			if exists {
+				cluster.Spec.TemplateDefaults.ShardTemplate = resolver.FallbackShardTemplate
+				scopedResolver.TemplateDefaults.ShardTemplate = resolver.FallbackShardTemplate
+			}
+		}
+	}
+
 	// 3. Stateful Resolution (Visible Defaults)
 
 	// A. Resolve Global Topo Server
-	if cluster.Spec.GlobalTopoServer == nil ||
-		(cluster.Spec.GlobalTopoServer.TemplateRef == "" && cluster.Spec.GlobalTopoServer.External == nil) {
-		globalTopo, err := scopedResolver.ResolveGlobalTopo(ctx, cluster)
-		if err != nil {
-			return fmt.Errorf("failed to resolve globalTopoServer: %w", err)
+	// Logic:
+	// 1. If explicit Inline Template -> Skip (Dynamic)
+	// 2. If explicit Global Template (TemplateDefaults) -> Skip (Dynamic)
+	// 3. If implicit "default" Template exists -> Skip (Dynamic)
+	// 4. Else -> Materialize Hardcoded Defaults.
+
+	// Helper to check intent
+	hasGlobalCore := cluster.Spec.TemplateDefaults.CoreTemplate != ""
+	hasImplicitCore, _ := scopedResolver.CoreTemplateExists(
+		ctx,
+		resolver.FallbackCoreTemplate,
+	) // Ignore error, treat as false
+
+	// GlobalTopo
+	{
+		hasInline := cluster.Spec.GlobalTopoServer != nil &&
+			cluster.Spec.GlobalTopoServer.TemplateRef != ""
+			// We also check if the user provided inline CONFIG (External or Etcd spec).
+			// If they provided config but no template, we might still want to merge defaults?
+			// User rule: "When NOT using templates, materialize whatever defaults".
+			// "Using templates" means Inline OR Global OR Implicit exists.
+
+		isUsingTemplate := hasInline || hasGlobalCore || hasImplicitCore
+
+		if !isUsingTemplate {
+			// No template involved. Materialize defaults.
+			globalTopo, err := scopedResolver.ResolveGlobalTopo(ctx, cluster)
+			if err != nil {
+				return fmt.Errorf("failed to resolve globalTopoServer: %w", err)
+			}
+			cluster.Spec.GlobalTopoServer = globalTopo
 		}
-		cluster.Spec.GlobalTopoServer = globalTopo
 	}
 
 	// B. Resolve MultiAdmin
-	if cluster.Spec.MultiAdmin == nil || cluster.Spec.MultiAdmin.TemplateRef == "" {
-		multiAdmin, err := scopedResolver.ResolveMultiAdmin(ctx, cluster)
-		if err != nil {
-			return fmt.Errorf("failed to resolve multiadmin: %w", err)
+	{
+		hasInline := cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef != ""
+		isUsingTemplate := hasInline || hasGlobalCore || hasImplicitCore
+
+		if !isUsingTemplate {
+			multiAdmin, err := scopedResolver.ResolveMultiAdmin(ctx, cluster)
+			if err != nil {
+				return fmt.Errorf("failed to resolve multiadmin: %w", err)
+			}
+			if cluster.Spec.MultiAdmin == nil {
+				cluster.Spec.MultiAdmin = &multigresv1alpha1.MultiAdminConfig{}
+			}
+			if multiAdmin != nil {
+				cluster.Spec.MultiAdmin.Spec = multiAdmin
+			}
 		}
-		if cluster.Spec.MultiAdmin == nil {
-			cluster.Spec.MultiAdmin = &multigresv1alpha1.MultiAdminConfig{}
-		}
-		cluster.Spec.MultiAdmin.Spec = multiAdmin
 	}
 
 	// C. Resolve Cells
+	hasGlobalCell := cluster.Spec.TemplateDefaults.CellTemplate != ""
+	hasImplicitCell, _ := scopedResolver.CellTemplateExists(ctx, resolver.FallbackCellTemplate)
+
 	for i := range cluster.Spec.Cells {
 		cell := &cluster.Spec.Cells[i]
-		if cell.CellTemplate == "" {
+		hasInline := cell.CellTemplate != ""
+
+		isUsingTemplate := hasInline || hasGlobalCell || hasImplicitCell
+
+		if !isUsingTemplate {
 			gatewaySpec, localTopoSpec, err := scopedResolver.ResolveCell(ctx, cell)
 			if err != nil {
 				return fmt.Errorf("failed to resolve cell '%s': %w", cell.Name, err)
@@ -88,11 +155,18 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	}
 
 	// D. Resolve Shards
+	hasGlobalShard := cluster.Spec.TemplateDefaults.ShardTemplate != ""
+	hasImplicitShard, _ := scopedResolver.ShardTemplateExists(ctx, resolver.FallbackShardTemplate)
+
 	for i := range cluster.Spec.Databases {
 		for j := range cluster.Spec.Databases[i].TableGroups {
 			for k := range cluster.Spec.Databases[i].TableGroups[j].Shards {
 				shard := &cluster.Spec.Databases[i].TableGroups[j].Shards[k]
-				if shard.ShardTemplate == "" {
+				hasInline := shard.ShardTemplate != ""
+
+				isUsingTemplate := hasInline || hasGlobalShard || hasImplicitShard
+
+				if !isUsingTemplate {
 					multiOrchSpec, poolsSpec, err := scopedResolver.ResolveShard(ctx, shard)
 					if err != nil {
 						return fmt.Errorf("failed to resolve shard '%s': %w", shard.Name, err)
