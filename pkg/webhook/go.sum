@@ -98,6 +98,8 @@ github.com/numtide/multigres-operator/api v0.0.0-20260110025154-da9aa10fb701 h1:
 github.com/numtide/multigres-operator/api v0.0.0-20260110025154-da9aa10fb701/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260106180404-c02430f41b11 h1:zZTF/NSklH8kqlw9srPJoXm/JRmmp9SIg5MGVT6XYhY=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260106180404-c02430f41b11/go.mod h1:e/+O28FuzzqC0uPaltae87ZDCAIaE+V7ZtywMjMCqXo=
+github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260115201516-44b30bf5dd8e h1:sHKM36+Rc8u+ycJP1lkh2SVEddFRhl9oYZQjriPtFbc=
+github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:Tof4AW9GIbESro20GKNt0DgYFwD8Yt3NZgU0jwZKNSA=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260106180404-c02430f41b11 h1:VBZAPz01P7K/32WpZBoz5nrUEKuVr0XvzFg2Szgq1pE=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260106180404-c02430f41b11/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
 github.com/onsi/ginkgo/v2 v2.25.3 h1:Ty8+Yi/ayDAGtk4XxmmfUy4GabvM+MegeB4cDLRi6nw=

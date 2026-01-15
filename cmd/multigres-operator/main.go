@@ -99,23 +99,83 @@ func main() {
 	}
 
 	// General Flags
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for Multigres Operator.")
-	flag.BoolVar(&secureMetrics, "metrics-secure", true, "If set, the metrics endpoint is served securely via HTTPS.")
-	flag.BoolVar(&enableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(
+		&metricsAddr,
+		"metrics-bind-address",
+		"0",
+		"The address the metrics endpoint binds to.",
+	)
+	flag.StringVar(
+		&probeAddr,
+		"health-probe-bind-address",
+		":8081",
+		"The address the probe endpoint binds to.",
+	)
+	flag.BoolVar(
+		&enableLeaderElection,
+		"leader-elect",
+		false,
+		"Enable leader election for Multigres Operator.",
+	)
+	flag.BoolVar(
+		&secureMetrics,
+		"metrics-secure",
+		true,
+		"If set, the metrics endpoint is served securely via HTTPS.",
+	)
+	flag.BoolVar(
+		&enableHTTP2,
+		"enable-http2",
+		false,
+		"If set, HTTP/2 will be enabled for the metrics and webhook servers",
+	)
 
 	// Webhook Flag Configuration
 	flag.BoolVar(&webhookEnabled, "webhook-enable", true, "Enable the admission webhook server")
-	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/var/run/secrets/webhook", "Directory to store/read webhook certificates")
-	flag.StringVar(&webhookServiceNamespace, "webhook-service-namespace", defaultNS, "Namespace where the webhook service resides")
-	flag.StringVar(&webhookServiceAccount, "webhook-service-account", defaultSA, "Service Account name of the operator")
-	flag.StringVar(&webhookServiceName, "webhook-service-name", "multigres-operator-webhook-service", "Name of the Kubernetes Service for the webhook")
+	flag.StringVar(
+		&webhookCertDir,
+		"webhook-cert-dir",
+		"/var/run/secrets/webhook",
+		"Directory to store/read webhook certificates",
+	)
+	flag.StringVar(
+		&webhookServiceNamespace,
+		"webhook-service-namespace",
+		defaultNS,
+		"Namespace where the webhook service resides",
+	)
+	flag.StringVar(
+		&webhookServiceAccount,
+		"webhook-service-account",
+		defaultSA,
+		"Service Account name of the operator",
+	)
+	flag.StringVar(
+		&webhookServiceName,
+		"webhook-service-name",
+		"multigres-operator-webhook-service",
+		"Name of the Kubernetes Service for the webhook",
+	)
 
 	// Template Defaults
-	flag.StringVar(&defaultCoreTemplate, "default-core-template", "default", "Default CoreTemplate name")
-	flag.StringVar(&defaultCellTemplate, "default-cell-template", "default", "Default CellTemplate name")
-	flag.StringVar(&defaultShardTemplate, "default-shard-template", "default", "Default ShardTemplate name")
+	flag.StringVar(
+		&defaultCoreTemplate,
+		"default-core-template",
+		"default",
+		"Default CoreTemplate name",
+	)
+	flag.StringVar(
+		&defaultCellTemplate,
+		"default-cell-template",
+		"default",
+		"Default CellTemplate name",
+	)
+	flag.StringVar(
+		&defaultShardTemplate,
+		"default-shard-template",
+		"default",
+		"Default ShardTemplate name",
+	)
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -146,7 +206,9 @@ func main() {
 	useInternalCerts := false
 	if webhookEnabled {
 		if !certsExist(webhookCertDir) {
-			setupLog.Info("webhook certificates not found on disk; enabling internal certificate rotation")
+			setupLog.Info(
+				"webhook certificates not found on disk; enabling internal certificate rotation",
+			)
 			useInternalCerts = true
 		} else {
 			setupLog.Info("webhook certificates found on disk; using external certificate management")
