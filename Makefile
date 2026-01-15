@@ -99,6 +99,8 @@ CONTROLLER_TOOLS_VERSION ?= v0.18.0
 # renovate: datasource=github-releases depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.3.0
 
+CERT_MANAGER_VERSION ?= v1.19.2
+
 ## Envtest
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
@@ -134,11 +136,10 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./api/..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac
-
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./api/...;./pkg/webhook/..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac output:webhook:artifacts:config=config/webhook
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object paths="./api/..."
+	$(CONTROLLER_GEN) object paths="./api/...;./pkg/webhook/..."
 # $(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 .PHONY: fmt
@@ -427,6 +428,30 @@ kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cl
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
+.PHONY: kind-deploy-certmanager
+kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-load
+	@echo "==> Installing CRDs..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
+		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Deploying operator (Cert-Manager Mode)..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	# POINT TO THE OVERLAY:
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/deploy-certmanager | \
+		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Deployment complete!"
+	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
+
+.PHONY: kind-deploy-no-webhook
+kind-deploy-no-webhook: kind-up install-certmanager manifests kustomize kind-load ## Deploy controller to Kind without the webhook enabled.
+	@echo "==> Installing CRDs..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Deploying operator..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/no-webhook | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Deployment complete!"
+	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
+
+
 .PHONY: kind-redeploy
 kind-redeploy: kind-load ## Rebuild image, reload to kind, and restart pods
 	@echo "==> Restarting operator pods..."
@@ -468,6 +493,13 @@ $(ENVTEST): $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+.PHONY: install-certmanager
+install-certmanager: ## Install Cert-Manager into the cluster
+	@echo "==> Installing Cert-Manager $(CERT_MANAGER_VERSION)..."
+	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
+	@echo "==> Waiting for Cert-Manager to be ready..."
+	$(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

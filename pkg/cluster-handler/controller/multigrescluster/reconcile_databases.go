@@ -47,6 +47,14 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 			for _, shard := range tg.Shards {
 				orch, pools, err := res.ResolveShard(ctx, &shard)
 				if err != nil {
+					r.Recorder.Eventf(
+						cluster,
+						"Warning",
+						"ConfigError",
+						"Failed to resolve shard %s: %v",
+						shard.Name,
+						err,
+					)
 					return fmt.Errorf(
 						"failed to resolve shard '%s': %w",
 						shard.Name,
@@ -88,7 +96,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				},
 			}
 
-			if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, tgCR, func() error {
+			op, err := controllerutil.CreateOrUpdate(ctx, r.Client, tgCR, func() error {
 				tgCR.Spec.DatabaseName = db.Name
 				tgCR.Spec.TableGroupName = tg.Name
 				tgCR.Spec.IsDefault = tg.Default
@@ -105,8 +113,12 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				tgCR.Spec.Shards = resolvedShards
 
 				return controllerutil.SetControllerReference(cluster, tgCR, r.Scheme)
-			}); err != nil {
+			})
+			if err != nil {
 				return fmt.Errorf("failed to create/update tablegroup '%s': %w", tgNameFull, err)
+			}
+			if op == controllerutil.OperationResultCreated {
+				r.Recorder.Eventf(cluster, "Normal", "Created", "Created TableGroup %s", tgCR.Name)
 			}
 		}
 	}
@@ -116,6 +128,13 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 			if err := r.Delete(ctx, &item); err != nil {
 				return fmt.Errorf("failed to delete orphaned tablegroup '%s': %w", item.Name, err)
 			}
+			r.Recorder.Eventf(
+				cluster,
+				"Normal",
+				"Deleted",
+				"Deleted orphaned TableGroup %s",
+				item.Name,
+			)
 		}
 	}
 

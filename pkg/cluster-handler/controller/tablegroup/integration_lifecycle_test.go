@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -122,17 +123,22 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 		}
 
 		// 2. Update TG to remove "delete-me"
-		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tg), tg); err != nil {
-			t.Fatal(err)
-		}
-		tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{
-			{
-				Name:      "keep-me",
-				MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-				Pools:     map[string]multigresv1alpha1.PoolSpec{},
-			},
-		}
-		if err := k8sClient.Update(ctx, tg); err != nil {
+		// FIX: Use RetryOnConflict to handle background controller updates (e.g. status/finalizers)
+		// causing ResourceVersion mismatches.
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			// Always fetch the latest version inside the retry loop
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tg), tg); err != nil {
+				return err
+			}
+			tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{
+				{
+					Name:      "keep-me",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
+					Pools:     map[string]multigresv1alpha1.PoolSpec{},
+				},
+			}
+			return k8sClient.Update(ctx, tg)
+		}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -194,11 +200,14 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 
 		// 2. Tamper with Shard (Scale up manually)
 		latestShard := &multigresv1alpha1.Shard{}
-		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(goodShard), latestShard); err != nil {
-			t.Fatal(err)
-		}
-		latestShard.Spec.MultiOrch.Replicas = ptr.To(int32(99)) // Tamper
-		if err := k8sClient.Update(ctx, latestShard); err != nil {
+		// FIX: Use RetryOnConflict for tamper update as well, just in case
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(goodShard), latestShard); err != nil {
+				return err
+			}
+			latestShard.Spec.MultiOrch.Replicas = ptr.To(int32(99)) // Tamper
+			return k8sClient.Update(ctx, latestShard)
+		}); err != nil {
 			t.Fatal(err)
 		}
 

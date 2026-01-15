@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -18,16 +19,22 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
+const (
+	finalizerName = "tablegroup.multigres.com/finalizer"
+)
+
 // TableGroupReconciler reconciles a TableGroup object.
 type TableGroupReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile reads the state of the TableGroup and ensures its child Shards are in the desired state.
 //
 // +kubebuilder:rbac:groups=multigres.com,resources=tablegroups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=tablegroups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=multigres.com,resources=tablegroups/finalizers,verbs=update
 // +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
 func (r *TableGroupReconciler) Reconcile(
 	ctx context.Context,
@@ -42,6 +49,20 @@ func (r *TableGroupReconciler) Reconcile(
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to get TableGroup: %w", err)
+	}
+
+	// Handle Deletion
+	if !tg.DeletionTimestamp.IsZero() {
+		return r.handleDelete(ctx, tg)
+	}
+
+	// Add Finalizer
+	if !controllerutil.ContainsFinalizer(tg, finalizerName) {
+		controllerutil.AddFinalizer(tg, finalizerName)
+		if err := r.Update(ctx, tg); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	activeShardNames := make(map[string]bool, len(tg.Spec.Shards))
@@ -63,7 +84,7 @@ func (r *TableGroupReconciler) Reconcile(
 			},
 		}
 
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, shardCR, func() error {
+		op, err := controllerutil.CreateOrUpdate(ctx, r.Client, shardCR, func() error {
 			shardCR.Spec.DatabaseName = tg.Spec.DatabaseName
 			shardCR.Spec.TableGroupName = tg.Spec.TableGroupName
 			shardCR.Spec.ShardName = shardSpec.Name
@@ -73,9 +94,13 @@ func (r *TableGroupReconciler) Reconcile(
 			shardCR.Spec.Pools = shardSpec.Pools
 
 			return controllerutil.SetControllerReference(tg, shardCR, r.Scheme)
-		}); err != nil {
+		})
+		if err != nil {
 			l.Error(err, "Failed to create/update shard", "shard", shardNameFull)
 			return ctrl.Result{}, fmt.Errorf("failed to create/update shard: %w", err)
+		}
+		if op == controllerutil.OperationResultCreated {
+			r.Recorder.Eventf(tg, "Normal", "Created", "Created Shard %s", shardCR.Name)
 		}
 	}
 
@@ -98,6 +123,7 @@ func (r *TableGroupReconciler) Reconcile(
 					err,
 				)
 			}
+			r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
 		}
 	}
 
@@ -146,6 +172,58 @@ func (r *TableGroupReconciler) Reconcile(
 	}
 
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+}
+
+func (r *TableGroupReconciler) handleDelete(
+	ctx context.Context,
+	tg *multigresv1alpha1.TableGroup,
+) (ctrl.Result, error) {
+	if controllerutil.ContainsFinalizer(tg, finalizerName) {
+		// List all Shards owned by this TableGroup
+		shards := &multigresv1alpha1.ShardList{}
+		if err := r.List(ctx, shards, client.InNamespace(tg.Namespace), client.MatchingLabels{
+			"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
+			"multigres.com/database":   tg.Spec.DatabaseName,
+			"multigres.com/tablegroup": tg.Spec.TableGroupName,
+		}); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to list shards for deletion: %w", err)
+		}
+
+		// Delete them
+		for _, s := range shards.Items {
+			if s.GetDeletionTimestamp().IsZero() {
+				if err := r.Delete(ctx, &s); err != nil {
+					if !errors.IsNotFound(err) {
+						return ctrl.Result{}, fmt.Errorf(
+							"failed to delete shard %s: %w",
+							s.Name,
+							err,
+						)
+					}
+				}
+			}
+		}
+
+		// If any shards remain, wait
+		if len(shards.Items) > 0 {
+			r.Recorder.Eventf(
+				tg,
+				"Normal",
+				"Cleanup",
+				"Waiting for %d shards to be deleted",
+				len(shards.Items),
+			)
+			// Requeue to check again
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+
+		// All shards gone, remove finalizer
+		controllerutil.RemoveFinalizer(tg, finalizerName)
+		if err := r.Update(ctx, tg); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
+		}
+	}
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

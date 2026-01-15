@@ -1,0 +1,49 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: overrides-cluster
+  namespace: default
+spec:
+  # Reference the global templates
+  templateDefaults:
+    coreTemplate: "standard-core"
+    cellTemplate: "standard-cell"
+    shardTemplate: "standard-shard"
+
+  # Override Global Topo Server
+  globalTopoServer:
+    etcd:
+      replicas: 5 # Override: Increase from 3 (template) to 5
+
+  # Override MultiAdmin
+  multiadmin:
+    spec:
+      replicas: 3 # Override: Increase from 2 (template) to 3
+
+  # Define Cells with Overrides
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"
+      overrides:
+        multigateway:
+            replicas: 3 # Override: Increase from 2 (template) to 3
+
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0"
+              overrides:
+                pools:
+                  "main-app":
+                    storage:
+                      size: "200Gi" # Override: Increase from 100Gi (template) to 200Gi
+                    # Define a new pool not in template
+                  "analytics":
+                    type: "readOnly"
+                    replicasPerCell: 1
+                    storage:
+                      size: "50Gi"

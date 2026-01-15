@@ -1,0 +1,193 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-multigres-com-v1alpha1-multigrescluster
+  failurePolicy: Fail
+  name: mmultigrescluster.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - multigresclusters
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-cell
+  failurePolicy: Fail
+  name: vcell.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - cells
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-celltemplate
+  failurePolicy: Fail
+  name: vcelltemplate.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - DELETE
+    resources:
+    - celltemplates
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-coretemplate
+  failurePolicy: Fail
+  name: vcoretemplate.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - DELETE
+    resources:
+    - coretemplates
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-multigrescluster
+  failurePolicy: Fail
+  name: vmultigrescluster.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - multigresclusters
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-shard
+  failurePolicy: Fail
+  name: vshard.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - shards
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-shardtemplate
+  failurePolicy: Fail
+  name: vshardtemplate.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - DELETE
+    resources:
+    - shardtemplates
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-tablegroup
+  failurePolicy: Fail
+  name: vtablegroup.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - tablegroups
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-multigres-com-v1alpha1-toposerver
+  failurePolicy: Fail
+  name: vtoposerver.kb.io
+  rules:
+  - apiGroups:
+    - multigres.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - toposervers
+  sideEffects: None

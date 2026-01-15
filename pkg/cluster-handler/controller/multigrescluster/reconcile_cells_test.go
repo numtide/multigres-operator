@@ -11,7 +11,7 @@ import (
 )
 
 func TestReconcile_Cells(t *testing.T) {
-	coreTpl, _, shardTpl, _, clusterName, namespace, _ := setupFixtures(t)
+	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, _ := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]reconcileTestCase{
@@ -107,6 +107,39 @@ func TestReconcile_Cells(t *testing.T) {
 				}(),
 			},
 			wantErrMsg: "failed to get global topo ref",
+		},
+		"Success: Cell Exists (Idempotency)": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-zone-a",
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster": clusterName,
+							"multigres.com/cell":    "zone-a",
+						},
+					},
+					Spec: multigresv1alpha1.CellSpec{
+						Name: "zone-a",
+						Zone: "us-east-1a",
+					},
+				},
+			},
+		},
+
+		"Success: Prune Orphan Cell": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-orphan-zone",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+					Spec: multigresv1alpha1.CellSpec{Name: "orphan-zone"},
+				},
+			},
 		},
 	}
 

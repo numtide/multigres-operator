@@ -35,8 +35,11 @@ func TestReconcile_Databases(t *testing.T) {
 				if len(tg.Spec.Shards) != 1 {
 					t.Fatalf("Expected 1 shard (injected '0'), got %d", len(tg.Spec.Shards))
 				}
-				// Verify defaults applied (1 replica from default spec, propagated cells)
-				if got, want := *tg.Spec.Shards[0].MultiOrch.Replicas, int32(1); got != want {
+				// Verify defaults applied.
+				// NOTE: We expect 3 replicas here because 'shardTpl' (the default template in fixtures)
+				// defines replicas: 3. The resolver correctly prioritizes the Namespace Default (Level 3)
+				// over the Operator Default (Level 4, which is 1).
+				if got, want := *tg.Spec.Shards[0].MultiOrch.Replicas, int32(3); got != want {
 					t.Errorf("Injected shard replicas mismatch. Replicas: %d, Want: %d", got, want)
 				}
 				if len(tg.Spec.Shards[0].MultiOrch.Cells) != 1 ||

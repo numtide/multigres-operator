@@ -34,6 +34,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 ) error {
 	spec, err := res.ResolveGlobalTopo(ctx, cluster)
 	if err != nil {
+		r.Recorder.Event(cluster, "Warning", "TemplateMissing", err.Error())
 		return fmt.Errorf("failed to resolve global topo: %w", err)
 	}
 
@@ -45,7 +46,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 				Labels:    map[string]string{"multigres.com/cluster": cluster.Name},
 			},
 		}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
+		op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
 			ts.Spec.Etcd = &multigresv1alpha1.EtcdSpec{
 				Image:     spec.Etcd.Image,
 				Replicas:  spec.Etcd.Replicas,
@@ -53,8 +54,12 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 				Resources: spec.Etcd.Resources,
 			}
 			return controllerutil.SetControllerReference(cluster, ts, r.Scheme)
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("failed to create/update global topo: %w", err)
+		}
+		if op == controllerutil.OperationResultCreated {
+			r.Recorder.Eventf(cluster, "Normal", "Created", "Created Global TopoServer %s", ts.Name)
 		}
 	}
 	return nil
@@ -67,6 +72,7 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 ) error {
 	spec, err := res.ResolveMultiAdmin(ctx, cluster)
 	if err != nil {
+		r.Recorder.Event(cluster, "Warning", "TemplateMissing", err.Error())
 		return fmt.Errorf("failed to resolve multiadmin: %w", err)
 	}
 
@@ -80,10 +86,13 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 			},
 		},
 	}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 		deploy.Spec.Replicas = spec.Replicas
 		deploy.Spec.Selector = &metav1.LabelSelector{
-			MatchLabels: map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name},
+			MatchLabels: map[string]string{
+				"app":                   "multiadmin",
+				"multigres.com/cluster": cluster.Name,
+			},
 		}
 
 		podLabels := map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name}
@@ -109,8 +118,18 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 			},
 		}
 		return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("failed to create/update multiadmin: %w", err)
+	}
+	if op == controllerutil.OperationResultCreated {
+		r.Recorder.Eventf(
+			cluster,
+			"Normal",
+			"Created",
+			"Created MultiAdmin Deployment %s",
+			deploy.Name,
+		)
 	}
 
 	return nil
@@ -124,6 +143,7 @@ func (r *MultigresClusterReconciler) getGlobalTopoRef(
 ) (multigresv1alpha1.GlobalTopoServerRef, error) {
 	spec, err := res.ResolveGlobalTopo(ctx, cluster)
 	if err != nil {
+		r.Recorder.Event(cluster, "Warning", "TemplateMissing", err.Error())
 		return multigresv1alpha1.GlobalTopoServerRef{}, err
 	}
 

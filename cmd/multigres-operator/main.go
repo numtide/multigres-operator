@@ -17,23 +17,28 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
+	"path/filepath"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
@@ -41,7 +46,10 @@ import (
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
 	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
-	// +kubebuilder:scaffold:imports
+
+	"github.com/numtide/multigres-operator/pkg/resolver"
+	multigreswebhook "github.com/numtide/multigres-operator/pkg/webhook"
+	cert "github.com/numtide/multigres-operator/pkg/webhook/cert"
 )
 
 var (
@@ -49,141 +57,80 @@ var (
 	version   = "dev"
 	buildDate = "unknown"
 	gitCommit = "unknown"
-
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme    = runtime.NewScheme()
+	setupLog  = ctrl.Log.WithName("setup")
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
 	utilruntime.Must(multigresv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(admissionregistrationv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
-// nolint:gocyclo
 func main() {
 	var metricsAddr string
-	var metricsCertPath, metricsCertName, metricsCertKey string
-	var webhookCertPath, webhookCertName, webhookCertKey string
 	var enableLeaderElection bool
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
-	flag.StringVar(
-		&metricsAddr,
-		"metrics-bind-address",
-		"0",
-		"The address the metrics endpoint binds to. "+
-			"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.",
-	)
-	flag.StringVar(
-		&probeAddr,
-		"health-probe-bind-address",
-		":8081",
-		"The address the probe endpoint binds to.",
-	)
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(
-		&secureMetrics,
-		"metrics-secure",
-		true,
-		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.",
-	)
-	flag.StringVar(
-		&webhookCertPath,
-		"webhook-cert-path",
-		"",
-		"The directory that contains the webhook certificate.",
-	)
-	flag.StringVar(
-		&webhookCertName,
-		"webhook-cert-name",
-		"tls.crt",
-		"The name of the webhook certificate file.",
-	)
-	flag.StringVar(
-		&webhookCertKey,
-		"webhook-cert-key",
-		"tls.key",
-		"The name of the webhook key file.",
-	)
-	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",
-		"The directory that contains the metrics server certificate.")
-	flag.StringVar(
-		&metricsCertName,
-		"metrics-cert-name",
-		"tls.crt",
-		"The name of the metrics server certificate file.",
-	)
-	flag.StringVar(
-		&metricsCertKey,
-		"metrics-cert-key",
-		"tls.key",
-		"The name of the metrics server key file.",
-	)
-	flag.BoolVar(&enableHTTP2, "enable-http2", false,
-		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	opts := zap.Options{
-		Development: true,
+
+	// Webhook Flags
+	var webhookEnabled bool
+	var webhookCertDir string
+	var webhookServiceNamespace string
+	var webhookServiceAccount string
+	var webhookServiceName string
+
+	// Template Default Flags
+	var defaultCoreTemplate string
+	var defaultCellTemplate string
+	var defaultShardTemplate string
+
+	defaultNS := os.Getenv("POD_NAMESPACE")
+	if defaultNS == "" {
+		defaultNS = "multigres-system"
 	}
+
+	defaultSA := os.Getenv("POD_SERVICE_ACCOUNT")
+	if defaultSA == "" {
+		defaultSA = "multigres-operator-controller-manager"
+	}
+
+	// General Flags
+	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for Multigres Operator.")
+	flag.BoolVar(&secureMetrics, "metrics-secure", true, "If set, the metrics endpoint is served securely via HTTPS.")
+	flag.BoolVar(&enableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
+
+	// Webhook Flag Configuration
+	flag.BoolVar(&webhookEnabled, "webhook-enable", true, "Enable the admission webhook server")
+	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/var/run/secrets/webhook", "Directory to store/read webhook certificates")
+	flag.StringVar(&webhookServiceNamespace, "webhook-service-namespace", defaultNS, "Namespace where the webhook service resides")
+	flag.StringVar(&webhookServiceAccount, "webhook-service-account", defaultSA, "Service Account name of the operator")
+	flag.StringVar(&webhookServiceName, "webhook-service-name", "multigres-operator-webhook-service", "Name of the Kubernetes Service for the webhook")
+
+	// Template Defaults
+	flag.StringVar(&defaultCoreTemplate, "default-core-template", "default", "Default CoreTemplate name")
+	flag.StringVar(&defaultCellTemplate, "default-cell-template", "default", "Default CellTemplate name")
+	flag.StringVar(&defaultShardTemplate, "default-shard-template", "default", "Default ShardTemplate name")
+
+	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	setupLog.Info("Starting Multigres Operator",
-		"version", version,
-		"buildDate", buildDate,
-		"gitCommit", gitCommit,
-	)
-
-	// if the enable-http2 flag is false (the default), http/2 should be disabled
-	// due to its vulnerabilities. More specifically, disabling http/2 will
-	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
-	// Rapid Reset CVEs. For more information see:
-	// - https://github.com/advisories/GHSA-qppj-fm5r-hxr3
-	// - https://github.com/advisories/GHSA-4374-p667-p6c8
 	disableHTTP2 := func(c *tls.Config) {
 		setupLog.Info("disabling http/2")
 		c.NextProtos = []string{"http/1.1"}
 	}
-
 	if !enableHTTP2 {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
-	// Initial webhook TLS options
-	webhookTLSOpts := tlsOpts
-	webhookServerOptions := webhook.Options{
-		TLSOpts: webhookTLSOpts,
-	}
-
-	if len(webhookCertPath) > 0 {
-		setupLog.Info(
-			"Initializing webhook certificate watcher using provided certificates",
-			"webhook-cert-path",
-			webhookCertPath,
-			"webhook-cert-name",
-			webhookCertName,
-			"webhook-cert-key",
-			webhookCertKey,
-		)
-
-		webhookServerOptions.CertDir = webhookCertPath
-		webhookServerOptions.CertName = webhookCertName
-		webhookServerOptions.KeyName = webhookCertKey
-	}
-
-	webhookServer := webhook.NewServer(webhookServerOptions)
-
-	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
-	// More info:
-	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/metrics/server
-	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
 		BindAddress:   metricsAddr,
 		SecureServing: secureMetrics,
@@ -191,97 +138,153 @@ func main() {
 	}
 
 	if secureMetrics {
-		// FilterProvider is used to protect the metrics endpoint with authn/authz.
-		// These configurations ensure that only authorized users and service accounts
-		// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
-		// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/metrics/filters#WithAuthenticationAndAuthorization
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
 
-	// If the certificate is not specified, controller-runtime will automatically
-	// generate self-signed certificates for the metrics server. While convenient for development and testing,
-	// this setup is not recommended for production.
-	//
-	// TODO(user): If you enable certManager, uncomment the following lines:
-	// - [METRICS-WITH-CERTS] at config/default/kustomization.yaml to generate and use certificates
-	// managed by cert-manager for the metrics server.
-	// - [PROMETHEUS-WITH-CERTS] at config/prometheus/kustomization.yaml for TLS certification.
-	if len(metricsCertPath) > 0 {
-		setupLog.Info(
-			"Initializing metrics certificate watcher using provided certificates",
-			"metrics-cert-path",
-			metricsCertPath,
-			"metrics-cert-name",
-			metricsCertName,
-			"metrics-cert-key",
-			metricsCertKey,
-		)
-
-		metricsServerOptions.CertDir = metricsCertPath
-		metricsServerOptions.CertName = metricsCertName
-		metricsServerOptions.KeyName = metricsCertKey
+	// 1. Auto-Detect Certificate Strategy
+	// If the cert files already exist (e.g. mounted by Cert-Manager), we skip internal generation.
+	useInternalCerts := false
+	if webhookEnabled {
+		if !certsExist(webhookCertDir) {
+			setupLog.Info("webhook certificates not found on disk; enabling internal certificate rotation")
+			useInternalCerts = true
+		} else {
+			setupLog.Info("webhook certificates found on disk; using external certificate management")
+		}
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "6844ffa5.my.domain",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
+		LeaderElectionID:       "multigres-operator.multigres.com",
+		// RELEASE LEADER ON CANCEL: Enables faster failover during rolling upgrades
+		LeaderElectionReleaseOnCancel: true,
+		WebhookServer: ctrlwebhook.NewServer(ctrlwebhook.Options{
+			Port:    9443,
+			CertDir: webhookCertDir,
+			TLSOpts: tlsOpts,
+		}),
+		Client: client.Options{
+			// Disable caching for resources we need during bootstrap/cert rotation
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{
+					&corev1.Secret{},
+					&appsv1.Deployment{},
+					&admissionregistrationv1.MutatingWebhookConfiguration{},
+					&admissionregistrationv1.ValidatingWebhookConfiguration{},
+				},
+			},
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	if err := (&shardcontroller.ShardReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	// 2. Setup Internal Certificate Rotation (If enabled)
+	if webhookEnabled && useInternalCerts {
+		// Use a temporary client for bootstrap since mgr.Client isn't started yet
+		tmpClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: scheme})
+		if err != nil {
+			setupLog.Error(err, "failed to create bootstrap client")
+			os.Exit(1)
+		}
+
+		rotator := cert.NewManager(
+			tmpClient,
+			mgr.GetEventRecorderFor("cert-rotator"),
+			cert.Options{
+				Namespace:   webhookServiceNamespace,
+				ServiceName: webhookServiceName,
+				CertDir:     webhookCertDir,
+				// Use Label Selector to find our own deployment for OwnerRefs
+				// This works even if the deployment name is changed by Kustomize/Helm.
+				OperatorLabelSelector: map[string]string{
+					"app.kubernetes.io/name": "multigres-operator",
+				},
+			},
+		)
+
+		// Bootstrap immediately to unblock Webhook Server start
+		if err := rotator.Bootstrap(context.Background()); err != nil {
+			setupLog.Error(err, "failed to bootstrap certificates")
+			os.Exit(1)
+		}
+
+		// Register rotator as a background runnable (forever rotation)
+		// We switch the client to the Manager's client for the long-running process
+		rotator.Client = mgr.GetClient()
+		if err := mgr.Add(rotator); err != nil {
+			setupLog.Error(err, "unable to add cert rotator to manager")
+			os.Exit(1)
+		}
+	}
+
+	// 3. Initialize Resolver & Controllers
+	globalResolver := resolver.NewResolver(
+		mgr.GetClient(),
+		webhookServiceNamespace,
+		multigresv1alpha1.TemplateDefaults{
+			CoreTemplate:  defaultCoreTemplate,
+			CellTemplate:  defaultCellTemplate,
+			ShardTemplate: defaultShardTemplate,
+		},
+	)
+
+	if err = (&multigresclustercontroller.MultigresClusterReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("multigrescluster-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Shard")
+		setupLog.Error(err, "unable to create controller", "controller", "MultigresCluster")
 		os.Exit(1)
 	}
-	if err := (&cellcontroller.CellReconciler{
+
+	if err = (&tablegroupcontroller.TableGroupReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("tablegroup-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TableGroup")
+		os.Exit(1)
+	}
+
+	if err = (&cellcontroller.CellReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Cell")
 		os.Exit(1)
 	}
-	if err := (&toposervercontroller.TopoServerReconciler{
+
+	if err = (&toposervercontroller.TopoServerReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TopoServer")
 		os.Exit(1)
 	}
-	if err := (&multigresclustercontroller.MultigresClusterReconciler{
+
+	if err = (&shardcontroller.ShardReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MultigresCluster")
+		setupLog.Error(err, "unable to create controller", "controller", "Shard")
 		os.Exit(1)
 	}
-	if err := (&tablegroupcontroller.TableGroupReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TableGroup")
-		os.Exit(1)
+
+	// 4. Register Webhook Handlers
+	if webhookEnabled {
+		if err := multigreswebhook.Setup(mgr, globalResolver, multigreswebhook.Options{
+			Namespace:          webhookServiceNamespace,
+			ServiceAccountName: webhookServiceAccount,
+		}); err != nil {
+			setupLog.Error(err, "unable to set up webhook")
+			os.Exit(1)
+		}
 	}
-	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -292,9 +295,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("Starting Multigres Operator",
+		"version", version,
+		"buildDate", buildDate,
+		"gitCommit", gitCommit,
+	)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "Problem running Multigres Operator")
 		os.Exit(1)
 	}
+}
+
+func certsExist(dir string) bool {
+	_, errCrt := os.Stat(filepath.Join(dir, "tls.crt"))
+	_, errKey := os.Stat(filepath.Join(dir, "tls.key"))
+	return !os.IsNotExist(errCrt) && !os.IsNotExist(errKey)
 }

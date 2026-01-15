@@ -8,7 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // ResolveCell determines the final configuration for a specific Cell.
@@ -28,13 +27,9 @@ func (r *Resolver) ResolveCell(
 	gateway, localTopo := mergeCellConfig(tpl, cellSpec.Overrides, cellSpec.Spec)
 
 	// 3. Apply Deep Defaults (Level 4)
-	// We use empty resources for Gateway default, as the specific values are often deployment-dependent,
-	// but we must ensure Replicas is at least 1.
-	defaultStatelessSpec(gateway, corev1.ResourceRequirements{}, 1)
+	defaultStatelessSpec(gateway, DefaultResourcesGateway(), 1)
 
 	// Note: We do NOT default LocalTopo here because it is optional.
-	// If it is nil, it remains nil (meaning the cell uses Global Topo).
-	// If it is non-nil (e.g. from template), we apply Etcd defaults.
 	if localTopo != nil && localTopo.Etcd != nil {
 		defaultEtcdSpec(localTopo.Etcd)
 	}
@@ -43,7 +38,6 @@ func (r *Resolver) ResolveCell(
 }
 
 // ResolveCellTemplate fetches and resolves a CellTemplate by name.
-// If name is empty, it resolves using the Cluster Defaults, then the Namespace Default.
 func (r *Resolver) ResolveCellTemplate(
 	ctx context.Context,
 	name string,
@@ -54,7 +48,7 @@ func (r *Resolver) ResolveCellTemplate(
 	if resolvedName == "" {
 		resolvedName = r.TemplateDefaults.CellTemplate
 	}
-	if resolvedName == "" {
+	if resolvedName == "" || resolvedName == FallbackCellTemplate {
 		resolvedName = FallbackCellTemplate
 		isImplicitFallback = true
 	}
@@ -64,7 +58,6 @@ func (r *Resolver) ResolveCellTemplate(
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
-				// We return an empty struct instead of nil to satisfy tests expecting non-nil structure.
 				return &multigresv1alpha1.CellTemplate{}, nil
 			}
 			return nil, fmt.Errorf("referenced CellTemplate '%s' not found: %w", resolvedName, err)
@@ -80,9 +73,11 @@ func mergeCellConfig(
 	overrides *multigresv1alpha1.CellOverrides,
 	inline *multigresv1alpha1.CellInlineSpec,
 ) (*multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec) {
+	// Start with empty
 	gateway := &multigresv1alpha1.StatelessSpec{}
 	var localTopo *multigresv1alpha1.LocalTopoServerSpec
 
+	// 1. Apply Template (Base)
 	if template != nil {
 		if template.Spec.MultiGateway != nil {
 			gateway = template.Spec.MultiGateway.DeepCopy()
@@ -92,23 +87,22 @@ func mergeCellConfig(
 		}
 	}
 
+	// 2. Apply Overrides (Explicit Template Modification)
 	if overrides != nil {
 		if overrides.MultiGateway != nil {
 			mergeStatelessSpec(gateway, overrides.MultiGateway)
 		}
 	}
 
+	// 3. Apply Inline Spec (Primary Overlay)
+	// This merges the inline definition on top of the template+overrides.
 	if inline != nil {
-		// Inline spec completely replaces the template for the components it defines
-		// However, for Multigres 'Spec' blocks, usually 'Spec' is exclusive to 'TemplateRef'.
-		// The design allows "Inline Spec" OR "Template + Overrides".
-		// If Inline Spec is present, we generally prefer it entirely.
-		gw := inline.MultiGateway.DeepCopy()
-		var topo *multigresv1alpha1.LocalTopoServerSpec
+		mergeStatelessSpec(gateway, &inline.MultiGateway)
+
 		if inline.LocalTopoServer != nil {
-			topo = inline.LocalTopoServer.DeepCopy()
+			// LocalTopo is complex (polymorphic), so we treat it as a replacement if provided
+			localTopo = inline.LocalTopoServer.DeepCopy()
 		}
-		return gw, topo
 	}
 
 	return gateway, localTopo

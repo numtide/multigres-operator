@@ -1,10 +1,14 @@
 package resolver
 
 import (
+	"context"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // Resolver handles the logic for fetching templates and calculating defaults.
@@ -29,6 +33,54 @@ func NewResolver(
 		Namespace:        namespace,
 		TemplateDefaults: tplDefaults,
 	}
+}
+
+// CoreTemplateExists checks if a CoreTemplate with the given name exists in the current namespace.
+func (r *Resolver) CoreTemplateExists(ctx context.Context, name string) (bool, error) {
+	if name == "" {
+		return false, nil
+	}
+	tpl := &multigresv1alpha1.CoreTemplate{}
+	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// CellTemplateExists checks if a CellTemplate with the given name exists in the current namespace.
+func (r *Resolver) CellTemplateExists(ctx context.Context, name string) (bool, error) {
+	if name == "" {
+		return false, nil
+	}
+	tpl := &multigresv1alpha1.CellTemplate{}
+	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// ShardTemplateExists checks if a ShardTemplate with the given name exists in the current namespace.
+func (r *Resolver) ShardTemplateExists(ctx context.Context, name string) (bool, error) {
+	if name == "" {
+		return false, nil
+	}
+	tpl := &multigresv1alpha1.ShardTemplate{}
+	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // ============================================================================

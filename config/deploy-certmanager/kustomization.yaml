@@ -1,0 +1,74 @@
+# 1. Base Resources
+resources:
+- ../default      # Your standard operator setup
+- ../certmanager  # The base we just created (Certificate + Issuer)
+
+# 3. Patch the Deployment to use Cert-Manager's secret
+patches:
+- target:
+    kind: Deployment
+    name: controller-manager
+  patch: |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: controller-manager
+    spec:
+      template:
+        spec:
+          volumes:
+          - name: cert-dir
+            secret:
+              # Point to the secret created by Cert-Manager (defined in certificate.yaml)
+              secretName: webhook-server-cert
+              # CRITICAL: Must be false so Pod waits for Cert-Manager to finish
+              optional: false
+
+# 4. Inject CA Bundle into Webhooks (Search & Replace)
+replacements:
+  - source:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: serving-cert
+      fieldPath: .metadata.namespace
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - .metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: '/'
+          index: 0
+          create: true
+      - select:
+          kind: MutatingWebhookConfiguration
+        fieldPaths:
+          - .metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: '/'
+          index: 0
+          create: true
+  - source:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: serving-cert
+      fieldPath: .metadata.name
+    targets:
+      - select:
+          kind: ValidatingWebhookConfiguration
+        fieldPaths:
+          - .metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: '/'
+          index: 1
+          create: true
+      - select:
+          kind: MutatingWebhookConfiguration
+        fieldPaths:
+          - .metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: '/'
+          index: 1
+          create: true

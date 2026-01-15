@@ -6,18 +6,17 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // ResolveShard determines the final configuration for a specific Shard.
-// It orchestrates: Template Lookup -> Fetch -> Merge -> Defaulting.
 func (r *Resolver) ResolveShard(
 	ctx context.Context,
 	shardSpec *multigresv1alpha1.ShardConfig,
 ) (*multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec, error) {
-	// 1. Fetch Template (Logic handles defaults)
+	// 1. Fetch Template
 	templateName := shardSpec.ShardTemplate
 	tpl, err := r.ResolveShardTemplate(ctx, templateName)
 	if err != nil {
@@ -28,17 +27,25 @@ func (r *Resolver) ResolveShard(
 	multiOrch, pools := mergeShardConfig(tpl, shardSpec.Overrides, shardSpec.Spec)
 
 	// 3. Apply Deep Defaults (Level 4)
-	defaultStatelessSpec(&multiOrch.StatelessSpec, corev1.ResourceRequirements{}, 1)
+	defaultStatelessSpec(&multiOrch.StatelessSpec, DefaultResourcesOrch(), 1)
 
-	// Note: We do not apply strict defaults to Pools here yet,
-	// as Pool defaults are often highly context-specific (storage class, etc).
-	// However, we could apply safety defaults if needed.
+	if len(pools) == 0 {
+		pools["default"] = multigresv1alpha1.PoolSpec{
+			Type:  "readWrite",
+			Cells: multiOrch.Cells,
+		}
+	}
+
+	for name := range pools {
+		p := pools[name]
+		defaultPoolSpec(&p)
+		pools[name] = p
+	}
 
 	return &multiOrch, pools, nil
 }
 
 // ResolveShardTemplate fetches and resolves a ShardTemplate by name.
-// If name is empty, it resolves using the Cluster Defaults, then the Namespace Default.
 func (r *Resolver) ResolveShardTemplate(
 	ctx context.Context,
 	name string,
@@ -49,7 +56,7 @@ func (r *Resolver) ResolveShardTemplate(
 	if resolvedName == "" {
 		resolvedName = r.TemplateDefaults.ShardTemplate
 	}
-	if resolvedName == "" {
+	if resolvedName == "" || resolvedName == FallbackShardTemplate {
 		resolvedName = FallbackShardTemplate
 		isImplicitFallback = true
 	}
@@ -59,7 +66,6 @@ func (r *Resolver) ResolveShardTemplate(
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
-				// We return an empty struct instead of nil to satisfy tests expecting non-nil structure.
 				return &multigresv1alpha1.ShardTemplate{}, nil
 			}
 			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found: %w", resolvedName, err)
@@ -75,15 +81,7 @@ func mergeShardConfig(
 	overrides *multigresv1alpha1.ShardOverrides,
 	inline *multigresv1alpha1.ShardInlineSpec,
 ) (multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec) {
-	if inline != nil {
-		orch := *inline.MultiOrch.DeepCopy()
-		pools := make(map[string]multigresv1alpha1.PoolSpec)
-		for k, v := range inline.Pools {
-			pools[k] = *v.DeepCopy()
-		}
-		return orch, pools
-	}
-
+	// 1. Start with Template (Base)
 	var multiOrch multigresv1alpha1.MultiOrchSpec
 	pools := make(map[string]multigresv1alpha1.PoolSpec)
 
@@ -96,15 +94,28 @@ func mergeShardConfig(
 		}
 	}
 
+	// 2. Apply Overrides (Explicit Template Modification)
 	if overrides != nil {
 		if overrides.MultiOrch != nil {
 			mergeMultiOrchSpec(&multiOrch, overrides.MultiOrch)
 		}
-
 		for k, v := range overrides.Pools {
 			if existingPool, exists := pools[k]; exists {
-				mergedPool := mergePoolSpec(existingPool, v)
-				pools[k] = mergedPool
+				pools[k] = mergePoolSpec(existingPool, v)
+			} else {
+				pools[k] = v
+			}
+		}
+	}
+
+	// 3. Apply Inline Spec (Primary Overlay)
+	// This merges the inline definition on top of the template+overrides.
+	if inline != nil {
+		mergeMultiOrchSpec(&multiOrch, &inline.MultiOrch)
+
+		for k, v := range inline.Pools {
+			if existingPool, exists := pools[k]; exists {
+				pools[k] = mergePoolSpec(existingPool, v)
 			} else {
 				pools[k] = v
 			}
@@ -152,4 +163,19 @@ func mergePoolSpec(
 		out.Affinity = override.Affinity.DeepCopy()
 	}
 	return out
+}
+
+func defaultPoolSpec(spec *multigresv1alpha1.PoolSpec) {
+	if spec.ReplicasPerCell == nil {
+		spec.ReplicasPerCell = ptr.To(int32(1))
+	}
+	if spec.Storage.Size == "" {
+		spec.Storage.Size = DefaultEtcdStorageSize
+	}
+	if isResourcesZero(spec.Postgres.Resources) {
+		spec.Postgres.Resources = DefaultResourcesPostgres()
+	}
+	if isResourcesZero(spec.Multipooler.Resources) {
+		spec.Multipooler.Resources = DefaultResourcesPooler()
+	}
 }
