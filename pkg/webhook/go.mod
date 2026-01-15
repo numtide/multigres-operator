@@ -3,7 +3,7 @@ module github.com/numtide/multigres-operator/pkg/webhook
 go 1.25.0
 
 require (
-	github.com/numtide/multigres-operator/api v0.0.0-20260106180404-c02430f41b11
+	github.com/numtide/multigres-operator/api v0.0.0-20260110025154-da9aa10fb701
 	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260106180404-c02430f41b11
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260106180404-c02430f41b11
 	k8s.io/api v0.34.3

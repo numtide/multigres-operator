@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/numtide/multigres-operator/api v0.0.0-20260106174142-cde0544f0a59
+	github.com/numtide/multigres-operator/api v0.0.0-20260110025154-da9aa10fb701
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
