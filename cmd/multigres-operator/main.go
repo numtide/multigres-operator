@@ -53,8 +53,12 @@ import (
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	// Version information - set via ldflags at build time
+	version   = "dev"
+	buildDate = "unknown"
+	gitCommit = "unknown"
+	scheme    = runtime.NewScheme()
+	setupLog  = ctrl.Log.WithName("setup")
 )
 
 func init() {
@@ -97,7 +101,7 @@ func main() {
 	// General Flags
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for Multigres Operator.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true, "If set, the metrics endpoint is served securely via HTTPS.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
@@ -291,9 +295,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("Starting Multigres Operator",
+		"version", version,
+		"buildDate", buildDate,
+		"gitCommit", gitCommit,
+	)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "Problem running Multigres Operator")
 		os.Exit(1)
 	}
 }
