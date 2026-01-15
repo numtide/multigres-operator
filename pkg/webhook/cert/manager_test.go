@@ -17,6 +17,7 @@ import (
 	"time"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,7 +36,7 @@ const (
 )
 
 func TestManager_EnsureCerts(t *testing.T) {
-	// t.Parallel() // Parallel disabled to avoid race conditions on global hooks
+	t.Parallel()
 
 	const (
 		namespace   = "test-ns"
@@ -68,6 +69,20 @@ func TestManager_EnsureCerts(t *testing.T) {
 		t,
 		ca,
 		time.Now().Add(15*24*time.Hour),
+		[]string{expectedDNSName},
+	)
+
+	otherCA, _ := GenerateCA()
+	signedByOtherCACert := generateSignedCertPEM(
+		t,
+		otherCA,
+		time.Now().Add(time.Hour),
+		[]string{expectedDNSName},
+	)
+	signedByOtherCAValidCert := generateSignedCertPEM(
+		t,
+		otherCA,
+		time.Now().Add(365*24*time.Hour),
 		[]string{expectedDNSName},
 	)
 
@@ -111,6 +126,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 		existingObjects []client.Object
 		failureConfig   *testutil.FailureConfig
 		customCertDir   string
+		customOptions   *Options
 		wantErr         bool
 		errContains     string
 		wantGenerated   bool
@@ -204,6 +220,39 @@ func TestManager_EnsureCerts(t *testing.T) {
 			checkFiles:    true,
 			wantGenerated: true,
 		},
+		"Rotation: CA Near Expiry": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": nearExpiryCert, // Using near expiry cert as CA cert
+						"ca.key": validCAKeyBytes,
+					},
+				},
+			}, baseWebhooks...),
+			checkFiles:    true,
+			wantGenerated: true,
+		},
+		"Rotation: Signed by Different CA": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": validCABytes,
+						"ca.key": validCAKeyBytes,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"tls.crt": signedByOtherCACert,
+						"tls.key": []byte("key"),
+					},
+				},
+			}, baseWebhooks...),
+			checkFiles:    true,
+			wantGenerated: true,
+		},
 		"Error: Get Secret Failed": {
 			existingObjects: baseWebhooks,
 			failureConfig: &testutil.FailureConfig{
@@ -221,7 +270,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 				),
 			},
 			wantErr:     true,
-			errContains: "failed to ensure CA",
+			errContains: "failed to create CA secret",
 		},
 		"Error: File System (Mkdir/Write)": {
 			existingObjects: baseWebhooks,
@@ -229,10 +278,377 @@ func TestManager_EnsureCerts(t *testing.T) {
 			wantErr:         true,
 			errContains:     "mkdir",
 		},
+		"Error: Patch Webhooks Failed": {
+			existingObjects: baseWebhooks,
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(
+					WebhookConfigNameMutating,
+					errors.New("injected patch error"),
+				),
+			},
+			wantErr:     true,
+			errContains: "failed to patch webhooks",
+		},
+		"Error: Update Server Cert Failed": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": validCABytes,
+						"ca.key": validCAKeyBytes,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+					Data:       map[string][]byte{"tls.crt": expiredCert, "tls.key": []byte("key")},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(
+					ServerSecretName,
+					errors.New("injected update error"),
+				),
+			},
+			wantErr:     true,
+			errContains: "failed to update server cert secret",
+		},
+		"Error: Delete Failed (Corrupt CA)": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": []byte("corrupt"),
+						"ca.key": []byte("key"),
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(CASecretName, errors.New("delete fail")),
+			},
+			wantErr:     true,
+			errContains: "failed to delete corrupt CA secret",
+		},
+		"Error: Delete Failed (Expiring CA)": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": generateSignedCertPEM(
+							t,
+							ca,
+							time.Now().Add(15*24*time.Hour),
+							[]string{"ca"},
+						),
+						"ca.key": validCAKeyBytes,
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(CASecretName, errors.New("delete fail")),
+			},
+			wantErr:     true,
+			errContains: "failed to delete expiring CA secret",
+		},
+		"Error: Get Validating Webhook Failed": {
+			existingObjects: baseWebhooks[:1], // Only mutating
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func(key client.ObjectKey) error {
+					if key.Name == "multigres-operator-validating-webhook-configuration" {
+						return errors.New("get fail")
+					}
+					return nil
+				},
+			},
+			wantErr:     true,
+			errContains: "failed to get validating webhook config",
+		},
+		"Error: Update Validating Webhook Failed": {
+			existingObjects: baseWebhooks,
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(
+					"multigres-operator-validating-webhook-configuration",
+					errors.New("update fail"),
+				),
+			},
+			wantErr:     true,
+			errContains: "failed to update validating webhook config",
+		},
+		"Error: Deployment List Failure": {
+			failureConfig: &testutil.FailureConfig{
+				OnList: func(list client.ObjectList) error {
+					return errors.New("list fail")
+				},
+			},
+			wantErr:     true,
+			errContains: "failed to list deployments by labels",
+		},
+		"Error: Delete Failed (Corrupt Server Cert)": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"tls.crt": []byte("corrupt"),
+						"tls.key": []byte("key"),
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(ServerSecretName, errors.New("delete fail")),
+			},
+			wantErr:     true,
+			errContains: "failed to delete corrupt server cert secret",
+		},
+		"Rotation: Wrong CA (Still Valid)": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": validCABytes,
+						"ca.key": validCAKeyBytes,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"tls.crt": signedByOtherCAValidCert,
+						"tls.key": []byte("key"),
+					},
+				},
+			}, baseWebhooks...),
+			checkFiles:    true,
+			wantGenerated: true,
+		},
+		"Rotation: Corrupt Cert Data (No Block)": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"tls.crt": []byte("not pem"),
+						"tls.key": []byte("key"),
+					},
+				},
+			}, baseWebhooks...),
+			checkFiles:    true,
+			wantGenerated: true,
+		},
+		"Error: Delete Failed (Corrupt Server Cert Data)": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"tls.crt": []byte("not pem"),
+						"tls.key": []byte("key"),
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(ServerSecretName, errors.New("delete fail")),
+			},
+			wantErr:     true,
+			errContains: "failed to delete corrupt server cert secret",
+		},
+		"Error: Delete Failed (Unparseable Server Cert)": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": validCABytes,
+						"ca.key": validCAKeyBytes,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"tls.crt": corruptCertBody,
+						"tls.key": []byte("key"),
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName(ServerSecretName, errors.New("delete fail")),
+			},
+			wantErr:     true,
+			errContains: "failed to delete unparseable server cert secret",
+		},
+		"Error: Controller Ref Failed": {
+			existingObjects: []client.Object{
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "op",
+						Namespace: namespace,
+						Labels:    map[string]string{"app": "op"},
+						// No UID -> SetControllerReference might fail?
+						// Actually fake client might auto-assign UID.
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func(key client.ObjectKey) error {
+					// We want findOperatorDeployment to find it, but SetControllerReference to fail.
+					// We can make m.Client.Scheme() return nil in CertRotator if we had control.
+					return nil
+				},
+			},
+			wantErr:     true,
+			errContains: "failed to set controller reference",
+		},
+		"Success: Owner Not Found (No-op)": {
+			existingObjects: baseWebhooks,
+			// No deployment exists, label selector won't match anything.
+			// setOwner should return nil (no error).
+			wantErr: false,
+		},
+		"Success: Found by Name": {
+			customOptions: &Options{
+				OperatorDeployment: "op-by-name",
+				// OperatorLabelSelector is nil by default in struct, ensuring we skip label search
+			},
+			existingObjects: append([]client.Object{
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "op-by-name",
+						Namespace: namespace,
+					},
+				},
+			}, baseWebhooks...),
+			checkFiles:    true,
+			wantGenerated: true,
+		},
+		"Success: Not Found by Name": {
+			customOptions: &Options{
+				OperatorDeployment:    "missing-deployment",
+				OperatorLabelSelector: nil, // Clear selector
+			},
+			wantErr: false,
+		},
+		"Success: No Webhooks (Skip Patch)": {
+			existingObjects: []client.Object{}, // No webhooks
+			// Default options find operator logic (mocked elsewhere? or defaults work)
+			// Wait, findOperatorDeployment logic requires deployment?
+			// If not found, setOwner returns nil.
+			// setOwner is called inside ensureCA and ensureServerCert.
+			// If owner not found, secret is created without owner ref.
+			// This is valid test.
+			// patchWebhooks will list webhooks. If none found, get returns NotFound -> skipped.
+			// Coverage for "if !errors.IsNotFound(err)" branch?
+			// The code:
+			// if err := m.Client.Get(..., mutating); err != nil {
+			//    if !errors.IsNotFound(err) { return err }
+			// }
+			// So "NotFound" is the success (skip) path.
+			// To cover it, we just need Get to return NotFound.
+			// Which happens if objects are missing.
+			wantErr: false,
+		},
+		"Recreation: Corrupt CA Secret": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": []byte("corrupt-pem-data"),
+						"ca.key": validCAKeyBytes,
+					},
+				},
+			}, baseWebhooks...),
+			checkFiles:    true,
+			wantGenerated: true,
+		},
+		// ... (previous cases)
+
+		"Error: Update Mutating Webhook Failed": {
+			existingObjects: baseWebhooks,
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(
+					WebhookConfigNameMutating,
+					errors.New("update fail"),
+				),
+			},
+			wantErr:     true,
+			errContains: "failed to update mutating webhook config",
+		},
+		// ... (previous cases)
+
+		"Error: Server Cert Owner Ref Failed": {
+			existingObjects: append([]client.Object{
+				// CA exists, so ensureCA succeeds and skips setOwner
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": validCABytes,
+						"ca.key": validCAKeyBytes,
+					},
+				},
+				// Deployment exists but List will fail
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "op",
+						Namespace: namespace,
+						Labels:    map[string]string{"app": "op"},
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnList: func(list client.ObjectList) error {
+					return errors.New("list fail")
+				},
+			},
+			wantErr:     true,
+			errContains: "failed to list deployments", // Error comes from findOperatorDeployment -> setOwner
+		},
+		// ... (previous cases)
+
+		"Error: Create Server Secret Failed": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": validCABytes,
+						"ca.key": validCAKeyBytes,
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnCreate: testutil.FailOnObjectName(
+					ServerSecretName,
+					errors.New("server create fail"),
+				),
+			},
+			wantErr:     true,
+			errContains: "failed to create server cert secret",
+		},
+		"Error: Get Server Secret Failed": {
+			existingObjects: append([]client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+					Data: map[string][]byte{
+						"ca.crt": validCABytes,
+						"ca.key": validCAKeyBytes,
+					},
+				},
+			}, baseWebhooks...),
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName(ServerSecretName, errors.New("server get fail")),
+			},
+			wantErr:     true,
+			errContains: "failed to get server cert secret",
+		},
+		"Error: Get Mutating Webhook Failed": {
+			existingObjects: baseWebhooks,
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName(
+					WebhookConfigNameMutating,
+					errors.New("mutating get fail"),
+				),
+			},
+			wantErr:     true,
+			errContains: "failed to get mutating webhook config",
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(s).
 				WithObjects(tc.existingObjects...).
@@ -270,17 +686,28 @@ func TestManager_EnsureCerts(t *testing.T) {
 
 			// Mock Kubelet for *updates* during the test
 			hookClient := &mockKubeletClient{
-				Client:  cl,
-				CertDir: certDir,
+				Client:    cl,
+				CertDir:   certDir,
+				badScheme: name == "Error: Controller Ref Failed",
 			}
 
-			mgr := NewManager(hookClient, record.NewFakeRecorder(10), Options{
-				Namespace:   namespace,
-				CertDir:     certDir,
-				ServiceName: serviceName,
-			})
+			opts := Options{
+				Namespace:             namespace,
+				CertDir:               certDir,
+				ServiceName:           serviceName,
+				OperatorLabelSelector: map[string]string{"app": "op"},
+			}
+			if tc.customOptions != nil {
+				opts = *tc.customOptions
+				opts.Namespace = namespace
+				opts.CertDir = certDir
+				opts.ServiceName = serviceName
+				// If customOptions has cleared selector, it will be cleared.
+			}
 
-			err := mgr.Bootstrap(context.Background())
+			mgr := NewManager(hookClient, record.NewFakeRecorder(10), opts)
+
+			err := mgr.Bootstrap(t.Context())
 
 			if tc.wantErr {
 				if err == nil {
@@ -308,7 +735,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 			if tc.wantGenerated {
 				secret := &corev1.Secret{}
 				_ = fakeClient.Get(
-					context.Background(),
+					t.Context(),
 					types.NamespacedName{Name: ServerSecretName, Namespace: namespace},
 					secret,
 				)
@@ -331,7 +758,15 @@ func TestManager_EnsureCerts(t *testing.T) {
 // mockKubeletClient intercepts Secret updates and writes them to disk to simulate Kubelet volume projection
 type mockKubeletClient struct {
 	client.Client
-	CertDir string
+	CertDir   string
+	badScheme bool
+}
+
+func (m *mockKubeletClient) Scheme() *runtime.Scheme {
+	if m.badScheme {
+		return runtime.NewScheme()
+	}
+	return m.Client.Scheme()
 }
 
 func (m *mockKubeletClient) Create(
@@ -378,25 +813,25 @@ func (m *mockKubeletClient) syncToDisk(obj client.Object) {
 	}
 }
 
-func generateCAPEM(t *testing.T) ([]byte, []byte) {
-	t.Helper()
+func generateCAPEM(tb testing.TB) ([]byte, []byte) {
+	tb.Helper()
 	ca, err := GenerateCA()
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	return ca.CertPEM, ca.KeyPEM
 }
 
 func generateSignedCertPEM(
-	t *testing.T,
+	tb testing.TB,
 	ca *CAArtifacts,
 	expiry time.Time,
 	dnsNames []string,
 ) []byte {
-	t.Helper()
+	tb.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 
 	tmpl := x509.Certificate{
@@ -409,8 +844,215 @@ func generateSignedCertPEM(
 
 	der, err := x509.CreateCertificate(rand.Reader, &tmpl, ca.Cert, &priv.PublicKey, ca.Key)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func TestManager_Misc(t *testing.T) {
+	t.Parallel() // Misc can be parallel
+
+	s := runtime.NewScheme()
+	_ = scheme.AddToScheme(s)
+	_ = admissionregistrationv1.AddToScheme(s)
+
+	namespace := "default"
+	cl := fake.NewClientBuilder().WithScheme(s).Build()
+
+	t.Run("Start Loop", func(t *testing.T) {
+		t.Parallel()
+		timeoutCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer cancel()
+
+		mgr := NewManager(cl, nil, Options{
+			Namespace:        namespace,
+			RotationInterval: 10 * time.Millisecond,
+		})
+
+		_ = mgr.Start(timeoutCtx)
+	})
+
+	t.Run("Start Loop: Default Interval", func(t *testing.T) {
+		t.Parallel()
+		timeoutCtx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+		defer cancel()
+
+		mgr := NewManager(cl, nil, Options{
+			Namespace: namespace,
+			// Interval will be Hour
+		})
+
+		_ = mgr.Start(timeoutCtx)
+	})
+
+	t.Run("setOwner: found multiple deployments", func(t *testing.T) {
+		t.Parallel()
+		objs := []client.Object{
+			&appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "op1",
+					Namespace: namespace,
+					Labels:    map[string]string{"app": "op"},
+				},
+			},
+			&appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "op2",
+					Namespace: namespace,
+					Labels:    map[string]string{"app": "op"},
+				},
+			},
+		}
+		clFail := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
+		mgr := NewManager(clFail, nil, Options{
+			Namespace:             namespace,
+			OperatorLabelSelector: map[string]string{"app": "op"},
+		})
+		err := mgr.setOwner(t.Context(), &corev1.Secret{})
+		if err == nil || !strings.Contains(err.Error(), "found multiple deployments") {
+			t.Errorf("Expected multiple deployments error, got: %v", err)
+		}
+	})
+
+	t.Run("setOwner: get by name failure", func(t *testing.T) {
+		t.Parallel()
+		clFail := testutil.NewFakeClientWithFailures(cl, &testutil.FailureConfig{
+			OnGet: func(key client.ObjectKey) error { return errors.New("get fail") },
+		})
+		mgr := NewManager(clFail, nil, Options{
+			Namespace:          namespace,
+			OperatorDeployment: "op",
+		})
+		err := mgr.setOwner(t.Context(), &corev1.Secret{})
+		if err == nil ||
+			!strings.Contains(err.Error(), "failed to get operator deployment by name") {
+			t.Errorf("Expected get failure, got: %v", err)
+		}
+	})
+
+	t.Run("waitForKubelet: mismatch log", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		_ = os.WriteFile(filepath.Join(dir, CertFileName), []byte("wrong"), 0o644)
+
+		mgr := NewManager(cl, nil, Options{
+			Namespace: namespace,
+			CertDir:   dir,
+		})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		defer cancel()
+
+		_ = mgr.waitForKubelet(ctx, []byte("expected"))
+	})
+}
+
+func TestManager_EntropyFailures(t *testing.T) {
+	// Not parallel - modifies global rand.Reader
+	oldReader := rand.Reader
+	defer func() { rand.Reader = oldReader }()
+
+	s := runtime.NewScheme()
+	_ = scheme.AddToScheme(s)
+	// Base objects
+	namespace := "test-ns"
+
+	// We need 100% coverage, so we target:
+	// 1. ensureCA -> GenerateCA failure
+	// 2. ensureServerCert -> GenerateServerCert failure (creation)
+	// 3. ensureServerCert -> GenerateServerCert failure (rotation)
+
+	t.Run("ensureCA: GenerateCA Failure", func(t *testing.T) {
+		// We want GenerateCA to fail.
+		// GenerateCA calls GenerateKey then CreateCertificate.
+		// If we use errorReader, GenerateKey fails immediately.
+		rand.Reader = errorReader{}
+
+		mgr := NewManager(
+			fake.NewClientBuilder().WithScheme(s).Build(),
+			nil,
+			Options{Namespace: namespace},
+		)
+
+		err := mgr.reconcilePKI(t.Context())
+		if err == nil || !strings.Contains(err.Error(), "failed to generate CA") {
+			t.Errorf("Expected generate CA error, got %v", err)
+		}
+	})
+
+	t.Run("ensureServerCert: GenerateServerCert Failure (Creation)", func(t *testing.T) {
+		// CA exists, but Server Cert missing.
+		// GenerateServerCert should be called.
+		// We want it to fail.
+
+		// Setup CA
+		rand.Reader = oldReader // Need valid CA
+		caArt, _ := GenerateCA()
+		caSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+			Data:       map[string][]byte{"ca.crt": caArt.CertPEM, "ca.key": caArt.KeyPEM},
+		}
+
+		cl := fake.NewClientBuilder().WithScheme(s).WithObjects(caSecret).Build()
+		mgr := NewManager(cl, nil, Options{Namespace: namespace, ServiceName: "svc"})
+
+		// We use stack inspection to fail GenerateServerCert -> GenerateKey (or CreateCertificate)
+		// Failing GenerateKey is easier/faster.
+		// GenerateServerCert calls ecdsa.GenerateKey.
+		// We can match "ecdsa.GenerateKey".
+		// But GenerateCA (if called) also calls it. But here GenerateCA is not called.
+
+		rand.Reader = &functionTargetedReader{
+			failOnCaller: "ecdsa.GenerateKey",
+			delegate:     oldReader,
+		}
+
+		err := mgr.reconcilePKI(t.Context())
+		if err == nil || !strings.Contains(err.Error(), "failed to generate server cert") {
+			t.Errorf("Expected server cert gen error, got %v", err)
+		}
+	})
+
+	t.Run("ensureServerCert: GenerateServerCert Failure (Rotation)", func(t *testing.T) {
+		// CA exists. Server Cert exists but is expired.
+		// Rotation triggered -> GenerateServerCert called.
+
+		rand.Reader = oldReader
+		caArt, _ := GenerateCA()
+
+		// Generate expired server cert
+		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+		tmpl := x509.Certificate{
+			SerialNumber: big.NewInt(2),
+			Subject:      pkix.Name{CommonName: "server"},
+			NotBefore:    time.Now().Add(-2 * time.Hour),
+			NotAfter:     time.Now().Add(-1 * time.Hour), // Expired
+			DNSNames:     []string{"svc.test-ns.svc"},
+		}
+		der, _ := x509.CreateCertificate(rand.Reader, &tmpl, caArt.Cert, &priv.PublicKey, caArt.Key)
+		expiredPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+
+		caSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: CASecretName, Namespace: namespace},
+			Data:       map[string][]byte{"ca.crt": caArt.CertPEM, "ca.key": caArt.KeyPEM},
+		}
+		srvSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: ServerSecretName, Namespace: namespace},
+			Data:       map[string][]byte{"tls.crt": expiredPEM, "tls.key": []byte("key")},
+		}
+
+		cl := fake.NewClientBuilder().WithScheme(s).WithObjects(caSecret, srvSecret).Build()
+		mgr := NewManager(cl, nil, Options{Namespace: namespace, ServiceName: "svc"})
+
+		rand.Reader = &functionTargetedReader{
+			failOnCaller: "ecdsa.GenerateKey",
+			delegate:     oldReader,
+		}
+
+		err := mgr.reconcilePKI(t.Context())
+		if err == nil || !strings.Contains(err.Error(), "failed to generate new server cert") {
+			t.Errorf("Expected server cert rotation error, got %v", err)
+		}
+	})
 }

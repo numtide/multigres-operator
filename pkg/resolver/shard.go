@@ -29,6 +29,13 @@ func (r *Resolver) ResolveShard(
 	// 3. Apply Deep Defaults (Level 4)
 	defaultStatelessSpec(&multiOrch.StatelessSpec, DefaultResourcesOrch(), 1)
 
+	if len(pools) == 0 {
+		pools["default"] = multigresv1alpha1.PoolSpec{
+			Type:  "readWrite",
+			Cells: multiOrch.Cells,
+		}
+	}
+
 	for name := range pools {
 		p := pools[name]
 		defaultPoolSpec(&p)

@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
@@ -41,6 +42,7 @@ type Options struct {
 	CertDir               string
 	OperatorDeployment    string
 	OperatorLabelSelector map[string]string
+	RotationInterval      time.Duration
 }
 
 type CertRotator struct {
@@ -59,22 +61,25 @@ func NewManager(c client.Client, recorder record.EventRecorder, opts Options) *C
 
 // Bootstrap runs at startup to ensure PKI is healthy before the webhook server listens.
 func (m *CertRotator) Bootstrap(ctx context.Context) error {
-	logger := log.FromContext(ctx).WithName("pki-bootstrap")
-	logger.Info("bootstrapping PKI infrastructure")
+	logger := log.FromContext(ctx)
+	logger.Info("bootstrapping PKI")
 
 	if err := os.MkdirAll(m.Options.CertDir, 0o755); err != nil {
-		return err
+		return fmt.Errorf("failed to create cert directory: %w", err)
 	}
 
 	return m.reconcilePKI(ctx)
 }
 
-// Start kicks off the background rotation loop.
 func (m *CertRotator) Start(ctx context.Context) error {
 	logger := log.FromContext(ctx).WithName("pki-rotation")
 	logger.Info("starting PKI rotation loop")
 
-	ticker := time.NewTicker(1 * time.Hour)
+	interval := m.Options.RotationInterval
+	if interval == 0 {
+		interval = time.Hour
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -93,287 +98,236 @@ func (m *CertRotator) Start(ctx context.Context) error {
 // 1. Ensure CA is valid.
 // 2. Ensure Server Cert is valid and signed by CA.
 // 3. Inject CA into Webhooks.
-// 4. Wait for Kubelet sync.
 func (m *CertRotator) reconcilePKI(ctx context.Context) error {
-	logger := log.FromContext(ctx)
-
-	// --- Step 1: Handle Root CA ---
-	caArtifacts, err := m.ensureCA(ctx)
+	ca, err := m.ensureCA(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to ensure CA: %w", err)
+		return err
 	}
 
-	// --- Step 2: Handle Server Certificate ---
-	serverCertPEM, err := m.ensureServerCert(ctx, caArtifacts)
+	serverCertPEM, err := m.ensureServerCert(ctx, ca)
 	if err != nil {
-		return fmt.Errorf("failed to ensure server cert: %w", err)
+		return err
 	}
 
-	// --- Step 3: Wait for File Propagation ---
-	// This ensures the webhook server reads the *new* files before we tell API server to talk to us.
-	if err := m.waitForKubelet(ctx, serverCertPEM); err != nil {
-		return fmt.Errorf("timeout waiting for kubelet to update secrets: %w", err)
-	}
-
-	// --- Step 4: Patch Webhook Configurations ---
-	if err := m.patchWebhooks(ctx, caArtifacts.CertPEM); err != nil {
+	if err := m.patchWebhooks(ctx, ca.CertPEM); err != nil {
 		return fmt.Errorf("failed to patch webhooks: %w", err)
 	}
 
-	logger.V(1).Info("PKI reconciliation complete")
-	return nil
+	return m.waitForKubelet(ctx, serverCertPEM)
 }
 
 func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
-	logger := log.FromContext(ctx)
-	secret := &corev1.Secret{}
-	err := m.Client.Get(
-		ctx,
-		types.NamespacedName{Name: CASecretName, Namespace: m.Options.Namespace},
-		secret,
-	)
-
-	generate := false
-	if errors.IsNotFound(err) {
-		logger.Info("CA secret not found, generating new one")
-		generate = true
-	} else if err != nil {
-		return nil, err
-	} else {
-		// Validate existing CA
-		certPEM := secret.Data["ca.crt"]
-		keyPEM := secret.Data["ca.key"]
-
-		if len(certPEM) == 0 || len(keyPEM) == 0 {
-			generate = true
-		} else {
-			// Parse and Check Expiry
-			ca, err := ParseCA(certPEM, keyPEM)
-			if err != nil {
-				logger.Error(err, "existing CA is corrupt, rotating")
-				generate = true
-			} else {
-				if time.Now().Add(RotationThreshold).After(ca.Cert.NotAfter) {
-					logger.Info("CA is expiring, rotating")
-					generate = true
-				} else {
-					return ca, nil // Valid
-				}
-			}
-		}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CASecretName,
+			Namespace: m.Options.Namespace,
+		},
 	}
 
-	if generate {
-		newCA, err := GenerateCA()
+	if err := m.Client.Get(ctx, types.NamespacedName{Name: CASecretName, Namespace: m.Options.Namespace}, secret); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get CA secret: %w", err)
+		}
+
+		artifacts, err := GenerateCA()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to generate CA: %w", err)
 		}
 
-		secret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      CASecretName,
-				Namespace: m.Options.Namespace,
-			},
-			Type: corev1.SecretTypeOpaque, // CA secret is just data, not necessarily TLS type
-			Data: map[string][]byte{
-				"ca.crt": newCA.CertPEM,
-				"ca.key": newCA.KeyPEM,
-			},
+		secret.Data = map[string][]byte{
+			"ca.crt": artifacts.CertPEM,
+			"ca.key": artifacts.KeyPEM,
 		}
 
-		// Set ownership
 		if err := m.setOwner(ctx, secret); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to set owner for CA secret: %w", err)
 		}
 
-		if _, err := controllerutil.CreateOrUpdate(ctx, m.Client, secret, func() error {
-			secret.Data = map[string][]byte{
-				"ca.crt": newCA.CertPEM,
-				"ca.key": newCA.KeyPEM,
-			}
-			return nil
-		}); err != nil {
-			return nil, err
+		if err := m.Client.Create(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to create CA secret: %w", err)
 		}
 
-		m.recorderEvent(secret, "Normal", "Rotated", "Created new CA certificate")
-		return newCA, nil
+		m.recorderEvent(secret, "Normal", "Generated", "Generated new CA certificate")
+		return artifacts, nil
 	}
 
-	return nil, fmt.Errorf("unreachable in ensureCA")
+	// Found secret, validate it
+	artifacts, err := ParseCA(secret.Data["ca.crt"], secret.Data["ca.key"])
+	if err != nil {
+		// If corrupt, recreate
+		log.FromContext(ctx).Error(err, "CA secret is corrupt, recreating")
+		if err := m.Client.Delete(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to delete corrupt CA secret: %w", err)
+		}
+		return m.ensureCA(ctx)
+	}
+
+	// Check if near expiry
+	if time.Until(artifacts.Cert.NotAfter) < RotationThreshold {
+		log.FromContext(ctx).Info("CA is near expiry, rotating")
+		if err := m.Client.Delete(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to delete expiring CA secret: %w", err)
+		}
+		return m.ensureCA(ctx)
+	}
+
+	return artifacts, nil
 }
 
 func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]byte, error) {
-	logger := log.FromContext(ctx)
-	secret := &corev1.Secret{}
-	err := m.Client.Get(
-		ctx,
-		types.NamespacedName{Name: ServerSecretName, Namespace: m.Options.Namespace},
-		secret,
-	)
-
-	generate := false
-	if errors.IsNotFound(err) {
-		generate = true
-	} else if err != nil {
-		return nil, err
-	} else {
-		// Check validity and if signed by current CA
-		certPEM := secret.Data["tls.crt"]
-		if len(certPEM) == 0 {
-			generate = true
-		} else {
-			block, _ := pem.Decode(certPEM)
-			if block == nil {
-				generate = true
-			} else {
-				cert, err := x509.ParseCertificate(block.Bytes)
-				if err != nil {
-					generate = true
-				} else {
-					// Check Expiry
-					if time.Now().Add(RotationThreshold).After(cert.NotAfter) {
-						logger.Info("Server cert expiring, rotating")
-						generate = true
-					}
-					// Check if signed by current CA
-					if err := cert.CheckSignatureFrom(ca.Cert); err != nil {
-						logger.Info("Server cert not signed by current CA, rotating")
-						generate = true
-					}
-				}
-			}
-		}
-	}
-
-	if !generate {
-		return secret.Data["tls.crt"], nil
-	}
-
-	// Generate new
-	commonName := fmt.Sprintf("%s.%s.svc", m.Options.ServiceName, m.Options.Namespace)
-	dnsNames := []string{
-		m.Options.ServiceName,
-		fmt.Sprintf("%s.%s", m.Options.ServiceName, m.Options.Namespace),
-		commonName,
-		commonName + ".cluster.local",
-	}
-
-	srv, err := GenerateServerCert(ca, commonName, dnsNames)
-	if err != nil {
-		return nil, err
-	}
-
-	secret = &corev1.Secret{
+	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServerSecretName,
 			Namespace: m.Options.Namespace,
 		},
-		Type: corev1.SecretTypeTLS,
 	}
 
-	if err := m.setOwner(ctx, secret); err != nil {
-		return nil, err
+	dnsNames := []string{
+		fmt.Sprintf("%s.%s.svc", m.Options.ServiceName, m.Options.Namespace),
+		fmt.Sprintf("%s.%s.svc.cluster.local", m.Options.ServiceName, m.Options.Namespace),
 	}
 
-	if _, err := controllerutil.CreateOrUpdate(ctx, m.Client, secret, func() error {
+	if err := m.Client.Get(ctx, types.NamespacedName{Name: ServerSecretName, Namespace: m.Options.Namespace}, secret); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get server cert secret: %w", err)
+		}
+
+		artifacts, err := GenerateServerCert(ca, m.Options.ServiceName, dnsNames)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate server cert: %w", err)
+		}
+
+		secret.Data = map[string][]byte{
+			"tls.crt": artifacts.CertPEM,
+			"tls.key": artifacts.KeyPEM,
+		}
+
+		if err := m.setOwner(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to set owner for server cert secret: %w", err)
+		}
+
+		if err := m.Client.Create(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to create server cert secret: %w", err)
+		}
+
+		m.recorderEvent(secret, "Normal", "Generated", "Generated new webhook server certificate")
+		return artifacts.CertPEM, nil
+	}
+
+	// Validate existing
+	certBlock, _ := pem.Decode(secret.Data["tls.crt"])
+	if certBlock == nil {
+		log.FromContext(ctx).Error(nil, "server cert secret is corrupt, recreating")
+		if err := m.Client.Delete(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to delete corrupt server cert secret: %w", err)
+		}
+		return m.ensureServerCert(ctx, ca)
+	}
+
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "failed to parse server cert, recreating")
+		if err := m.Client.Delete(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to delete unparseable server cert secret: %w", err)
+		}
+		return m.ensureServerCert(ctx, ca)
+	}
+
+	// Check if near expiry OR if CA changed
+	needsRotation := time.Until(cert.NotAfter) < RotationThreshold
+	if !needsRotation {
+		// Check if signed by current CA
+		if err := cert.CheckSignatureFrom(ca.Cert); err != nil {
+			log.FromContext(ctx).Info("server cert was not signed by current CA, rotating")
+			needsRotation = true
+		}
+	}
+
+	if needsRotation {
+		srv, err := GenerateServerCert(ca, m.Options.ServiceName, dnsNames)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate new server cert: %w", err)
+		}
 		secret.Data = map[string][]byte{
 			"tls.crt": srv.CertPEM,
 			"tls.key": srv.KeyPEM,
-			"ca.crt":  ca.CertPEM, // Helpful to have CA in here too for client verification if needed
 		}
-		return nil
-	}); err != nil {
-		return nil, err
+		if err := m.Client.Update(ctx, secret); err != nil {
+			return nil, fmt.Errorf("failed to update server cert secret: %w", err)
+		}
+		m.recorderEvent(secret, "Normal", "Rotated", "Rotated webhook server certificate")
+		return srv.CertPEM, nil
 	}
 
-	m.recorderEvent(secret, "Normal", "Rotated", "Rotated webhook server certificate")
-	return srv.CertPEM, nil
+	return secret.Data["tls.crt"], nil
 }
 
 func (m *CertRotator) waitForKubelet(ctx context.Context, expectedCertPEM []byte) error {
 	logger := log.FromContext(ctx)
 	// Exponential backoff to wait for Kubelet
 	// Start fast (100ms) and backoff up to 2m total wait.
-	backoff := wait.Backoff{
-		Duration: 100 * time.Millisecond,
-		Factor:   2,
-		Jitter:   0.1,
-		Steps:    12, // 100ms -> 200 -> 400 ... ~3-4 minutes max
-	}
+	return wait.PollUntilContextTimeout(
+		ctx,
+		100*time.Millisecond,
+		2*time.Minute,
+		true,
+		func(ctx context.Context) (bool, error) {
+			certPath := filepath.Join(m.Options.CertDir, CertFileName)
+			diskBytes, err := os.ReadFile(certPath)
+			if err != nil {
+				// File might not exist yet if pod is just starting
+				logger.V(1).Info("Waiting for certificate file", "path", certPath, "err", err)
+				return false, nil
+			}
 
-	return wait.ExponentialBackoff(backoff, func() (bool, error) {
-		certPath := filepath.Join(m.Options.CertDir, CertFileName)
-		diskBytes, err := os.ReadFile(certPath)
-		if err != nil {
-			// File might not exist yet if pod is just starting
-			logger.V(1).Info("Waiting for certificate file", "path", certPath, "err", err)
+			if string(diskBytes) == string(expectedCertPEM) {
+				return true, nil
+			}
+
+			logger.V(1).Info("Certificate on disk does not match Secret yet")
 			return false, nil
-		}
-
-		if string(diskBytes) == string(expectedCertPEM) {
-			return true, nil
-		}
-
-		logger.V(1).Info("Certificate on disk does not match Secret yet")
-		return false, nil
-	})
+		},
+	)
 }
 
 func (m *CertRotator) setOwner(ctx context.Context, secret *corev1.Secret) error {
-	logger := log.FromContext(ctx)
-
 	dep, err := m.findOperatorDeployment(ctx)
 	if err != nil {
-		// Don't fail if we can't find it (e.g. running locally), but log it
-		logger.V(1).Info("Could not determine operator deployment for GC", "error", err)
-		return nil
+		return err
 	}
-
 	if dep == nil {
 		return nil
 	}
 
-	return controllerutil.SetControllerReference(dep, secret, m.Client.Scheme())
+	if err := controllerutil.SetControllerReference(dep, secret, m.Client.Scheme()); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+	return nil
 }
 
-// findOperatorDeployment locates the deployment running this operator.
 func (m *CertRotator) findOperatorDeployment(ctx context.Context) (*appsv1.Deployment, error) {
-	// 1. Try Robust Label Selection (Preferred)
+	// 1. Try by label selector
 	if len(m.Options.OperatorLabelSelector) > 0 {
 		list := &appsv1.DeploymentList{}
-		err := m.Client.List(ctx, list,
-			client.InNamespace(m.Options.Namespace),
-			client.MatchingLabels(m.Options.OperatorLabelSelector),
-		)
-		if err != nil {
-			return nil, err
+		if err := m.Client.List(ctx, list, client.InNamespace(m.Options.Namespace), client.MatchingLabels(m.Options.OperatorLabelSelector)); err != nil {
+			return nil, fmt.Errorf("failed to list deployments by labels: %w", err)
 		}
-
+		if len(list.Items) > 1 {
+			return nil, fmt.Errorf("found multiple deployments matching operator labels")
+		}
 		if len(list.Items) == 1 {
 			return &list.Items[0], nil
-		} else if len(list.Items) > 1 {
-			return nil, fmt.Errorf("found multiple deployments matching selector %v", m.Options.OperatorLabelSelector)
 		}
-		// If 0 found, fall through to legacy name check
 	}
 
-	// 2. Try Specific Name (Fallback)
+	// 2. Try by explicit name
 	if m.Options.OperatorDeployment != "" {
 		dep := &appsv1.Deployment{}
-		err := m.Client.Get(
-			ctx,
-			types.NamespacedName{
-				Name:      m.Options.OperatorDeployment,
-				Namespace: m.Options.Namespace,
-			},
-			dep,
-		)
-		if err != nil {
+		if err := m.Client.Get(ctx, types.NamespacedName{Name: m.Options.OperatorDeployment, Namespace: m.Options.Namespace}, dep); err != nil {
 			if errors.IsNotFound(err) {
 				return nil, nil
 			}
-			return nil, err
+			return nil, fmt.Errorf("failed to get operator deployment by name: %w", err)
 		}
 		return dep, nil
 	}
@@ -381,66 +335,44 @@ func (m *CertRotator) findOperatorDeployment(ctx context.Context) (*appsv1.Deplo
 	return nil, nil
 }
 
-func (m *CertRotator) patchWebhooks(ctx context.Context, caCert []byte) error {
-	logger := log.FromContext(ctx)
-
-	configs := []struct {
-		Kind client.Object
-		Name string
-	}{
-		{
-			&admissionregistrationv1.MutatingWebhookConfiguration{},
-			"multigres-operator-mutating-webhook-configuration",
-		},
-		{
-			&admissionregistrationv1.ValidatingWebhookConfiguration{},
-			"multigres-operator-validating-webhook-configuration",
-		},
-	}
-
-	for _, c := range configs {
-		obj := c.Kind.DeepCopyObject().(client.Object)
-		if err := m.Client.Get(ctx, types.NamespacedName{Name: c.Name}, obj); err != nil {
-			if errors.IsNotFound(err) {
-				continue
-			}
-			return err
+func (m *CertRotator) patchWebhooks(ctx context.Context, caBundle []byte) error {
+	// Mutating
+	mutating := &admissionregistrationv1.MutatingWebhookConfiguration{}
+	mutName := "multigres-operator-mutating-webhook-configuration"
+	if err := m.Client.Get(ctx, types.NamespacedName{Name: mutName}, mutating); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get mutating webhook config: %w", err)
 		}
-
-		// Create copy for diffing
-		oldObj := obj.DeepCopyObject().(client.Object)
-		updated := false
-
-		switch r := obj.(type) {
-		case *admissionregistrationv1.MutatingWebhookConfiguration:
-			for i := range r.Webhooks {
-				if string(r.Webhooks[i].ClientConfig.CABundle) != string(caCert) {
-					r.Webhooks[i].ClientConfig.CABundle = caCert
-					updated = true
-				}
-			}
-		case *admissionregistrationv1.ValidatingWebhookConfiguration:
-			for i := range r.Webhooks {
-				if string(r.Webhooks[i].ClientConfig.CABundle) != string(caCert) {
-					r.Webhooks[i].ClientConfig.CABundle = caCert
-					updated = true
-				}
-			}
+	} else {
+		for i := range mutating.Webhooks {
+			mutating.Webhooks[i].ClientConfig.CABundle = caBundle
 		}
-
-		if updated {
-			logger.Info("Patching webhook configuration with new CA", "config", c.Name)
-			if err := m.Client.Patch(ctx, obj, client.MergeFrom(oldObj)); err != nil {
-				return fmt.Errorf("failed to patch %s: %w", c.Name, err)
-			}
+		if err := m.Client.Update(ctx, mutating); err != nil {
+			return fmt.Errorf("failed to update mutating webhook config: %w", err)
 		}
 	}
+
+	// Validating
+	validating := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+	valName := "multigres-operator-validating-webhook-configuration"
+	if err := m.Client.Get(ctx, types.NamespacedName{Name: valName}, validating); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get validating webhook config: %w", err)
+		}
+	} else {
+		for i := range validating.Webhooks {
+			validating.Webhooks[i].ClientConfig.CABundle = caBundle
+		}
+		if err := m.Client.Update(ctx, validating); err != nil {
+			return fmt.Errorf("failed to update validating webhook config: %w", err)
+		}
+	}
+
 	return nil
 }
 
-// recorderEvent emits a Kubernetes event.
-func (m *CertRotator) recorderEvent(obj client.Object, eventType, reason, message string) {
-	if m.Recorder != nil {
-		m.Recorder.Event(obj, eventType, reason, message)
+func (m *CertRotator) recorderEvent(object runtime.Object, eventtype, reason, message string) {
+	if m.Recorder != nil && object != nil {
+		m.Recorder.AnnotatedEventf(object, nil, eventtype, reason, message)
 	}
 }

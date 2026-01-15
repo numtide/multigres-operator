@@ -602,6 +602,16 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			skipClusterCreation: true,
 			existingObjects:     []client.Object{},
 		},
+		"Error: PopulateClusterDefaults Failed (Implicit Shard Check)": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.TemplateDefaults.ShardTemplate = "" // Force implicit check
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnNamespacedKeyName("default", namespace, errSimulated),
+			},
+			wantErrMsg: "failed to check for implicit shard template",
+		},
 	}
 
 	runReconcileTest(t, tests)

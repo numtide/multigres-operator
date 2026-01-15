@@ -292,7 +292,20 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 								Resources: resolver.DefaultResourcesOrch(), // FIX: Expect defaults
 							},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{},
+						Pools: map[string]multigresv1alpha1.PoolSpec{
+							"default": {
+								Type:            "readWrite",
+								Cells:           []multigresv1alpha1.CellName{"zone-c"},
+								ReplicasPerCell: ptr.To(int32(1)),
+								Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
+								Postgres: multigresv1alpha1.ContainerConfig{
+									Resources: resolver.DefaultResourcesPostgres(),
+								},
+								Multipooler: multigresv1alpha1.ContainerConfig{
+									Resources: resolver.DefaultResourcesPooler(),
+								},
+							},
+						},
 					},
 				},
 			},

@@ -1,16 +1,16 @@
 package resolver
 
 import (
-	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -80,6 +80,83 @@ func TestNewResolver(t *testing.T) {
 	if got, want := r.TemplateDefaults.CoreTemplate, "foo"; got != want {
 		t.Errorf("Defaults mismatch: got %q, want %q", got, want)
 	}
+}
+
+// TestResolver_TemplateExists covers the helpers called by the Defaulter/Validator.
+func TestResolver_TemplateExists(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	coreTpl, cellTpl, shardTpl, ns := setupFixtures(t)
+	objs := []client.Object{coreTpl, cellTpl, shardTpl}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+	r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
+
+	// 1. CoreTemplateExists
+	t.Run("CoreTemplateExists", func(t *testing.T) {
+		// Found
+		if exists, err := r.CoreTemplateExists(t.Context(), "default"); err != nil || !exists {
+			t.Errorf("Expected found, got %v, %v", exists, err)
+		}
+		// Not Found
+		if exists, err := r.CoreTemplateExists(t.Context(), "missing"); err != nil || exists {
+			t.Errorf("Expected not found, got %v, %v", exists, err)
+		}
+		// Empty Name
+		if exists, err := r.CoreTemplateExists(t.Context(), ""); err != nil || exists {
+			t.Errorf("Expected false for empty name, got %v, %v", exists, err)
+		}
+	})
+
+	// 2. CellTemplateExists
+	t.Run("CellTemplateExists", func(t *testing.T) {
+		if exists, err := r.CellTemplateExists(t.Context(), "default"); err != nil || !exists {
+			t.Errorf("Expected found, got %v, %v", exists, err)
+		}
+		if exists, err := r.CellTemplateExists(t.Context(), "missing"); err != nil || exists {
+			t.Errorf("Expected not found, got %v, %v", exists, err)
+		}
+		if exists, err := r.CellTemplateExists(t.Context(), ""); err != nil || exists {
+			t.Errorf("Expected false for empty name, got %v, %v", exists, err)
+		}
+	})
+
+	// 3. ShardTemplateExists
+	t.Run("ShardTemplateExists", func(t *testing.T) {
+		if exists, err := r.ShardTemplateExists(t.Context(), "default"); err != nil || !exists {
+			t.Errorf("Expected found, got %v, %v", exists, err)
+		}
+		if exists, err := r.ShardTemplateExists(t.Context(), "missing"); err != nil || exists {
+			t.Errorf("Expected not found, got %v, %v", exists, err)
+		}
+		if exists, err := r.ShardTemplateExists(t.Context(), ""); err != nil || exists {
+			t.Errorf("Expected false for empty name, got %v, %v", exists, err)
+		}
+	})
+
+	// 4. Error Case (Simulate DB failure)
+	t.Run("ClientFailure", func(t *testing.T) {
+		errSim := testutil.ErrInjected
+		failClient := testutil.NewFakeClientWithFailures(c, &testutil.FailureConfig{
+			OnGet: func(_ client.ObjectKey) error { return errSim },
+		})
+		rFail := NewResolver(failClient, ns, multigresv1alpha1.TemplateDefaults{})
+
+		if _, err := rFail.CoreTemplateExists(t.Context(), "any"); err == nil ||
+			!errors.Is(err, errSim) {
+			t.Error("Expected error for CoreTemplateExists")
+		}
+		if _, err := rFail.CellTemplateExists(t.Context(), "any"); err == nil ||
+			!errors.Is(err, errSim) {
+			t.Error("Expected error for CellTemplateExists")
+		}
+		if _, err := rFail.ShardTemplateExists(t.Context(), "any"); err == nil ||
+			!errors.Is(err, errSim) {
+			t.Error("Expected error for ShardTemplateExists")
+		}
+	})
 }
 
 func TestSharedHelpers(t *testing.T) {
@@ -171,25 +248,6 @@ func TestSharedHelpers(t *testing.T) {
 			t.Error("Replicas not merged")
 		}
 	})
-}
-
-// mockClient is a partial implementation of client.Client to force errors.
-type mockClient struct {
-	client.Client
-	failGet bool
-	err     error
-}
-
-func (m *mockClient) Get(
-	ctx context.Context,
-	key client.ObjectKey,
-	obj client.Object,
-	opts ...client.GetOption,
-) error {
-	if m.failGet {
-		return m.err
-	}
-	return apierrors.NewNotFound(schema.GroupResource{}, key.Name)
 }
 
 func parseQty(s string) resource.Quantity {

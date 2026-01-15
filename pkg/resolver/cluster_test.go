@@ -7,7 +7,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/testutil"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,19 +20,28 @@ import (
 func TestResolver_PopulateClusterDefaults(t *testing.T) {
 	t.Parallel()
 
-	r := NewResolver(
-		fake.NewClientBuilder().Build(),
-		"default",
-		multigresv1alpha1.TemplateDefaults{},
-	)
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	// Fixture: An implicit "default" ShardTemplate exists in the namespace
+	shardTplDefault := &multigresv1alpha1.ShardTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default",
+			Namespace: "default",
+		},
+	}
 
 	tests := map[string]struct {
-		input *multigresv1alpha1.MultigresCluster
-		want  *multigresv1alpha1.MultigresCluster
+		input   *multigresv1alpha1.MultigresCluster
+		objects []client.Object
+		want    *multigresv1alpha1.MultigresCluster
 	}{
 		"Empty Cluster: Applies All System Defaults": {
-			input: &multigresv1alpha1.MultigresCluster{},
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+			},
 			want: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
@@ -40,11 +52,10 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						ImagePullPolicy: DefaultImagePullPolicy,
 					},
 					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-						CoreTemplate:  FallbackCoreTemplate,
-						CellTemplate:  FallbackCellTemplate,
-						ShardTemplate: FallbackShardTemplate,
+						CoreTemplate:  "",
+						CellTemplate:  "",
+						ShardTemplate: "",
 					},
-					// Expect Smart Defaulting: System Catalog with Shard 0
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
 							Name:    DefaultSystemDatabaseName,
@@ -65,6 +76,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 		},
 		"Existing Database but No TableGroups: Inject TG and Shard": {
 			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{Name: "custom-db"},
@@ -72,6 +84,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 			want: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
@@ -82,9 +95,9 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						ImagePullPolicy: DefaultImagePullPolicy,
 					},
 					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-						CoreTemplate:  FallbackCoreTemplate,
-						CellTemplate:  FallbackCellTemplate,
-						ShardTemplate: FallbackShardTemplate,
+						CoreTemplate:  "",
+						CellTemplate:  "",
+						ShardTemplate: "",
 					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
@@ -105,8 +118,8 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 		},
 		"Existing TableGroup but No Shards: Inject Shard 0 with Default Cells": {
 			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					// Adding Cells here triggers the loop to build defaultCells
 					Cells: []multigresv1alpha1.CellConfig{
 						{Name: "zone-a"},
 						{Name: "zone-b"},
@@ -122,6 +135,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 			want: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
@@ -132,9 +146,9 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						ImagePullPolicy: DefaultImagePullPolicy,
 					},
 					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-						CoreTemplate:  FallbackCoreTemplate,
-						CellTemplate:  FallbackCellTemplate,
-						ShardTemplate: FallbackShardTemplate,
+						CoreTemplate:  "",
+						CellTemplate:  "",
+						ShardTemplate: "",
 					},
 					Cells: []multigresv1alpha1.CellConfig{
 						{Name: "zone-a"},
@@ -149,7 +163,6 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 									Shards: []multigresv1alpha1.ShardConfig{
 										{
 											Name: "0",
-											// Expect MultiOrch.Cells to be populated from cluster.Spec.Cells
 											Spec: &multigresv1alpha1.ShardInlineSpec{
 												MultiOrch: multigresv1alpha1.MultiOrchSpec{
 													Cells: []multigresv1alpha1.CellName{
@@ -157,7 +170,6 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 														"zone-b",
 													},
 												},
-												// FIX: Expect the default pool to be injected
 												Pools: map[string]multigresv1alpha1.PoolSpec{
 													"default": {
 														Type: "readWrite",
@@ -177,8 +189,69 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 		},
+		// COVERAGE: Implicit Default ShardTemplate exists -> Shard 0 created, but defaults NOT injected.
+		// This hits the `else { shouldInjectDefaults = false }` branch.
+		"Implicit Default ShardTemplate Exists -> Shard 0 Created Empty": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-a"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name: "db",
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{Name: "tg"},
+							},
+						},
+					},
+				},
+			},
+			objects: []client.Object{shardTplDefault}, // "default" exists!
+			want: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        DefaultPostgresImage,
+						MultiAdmin:      DefaultMultiAdminImage,
+						MultiOrch:       DefaultMultiOrchImage,
+						MultiPooler:     DefaultMultiPoolerImage,
+						MultiGateway:    DefaultMultiGatewayImage,
+						ImagePullPolicy: DefaultImagePullPolicy,
+					},
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate:  "",
+						CellTemplate:  "",
+						ShardTemplate: "",
+					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-a"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name: "db",
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name: "tg",
+									Shards: []multigresv1alpha1.ShardConfig{
+										{
+											Name: "0",
+											Spec: &multigresv1alpha1.ShardInlineSpec{
+												MultiOrch: multigresv1alpha1.MultiOrchSpec{
+													Cells: []multigresv1alpha1.CellName{"zone-a"},
+												},
+												// KEY: Pools is empty because implicit template takes over
+												Pools: map[string]multigresv1alpha1.PoolSpec{},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		"Existing Shards: Do Not Inject": {
 			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
@@ -196,6 +269,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 			want: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
@@ -206,9 +280,9 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						ImagePullPolicy: DefaultImagePullPolicy,
 					},
 					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-						CoreTemplate:  FallbackCoreTemplate,
-						CellTemplate:  FallbackCellTemplate,
-						ShardTemplate: FallbackShardTemplate,
+						CoreTemplate:  "",
+						CellTemplate:  "",
+						ShardTemplate: "",
 					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
@@ -228,6 +302,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 		},
 		"Pre-populated Fields: Preserves Values": {
 			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        "custom/postgres:16",
@@ -258,6 +333,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				},
 			},
 			want: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        "custom/postgres:16",
@@ -293,13 +369,46 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			r := NewResolver(
+				fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build(),
+				"default",
+				multigresv1alpha1.TemplateDefaults{},
+			)
+
 			got := tc.input.DeepCopy()
-			r.PopulateClusterDefaults(got)
+			if err := r.PopulateClusterDefaults(t.Context(), got); err != nil {
+				t.Fatalf("PopulateClusterDefaults failed: %v", err)
+			}
 
 			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
-				t.Errorf("Cluster defaults mismatch (-want +got):\n%s", diff)
+				t.Errorf("Diff (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestResolver_PopulateClusterDefaults_ClientError(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	errSim := errors.New("simulated error")
+	mc := testutil.NewFakeClientWithFailures(fake.NewClientBuilder().WithScheme(scheme).Build(),
+		&testutil.FailureConfig{
+			OnGet: func(_ client.ObjectKey) error { return errSim },
+		})
+
+	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
+	// This input triggers the "check implicit shard template" path because ShardTemplate is empty
+	input := &multigresv1alpha1.MultigresCluster{
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			Databases: []multigresv1alpha1.DatabaseConfig{{Name: "db"}},
+		},
+	}
+
+	err := r.PopulateClusterDefaults(t.Context(), input)
+	if err == nil || !errors.Is(err, errSim) {
+		t.Errorf("Expected simulated error, got %v", err)
 	}
 }
 
@@ -351,6 +460,39 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 				},
 			},
 		},
+		// COVERAGE: Explicit Override of ALL fields to ensure merge logic branches are hit
+		"Template Reference + Full Inline Override": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						TemplateRef: "default",
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Image:    "override-image",
+							Replicas: ptr.To(int32(99)),
+							Storage:  multigresv1alpha1.StorageSpec{Size: "99Gi"},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse("99Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			objects: []client.Object{coreTpl},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:    "override-image",
+					Replicas: ptr.To(int32(99)),
+					Storage:  multigresv1alpha1.StorageSpec{Size: "99Gi"},
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("99Gi"),
+						},
+					},
+				},
+			},
+		},
 		"Cluster Default Template": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				Spec: multigresv1alpha1.MultigresClusterSpec{
@@ -390,6 +532,86 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 				},
 			},
 			wantErr: true,
+		},
+		"External Spec": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						External: &multigresv1alpha1.ExternalTopoServerSpec{
+							Endpoints: []multigresv1alpha1.EndpointUrl{"https://1.2.3.4:2379"},
+						},
+						Etcd: &multigresv1alpha1.EtcdSpec{Image: "ignored"},
+					},
+				},
+			},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				External: &multigresv1alpha1.ExternalTopoServerSpec{
+					Endpoints: []multigresv1alpha1.EndpointUrl{"https://1.2.3.4:2379"},
+				},
+				Etcd: nil, // Explicitly nilled out
+			},
+		},
+		"CoreTemplate with GlobalTopo": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						TemplateRef: "with-topo",
+					},
+				},
+			},
+			objects: []client.Object{
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "with-topo", Namespace: "default"},
+					Spec: multigresv1alpha1.CoreTemplateSpec{
+						GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+							Etcd: &multigresv1alpha1.EtcdSpec{Image: "core-image"},
+						},
+					},
+				},
+			},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     "core-image",
+					Replicas:  ptr.To(DefaultEtcdReplicas), // Defaults applied
+					Resources: DefaultResourcesEtcd(),
+					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+				},
+			},
+		},
+		"Template External -> Inline Etcd Override": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						TemplateRef: "topo-external",
+						Etcd:        &multigresv1alpha1.EtcdSpec{Image: "new-etcd"},
+					},
+				},
+			},
+			objects: []client.Object{
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "topo-external", Namespace: "default"},
+					Spec: multigresv1alpha1.CoreTemplateSpec{
+						GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+							// Template defines external, so Etcd is nil
+							// Note: TopoServerSpec in CoreTemplate only has Etcd field in current definition?
+							// Let's check TopoServerSpec definition again.
+							// It says: type TopoServerSpec struct { Etcd *EtcdSpec }
+							// It DOES NOT have External.
+							// Wait, if it only has Etcd, how can it be nil? It's a pointer.
+							// Use case: User creates CoreTemplate with empty spec? Or nil TopoServer?
+							Etcd: nil,
+						},
+					},
+				},
+			},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     "new-etcd",
+					Replicas:  ptr.To(DefaultEtcdReplicas),
+					Resources: DefaultResourcesEtcd(),
+					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+				},
+			},
 		},
 	}
 
@@ -501,15 +723,56 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 	}
 }
 
+// TestResolver_ResolveCoreTemplate hits specific error branches for Implicit vs Explicit missing.
+func TestResolver_ResolveCoreTemplate(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	r := NewResolver(
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		"default",
+		multigresv1alpha1.TemplateDefaults{},
+	)
+
+	// 1. Implicit Fallback ("default" or "") -> Not Found -> Returns nil, nil (No Error)
+	// This covers: "if isImplicitFallback { return ... nil }"
+	t.Run("Implicit Fallback Missing", func(t *testing.T) {
+		tpl, err := r.ResolveCoreTemplate(t.Context(), "")
+		if err != nil {
+			t.Errorf("Expected nil error for implicit missing, got %v", err)
+		}
+		if tpl.Name != "" { // Empty struct
+			t.Errorf("Expected empty template, got %v", tpl)
+		}
+	})
+
+	// 2. Explicit Template ("custom") -> Not Found -> Returns Error
+	// This covers: "return nil, fmt.Errorf(...)"
+	t.Run("Explicit Template Missing", func(t *testing.T) {
+		_, err := r.ResolveCoreTemplate(t.Context(), "missing-custom")
+		if err == nil {
+			t.Error("Expected error for explicit missing template")
+		}
+	})
+}
+
 func TestResolver_ClientErrors_Core(t *testing.T) {
 	t.Parallel()
-	errSimulated := errors.New("simulated database connection error")
-	mc := &mockClient{failGet: true, err: errSimulated}
-	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	errSim := testutil.ErrInjected
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	failConfig := &testutil.FailureConfig{
+		OnGet: func(_ client.ObjectKey) error { return errSim },
+	}
+	c := testutil.NewFakeClientWithFailures(baseClient, failConfig)
+
+	r := NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{})
 
 	_, err := r.ResolveCoreTemplate(t.Context(), "any")
-	if err == nil ||
-		err.Error() != "failed to get CoreTemplate: simulated database connection error" {
-		t.Errorf("Error mismatch: got %v, want simulated error", err)
+	if err == nil || !errors.Is(err, errSim) {
+		t.Errorf("Error mismatch: got %v, want %v", err, errSim)
 	}
 }

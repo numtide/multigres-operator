@@ -108,8 +108,6 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 			obj = &multigresv1alpha1.CellTemplate{}
 		case "ShardTemplate":
 			obj = &multigresv1alpha1.ShardTemplate{}
-		default:
-			return fmt.Errorf("unknown template kind %s", kind)
 		}
 
 		if err := v.Client.Get(ctx, key, obj); err != nil {

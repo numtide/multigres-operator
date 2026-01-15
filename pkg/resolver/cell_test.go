@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -82,7 +83,10 @@ func TestResolver_ResolveCell(t *testing.T) {
 			t.Parallel()
 			var c client.Client
 			if name == "Client Error" {
-				c = &mockClient{failGet: true, err: errors.New("fail")}
+				base := fake.NewClientBuilder().WithScheme(scheme).Build()
+				c = testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
+					OnGet: func(_ client.ObjectKey) error { return errors.New("fail") },
+				})
 			} else {
 				c = fake.NewClientBuilder().
 					WithScheme(scheme).
@@ -347,8 +351,15 @@ func TestMergeCellConfig(t *testing.T) {
 
 func TestResolver_ClientErrors_Cell(t *testing.T) {
 	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
 	errSimulated := errors.New("simulated database connection error")
-	mc := &mockClient{failGet: true, err: errSimulated}
+	mc := testutil.NewFakeClientWithFailures(
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		&testutil.FailureConfig{
+			OnGet: func(_ client.ObjectKey) error { return errSimulated },
+		},
+	)
 	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
 
 	_, err := r.ResolveCellTemplate(t.Context(), "any")

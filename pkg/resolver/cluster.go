@@ -11,7 +11,10 @@ import (
 )
 
 // PopulateClusterDefaults applies static defaults to the Cluster Spec.
-func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresCluster) {
+func (r *Resolver) PopulateClusterDefaults(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) error {
 	// 1. Default Images
 	if cluster.Spec.Images.Postgres == "" {
 		cluster.Spec.Images.Postgres = DefaultPostgresImage
@@ -32,13 +35,7 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 		cluster.Spec.Images.ImagePullPolicy = DefaultImagePullPolicy
 	}
 
-	// 2. Default Template Refs - REMOVED
-	// We do NOT blindly default these to "default".
-	// If the user wants to use a template named "default", they can rely on the implicit lookup
-	// or specify it explicitly. Setting it here causes the spec to claim "default" is being used
-	// even when no such template exists.
-
-	// 3. Smart Defaulting: System Catalog
+	// 2. Smart Defaulting: System Catalog
 	if len(cluster.Spec.Databases) == 0 {
 		cluster.Spec.Databases = append(cluster.Spec.Databases, multigresv1alpha1.DatabaseConfig{
 			Name:    DefaultSystemDatabaseName,
@@ -49,6 +46,30 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 	var defaultCells []multigresv1alpha1.CellName
 	for _, c := range cluster.Spec.Cells {
 		defaultCells = append(defaultCells, multigresv1alpha1.CellName(c.Name))
+	}
+
+	// Logic: Should we inject the "default" pool inline?
+	// Rule 1: If user EXPLICITLY requested a template, NEVER inject defaults. Trust the user.
+	// Rule 2: If user requested NOTHING, check if "default" template exists.
+	//         If exists -> Do not inject (use implicit template).
+	//         If missing -> Inject defaults (Zero Config mode).
+	shouldInjectDefaults := false
+
+	userExplicitTemplate := cluster.Spec.TemplateDefaults.ShardTemplate
+	if userExplicitTemplate != "" {
+		// Rule 1: Explicit template -> No defaults
+		shouldInjectDefaults = false
+	} else {
+		// Rule 2: No explicit template. Check for implicit "default".
+		implicitExists, err := r.ShardTemplateExists(ctx, "default")
+		if err != nil {
+			return fmt.Errorf("failed to check for implicit shard template: %w", err)
+		}
+		if implicitExists {
+			shouldInjectDefaults = false
+		} else {
+			shouldInjectDefaults = true
+		}
 	}
 
 	for i := range cluster.Spec.Databases {
@@ -73,12 +94,15 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							Cells: defaultCells,
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{
-							"default": {
-								Type:  "readWrite",
-								Cells: defaultCells,
-							},
-						},
+						Pools: make(map[string]multigresv1alpha1.PoolSpec),
+					}
+
+					// Apply the decision made above
+					if shouldInjectDefaults {
+						shardCfg.Spec.Pools["default"] = multigresv1alpha1.PoolSpec{
+							Type:  "readWrite",
+							Cells: defaultCells,
+						}
 					}
 				}
 
@@ -89,6 +113,8 @@ func (r *Resolver) PopulateClusterDefaults(cluster *multigresv1alpha1.MultigresC
 			}
 		}
 	}
+
+	return nil
 }
 
 // ResolveGlobalTopo determines the final GlobalTopoServer configuration.

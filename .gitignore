@@ -12,9 +12,9 @@ dist/
 go.work
 go.work.sum
 cover.out
+*cover.out
 cover.html
 coverage/
-
 # kubebuilder
 bin/
 
@@ -23,4 +23,4 @@ kubeconfig.yaml
 
 
 # MacOS
-.DS_Store   
+.DS_Store

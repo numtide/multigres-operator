@@ -40,7 +40,9 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	}
 
 	// 1. Static Defaulting (Images, System Catalog)
-	d.Resolver.PopulateClusterDefaults(cluster)
+	if err := d.Resolver.PopulateClusterDefaults(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to populate cluster defaults: %w", err)
+	}
 
 	// 2. Create a "Request Scoped" Resolver
 	// We copy the resolver and point it to the Object's Namespace.

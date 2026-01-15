@@ -69,7 +69,10 @@ func (r *MultigresClusterReconciler) Reconcile(
 	res := resolver.NewResolver(r.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
 
 	// Apply defaults (in-memory) to ensure we have images/configs/system-catalog even if webhook didn't run.
-	res.PopulateClusterDefaults(cluster)
+	if err := res.PopulateClusterDefaults(ctx, cluster); err != nil {
+		l.Error(err, "Failed to populate cluster defaults")
+		return ctrl.Result{}, err
+	}
 
 	if err := r.reconcileGlobalComponents(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile global components")

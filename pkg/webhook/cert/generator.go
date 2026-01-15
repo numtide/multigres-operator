@@ -36,6 +36,12 @@ type ServerArtifacts struct {
 	KeyPEM  []byte
 }
 
+// internal variables for mocking in tests
+var (
+	marshalECPrivateKey = x509.MarshalECPrivateKey
+	parseCertificate    = x509.ParseCertificate
+)
+
 // GenerateCA creates a new self-signed Root CA using ECDSA P-256.
 func GenerateCA() (*CAArtifacts, error) {
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -71,14 +77,14 @@ func GenerateCA() (*CAArtifacts, error) {
 		return nil, fmt.Errorf("failed to create CA certificate: %w", err)
 	}
 
-	caCert, err := x509.ParseCertificate(derBytes)
+	caCert, err := parseCertificate(derBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse generated CA: %w", err)
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 
-	keyBytes, err := x509.MarshalECPrivateKey(privKey)
+	keyBytes, err := marshalECPrivateKey(privKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal CA key: %w", err)
 	}
@@ -98,6 +104,9 @@ func GenerateServerCert(
 	commonName string,
 	dnsNames []string,
 ) (*ServerArtifacts, error) {
+	if ca == nil {
+		return nil, fmt.Errorf("CA artifacts cannot be nil")
+	}
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate server private key: %w", err)
@@ -138,7 +147,7 @@ func GenerateServerCert(
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 
-	keyBytes, err := x509.MarshalECPrivateKey(privKey)
+	keyBytes, err := marshalECPrivateKey(privKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal server key: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +39,21 @@ func TestResolver_ResolveShard(t *testing.T) {
 					Resources: DefaultResourcesOrch(),
 				},
 			},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{},
+			wantPools: map[string]multigresv1alpha1.PoolSpec{
+				"default": {
+					Type:            "readWrite",
+					ReplicasPerCell: ptr.To(int32(1)),
+					Storage: multigresv1alpha1.StorageSpec{
+						Size: DefaultEtcdStorageSize,
+					},
+					Postgres: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPostgres(),
+					},
+					Multipooler: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPooler(),
+					},
+				},
+			},
 		},
 		"Template Not Found": {
 			config:  &multigresv1alpha1.ShardConfig{ShardTemplate: "missing"},
@@ -364,6 +379,24 @@ func TestMergeShardConfig(t *testing.T) {
 				"inline-pool": {Type: "read"},
 			},
 		},
+		"Inline Spec Overrides Existing Pool": {
+			tpl: &multigresv1alpha1.ShardTemplate{
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"existing": {Type: "read"},
+					},
+				},
+			},
+			inline: &multigresv1alpha1.ShardInlineSpec{
+				Pools: map[string]multigresv1alpha1.PoolSpec{
+					"existing": {Type: "write"},
+				},
+			},
+			wantOrch: multigresv1alpha1.MultiOrchSpec{},
+			wantPools: map[string]multigresv1alpha1.PoolSpec{
+				"existing": {Type: "write"},
+			},
+		},
 		"Nil Template": {
 			tpl: nil,
 			overrides: &multigresv1alpha1.ShardOverrides{
@@ -393,8 +426,15 @@ func TestMergeShardConfig(t *testing.T) {
 
 func TestResolver_ClientErrors_Shard(t *testing.T) {
 	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
 	errSimulated := errors.New("simulated database connection error")
-	mc := &mockClient{failGet: true, err: errSimulated}
+	mc := testutil.NewFakeClientWithFailures(
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		&testutil.FailureConfig{
+			OnGet: func(_ client.ObjectKey) error { return errSimulated },
+		},
+	)
 	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
 
 	_, err := r.ResolveShardTemplate(t.Context(), "any")

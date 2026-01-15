@@ -1,116 +1,282 @@
 package handlers
 
 import (
-	"context"
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 	t.Parallel()
 
-	// Register scheme
-	s := runtime.NewScheme()
-	_ = scheme.AddToScheme(s)
-	_ = multigresv1alpha1.AddToScheme(s)
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
 
-	// Fixtures
-	coreTemplate := &multigresv1alpha1.CoreTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "default-core", Namespace: "test-ns"},
-		Spec: multigresv1alpha1.CoreTemplateSpec{
-			MultiAdmin: &multigresv1alpha1.StatelessSpec{Replicas: ptr(int32(3))},
+	baseObjs := []client.Object{
+		&multigresv1alpha1.ShardTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "exists-shard", Namespace: "test-ns"},
 		},
-	}
-	cellTemplate := &multigresv1alpha1.CellTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test-ns"},
-		Spec:       multigresv1alpha1.CellTemplateSpec{},
-	}
-	shardTemplate := &multigresv1alpha1.ShardTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test-ns"},
-		Spec:       multigresv1alpha1.ShardTemplateSpec{},
+		&multigresv1alpha1.CellTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "exists-cell", Namespace: "test-ns"},
+		},
+		&multigresv1alpha1.CoreTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "exists-core", Namespace: "test-ns"},
+		},
+		// Fallbacks
+		&multigresv1alpha1.ShardTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test-ns"},
+		},
+		&multigresv1alpha1.CellTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test-ns"},
+		},
+		&multigresv1alpha1.CoreTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "test-ns"},
+		},
 	}
 
 	tests := map[string]struct {
-		cluster       *multigresv1alpha1.MultigresCluster
-		existingObjs  []client.Object
-		failureConfig *testutil.FailureConfig
-		wantError     bool
-		wantMessage   string // substring match on error message
-		validateObj   func(t *testing.T, c *multigresv1alpha1.MultigresCluster)
+		input           *multigresv1alpha1.MultigresCluster
+		existingObjects []client.Object
+		failureConfig   *testutil.FailureConfig
+		nilResolver     bool
+		wrongType       bool
+		expectError     string
+		validate        func(testing.TB, *multigresv1alpha1.MultigresCluster)
 	}{
-		"Happy Path: System Catalog Injection & Resolution": {
-			cluster: &multigresv1alpha1.MultigresCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: "test-ns"},
+		"Happy Path: No Template -> Materializes Defaults": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "no-template", Namespace: "test-ns"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-						CoreTemplate: "default-core",
-					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "c1"}},
 				},
 			},
-			existingObjs: []client.Object{coreTemplate, cellTemplate, shardTemplate},
-			wantError:    false,
-			validateObj: func(t *testing.T, c *multigresv1alpha1.MultigresCluster) {
-				// 1. Verify System Catalog Injection (databases list)
-				if len(c.Spec.Databases) == 0 {
-					t.Error(
-						"Expected spec.databases to be populated (System Catalog), but it was empty",
-					)
+			existingObjects: []client.Object{},
+			validate: func(t testing.TB, cluster *multigresv1alpha1.MultigresCluster) {
+				t.Helper()
+				want := &multigresv1alpha1.MultigresClusterSpec{
+					Images: multigresv1alpha1.ClusterImages{
+						Postgres:        resolver.DefaultPostgresImage,
+						MultiAdmin:      resolver.DefaultMultiAdminImage,
+						MultiOrch:       resolver.DefaultMultiOrchImage,
+						MultiPooler:     resolver.DefaultMultiPoolerImage,
+						MultiGateway:    resolver.DefaultMultiGatewayImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{
+							Name: "c1",
+							Spec: &multigresv1alpha1.CellInlineSpec{
+								MultiGateway: multigresv1alpha1.StatelessSpec{
+									Replicas:  ptr.To(int32(1)),
+									Resources: resolver.DefaultResourcesGateway(),
+								},
+							},
+						},
+					},
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{
+							Replicas:  ptr.To(int32(1)),
+							Resources: resolver.DefaultResourcesAdmin(),
+						},
+					},
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Image:     resolver.DefaultEtcdImage,
+							Replicas:  ptr.To(int32(3)),
+							Resources: resolver.DefaultResourcesEtcd(),
+							Storage:   multigresv1alpha1.StorageSpec{Size: "1Gi"},
+						},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name:    "postgres",
+							Default: true,
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{
+									Name:    "default",
+									Default: true,
+									Shards: []multigresv1alpha1.ShardConfig{
+										{
+											Name: "0",
+											Spec: &multigresv1alpha1.ShardInlineSpec{
+												MultiOrch: multigresv1alpha1.MultiOrchSpec{
+													StatelessSpec: multigresv1alpha1.StatelessSpec{
+														Replicas:  ptr.To(int32(1)),
+														Resources: resolver.DefaultResourcesOrch(),
+													},
+													Cells: []multigresv1alpha1.CellName{"c1"},
+												},
+												Pools: map[string]multigresv1alpha1.PoolSpec{
+													"default": {
+														Type: "readWrite",
+														Cells: []multigresv1alpha1.CellName{
+															"c1",
+														},
+														ReplicasPerCell: ptr.To(int32(1)),
+														Storage: multigresv1alpha1.StorageSpec{
+															Size: "1Gi",
+														},
+														Postgres: multigresv1alpha1.ContainerConfig{
+															Resources: resolver.DefaultResourcesPostgres(),
+														},
+														Multipooler: multigresv1alpha1.ContainerConfig{
+															Resources: resolver.DefaultResourcesPooler(),
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
 				}
-
-				// 2. Verify Template Resolution (MultiAdmin resolved from CoreTemplate)
-				if c.Spec.MultiAdmin == nil || c.Spec.MultiAdmin.Spec == nil {
-					t.Error("Expected spec.multiadmin to be resolved from template, but it was nil")
-				} else if *c.Spec.MultiAdmin.Spec.Replicas != 3 {
-					t.Errorf("Expected MultiAdmin replicas to be 3, got %v", c.Spec.MultiAdmin.Spec.Replicas)
+				if diff := cmp.Diff(want, &cluster.Spec, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("Cluster mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
-		"Error: Resolution Failed (Missing Template)": {
-			cluster: &multigresv1alpha1.MultigresCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "broken-cluster", Namespace: "test-ns"},
+		"Happy Path: Fallbacks -> Promotes to Explicit": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "fallback-promote", Namespace: "test-ns"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
-					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-						CoreTemplate: "missing-template",
-					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "c1"}},
 				},
 			},
-			existingObjs: []client.Object{}, // No templates exist
-			wantError:    true,
-			wantMessage:  "failed to resolve globalTopoServer",
+			existingObjects: baseObjs,
+			validate: func(t testing.TB, cluster *multigresv1alpha1.MultigresCluster) {
+				t.Helper()
+				if cluster.Spec.TemplateDefaults.CoreTemplate != "default" ||
+					cluster.Spec.TemplateDefaults.CellTemplate != "default" ||
+					cluster.Spec.TemplateDefaults.ShardTemplate != "default" {
+					t.Errorf("Fallbacks were not promoted. Got: %+v", cluster.Spec.TemplateDefaults)
+				}
+			},
 		},
-		"Error: Resolution Failed (Client Error Injection)": {
-			cluster: &multigresv1alpha1.MultigresCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "fail-cluster", Namespace: "test-ns"},
-				Spec: multigresv1alpha1.MultigresClusterSpec{
-					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-						CoreTemplate: "default-core",
-					},
-				},
+		"Error: Resolver Nil": {
+			input:       &multigresv1alpha1.MultigresCluster{},
+			nilResolver: true,
+			expectError: "resolver is nil",
+		},
+		"Error: Wrong Type": {
+			wrongType:   true,
+			expectError: "expected MultigresCluster, got",
+		},
+		"Error: PopulateDefaults failure": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
 			},
-			existingObjs: []client.Object{coreTemplate},
+			existingObjects: baseObjs,
 			failureConfig: &testutil.FailureConfig{
-				OnGet: func(_ client.ObjectKey) error { return testutil.ErrInjected },
+				OnGet: func(key client.ObjectKey) error { return testutil.ErrInjected },
 			},
-			wantError:   true,
-			wantMessage: "failed to resolve globalTopoServer",
+			expectError: "failed to populate cluster defaults",
 		},
-		"Error: Decode Failed (Bad Object)": {
-			// This case is harder to simulate with strongly typed Default(obj) interface
-			// unless we pass the wrong type.
-			cluster:      nil, // Passing wrong type simulation
-			existingObjs: []client.Object{},
-			wantError:    true,
-			wantMessage:  "expected MultigresCluster",
+		"Error: ResolveMultiAdmin failure": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						TemplateRef: "exists-core",
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailKeyAfterNCalls(2, testutil.ErrInjected),
+			},
+			expectError: "failed to resolve multiadmin",
+		},
+		"Error: ResolveGlobalTopo failure": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						ShardTemplate: "exists-shard",
+					},
+				},
+			},
+			existingObjects: baseObjs,
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func(key client.ObjectKey) error {
+					if key.Name == "default" {
+						return testutil.ErrInjected
+					}
+					return nil
+				},
+			},
+			expectError: "failed to resolve globalTopoServer",
+		},
+		"Error: ResolveCell failure": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						ShardTemplate: "exists-shard",
+						CoreTemplate:  "exists-core",
+					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "c1"}},
+				},
+			},
+			existingObjects: baseObjs,
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func(key client.ObjectKey) error {
+					if key.Name == "default" {
+						return testutil.ErrInjected
+					}
+					return nil
+				},
+			},
+			expectError: "failed to resolve cell 'c1'",
+		},
+		"Error: ResolveShard failure": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate: "exists-core",
+						CellTemplate: "exists-cell",
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							TableGroups: []multigresv1alpha1.TableGroupConfig{
+								{Shards: []multigresv1alpha1.ShardConfig{{Name: "s1"}}},
+							},
+						},
+					},
+				},
+			},
+			existingObjects: baseObjs,
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func() func(client.ObjectKey) error {
+					count := 0
+					return func(key client.ObjectKey) error {
+						if key.Name == "default" {
+							count++
+							if count >= 3 {
+								return testutil.ErrInjected
+							}
+							return errors.NewNotFound(schema.GroupResource{}, key.Name)
+						}
+						return nil
+					}
+				}(),
+			},
+			expectError: "failed to resolve shard 's1'",
 		},
 	}
 
@@ -118,51 +284,43 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			// Setup Client
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(s).
-				WithObjects(tc.existingObjs...).
-				Build()
+			var res *resolver.Resolver
+			if !tc.nilResolver {
+				var c client.Client = fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(tc.existingObjects...).
+					Build()
 
-			var cl client.Client = fakeClient
-			if tc.failureConfig != nil {
-				cl = testutil.NewFakeClientWithFailures(fakeClient, tc.failureConfig)
+				if tc.failureConfig != nil {
+					c = testutil.NewFakeClientWithFailures(c, tc.failureConfig)
+				}
+
+				res = resolver.NewResolver(c, "test-ns", multigresv1alpha1.TemplateDefaults{})
 			}
 
-			// Setup Defaulter
-			res := resolver.NewResolver(cl, "test-ns", multigresv1alpha1.TemplateDefaults{})
 			defaulter := NewMultigresClusterDefaulter(res)
 
-			// Prepare Object
-			var obj runtime.Object
-			if tc.cluster != nil {
-				obj = tc.cluster.DeepCopy()
-			} else {
-				obj = &multigresv1alpha1.Cell{} // Wrong type
+			var obj runtime.Object = tc.input
+			if tc.wrongType {
+				obj = &multigresv1alpha1.Cell{}
 			}
 
-			// Run
-			err := defaulter.Default(context.Background(), obj)
+			err := defaulter.Default(t.Context(), obj)
 
-			// Assertions
-			if tc.wantError {
+			if tc.expectError != "" {
 				if err == nil {
-					t.Errorf("Expected error, got nil")
-				} else if tc.wantMessage != "" && !strings.Contains(err.Error(), tc.wantMessage) {
-					t.Errorf("Error message mismatch. Want substring: '%s', Got: '%s'", tc.wantMessage, err.Error())
+					t.Fatalf("Expected error containing %q, got nil", tc.expectError)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error, got: %v", err)
+				if !strings.Contains(err.Error(), tc.expectError) {
+					t.Fatalf("Expected error containing %q, got: %v", tc.expectError, err)
 				}
-				if tc.validateObj != nil {
-					// We know it's a cluster if we are in happy path
-					tc.validateObj(t, obj.(*multigresv1alpha1.MultigresCluster))
-				}
+			} else if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if tc.validate != nil {
+				tc.validate(t, tc.input)
 			}
 		})
 	}
 }
-
-// Helpers
-func ptr[T any](v T) *T { return &v }

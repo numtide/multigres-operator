@@ -243,8 +243,12 @@ func TestWebhook_Mutation(t *testing.T) {
 			}
 		}
 
-		if fetched.Spec.MultiAdmin == nil || fetched.Spec.MultiAdmin.Spec == nil {
-			t.Error("Webhook failed to resolve MultiAdmin from default template")
+		if fetched.Spec.TemplateDefaults.CoreTemplate != "default" {
+			t.Errorf("Expected CoreTemplate to be promoted to 'default', got %q", fetched.Spec.TemplateDefaults.CoreTemplate)
+		}
+
+		if fetched.Spec.MultiAdmin != nil {
+			t.Error("Expected spec.multiadmin to be nil (preserved dynamic link to template, no overrides provided)")
 		}
 	})
 }
