@@ -419,7 +419,7 @@ kind-load: container ## Build and load image into kind cluster
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER)
 
 .PHONY: kind-deploy
-kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cluster
+kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cluster using webhook with self-signed certificates
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator..."
@@ -429,7 +429,7 @@ kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cl
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
 .PHONY: kind-deploy-certmanager
-kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-load
+kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-load ## Deploy operator to kind cluster using cert manager
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
