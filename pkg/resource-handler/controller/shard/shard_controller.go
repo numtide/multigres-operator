@@ -60,6 +60,12 @@ func (r *ShardReconciler) Reconcile(
 		}
 	}
 
+	// Reconcile pg_hba ConfigMap first (required by all pools before StatefulSets start)
+	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
+		logger.Error(err, "Failed to reconcile pg_hba ConfigMap")
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	multiOrchCells, err := getMultiOrchCells(shard)
 	if err != nil {
@@ -161,6 +167,44 @@ func (r *ShardReconciler) reconcileMultiOrchDeployment(
 	return nil
 }
 
+// reconcilePgHbaConfigMap creates or updates the pg_hba ConfigMap for a shard.
+// This ConfigMap is shared across all pools and contains the authentication template.
+func (r *ShardReconciler) reconcilePgHbaConfigMap(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	desired, err := BuildPgHbaConfigMap(shard, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build pg_hba ConfigMap: %w", err)
+	}
+
+	existing := &corev1.ConfigMap{}
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
+		existing,
+	)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new ConfigMap
+			if err := r.Create(ctx, desired); err != nil {
+				return fmt.Errorf("failed to create pg_hba ConfigMap: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get pg_hba ConfigMap: %w", err)
+	}
+
+	// Update existing ConfigMap
+	existing.Data = desired.Data
+	existing.Labels = desired.Labels
+	if err := r.Update(ctx, existing); err != nil {
+		return fmt.Errorf("failed to update pg_hba ConfigMap: %w", err)
+	}
+
+	return nil
+}
+
 // reconcileMultiOrchService creates or updates the MultiOrch Service for a specific cell.
 func (r *ShardReconciler) reconcileMultiOrchService(
 	ctx context.Context,
@@ -221,6 +265,11 @@ func (r *ShardReconciler) reconcilePool(
 	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
 
+		// Reconcile backup PVC before StatefulSet (PVC must exist first)
+		if err := r.reconcilePoolBackupPVC(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf("failed to reconcile backup PVC for cell %s: %w", cellName, err)
+		}
+
 		// Reconcile pool StatefulSet for this cell
 		if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, cellName, poolSpec); err != nil {
 			return fmt.Errorf("failed to reconcile pool StatefulSet for cell %s: %w", cellName, err)
@@ -274,6 +323,47 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 	existing.Labels = desired.Labels
 	if err := r.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update pool StatefulSet: %w", err)
+	}
+
+	return nil
+}
+
+// reconcilePoolBackupPVC creates or updates the shared backup PVC for a pool in a specific cell.
+func (r *ShardReconciler) reconcilePoolBackupPVC(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	poolName string,
+	cellName string,
+	poolSpec multigresv1alpha1.PoolSpec,
+) error {
+	desired, err := BuildBackupPVC(shard, poolName, cellName, poolSpec, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build backup PVC: %w", err)
+	}
+
+	existing := &corev1.PersistentVolumeClaim{}
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
+		existing,
+	)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new PVC
+			if err := r.Create(ctx, desired); err != nil {
+				return fmt.Errorf("failed to create backup PVC: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get backup PVC: %w", err)
+	}
+
+	// PVCs are immutable after creation, only update labels/annotations if needed
+	if desired.Labels != nil {
+		existing.Labels = desired.Labels
+		if err := r.Update(ctx, existing); err != nil {
+			return fmt.Errorf("failed to update backup PVC labels: %w", err)
+		}
 	}
 
 	return nil

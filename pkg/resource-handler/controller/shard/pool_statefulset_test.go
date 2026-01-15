@@ -105,13 +105,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
@@ -120,24 +117,72 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Type: "replica",
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "10Gi",
+										},
+									},
 									"primary",
 									"zone1",
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
+									},
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
+								buildBackupVolume("test-shard-pool-primary-zone1"),
+								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 						},
 					},
@@ -242,13 +287,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-001"},
@@ -258,25 +300,74 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 										},
 									},
 									multigresv1alpha1.PoolSpec{
-										Cells: []multigresv1alpha1.CellName{"zone-west"},
+										Type:            "readOnly",
+										Cells:           []multigresv1alpha1.CellName{"zone-west"},
+										ReplicasPerCell: ptr.To(int32(3)),
+										Storage: multigresv1alpha1.StorageSpec{
+											Class: "fast-ssd",
+											Size:  "20Gi",
+										},
 									},
 									"replica",
 									"zone-west",
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
+									},
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
+								buildBackupVolume("shard-001-pool-replica-zone-west"),
+								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 						},
 					},
@@ -378,13 +469,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-002"},
@@ -393,24 +481,71 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "5Gi",
+										},
+									},
 									"readOnly",
 									"zone1",
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
+									},
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
+								buildBackupVolume("shard-002-pool-readOnly-zone1"),
+								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 						},
 					},
@@ -529,13 +664,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							},
 						},
 						Spec: corev1.PodSpec{
+							SecurityContext: &corev1.PodSecurityContext{
+								FSGroup: ptr.To(int64(999)),
+							},
 							InitContainers: []corev1.Container{
-								buildPgctldInitContainer(&multigresv1alpha1.Shard{
-									Spec: multigresv1alpha1.ShardSpec{
-										DatabaseName:   "testdb",
-										TableGroupName: "default",
-									},
-								}),
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity"},
@@ -544,24 +676,89 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
+									multigresv1alpha1.PoolSpec{
+										Type: "replica",
+										Affinity: &corev1.Affinity{
+											NodeAffinity: &corev1.NodeAffinity{
+												RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+													NodeSelectorTerms: []corev1.NodeSelectorTerm{
+														{
+															MatchExpressions: []corev1.NodeSelectorRequirement{
+																{
+																	Key:      "disk-type",
+																	Operator: corev1.NodeSelectorOpIn,
+																	Values:   []string{"ssd"},
+																},
+															},
+														},
+													},
+												},
+											},
+										},
+										Storage: multigresv1alpha1.StorageSpec{
+											Size: "10Gi",
+										},
+									},
 									"primary",
 									"zone1",
 								),
 							},
 							Containers: []corev1.Container{
-								buildPostgresContainer(
-									&multigresv1alpha1.Shard{
-										Spec: multigresv1alpha1.ShardSpec{
-											DatabaseName:   "testdb",
-											TableGroupName: "default",
+								{
+									Name:  "postgres",
+									Image: DefaultPgctldImage,
+									Command: []string{
+										"/usr/local/bin/pgctld",
+									},
+									Args: []string{
+										"server",
+										"--pooler-dir=/var/lib/pooler",
+										"--grpc-port=15470",
+										"--pg-port=5432",
+										"--pg-listen-addresses=*",
+										"--pg-database=postgres",
+										"--pg-user=postgres",
+										"--timeout=30",
+										"--log-level=info",
+										"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+										"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "PGDATA",
+											Value: "/var/lib/pooler/pg_data",
 										},
 									},
-									multigresv1alpha1.PoolSpec{},
-								),
+									SecurityContext: &corev1.SecurityContext{
+										RunAsUser:    ptr.To(int64(999)),
+										RunAsGroup:   ptr.To(int64(999)),
+										RunAsNonRoot: ptr.To(true),
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "pgdata",
+											MountPath: "/var/lib/pooler",
+										},
+										{
+											Name:      "backup-data",
+											MountPath: "/backups",
+										},
+										{
+											Name:      "socket-dir",
+											MountPath: "/var/run/postgresql",
+										},
+										{
+											Name:      "pg-hba-template",
+											MountPath: "/etc/pgctld",
+											ReadOnly:  true,
+										},
+									},
+								},
 							},
 							Volumes: []corev1.Volume{
-								buildPgctldVolume(),
+								buildBackupVolume("shard-affinity-pool-primary-zone1"),
+								buildSocketDirVolume(),
+								buildPgHbaVolume(),
 							},
 							Affinity: &corev1.Affinity{
 								NodeAffinity: &corev1.NodeAffinity{
@@ -732,5 +929,201 @@ func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 				t.Errorf("buildPoolVolumeClaimTemplates() mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestBuildBackupPVC(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			UID:       "test-uid",
+		},
+	}
+
+	tests := map[string]struct {
+		poolSpec multigresv1alpha1.PoolSpec
+		want     *corev1.PersistentVolumeClaim
+	}{
+		"defaults": {
+			poolSpec: multigresv1alpha1.PoolSpec{},
+			want: &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "backup-data-test-shard-pool-primary-zone1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/component":  PoolComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "",
+						"multigres.com/tablegroup":     "",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "test-shard",
+							UID:                "test-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("10Gi"),
+						},
+					},
+				},
+			},
+		},
+		"inherit storage class": {
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Storage: multigresv1alpha1.StorageSpec{
+					Class: "fast-ssd",
+				},
+			},
+			want: &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "backup-data-test-shard-pool-primary-zone1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/component":  PoolComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "",
+						"multigres.com/tablegroup":     "",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "test-shard",
+							UID:                "test-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					StorageClassName: ptr.To("fast-ssd"),
+					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("10Gi"),
+						},
+					},
+				},
+			},
+		},
+		"override backup storage": {
+			poolSpec: multigresv1alpha1.PoolSpec{
+				Storage: multigresv1alpha1.StorageSpec{
+					Class: "fast-ssd",
+				},
+				BackupStorage: multigresv1alpha1.StorageSpec{
+					Class:       "backup-nfs",
+					Size:        "100Gi",
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+				},
+			},
+			want: &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "backup-data-test-shard-pool-primary-zone1",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/component":  PoolComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cell":           "zone1",
+						"multigres.com/database":       "",
+						"multigres.com/tablegroup":     "",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "test-shard",
+							UID:                "test-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					StorageClassName: ptr.To("backup-nfs"),
+					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceStorage: resource.MustParse("100Gi"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			testScheme := scheme
+			if name == "error on controller reference" {
+				testScheme = runtime.NewScheme() // Empty scheme triggers SetControllerReference error
+			}
+
+			got, err := BuildBackupPVC(
+				shard,
+				"primary",
+				"zone1",
+				tc.poolSpec,
+				testScheme,
+			)
+
+			if name == "error on controller reference" {
+				if err == nil {
+					t.Error("BuildBackupPVC() expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("BuildBackupPVC() error = %v", err)
+				return
+			}
+
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("BuildBackupPVC() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestBuildBackupPVC_Error(t *testing.T) {
+	// Separate test for error case to avoid messing with table driven test logic too much
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{Name: "test"},
+	}
+	// Empty scheme causes SetControllerReference to fail
+	_, err := BuildBackupPVC(
+		shard,
+		"pool",
+		"cell",
+		multigresv1alpha1.PoolSpec{},
+		runtime.NewScheme(),
+	)
+	if err == nil {
+		t.Error("BuildBackupPVC() expected error with empty scheme, got nil")
 	}
 }

@@ -79,7 +79,6 @@ func BuildMultiGatewayDeployment(
 								"--pg-port", fmt.Sprintf("%d", MultiGatewayPostgresPort),
 								"--topo-global-server-addresses", cell.Spec.GlobalTopoServer.Address,
 								"--topo-global-root", cell.Spec.GlobalTopoServer.RootPath,
-								"--topo-implementation", cell.Spec.GlobalTopoServer.Implementation,
 								"--cell", cell.Spec.Name,
 							},
 							Resources: cell.Spec.MultiGateway.Resources,

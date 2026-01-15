@@ -114,7 +114,6 @@ func TestCellReconciliation(t *testing.T) {
 											"--pg-port", "15432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
-											"--topo-implementation", "etcd2",
 											"--cell", "zone1",
 										},
 										Ports: []corev1.ContainerPort{
@@ -201,7 +200,6 @@ func TestCellReconciliation(t *testing.T) {
 											"--pg-port", "15432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
-											"--topo-implementation", "etcd2",
 											"--cell", "zone2",
 										},
 										Ports: []corev1.ContainerPort{
@@ -288,7 +286,6 @@ func TestCellReconciliation(t *testing.T) {
 											"--pg-port", "15432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
-											"--topo-implementation", "etcd2",
 											"--cell", "zone3",
 										},
 										Ports: []corev1.ContainerPort{
@@ -392,7 +389,6 @@ func TestCellReconciliation(t *testing.T) {
 											"--pg-port", "15432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
-											"--topo-implementation", "etcd2",
 											"--cell", "zone4",
 										},
 										Ports: []corev1.ContainerPort{

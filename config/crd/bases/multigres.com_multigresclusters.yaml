@@ -1184,6 +1184,13 @@ spec:
                                 storage:
                                   description: Storage configuration for Etcd data.
                                   properties:
+                                    accessModes:
+                                      description: |-
+                                        AccessModes contains the desired access modes the volume should have.
+                                        More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                                      items:
+                                        type: string
+                                      type: array
                                     class:
                                       description: Class is the StorageClass name.
                                       maxLength: 63
@@ -4401,6 +4408,31 @@ spec:
                                                     x-kubernetes-list-type: atomic
                                                 type: object
                                             type: object
+                                          backupStorage:
+                                            description: |-
+                                              BackupStorage defines the storage configuration for backup volumes.
+                                              Shared across all pods in a pool. Defaults to same as Storage if not specified.
+                                            properties:
+                                              accessModes:
+                                                description: |-
+                                                  AccessModes contains the desired access modes the volume should have.
+                                                  More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                                                items:
+                                                  type: string
+                                                type: array
+                                              class:
+                                                description: Class is the StorageClass
+                                                  name.
+                                                maxLength: 63
+                                                minLength: 1
+                                                type: string
+                                              size:
+                                                description: Size of the persistent
+                                                  volume.
+                                                maxLength: 63
+                                                pattern: ^([0-9]+)(.+)$
+                                                type: string
+                                            type: object
                                           cells:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
@@ -4553,6 +4585,13 @@ spec:
                                             description: Storage defines the storage
                                               configuration for the pool's data volumes.
                                             properties:
+                                              accessModes:
+                                                description: |-
+                                                  AccessModes contains the desired access modes the volume should have.
+                                                  More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                                                items:
+                                                  type: string
+                                                type: array
                                               class:
                                                 description: Class is the StorageClass
                                                   name.
@@ -6669,6 +6708,31 @@ spec:
                                                     x-kubernetes-list-type: atomic
                                                 type: object
                                             type: object
+                                          backupStorage:
+                                            description: |-
+                                              BackupStorage defines the storage configuration for backup volumes.
+                                              Shared across all pods in a pool. Defaults to same as Storage if not specified.
+                                            properties:
+                                              accessModes:
+                                                description: |-
+                                                  AccessModes contains the desired access modes the volume should have.
+                                                  More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                                                items:
+                                                  type: string
+                                                type: array
+                                              class:
+                                                description: Class is the StorageClass
+                                                  name.
+                                                maxLength: 63
+                                                minLength: 1
+                                                type: string
+                                              size:
+                                                description: Size of the persistent
+                                                  volume.
+                                                maxLength: 63
+                                                pattern: ^([0-9]+)(.+)$
+                                                type: string
+                                            type: object
                                           cells:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
@@ -6821,6 +6885,13 @@ spec:
                                             description: Storage defines the storage
                                               configuration for the pool's data volumes.
                                             properties:
+                                              accessModes:
+                                                description: |-
+                                                  AccessModes contains the desired access modes the volume should have.
+                                                  More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                                                items:
+                                                  type: string
+                                                type: array
                                               class:
                                                 description: Class is the StorageClass
                                                   name.
@@ -6969,6 +7040,13 @@ spec:
                       storage:
                         description: Storage configuration for Etcd data.
                         properties:
+                          accessModes:
+                            description: |-
+                              AccessModes contains the desired access modes the volume should have.
+                              More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                            items:
+                              type: string
+                            type: array
                           class:
                             description: Class is the StorageClass name.
                             maxLength: 63

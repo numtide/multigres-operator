@@ -4,14 +4,20 @@ metadata:
   name: kind-cell-sample
   namespace: default
 spec:
+  # ============================================================================
+  # MVP Configuration (Currently Active)
+  # ============================================================================
+  # This configuration is compatible with the MVP (Minimum Viable Product)
+
   # Logical name of the cell
   name: zone-a
 
   # Physical zone placement (use either 'zone' or 'region', not both)
   zone: us-west-1a
 
-  # Container image for multigateway
-  multigatewayImage: ghcr.io/multigres/multigres:main
+  # Container images for cell components
+  images:
+    multigateway: ghcr.io/multigres/multigres:main
 
   # MultiGateway deployment - query routing
   multigateway:
@@ -26,7 +32,7 @@ spec:
 
   # Reference to the global topology server
   globalTopoServer:
-    address: kind-global-topo:2379
+    address: kind-toposerver-sample:2379
     rootPath: /multigres/global
     implementation: etcd2
 
@@ -38,6 +44,8 @@ spec:
       replicas: 1
       storage:
         size: 1Gi
+        accessModes:
+          - ReadWriteOnce
       resources:
         requests:
           cpu: 50m

@@ -4,20 +4,37 @@ metadata:
   name: kind-shard-sample
   namespace: default
 spec:
-  # Shard identification
-  databaseName: mydb
-  tableGroupName: users
-  shardName: "0"
+  # ============================================================================
+  # MVP Configuration (Currently Active)
+  # ============================================================================
+  # The MVP (Minimum Viable Product) has strict validation requirements:
+  # - Database must be "postgres"
+  # - TableGroup must be "default"
+  # - Shard name must be "0-inf" for default tablegroup (unsharded/range mode)
+
+  databaseName: postgres
+  tableGroupName: default
+  shardName: "0-inf"
+
+  # ============================================================================
+  # Original E2E Configuration (Commented Out)
+  # ============================================================================
+  # For future e2e testing with custom databases/tablegroups, uncomment below
+  # and comment out the MVP config above:
+  #
+  # databaseName: mydb
+  # tableGroupName: users
+  # shardName: "0"
 
   # Container images for shard components
   images:
     multiorch: ghcr.io/multigres/multigres:main
     multipooler: ghcr.io/multigres/multigres:main
-    postgres: postgres:16-alpine
+    postgres: ghcr.io/multigres/pgctld:main
 
   # Reference to the global topology server
   globalTopoServer:
-    address: kind-global-topo:2379
+    address: kind-toposerver-sample:2379
     rootPath: /multigres/global
     implementation: etcd2
 
@@ -36,16 +53,18 @@ spec:
 
   # Shard pools - different types of PostgreSQL replicas
   pools:
-    # Primary replica pool
-    primary:
+    # Primary "eligible" pool, with unique name
+    pool-1:
       type: readWrite
       cells:
         - zone-a
-      replicasPerCell: 1
+      replicasPerCell: 3
 
       # Storage configuration - kind uses local storage provisioner
       storage:
         size: 1Gi
+        accessModes:
+          - ReadWriteOnce
 
       # PostgreSQL container configuration - lower resources for kind
       postgres:
@@ -67,30 +86,31 @@ spec:
             cpu: 200m
             memory: 128Mi
 
-    # Read replica pool
-    replica:
-      type: readOnly
-      cells:
-        - zone-a
-      replicasPerCell: 1
+    # Commenting out for isolated testing
+    # # Read replica pool
+    # pool-readonly:
+    #   type: readOnly
+    #   cells:
+    #     - zone-a
+    #   replicasPerCell: 3
 
-      storage:
-        size: 1Gi
+    #   storage:
+    #     size: 1Gi
 
-      postgres:
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+    #   postgres:
+    #     resources:
+    #       requests:
+    #         cpu: 100m
+    #         memory: 256Mi
+    #       limits:
+    #         cpu: 500m
+    #         memory: 512Mi
 
-      multipooler:
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 200m
-            memory: 128Mi
+    #   multipooler:
+    #     resources:
+    #       requests:
+    #         cpu: 50m
+    #         memory: 64Mi
+    #       limits:
+    #         cpu: 200m
+    #         memory: 128Mi

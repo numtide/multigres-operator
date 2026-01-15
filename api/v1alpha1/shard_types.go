@@ -35,6 +35,8 @@ import (
 // +kubebuilder:rbac:groups=multigres.com,resources=shards/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // ============================================================================
 // Shard Component Specs (Reusable)
@@ -75,6 +77,11 @@ type PoolSpec struct {
 	// Storage defines the storage configuration for the pool's data volumes.
 	// +optional
 	Storage StorageSpec `json:"storage,omitempty"`
+
+	// BackupStorage defines the storage configuration for backup volumes.
+	// Shared across all pods in a pool. Defaults to same as Storage if not specified.
+	// +optional
+	BackupStorage StorageSpec `json:"backupStorage,omitempty"`
 
 	// Postgres container configuration.
 	// +optional
