@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -35,6 +36,34 @@ func NewResolver(
 	}
 }
 
+// ValidateCoreTemplateReference checks if a CoreTemplate reference is valid.
+// It returns nil if:
+// 1. The name is empty (no reference).
+// 2. The name matches the FallbackCoreTemplate (assumed to be a system default or implicitly allowed).
+// 3. The referenced CoreTemplate exists in the Resolver's namespace.
+// Otherwise, it returns an error.
+func (r *Resolver) ValidateCoreTemplateReference(ctx context.Context, name string) error {
+	if name == "" {
+		return nil
+	}
+	if name == FallbackCoreTemplate {
+		return nil
+	}
+
+	exists, err := r.CoreTemplateExists(ctx, name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf(
+			"referenced CoreTemplate '%s' not found in namespace '%s'",
+			name,
+			r.Namespace,
+		)
+	}
+	return nil
+}
+
 // CoreTemplateExists checks if a CoreTemplate with the given name exists in the current namespace.
 func (r *Resolver) CoreTemplateExists(ctx context.Context, name string) (bool, error) {
 	if name == "" {
@@ -51,6 +80,30 @@ func (r *Resolver) CoreTemplateExists(ctx context.Context, name string) (bool, e
 	return true, nil
 }
 
+// ValidateCellTemplateReference checks if a CellTemplate reference is valid.
+// See ValidateCoreTemplateReference for logic details.
+func (r *Resolver) ValidateCellTemplateReference(ctx context.Context, name string) error {
+	if name == "" {
+		return nil
+	}
+	if name == FallbackCellTemplate {
+		return nil
+	}
+
+	exists, err := r.CellTemplateExists(ctx, name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf(
+			"referenced CellTemplate '%s' not found in namespace '%s'",
+			name,
+			r.Namespace,
+		)
+	}
+	return nil
+}
+
 // CellTemplateExists checks if a CellTemplate with the given name exists in the current namespace.
 func (r *Resolver) CellTemplateExists(ctx context.Context, name string) (bool, error) {
 	if name == "" {
@@ -65,6 +118,30 @@ func (r *Resolver) CellTemplateExists(ctx context.Context, name string) (bool, e
 		return false, err
 	}
 	return true, nil
+}
+
+// ValidateShardTemplateReference checks if a ShardTemplate reference is valid.
+// See ValidateCoreTemplateReference for logic details.
+func (r *Resolver) ValidateShardTemplateReference(ctx context.Context, name string) error {
+	if name == "" {
+		return nil
+	}
+	if name == FallbackShardTemplate {
+		return nil
+	}
+
+	exists, err := r.ShardTemplateExists(ctx, name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf(
+			"referenced ShardTemplate '%s' not found in namespace '%s'",
+			name,
+			r.Namespace,
+		)
+	}
+	return nil
 }
 
 // ShardTemplateExists checks if a ShardTemplate with the given name exists in the current namespace.

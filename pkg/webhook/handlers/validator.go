@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -76,83 +74,38 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) error {
-	check := func(kind, name string) error {
-		if name == "" {
-			return nil
-		}
+	// Create an ephemeral resolver for validation
+	// This ensures we use the exact same logic ("Shared Resolver Pattern") as the Mutator and Reconciler.
+	res := resolver.NewResolver(v.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
 
-		// Identify if this reference is a "Fallback" (e.g., "default").
-		// If it is, we allow it to be missing because the Resolver has hardcoded logic to handle that case.
-		isFallback := false
-		switch kind {
-		case "CoreTemplate":
-			if name == resolver.FallbackCoreTemplate {
-				isFallback = true
-			}
-		case "CellTemplate":
-			if name == resolver.FallbackCellTemplate {
-				isFallback = true
-			}
-		case "ShardTemplate":
-			if name == resolver.FallbackShardTemplate {
-				isFallback = true
-			}
-		}
-
-		key := types.NamespacedName{Name: name, Namespace: cluster.Namespace}
-		var obj client.Object
-		switch kind {
-		case "CoreTemplate":
-			obj = &multigresv1alpha1.CoreTemplate{}
-		case "CellTemplate":
-			obj = &multigresv1alpha1.CellTemplate{}
-		case "ShardTemplate":
-			obj = &multigresv1alpha1.ShardTemplate{}
-		}
-
-		if err := v.Client.Get(ctx, key, obj); err != nil {
-			if errors.IsNotFound(err) {
-				if isFallback {
-					return nil
-				}
-				return fmt.Errorf(
-					"referenced %s '%s' not found in namespace '%s'",
-					kind,
-					name,
-					cluster.Namespace,
-				)
-			}
-			return fmt.Errorf("failed to check %s '%s': %w", kind, name, err)
-		}
-		return nil
-	}
-
-	if err := check("CoreTemplate", cluster.Spec.TemplateDefaults.CoreTemplate); err != nil {
+	// 1. Validate Core Templates
+	if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.TemplateDefaults.CoreTemplate); err != nil {
 		return err
 	}
-	if err := check("CellTemplate", cluster.Spec.TemplateDefaults.CellTemplate); err != nil {
-		return err
-	}
-	if err := check("ShardTemplate", cluster.Spec.TemplateDefaults.ShardTemplate); err != nil {
-		return err
-	}
-
 	if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef != "" {
-		if err := check("CoreTemplate", cluster.Spec.MultiAdmin.TemplateRef); err != nil {
+		if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.MultiAdmin.TemplateRef); err != nil {
 			return err
 		}
 	}
 
+	// 2. Validate Cell Templates
+	if err := res.ValidateCellTemplateReference(ctx, cluster.Spec.TemplateDefaults.CellTemplate); err != nil {
+		return err
+	}
 	for _, cell := range cluster.Spec.Cells {
-		if err := check("CellTemplate", cell.CellTemplate); err != nil {
+		if err := res.ValidateCellTemplateReference(ctx, cell.CellTemplate); err != nil {
 			return err
 		}
 	}
 
+	// 3. Validate Shard Templates
+	if err := res.ValidateShardTemplateReference(ctx, cluster.Spec.TemplateDefaults.ShardTemplate); err != nil {
+		return err
+	}
 	for _, db := range cluster.Spec.Databases {
 		for _, tg := range db.TableGroups {
 			for _, shard := range tg.Shards {
-				if err := check("ShardTemplate", shard.ShardTemplate); err != nil {
+				if err := res.ValidateShardTemplateReference(ctx, shard.ShardTemplate); err != nil {
 					return err
 				}
 			}

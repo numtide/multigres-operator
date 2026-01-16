@@ -159,6 +159,130 @@ func TestResolver_TemplateExists(t *testing.T) {
 	})
 }
 
+// TestResolver_ValidateReference checks Validat*TemplateReference logic (including fallback).
+func TestResolver_ValidateReference(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	// Fixtures have names like "default" (FallbackCoreTemplate)
+	coreTpl, cellTpl, shardTpl, ns := setupFixtures(t)
+	objs := []client.Object{coreTpl, cellTpl, shardTpl} // "default" exists here
+
+	// Add "custom" templates to bypass fallback logic and hit "Exists" branch
+	customCore := &multigresv1alpha1.CoreTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom", Namespace: ns},
+	}
+	customCell := &multigresv1alpha1.CellTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom", Namespace: ns},
+	}
+	customShard := &multigresv1alpha1.ShardTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom", Namespace: ns},
+	}
+	objs = append(objs, customCore, customCell, customShard)
+
+	cWithDefaults := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+	cEmpty := fake.NewClientBuilder().WithScheme(scheme).Build() // "default" is missing here
+
+	// Case 1: Core Template
+	t.Run("Core", func(t *testing.T) {
+		r := NewResolver(cEmpty, ns, multigresv1alpha1.TemplateDefaults{})
+
+		// Empty name -> Valid
+		if err := r.ValidateCoreTemplateReference(t.Context(), ""); err != nil {
+			t.Errorf("Empty name should be valid, got %v", err)
+		}
+		// Fallback name ("default") -> Valid even if missing in client
+		if err := r.ValidateCoreTemplateReference(t.Context(), FallbackCoreTemplate); err != nil {
+			t.Errorf("Fallback name should be valid even if missing, got %v", err)
+		}
+		// Random missing -> Invalid
+		if err := r.ValidateCoreTemplateReference(t.Context(), "missing"); err == nil {
+			t.Error("Missing template should error")
+		}
+
+		// Real existence (Implicit Default)
+		rExists := NewResolver(cWithDefaults, ns, multigresv1alpha1.TemplateDefaults{})
+		if err := rExists.ValidateCoreTemplateReference(t.Context(), "default"); err != nil {
+			t.Errorf("Existing template should be valid, got %v", err)
+		}
+		// Real existence (Explicit Custom) - Hits "exists" branch
+		if err := rExists.ValidateCoreTemplateReference(t.Context(), "custom"); err != nil {
+			t.Errorf("Custom template should be valid, got %v", err)
+		}
+	})
+
+	// Case 2: Cell Template
+	t.Run("Cell", func(t *testing.T) {
+		r := NewResolver(cEmpty, ns, multigresv1alpha1.TemplateDefaults{})
+
+		if err := r.ValidateCellTemplateReference(t.Context(), ""); err != nil {
+			t.Errorf("Empty name should be valid, got %v", err)
+		}
+		if err := r.ValidateCellTemplateReference(t.Context(), FallbackCellTemplate); err != nil {
+			t.Errorf("Fallback name should be valid even if missing, got %v", err)
+		}
+		if err := r.ValidateCellTemplateReference(t.Context(), "missing"); err == nil {
+			t.Error("Missing template should error")
+		}
+		rExists := NewResolver(cWithDefaults, ns, multigresv1alpha1.TemplateDefaults{})
+		if err := rExists.ValidateCellTemplateReference(t.Context(), "default"); err != nil {
+			t.Errorf("Existing template should be valid, got %v", err)
+		}
+		if err := rExists.ValidateCellTemplateReference(t.Context(), "custom"); err != nil {
+			t.Errorf("Custom template should be valid, got %v", err)
+		}
+	})
+
+	// Case 3: Shard Template
+	t.Run("Shard", func(t *testing.T) {
+		r := NewResolver(cEmpty, ns, multigresv1alpha1.TemplateDefaults{})
+
+		if err := r.ValidateShardTemplateReference(t.Context(), ""); err != nil {
+			t.Errorf("Empty name should be valid, got %v", err)
+		}
+		if err := r.ValidateShardTemplateReference(t.Context(), FallbackShardTemplate); err != nil {
+			t.Errorf("Fallback name should be valid even if missing, got %v", err)
+		}
+		if err := r.ValidateShardTemplateReference(t.Context(), "missing"); err == nil {
+			t.Error("Missing template should error")
+		}
+		rExists := NewResolver(cWithDefaults, ns, multigresv1alpha1.TemplateDefaults{})
+		if err := rExists.ValidateShardTemplateReference(t.Context(), "default"); err != nil {
+			t.Errorf("Existing template should be valid, got %v", err)
+		}
+		if err := rExists.ValidateShardTemplateReference(t.Context(), "custom"); err != nil {
+			t.Errorf("Custom template should be valid, got %v", err)
+		}
+	})
+
+	// Case 4: Client Failure
+	t.Run("ClientFailure", func(t *testing.T) {
+		errSim := testutil.ErrInjected
+		failClient := testutil.NewFakeClientWithFailures(
+			fake.NewClientBuilder().Build(),
+			&testutil.FailureConfig{
+				OnGet: func(_ client.ObjectKey) error { return errSim },
+			},
+		)
+		rFail := NewResolver(failClient, ns, multigresv1alpha1.TemplateDefaults{})
+
+		// Should propagate error
+		if err := rFail.ValidateCoreTemplateReference(t.Context(), "any"); !errors.Is(err, errSim) {
+			t.Errorf("Expected error propagation for Core, got %v", err)
+		}
+		if err := rFail.ValidateCellTemplateReference(t.Context(), "any"); !errors.Is(err, errSim) {
+			t.Errorf("Expected error propagation for Cell, got %v", err)
+		}
+		if err := rFail.ValidateShardTemplateReference(t.Context(), "any"); !errors.Is(
+			err,
+			errSim,
+		) {
+			t.Errorf("Expected error propagation for Shard, got %v", err)
+		}
+	})
+}
+
 func TestSharedHelpers(t *testing.T) {
 	t.Parallel()
 
@@ -229,23 +353,55 @@ func TestSharedHelpers(t *testing.T) {
 		if val.String() == "999" {
 			t.Error("Shared pointer detected in defaultStatelessSpec")
 		}
+
+		// Test Preservation
+		spec2 := &multigresv1alpha1.StatelessSpec{
+			Replicas: ptr.To(int32(10)),
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("5m")},
+			},
+		}
+		defaultStatelessSpec(spec2, res, 5)
+		if *spec2.Replicas != 10 {
+			t.Error("Should preserve existing Replicas")
+		}
+		if spec2.Resources.Requests.Cpu().String() != "5m" {
+			t.Error("Should preserve existing Resources")
+		}
 	})
 
 	t.Run("mergeStatelessSpec", func(t *testing.T) {
 		base := &multigresv1alpha1.StatelessSpec{
 			PodAnnotations: map[string]string{"a": "1"},
+			PodLabels:      map[string]string{"l1": "v1"},
 		}
 		override := &multigresv1alpha1.StatelessSpec{
 			PodAnnotations: map[string]string{"b": "2"},
+			PodLabels:      map[string]string{"l2": "v2"},
 			Replicas:       ptr.To(int32(3)),
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("100m")},
+			},
+			Affinity: &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{},
+			},
 		}
 		mergeStatelessSpec(base, override)
 
 		if len(base.PodAnnotations) != 2 {
-			t.Errorf("Map merge failed, got %v", base.PodAnnotations)
+			t.Errorf("Map merge failed (Annotations), got %v", base.PodAnnotations)
+		}
+		if len(base.PodLabels) != 2 {
+			t.Errorf("Map merge failed (Labels), got %v", base.PodLabels)
 		}
 		if *base.Replicas != 3 {
 			t.Error("Replicas not merged")
+		}
+		if base.Resources.Requests == nil {
+			t.Error("Resources not merged")
+		}
+		if base.Affinity == nil {
+			t.Error("Affinity not merged")
 		}
 	})
 }
