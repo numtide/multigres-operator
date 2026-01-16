@@ -100,8 +100,13 @@ github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260106180404-c02430f
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260106180404-c02430f41b11/go.mod h1:e/+O28FuzzqC0uPaltae87ZDCAIaE+V7ZtywMjMCqXo=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260115201516-44b30bf5dd8e h1:sHKM36+Rc8u+ycJP1lkh2SVEddFRhl9oYZQjriPtFbc=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:Tof4AW9GIbESro20GKNt0DgYFwD8Yt3NZgU0jwZKNSA=
+github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260116114253-fd867f056f16 h1:eUvOealF9GlRCObAspNuDh6PTm46r3G7E58bDujJL8M=
+github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260116114253-fd867f056f16/go.mod h1:8urAPFN6zF8V6KmQWWU31DL6WtZ6seLkm6UrwBVGArU=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260106180404-c02430f41b11 h1:VBZAPz01P7K/32WpZBoz5nrUEKuVr0XvzFg2Szgq1pE=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260106180404-c02430f41b11/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260116114253-fd867f056f16 h1:hPiKWWyaK0K9kGTFZ42sR+qdZ4sBLwlhjwM9xboiZYM=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260116114253-fd867f056f16/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
 github.com/onsi/ginkgo/v2 v2.25.3 h1:Ty8+Yi/ayDAGtk4XxmmfUy4GabvM+MegeB4cDLRi6nw=
 github.com/onsi/ginkgo/v2 v2.25.3/go.mod h1:43uiyQC4Ed2tkOzLsEYm7hnrb7UJTWHYNsuy3bG/snE=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=
