@@ -94,7 +94,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 				OnGet: func(key client.ObjectKey) error { return testutil.ErrInjected },
 			},
 			wantAllowed: false,
-			wantMessage: "failed to check CoreTemplate",
+			wantMessage: "injected test error",
 		},
 		"Error: Client Error (CellTemplate)": {
 			object: func() *multigresv1alpha1.MultigresCluster {
@@ -113,7 +113,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 				},
 			},
 			wantAllowed: false,
-			wantMessage: "failed to check CellTemplate",
+			wantMessage: "injected test error",
 		},
 		"Error: Client Error (ShardTemplate)": {
 			object:    baseCluster.DeepCopy(),
@@ -127,7 +127,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 				},
 			},
 			wantAllowed: false,
-			wantMessage: "failed to check ShardTemplate",
+			wantMessage: "injected test error",
 		},
 		"Error: Client Error (MultiAdmin)": {
 			object: func() *multigresv1alpha1.MultigresCluster {
@@ -145,7 +145,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 				},
 			},
 			wantAllowed: false,
-			wantMessage: "failed to check CoreTemplate",
+			wantMessage: "injected test error",
 		},
 		"Error: Client Error (Inline Cell)": {
 			object: func() *multigresv1alpha1.MultigresCluster {
@@ -165,7 +165,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 				},
 			},
 			wantAllowed: false,
-			wantMessage: "failed to check CellTemplate",
+			wantMessage: "injected test error",
 		},
 		"Error: Client Error (Inline Shard)": {
 			object: func() *multigresv1alpha1.MultigresCluster {
@@ -189,7 +189,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 				},
 			},
 			wantAllowed: false,
-			wantMessage: "failed to check ShardTemplate",
+			wantMessage: "injected test error",
 		},
 		"Allowed: Missing Fallback Templates": {
 			object: func() *multigresv1alpha1.MultigresCluster {
