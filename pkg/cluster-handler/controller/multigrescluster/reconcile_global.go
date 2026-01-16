@@ -5,9 +5,8 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
@@ -27,6 +26,7 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(
 	return nil
 }
 
+// reconcileGlobalTopoServer reconciles the global TopoServer resource.
 func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
@@ -38,33 +38,52 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 		return fmt.Errorf("failed to resolve global topo: %w", err)
 	}
 
-	if spec.Etcd != nil {
-		ts := &multigresv1alpha1.TopoServer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cluster.Name + "-global-topo",
-				Namespace: cluster.Namespace,
-				Labels:    map[string]string{"multigres.com/cluster": cluster.Name},
-			},
-		}
-		op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ts, func() error {
-			ts.Spec.Etcd = &multigresv1alpha1.EtcdSpec{
-				Image:     spec.Etcd.Image,
-				Replicas:  spec.Etcd.Replicas,
-				Storage:   spec.Etcd.Storage,
-				Resources: spec.Etcd.Resources,
-			}
-			return controllerutil.SetControllerReference(cluster, ts, r.Scheme)
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create/update global topo: %w", err)
-		}
-		if op == controllerutil.OperationResultCreated {
-			r.Recorder.Eventf(cluster, "Normal", "Created", "Created Global TopoServer %s", ts.Name)
-		}
+	desired, err := BuildGlobalTopoServer(cluster, spec, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build global topo server: %w", err)
 	}
+
+	// If desired is nil, it means we don't need a managed TopoServer (e.g. external).
+	// We should ensure any existing managed TopoServer is cleaned up?
+	// For now, if nil, we just return (logic per current implementation which didn't delete either).
+	// TODO: Consider if we should delete existing if switching to external.
+	if desired == nil {
+		return nil
+	}
+
+	existing := &multigresv1alpha1.TopoServer{}
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: cluster.Namespace, Name: desired.Name},
+		existing,
+	)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			if err := r.Create(ctx, desired); err != nil {
+				return fmt.Errorf("failed to create global topo server: %w", err)
+			}
+			r.Recorder.Eventf(
+				cluster,
+				"Normal",
+				"Created",
+				"Created Global TopoServer %s",
+				desired.Name,
+			)
+			return nil
+		}
+		return fmt.Errorf("failed to get global topo server: %w", err)
+	}
+
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+	if err := r.Update(ctx, existing); err != nil {
+		return fmt.Errorf("failed to update global topo server: %w", err)
+	}
+
 	return nil
 }
 
+// reconcileMultiAdmin reconciles the MultiAdmin Deployment.
 func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
@@ -76,60 +95,38 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 		return fmt.Errorf("failed to resolve multiadmin: %w", err)
 	}
 
-	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-multiadmin",
-			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				"multigres.com/cluster": cluster.Name,
-				"app":                   "multiadmin",
-			},
-		},
-	}
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-		deploy.Spec.Replicas = spec.Replicas
-		deploy.Spec.Selector = &metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"app":                   "multiadmin",
-				"multigres.com/cluster": cluster.Name,
-			},
-		}
-
-		podLabels := map[string]string{"app": "multiadmin", "multigres.com/cluster": cluster.Name}
-		for k, v := range spec.PodLabels {
-			podLabels[k] = v
-		}
-
-		deploy.Spec.Template = corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels:      podLabels,
-				Annotations: spec.PodAnnotations,
-			},
-			Spec: corev1.PodSpec{
-				ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
-				Containers: []corev1.Container{
-					{
-						Name:      "multiadmin",
-						Image:     cluster.Spec.Images.MultiAdmin,
-						Resources: spec.Resources,
-					},
-				},
-				Affinity: spec.Affinity,
-			},
-		}
-		return controllerutil.SetControllerReference(cluster, deploy, r.Scheme)
-	})
+	desired, err := BuildMultiAdminDeployment(cluster, spec, r.Scheme)
 	if err != nil {
-		return fmt.Errorf("failed to create/update multiadmin: %w", err)
+		return fmt.Errorf("failed to build multiadmin deployment: %w", err)
 	}
-	if op == controllerutil.OperationResultCreated {
-		r.Recorder.Eventf(
-			cluster,
-			"Normal",
-			"Created",
-			"Created MultiAdmin Deployment %s",
-			deploy.Name,
-		)
+
+	existing := &appsv1.Deployment{}
+	err = r.Get(
+		ctx,
+		client.ObjectKey{Namespace: cluster.Namespace, Name: desired.Name},
+		existing,
+	)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			if err := r.Create(ctx, desired); err != nil {
+				return fmt.Errorf("failed to create multiadmin deployment: %w", err)
+			}
+			r.Recorder.Eventf(
+				cluster,
+				"Normal",
+				"Created",
+				"Created MultiAdmin Deployment %s",
+				desired.Name,
+			)
+			return nil
+		}
+		return fmt.Errorf("failed to get multiadmin deployment: %w", err)
+	}
+
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+	if err := r.Update(ctx, existing); err != nil {
+		return fmt.Errorf("failed to update multiadmin deployment: %w", err)
 	}
 
 	return nil

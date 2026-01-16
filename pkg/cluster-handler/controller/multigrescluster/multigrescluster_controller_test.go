@@ -555,7 +555,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
 			},
-			wantErrMsg: "failed to create/update tablegroup",
+			wantErrMsg: "failed to create tablegroup",
 		},
 		"Error: Delete Orphan TableGroup Failed": {
 			existingObjects: []client.Object{

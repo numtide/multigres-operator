@@ -71,36 +71,35 @@ func (r *TableGroupReconciler) Reconcile(
 		shardNameFull := fmt.Sprintf("%s-%s", tg.Name, shardSpec.Name)
 		activeShardNames[shardNameFull] = true
 
-		shardCR := &multigresv1alpha1.Shard{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      shardNameFull,
-				Namespace: tg.Namespace,
-				Labels: map[string]string{
-					"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
-					"multigres.com/database":   tg.Spec.DatabaseName,
-					"multigres.com/tablegroup": tg.Spec.TableGroupName,
-					"multigres.com/shard":      shardSpec.Name,
-				},
-			},
-		}
-
-		op, err := controllerutil.CreateOrUpdate(ctx, r.Client, shardCR, func() error {
-			shardCR.Spec.DatabaseName = tg.Spec.DatabaseName
-			shardCR.Spec.TableGroupName = tg.Spec.TableGroupName
-			shardCR.Spec.ShardName = shardSpec.Name
-			shardCR.Spec.Images = tg.Spec.Images
-			shardCR.Spec.GlobalTopoServer = tg.Spec.GlobalTopoServer
-			shardCR.Spec.MultiOrch = shardSpec.MultiOrch
-			shardCR.Spec.Pools = shardSpec.Pools
-
-			return controllerutil.SetControllerReference(tg, shardCR, r.Scheme)
-		})
+		desired, err := BuildShard(tg, &shardSpec, r.Scheme)
 		if err != nil {
-			l.Error(err, "Failed to create/update shard", "shard", shardNameFull)
-			return ctrl.Result{}, fmt.Errorf("failed to create/update shard: %w", err)
+			l.Error(err, "Failed to build shard", "shard", shardNameFull)
+			return ctrl.Result{}, fmt.Errorf("failed to build shard: %w", err)
 		}
-		if op == controllerutil.OperationResultCreated {
-			r.Recorder.Eventf(tg, "Normal", "Created", "Created Shard %s", shardCR.Name)
+
+		existing := &multigresv1alpha1.Shard{}
+		err = r.Get(
+			ctx,
+			client.ObjectKey{Namespace: tg.Namespace, Name: desired.Name},
+			existing,
+		)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				if err := r.Create(ctx, desired); err != nil {
+					l.Error(err, "Failed to create shard", "shard", shardNameFull)
+					return ctrl.Result{}, fmt.Errorf("failed to create shard: %w", err)
+				}
+				r.Recorder.Eventf(tg, "Normal", "Created", "Created Shard %s", desired.Name)
+				continue
+			}
+			return ctrl.Result{}, fmt.Errorf("failed to get shard: %w", err)
+		}
+
+		existing.Spec = desired.Spec
+		existing.Labels = desired.Labels
+		if err := r.Update(ctx, existing); err != nil {
+			l.Error(err, "Failed to update shard", "shard", shardNameFull)
+			return ctrl.Result{}, fmt.Errorf("failed to update shard: %w", err)
 		}
 	}
 

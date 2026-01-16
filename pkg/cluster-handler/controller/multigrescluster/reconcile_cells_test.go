@@ -2,12 +2,19 @@ package multigrescluster
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestReconcile_Cells(t *testing.T) {
@@ -43,7 +50,29 @@ func TestReconcile_Cells(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
 			},
-			wantErrMsg: "failed to create/update cell",
+			wantErrMsg: "failed to create cell",
+		},
+		"Error: Get Cell Failed (Unexpected Error)": {
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName(clusterName+"-zone-a", errSimulated),
+			},
+			wantErrMsg: "failed to get cell",
+		},
+		"Error: Update Cell Failed": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-zone-a",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
+			},
+			wantErrMsg: "failed to update cell",
 		},
 		"Error: Prune Cell Failed": {
 			existingObjects: []client.Object{
@@ -144,4 +173,75 @@ func TestReconcile_Cells(t *testing.T) {
 	}
 
 	runReconcileTest(t, tests)
+}
+
+func TestReconcile_Cells_BuildFailure(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MultigresCluster",
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "c1",
+			Namespace:  "ns1",
+			Finalizers: []string{"multigres.com/finalizer"},
+		},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			// Need to disable global components to avoid them failing first (on cluster name if long? No, we use normal cluster name here)
+			// But for Cells, we use Long Cell Name.
+			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+				External: &multigresv1alpha1.ExternalTopoServerSpec{
+					Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
+				},
+			},
+			MultiAdmin: nil,
+			Cells: []multigresv1alpha1.CellConfig{ // This will trigger Build failure due to long name
+				{Name: strings.Repeat("a", 64), CellTemplate: "cell-tpl"},
+			},
+		},
+	}
+
+	tmpl := &multigresv1alpha1.CellTemplate{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CellTemplate",
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-tpl", Namespace: "ns1"},
+		Spec:       multigresv1alpha1.CellTemplateSpec{},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, tmpl).
+		Build()
+
+	r := &MultigresClusterReconciler{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+	}
+
+	_, err := r.Reconcile(t.Context(), req)
+	if err == nil {
+		t.Fatal("Expected error from Reconcile, got nil")
+	}
+	if !contains(err.Error(), "failed to build cell") {
+		// If MultiAdmin fails, we will see it here. But since we used normal cluster name and nil MultiAdmin (which likely defaults),
+		// we might hit MultiAdmin build.
+		// If MultiAdmin defaults, it builds.
+		// Does MultiAdmin validation fail? No.
+		// So MultiAdmin succeeds.
+		// Then Cells run. Cell name is long. Validation fails.
+		// WE SHOULD SEE "failed to build cell".
+		t.Errorf("Unexpected error: %v", err)
+	}
 }
