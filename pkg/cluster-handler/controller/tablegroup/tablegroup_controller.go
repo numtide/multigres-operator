@@ -65,6 +65,7 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
+	// Reconcile Loop: Create/Update/Prune Shards
 	activeShardNames := make(map[string]bool, len(tg.Spec.Shards))
 
 	for _, shardSpec := range tg.Spec.Shards {
@@ -77,29 +78,21 @@ func (r *TableGroupReconciler) Reconcile(
 			return ctrl.Result{}, fmt.Errorf("failed to build shard: %w", err)
 		}
 
-		existing := &multigresv1alpha1.Shard{}
-		err = r.Get(
+		// Use Server-Side Apply
+		desired.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("Shard"))
+		if err := r.Patch(
 			ctx,
-			client.ObjectKey{Namespace: tg.Namespace, Name: desired.Name},
-			existing,
-		)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				if err := r.Create(ctx, desired); err != nil {
-					l.Error(err, "Failed to create shard", "shard", shardNameFull)
-					return ctrl.Result{}, fmt.Errorf("failed to create shard: %w", err)
-				}
-				r.Recorder.Eventf(tg, "Normal", "Created", "Created Shard %s", desired.Name)
-				continue
-			}
-			return ctrl.Result{}, fmt.Errorf("failed to get shard: %w", err)
+			desired,
+			client.Apply,
+			client.ForceOwnership,
+			client.FieldOwner("multigres-operator"),
+		); err != nil {
+			l.Error(err, "Failed to apply shard", "shard", shardNameFull)
+			return ctrl.Result{}, fmt.Errorf("failed to apply shard: %w", err)
 		}
 
-		existing.Spec = desired.Spec
-		existing.Labels = desired.Labels
-		if err := r.Update(ctx, existing); err != nil {
-			l.Error(err, "Failed to update shard", "shard", shardNameFull)
-			return ctrl.Result{}, fmt.Errorf("failed to update shard: %w", err)
+		if r.Recorder != nil {
+			r.Recorder.Eventf(tg, "Normal", "Applied", "Applied Shard %s", desired.Name)
 		}
 	}
 

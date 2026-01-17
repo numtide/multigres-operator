@@ -413,54 +413,17 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 				OnGet: testutil.FailOnKeyName(tgName, errSimulated),
 			},
 		},
-		"Error: Create/Update Shard Failed": {
+		"Error: Apply Shard Failed": {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(
+				OnPatch: testutil.FailOnObjectName(
 					fmt.Sprintf("%s-%s", tgName, "shard-0"),
 					errSimulated,
 				),
 			},
 		},
-		"Error: Get Shard Failed (Generic)": {
-			tableGroup:      baseTG.DeepCopy(),
-			existingObjects: []client.Object{
-				// Need shard to exist? No, Get is called before check.
-				// But to distinguish from NotFound, OnGet must return generic error.
-				// Fake client default Get returns NotFound if missing.
-				// FailureConfig overrides.
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(
-					fmt.Sprintf("%s-%s", tgName, "shard-0"),
-					errSimulated,
-				),
-			},
-		},
-		"Error: Update Shard Failed": {
-			tableGroup: baseTG.DeepCopy(),
-			existingObjects: []client.Object{
-				&multigresv1alpha1.Shard{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
-						Namespace: namespace,
-						Labels: map[string]string{
-							"multigres.com/cluster":    clusterName,
-							"multigres.com/database":   dbName,
-							"multigres.com/tablegroup": tgLabelName,
-						},
-					},
-					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(
-					fmt.Sprintf("%s-%s", tgName, "shard-0"),
-					errSimulated,
-				),
-			},
-		},
+
 		"Error: List Shards Failed (during pruning)": {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},

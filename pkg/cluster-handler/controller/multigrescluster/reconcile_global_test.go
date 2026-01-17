@@ -8,13 +8,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -154,67 +150,18 @@ func TestReconcile_Global(t *testing.T) {
 			},
 			wantErrMsg: "failed to resolve multiadmin",
 		},
-		"Error: Get GlobalTopo Failed (Unexpected Error)": {
+		"Error: Apply GlobalTopo Failed": {
 			failureConfig: &testutil.FailureConfig{
-				// Determine if Get fails for the TopoServer resource
-				OnGet: testutil.FailOnKeyName(clusterName+"-global-topo", errSimulated),
+				OnPatch: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
 			},
-			wantErrMsg: "failed to get global topo server",
+			wantErrMsg: "failed to apply global topo server",
 		},
-		"Error: Create GlobalTopo Failed": {
+
+		"Error: Apply MultiAdmin Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
+				OnPatch: testutil.FailOnObjectName(clusterName+"-multiadmin", errSimulated),
 			},
-			wantErrMsg: "failed to create global topo server",
-		},
-		"Error: Update GlobalTopo Failed": {
-			// Pre-create the TopoServer so we hit the Update path
-			existingObjects: []client.Object{
-				coreTpl, cellTpl, shardTpl, // default templates
-				&multigresv1alpha1.TopoServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-global-topo",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-					Spec: multigresv1alpha1.TopoServerSpec{
-						Etcd: &multigresv1alpha1.EtcdSpec{Image: "old-image"},
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
-			},
-			wantErrMsg: "failed to update global topo server",
-		},
-		"Error: Get MultiAdmin Failed (Unexpected Error)": {
-			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(clusterName+"-multiadmin", errSimulated),
-			},
-			wantErrMsg: "failed to get multiadmin deployment",
-		},
-		"Error: Create MultiAdmin Failed": {
-			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-multiadmin", errSimulated),
-			},
-			wantErrMsg: "failed to create multiadmin deployment",
-		},
-		"Error: Update MultiAdmin Failed": {
-			// Pre-create the MultiAdmin Deployment so CreateOrUpdate goes to Update path
-			existingObjects: []client.Object{
-				coreTpl, cellTpl, shardTpl,
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-multiadmin",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(clusterName+"-multiadmin", errSimulated),
-			},
-			wantErrMsg: "failed to update multiadmin deployment",
+			wantErrMsg: "failed to apply multiadmin deployment",
 		},
 		"Update: Global Components Success": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -265,124 +212,27 @@ func TestReconcile_Global(t *testing.T) {
 				}
 			},
 		},
+		"Error: Build GlobalTopo Failed (Name Too Long)": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Name = strings.Repeat("a", 64)
+			},
+			existingObjects: []client.Object{coreTpl},
+			wantErrMsg:      "failed to build global topo server",
+		},
+		"Error: Build MultiAdmin Failed (Name Too Long)": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Name = strings.Repeat("a", 64)
+				// Ensure GlobalTopo doesn't fail first (set to External to skip build)
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					External: &multigresv1alpha1.ExternalTopoServerSpec{
+						Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
+					},
+				}
+			},
+			existingObjects: []client.Object{coreTpl},
+			wantErrMsg:      "failed to build multiadmin deployment",
+		},
 	}
 
 	runReconcileTest(t, tests)
-}
-
-func TestReconcile_Global_BuildFailure(t *testing.T) {
-	t.Parallel()
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-
-	cluster := &multigresv1alpha1.MultigresCluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "MultigresCluster",
-			APIVersion: multigresv1alpha1.GroupVersion.String(),
-		},
-		// Use a name > 63 characters to trigger validation error in BuildGlobalTopoServer
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       strings.Repeat("a", 64),
-			Namespace:  "ns1",
-			Finalizers: []string{"multigres.com/finalizer"},
-		},
-		Spec: multigresv1alpha1.MultigresClusterSpec{
-			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
-				TemplateRef: "topo-core",
-			},
-		},
-	}
-
-	tmpl := &multigresv1alpha1.CoreTemplate{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "CoreTemplate",
-			APIVersion: multigresv1alpha1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: "topo-core", Namespace: "ns1"},
-		Spec: multigresv1alpha1.CoreTemplateSpec{
-			GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
-				Etcd: &multigresv1alpha1.EtcdSpec{Image: "img"},
-			},
-		},
-	}
-
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(cluster, tmpl).
-		Build()
-
-	r := &MultigresClusterReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(100),
-	}
-
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
-	}
-
-	_, err := r.Reconcile(t.Context(), req)
-	if err == nil {
-		t.Fatal("Expected error from Reconcile, got nil")
-	}
-	if !contains(err.Error(), "failed to build global topo server") {
-		t.Errorf("Unexpected error: %v", err)
-	}
-}
-
-func TestReconcile_MultiAdmin_BuildFailure(t *testing.T) {
-	t.Parallel()
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-
-	cluster := &multigresv1alpha1.MultigresCluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "MultigresCluster",
-			APIVersion: multigresv1alpha1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       strings.Repeat("a", 64),
-			Namespace:  "ns1",
-			Finalizers: []string{"multigres.com/finalizer"},
-		},
-		Spec: multigresv1alpha1.MultigresClusterSpec{
-			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
-				External: &multigresv1alpha1.ExternalTopoServerSpec{
-					Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
-				},
-			},
-			// MultiAdmin enabled by default (implicit)
-		},
-	}
-
-	// Need CoreTemplate to resolve MultiAdmin (even if defaults used, resolver might fetch it)
-	// But mostly defaults.
-
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(cluster).
-		Build()
-
-	r := &MultigresClusterReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(100),
-	}
-
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
-	}
-
-	_, err := r.Reconcile(t.Context(), req)
-	if err == nil {
-		t.Fatal("Expected error from Reconcile, got nil")
-	}
-	if !contains(err.Error(), "failed to build multiadmin deployment") {
-		t.Errorf("Unexpected error: %v", err)
-	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[0:len(substr)] == substr
 }

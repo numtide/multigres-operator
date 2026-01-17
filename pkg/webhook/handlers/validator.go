@@ -279,7 +279,6 @@ func (v *ChildResourceValidator) validate(
 		kind = "Resource"
 	}
 
-	// FIX: ST1005: error strings should not be capitalized or end with punctuation
 	return nil, fmt.Errorf(
 		"direct modification of %s is prohibited; this resource is managed by the MultigresCluster parent object",
 		kind,

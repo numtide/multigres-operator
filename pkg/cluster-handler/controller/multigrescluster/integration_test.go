@@ -70,8 +70,9 @@ func setupIntegration(t *testing.T) (client.Client, *testutil.ResourceWatcher) {
 
 	// 3. Setup Controller
 	reconciler := &multigrescluster.MultigresClusterReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("multigres-cluster-controller"),
 	}
 
 	if err := reconciler.SetupWithManager(mgr, controller.Options{
