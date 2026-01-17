@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -55,28 +54,19 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			return fmt.Errorf("failed to build cell '%s': %w", cellCfg.Name, err)
 		}
 
-		existing := &multigresv1alpha1.Cell{}
-		err = r.Get(
+		// Server Side Apply
+		desired.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("Cell"))
+		if err := r.Patch(
 			ctx,
-			client.ObjectKey{Namespace: cluster.Namespace, Name: desired.Name},
-			existing,
-		)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				if err := r.Create(ctx, desired); err != nil {
-					return fmt.Errorf("failed to create cell '%s': %w", cellCfg.Name, err)
-				}
-				r.Recorder.Eventf(cluster, "Normal", "Created", "Created Cell %s", desired.Name)
-				continue
-			}
-			return fmt.Errorf("failed to get cell '%s': %w", cellCfg.Name, err)
+			desired,
+			client.Apply,
+			client.ForceOwnership,
+			client.FieldOwner("multigres-operator"),
+		); err != nil {
+			return fmt.Errorf("failed to apply cell '%s': %w", cellCfg.Name, err)
 		}
+		r.Recorder.Eventf(cluster, "Normal", "Applied", "Applied Cell %s", desired.Name)
 
-		existing.Spec = desired.Spec
-		existing.Labels = desired.Labels
-		if err := r.Update(ctx, existing); err != nil {
-			return fmt.Errorf("failed to update cell '%s': %w", cellCfg.Name, err)
-		}
 	}
 
 	for _, item := range existingCells.Items {

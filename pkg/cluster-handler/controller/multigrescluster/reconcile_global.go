@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -44,41 +43,29 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 	}
 
 	// If desired is nil, it means we don't need a managed TopoServer (e.g. external).
-	// We should ensure any existing managed TopoServer is cleaned up?
-	// For now, if nil, we just return (logic per current implementation which didn't delete either).
-	// TODO: Consider if we should delete existing if switching to external.
 	if desired == nil {
 		return nil
 	}
 
-	existing := &multigresv1alpha1.TopoServer{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("TopoServer"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: cluster.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create global topo server: %w", err)
-			}
-			r.Recorder.Eventf(
-				cluster,
-				"Normal",
-				"Created",
-				"Created Global TopoServer %s",
-				desired.Name,
-			)
-			return nil
-		}
-		return fmt.Errorf("failed to get global topo server: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply global topo server: %w", err)
 	}
 
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update global topo server: %w", err)
-	}
+	r.Recorder.Eventf(
+		cluster,
+		"Normal",
+		"Applied",
+		"Applied Global TopoServer %s",
+		desired.Name,
+	)
 
 	return nil
 }
@@ -100,34 +87,25 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 		return fmt.Errorf("failed to build multiadmin deployment: %w", err)
 	}
 
-	existing := &appsv1.Deployment{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: cluster.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create multiadmin deployment: %w", err)
-			}
-			r.Recorder.Eventf(
-				cluster,
-				"Normal",
-				"Created",
-				"Created MultiAdmin Deployment %s",
-				desired.Name,
-			)
-			return nil
-		}
-		return fmt.Errorf("failed to get multiadmin deployment: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply multiadmin deployment: %w", err)
 	}
 
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update multiadmin deployment: %w", err)
-	}
+	r.Recorder.Eventf(
+		cluster,
+		"Normal",
+		"Applied",
+		"Applied MultiAdmin Deployment %s",
+		desired.Name,
+	)
 
 	return nil
 }

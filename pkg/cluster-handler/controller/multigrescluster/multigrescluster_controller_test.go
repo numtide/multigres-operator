@@ -550,12 +550,12 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			wantErrMsg:      "exceeds 50 characters",
 		},
-		"Error: Create TableGroup Failed": {
+		"Error: Apply TableGroup Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+				OnPatch: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
 			},
-			wantErrMsg: "failed to create tablegroup",
+			wantErrMsg: "failed to apply tablegroup",
 		},
 		"Error: Delete Orphan TableGroup Failed": {
 			existingObjects: []client.Object{

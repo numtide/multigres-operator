@@ -6,17 +6,12 @@ import (
 	"testing"
 
 	"github.com/numtide/multigres-operator/pkg/testutil"
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestReconcile_Databases(t *testing.T) {
@@ -145,34 +140,13 @@ func TestReconcile_Databases(t *testing.T) {
 			},
 			wantErrMsg: "failed to resolve shard",
 		},
-		"Error: Create TableGroup Failed": {
+		"Error: Apply TableGroup Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+				OnPatch: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
 			},
-			wantErrMsg: "failed to create tablegroup",
+			wantErrMsg: "failed to apply tablegroup",
 		},
-		"Error: Get TableGroup Failed (Unexpected Error)": {
-			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(clusterName+"-db1-tg1", errSimulated),
-			},
-			wantErrMsg: "failed to get tablegroup",
-		},
-		"Error: Update TableGroup Failed": {
-			existingObjects: []client.Object{
-				coreTpl, cellTpl, shardTpl,
-				&multigresv1alpha1.TableGroup{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-db1-tg1",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
-			},
-			wantErrMsg: "failed to update tablegroup",
-		},
+
 		"Error: Prune TableGroup Failed": {
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
@@ -235,79 +209,32 @@ func TestReconcile_Databases(t *testing.T) {
 			},
 			wantErrMsg: "exceeds 50 characters",
 		},
-	}
-
-	runReconcileTest(t, tests)
-}
-
-func TestReconcile_Databases_BuildFailure(t *testing.T) {
-	t.Parallel()
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-
-	cluster := &multigresv1alpha1.MultigresCluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "MultigresCluster",
-			APIVersion: multigresv1alpha1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "c1",
-			Namespace:  "ns1",
-			Finalizers: []string{"multigres.com/finalizer"},
-		},
-		Spec: multigresv1alpha1.MultigresClusterSpec{
-			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
-				External: &multigresv1alpha1.ExternalTopoServerSpec{
-					Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
-				},
-			},
-			MultiAdmin: nil, // MultiAdmin will default and succeed.
-			Databases: []multigresv1alpha1.DatabaseConfig{
-				{
-					Name: strings.Repeat("a", 64), // Long Name triggers failure in BuildTableGroup
-					TableGroups: []multigresv1alpha1.TableGroupConfig{
-						{
-							Name: "tg1",
-							Shards: []multigresv1alpha1.ShardConfig{
-								{Name: "0", ShardTemplate: "shard-tpl"},
+		"Error: Build TableGroup Failed (Name Too Long)": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					External: &multigresv1alpha1.ExternalTopoServerSpec{
+						Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
+					},
+				}
+				c.Spec.MultiAdmin = nil
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{
+					{
+						Name: strings.Repeat("a", 64),
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Name: "tg1",
+								Shards: []multigresv1alpha1.ShardConfig{
+									{Name: "0", ShardTemplate: "default-shard"},
+								},
 							},
 						},
 					},
-				},
+				}
 			},
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			wantErrMsg:      "failed to build tablegroup",
 		},
 	}
 
-	tmpl := &multigresv1alpha1.ShardTemplate{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ShardTemplate",
-			APIVersion: multigresv1alpha1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: "shard-tpl", Namespace: "ns1"},
-		Spec:       multigresv1alpha1.ShardTemplateSpec{},
-	}
-
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(cluster, tmpl).
-		Build()
-
-	r := &MultigresClusterReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(100),
-	}
-
-	req := ctrl.Request{
-		NamespacedName: types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
-	}
-
-	_, err := r.Reconcile(t.Context(), req)
-	if err == nil {
-		t.Fatal("Expected error from Reconcile, got nil")
-	}
-	if !contains(err.Error(), "failed to build tablegroup") {
-		t.Errorf("Unexpected error: %v", err)
-	}
+	runReconcileTest(t, tests)
 }
