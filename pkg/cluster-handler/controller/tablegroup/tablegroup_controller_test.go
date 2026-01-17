@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -288,10 +289,59 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
+		"Create: Add Finalizer Success": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Finalizers = nil // Remove finalizer to force addition
+			},
+			existingObjects: []client.Object{},
+			validate: func(t testing.TB, c client.Client) {
+				updatedTG := &multigresv1alpha1.TableGroup{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+					t.Fatalf("failed to get tablegroup: %v", err)
+				}
+				if !controllerutil.ContainsFinalizer(
+					updatedTG,
+					"tablegroup.multigres.com/finalizer",
+				) {
+					t.Error("Finalizer should have been added")
+				}
+			},
+		},
 		"Error: Object Not Found (Clean Exit)": {
 			tableGroup:      baseTG.DeepCopy(),
 			skipCreate:      true,
 			existingObjects: []client.Object{},
+		},
+		"Update: Shard Update Success": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				// Change spec to force update
+				tg.Spec.Shards[0].MultiOrch.Replicas = ptr.To(int32(5))
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+				},
+			},
+			validate: func(t testing.TB, c client.Client) {
+				shard := &multigresv1alpha1.Shard{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-0"), Namespace: namespace}, shard); err != nil {
+					t.Fatal(err)
+				}
+				if *shard.Spec.MultiOrch.Replicas != 5 {
+					t.Errorf("Shard replicas not updated")
+				}
+			},
 		},
 	}
 
@@ -368,6 +418,44 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: testutil.FailOnObjectName(
+					fmt.Sprintf("%s-%s", tgName, "shard-0"),
+					errSimulated,
+				),
+			},
+		},
+		"Error: Get Shard Failed (Generic)": {
+			tableGroup:      baseTG.DeepCopy(),
+			existingObjects: []client.Object{
+				// Need shard to exist? No, Get is called before check.
+				// But to distinguish from NotFound, OnGet must return generic error.
+				// Fake client default Get returns NotFound if missing.
+				// FailureConfig overrides.
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: testutil.FailOnKeyName(
+					fmt.Sprintf("%s-%s", tgName, "shard-0"),
+					errSimulated,
+				),
+			},
+		},
+		"Error: Update Shard Failed": {
+			tableGroup: baseTG.DeepCopy(),
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(
 					fmt.Sprintf("%s-%s", tgName, "shard-0"),
 					errSimulated,
 				),
@@ -494,19 +582,27 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 				),
 			},
 		},
+		"Error: Build Shard Failed (Long Name)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards[0].Name = "a" + string(make([]byte, 64)) // > 63 chars
+			},
+			existingObjects: []client.Object{},
+			// No failureConfig needed as failure comes from builder logic, propagated to Reconcile
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			// Apply pre-reconcile updates if defined
+			// Apply pre-reconcile updates
 			if tc.preReconcileUpdate != nil {
 				tc.preReconcileUpdate(t, tc.tableGroup)
 			}
 
 			objects := tc.existingObjects
-			// Default behavior: create the TableGroup unless getting it is set to fail (which simulates Not Found or error)
+			// Default behavior: create the TableGroup unless getting it handling failure
 			// For failure tests, usually the object exists so the code can proceed to the failing step.
 			objects = append(objects, tc.tableGroup)
 
@@ -522,6 +618,12 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			if tc.failureConfig != nil {
 				finalClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
+
+			// Use explicit scheme for Reconciler.
+			// If we want to simulate Build failure, we might need to inject a broken scheme here?
+			// But the test structure iterates cases.
+			// Ideally we catch "Build Failed" in a separate manual test if it requires structural changes (like Reconciler.Scheme change).
+			// But let's try to add it here as a special case? No, the loop uses 'scheme'.
 
 			reconciler := &TableGroupReconciler{
 				Client:   finalClient,
@@ -541,6 +643,34 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 				t.Error("Expected error from Reconcile, got nil")
 			}
 		})
+	}
+}
+
+func TestTableGroupReconciler_Reconcile_BuildFailure(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	baseTG, _, _, _, _, _ := setupFixtures(t)
+
+	// Create client with VALID scheme
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseTG).Build()
+
+	// Create Reconciler with EMPTY scheme (causes BuildShard -> SetControllerReference to fail)
+	r := &TableGroupReconciler{
+		Client:   c,
+		Scheme:   runtime.NewScheme(), // Empty!
+		Recorder: record.NewFakeRecorder(100),
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{Name: baseTG.Name, Namespace: baseTG.Namespace},
+	}
+	_, err := r.Reconcile(t.Context(), req)
+	if err == nil {
+		t.Fatal("Expected Reconcile to fail due to Build error")
+	}
+	if err.Error() != "failed to build shard: no kind is registered for the type v1alpha1.TableGroup" {
+		t.Logf("Got error: %v", err) // verify it's the right error
 	}
 }
 

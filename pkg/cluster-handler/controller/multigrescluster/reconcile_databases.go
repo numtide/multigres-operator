@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"sort"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
@@ -33,13 +32,6 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 	for _, db := range cluster.Spec.Databases {
 		for _, tg := range db.TableGroups {
 			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, db.Name, tg.Name)
-			if len(tgNameFull) > 50 {
-				return fmt.Errorf(
-					"TableGroup name '%s' exceeds 50 characters; limit required to allow for shard resource suffixing",
-					tgNameFull,
-				)
-			}
-
 			activeTGNames[tgNameFull] = true
 
 			resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
@@ -84,41 +76,45 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				})
 			}
 
-			tgCR := &multigresv1alpha1.TableGroup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      tgNameFull,
-					Namespace: cluster.Namespace,
-					Labels: map[string]string{
-						"multigres.com/cluster":    cluster.Name,
-						"multigres.com/database":   db.Name,
-						"multigres.com/tablegroup": tg.Name,
-					},
-				},
-			}
-
-			op, err := controllerutil.CreateOrUpdate(ctx, r.Client, tgCR, func() error {
-				tgCR.Spec.DatabaseName = db.Name
-				tgCR.Spec.TableGroupName = tg.Name
-				tgCR.Spec.IsDefault = tg.Default
-
-				tgCR.Spec.Images = multigresv1alpha1.ShardImages{
-					MultiOrch:        cluster.Spec.Images.MultiOrch,
-					MultiPooler:      cluster.Spec.Images.MultiPooler,
-					Postgres:         cluster.Spec.Images.Postgres,
-					ImagePullPolicy:  cluster.Spec.Images.ImagePullPolicy,
-					ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
-				}
-
-				tgCR.Spec.GlobalTopoServer = globalTopoRef
-				tgCR.Spec.Shards = resolvedShards
-
-				return controllerutil.SetControllerReference(cluster, tgCR, r.Scheme)
-			})
+			desired, err := BuildTableGroup(
+				cluster,
+				db.Name,
+				&tg,
+				resolvedShards,
+				globalTopoRef,
+				r.Scheme,
+			)
 			if err != nil {
-				return fmt.Errorf("failed to create/update tablegroup '%s': %w", tgNameFull, err)
+				return fmt.Errorf("failed to build tablegroup '%s': %w", tgNameFull, err)
 			}
-			if op == controllerutil.OperationResultCreated {
-				r.Recorder.Eventf(cluster, "Normal", "Created", "Created TableGroup %s", tgCR.Name)
+
+			existing := &multigresv1alpha1.TableGroup{}
+			err = r.Get(
+				ctx,
+				client.ObjectKey{Namespace: cluster.Namespace, Name: desired.Name},
+				existing,
+			)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					if err := r.Create(ctx, desired); err != nil {
+						return fmt.Errorf("failed to create tablegroup '%s': %w", tgNameFull, err)
+					}
+					r.Recorder.Eventf(
+						cluster,
+						"Normal",
+						"Created",
+						"Created TableGroup %s",
+						desired.Name,
+					)
+					continue
+				}
+				return fmt.Errorf("failed to get tablegroup '%s': %w", tgNameFull, err)
+			}
+
+			existing.Spec = desired.Spec
+			existing.Labels = desired.Labels
+			if err := r.Update(ctx, existing); err != nil {
+				return fmt.Errorf("failed to update tablegroup '%s': %w", tgNameFull, err)
 			}
 		}
 	}
