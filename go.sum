@@ -120,6 +120,8 @@ github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260115201516-
 github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:MSMdL/Be0qtXsV7qGWidDeepGGCFc9MmTqG7hk/h1pQ=
 github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260117103319-0310da4fde93 h1:cZgIfvDyCknmq4nk738SkakXKj8qn9iAvKcbWsLW92g=
 github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260117103319-0310da4fde93/go.mod h1:zhIRec/iMZmV4gtVqJQ524SdMd+VmWmRV57/kNqm33k=
+github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260119180828-5de2bf61aae8 h1:8KKbNyEQ99PCauTbDpUuSsLkNRg5hDTvyP85A+IKofI=
+github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260119180828-5de2bf61aae8/go.mod h1:zhIRec/iMZmV4gtVqJQ524SdMd+VmWmRV57/kNqm33k=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260116114253-fd867f056f16 h1:eUvOealF9GlRCObAspNuDh6PTm46r3G7E58bDujJL8M=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260116114253-fd867f056f16/go.mod h1:8urAPFN6zF8V6KmQWWU31DL6WtZ6seLkm6UrwBVGArU=
 github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260110015531-40fb79c0dda3 h1:1iGWxJPk4ucAjDOR8rcSPfVVKHtlXDSLq8gpAOonq8I=
@@ -128,6 +130,8 @@ github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
 github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260115201516-44b30bf5dd8e h1:MrQXRa+6/Tw5FhaWoDQQUJZYlkGYYnK4ezVFCzjsh0s=
 github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:r1W5LXXbuBfgwJh9BCuwn4AOushxC+tyMxnJkW8ltps=
+github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260119180828-5de2bf61aae8 h1:h4b3ZXPXK3ejghDN8h1cQ1EItpgZZTyk/RMh3YRBOes=
+github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260119180828-5de2bf61aae8/go.mod h1:91v1CQZ/t3460dJZdtESjZ4WGDNMIi0g6T9YwLYhxMo=
 github.com/onsi/ginkgo/v2 v2.27.2 h1:LzwLj0b89qtIy6SSASkzlNvX6WktqurSHwkk2ipF/Ns=
 github.com/onsi/ginkgo/v2 v2.27.2/go.mod h1:ArE1D/XhNXBXCBkKOLkbsb2c81dQHCRcF5zwn/ykDRo=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=
