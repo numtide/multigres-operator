@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -42,7 +41,7 @@ func setupFixtures(
 				"multigres.com/database":   dbName,
 				"multigres.com/tablegroup": tgLabelName,
 			},
-			Finalizers: []string{"tablegroup.multigres.com/finalizer"},
+			// Finalizers removed
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{
 			DatabaseName:   dbName,
@@ -85,7 +84,9 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 		tableGroup         *multigresv1alpha1.TableGroup
 		existingObjects    []client.Object
 		preReconcileUpdate func(testing.TB, *multigresv1alpha1.TableGroup)
-		skipCreate         bool // If true, the object won't be created in the fake client (simulates Not Found)
+		preReconcileClient func(testing.TB, client.Client) // Hook to modify client state before Reconcile
+		nilRecorder        bool                            // If true, sets the Recorder to nil
+		skipCreate         bool                            // If true, the object won't be created in the fake client (simulates Not Found)
 		validate           func(testing.TB, client.Client)
 	}{
 		"Create: Shard Creation": {
@@ -103,69 +104,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
-		"Delete: Wait for Shards (Cleanup)": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				now := metav1.Now()
-				tg.DeletionTimestamp = &now
-				tg.Finalizers = []string{"tablegroup.multigres.com/finalizer"}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.Shard{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
-						Namespace: namespace,
-						Labels: map[string]string{
-							"multigres.com/cluster":    clusterName,
-							"multigres.com/database":   dbName,
-							"multigres.com/tablegroup": tgLabelName,
-						},
-						// Add finalizer to shard so it blocks deletion
-						Finalizers: []string{"some.finalizer"},
-					},
-					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
-				},
-			},
-			validate: func(t testing.TB, c client.Client) {
-				// Shard should be marked for deletion
-				shard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-0"), Namespace: namespace}, shard); err != nil {
-					t.Fatalf("Shard should exist: %v", err)
-				}
-				if shard.DeletionTimestamp.IsZero() {
-					t.Error("Shard should have DeletionTimestamp set")
-				}
 
-				// TableGroup should still have finalizer
-				tg := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
-					t.Fatalf("TableGroup should exist: %v", err)
-				}
-				if len(tg.Finalizers) == 0 {
-					t.Error("TableGroup finalizer should NOT be removed yet")
-				}
-			},
-		},
-		"Delete: Finalize (No Shards)": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				now := metav1.Now()
-				tg.DeletionTimestamp = &now
-				tg.Finalizers = []string{"tablegroup.multigres.com/finalizer"}
-			},
-			existingObjects: []client.Object{},
-			validate: func(t testing.TB, c client.Client) {
-				updatedTG := &multigresv1alpha1.TableGroup{}
-				err := c.Get(
-					t.Context(),
-					types.NamespacedName{Name: tgName, Namespace: namespace},
-					updatedTG,
-				)
-				if !apierrors.IsNotFound(err) {
-					t.Error("TableGroup should be deleted (NotFound)")
-				}
-			},
-		},
 		"Update: Apply Changes and Prune Orphans": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
@@ -273,6 +212,44 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
+		"Status: Shard Not Ready (False Condition)": {
+			tableGroup: baseTG.DeepCopy(),
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+					Status: multigresv1alpha1.ShardStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   "Available",
+								Status: metav1.ConditionFalse,
+							},
+							{
+								Type:   "SomethingElse",
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			validate: func(t testing.TB, c client.Client) {
+				updatedTG := &multigresv1alpha1.TableGroup{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+					t.Fatalf("failed to get tablegroup: %v", err)
+				}
+				if got, want := updatedTG.Status.ReadyShards, int32(0); got != want {
+					t.Errorf("ReadyShards mismatch got %d, want %d", got, want)
+				}
+			},
+		},
 		"Status: Zero Shards (Vacuously True)": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
@@ -289,25 +266,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
-		"Create: Add Finalizer Success": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				tg.Finalizers = nil // Remove finalizer to force addition
-			},
-			existingObjects: []client.Object{},
-			validate: func(t testing.TB, c client.Client) {
-				updatedTG := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
-					t.Fatalf("failed to get tablegroup: %v", err)
-				}
-				if !controllerutil.ContainsFinalizer(
-					updatedTG,
-					"tablegroup.multigres.com/finalizer",
-				) {
-					t.Error("Finalizer should have been added")
-				}
-			},
-		},
+
 		"Error: Object Not Found (Clean Exit)": {
 			tableGroup:      baseTG.DeepCopy(),
 			skipCreate:      true,
@@ -343,6 +302,32 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
+		"Success: Early Return on Deletion": {
+			tableGroup:      baseTG.DeepCopy(),
+			existingObjects: []client.Object{},
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				now := metav1.Now()
+				tg.DeletionTimestamp = &now
+				tg.Finalizers = []string{
+					"test.finalizer",
+				} // Prevent immediate deletion/GC simulation issues
+			},
+			validate: func(t testing.TB, c client.Client) {
+				// Verify Shard is NOT created because checks are skipped
+				shardNameFull := fmt.Sprintf("%s-%s", tgName, "shard-0")
+				shard := &multigresv1alpha1.Shard{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: shardNameFull, Namespace: namespace}, shard); !apierrors.IsNotFound(
+					err,
+				) {
+					t.Errorf("Expected Shard %s to NOT be created", shardNameFull)
+				}
+			},
+		},
+		"Success: No Recorder": {
+			tableGroup:      baseTG.DeepCopy(),
+			existingObjects: []client.Object{},
+			nilRecorder:     true,
+		},
 	}
 
 	for name, tc := range tests {
@@ -366,10 +351,19 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				WithStatusSubresource(&multigresv1alpha1.TableGroup{}, &multigresv1alpha1.Shard{})
 			baseClient := clientBuilder.Build()
 
+			if tc.preReconcileClient != nil {
+				tc.preReconcileClient(t, baseClient)
+			}
+
+			var recorder record.EventRecorder
+			if !tc.nilRecorder {
+				recorder = record.NewFakeRecorder(100)
+			}
+
 			reconciler := &TableGroupReconciler{
 				Client:   baseClient,
 				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(100),
+				Recorder: recorder,
 			}
 
 			req := ctrl.Request{
@@ -436,6 +430,24 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 				},
 			},
 		},
+		"Error: Status List Failed (Second List Call)": {
+			tableGroup:      baseTG.DeepCopy(),
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnList: func() func(list client.ObjectList) error {
+					count := 0
+					return func(list client.ObjectList) error {
+						if _, ok := list.(*multigresv1alpha1.ShardList); ok {
+							count++
+							if count == 2 {
+								return errSimulated
+							}
+						}
+						return nil
+					}
+				}(),
+			},
+		},
 		"Error: Delete Orphan Shard Failed": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
@@ -469,82 +481,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 				OnStatusUpdate: testutil.FailOnObjectName(tgName, errSimulated),
 			},
 		},
-		"Error: Add Finalizer Failed": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				tg.Finalizers = nil // Ensure we try to add it
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(tgName, errSimulated),
-			},
-		},
-		"Error: Remove Finalizer Failed": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				now := metav1.Now()
-				tg.DeletionTimestamp = &now
-				tg.Finalizers = []string{"tablegroup.multigres.com/finalizer"}
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(tgName, errSimulated),
-			},
-		},
-		"Error: List Shards Failed (Deletion)": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				now := metav1.Now()
-				tg.DeletionTimestamp = &now
-				tg.Finalizers = []string{"tablegroup.multigres.com/finalizer"}
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnList: func(list client.ObjectList) error {
-					if _, ok := list.(*multigresv1alpha1.ShardList); ok {
-						return errSimulated
-					}
-					return nil
-				},
-			},
-		},
-		"Error: List Shards Failed (Status)": {
-			tableGroup:      baseTG.DeepCopy(),
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnList: testutil.FailObjListAfterNCalls(1, errSimulated),
-			},
-		},
-		"Error: Delete Shard Failed (Deletion)": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				now := metav1.Now()
-				tg.DeletionTimestamp = &now
-				tg.Finalizers = []string{"tablegroup.multigres.com/finalizer"}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.Shard{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
-						Namespace: namespace,
-						Labels: map[string]string{
-							"multigres.com/cluster":    clusterName,
-							"multigres.com/database":   dbName,
-							"multigres.com/tablegroup": tgLabelName,
-						},
-						// Add finalizer so it isn't auto-deleted by fake client before we can fail it?
-						// Actually fake client Delete calls OnDelete first.
-					},
-					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(
-					fmt.Sprintf("%s-%s", tgName, "shard-0"),
-					errSimulated,
-				),
-			},
-		},
+
 		"Error: Build Shard Failed (Long Name)": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {

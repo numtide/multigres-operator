@@ -5,7 +5,6 @@ package multigrescluster_test
 
 import (
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -671,14 +670,6 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 				t.Errorf("Resources mismatch:\n%v", err)
 			}
 
-			// Check Finalizer
-			fetchedCluster := &multigresv1alpha1.MultigresCluster{}
-			if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(tc.cluster), fetchedCluster); err != nil {
-				t.Fatalf("Failed to get cluster: %v", err)
-			}
-			if !slices.Contains(fetchedCluster.Finalizers, "multigres.com/finalizer") {
-				t.Errorf("Expected finalizer 'multigres.com/finalizer' to be present, got %v", fetchedCluster.Finalizers)
-			}
 		})
 	}
 }

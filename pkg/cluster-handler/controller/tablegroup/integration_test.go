@@ -45,6 +45,32 @@ func TestSetupWithManager(t *testing.T) {
 	}
 }
 
+func TestSetupWithManager_Failure(t *testing.T) {
+	t.Parallel()
+
+	// Scheme WITHOUT Multigres types serves to trigger a failure in SetupWithManager
+	// because controller-runtime cannot map the Go type to a GVK.
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	mgr := testutil.SetUpEnvtestManager(t, scheme,
+		testutil.WithCRDPaths(
+			filepath.Join("../../../../", "config", "crd", "bases"),
+		),
+	)
+
+	// Setup should fail because TableGroup is not in scheme
+	if err := (&tablegroup.TableGroupReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, controller.Options{
+		SkipNameValidation: ptr.To(true),
+	}); err == nil {
+		t.Fatal("Expected SetupWithManager to fail due to missing type in scheme, got nil")
+	}
+}
+
 func TestTableGroupReconciliation(t *testing.T) {
 	t.Parallel()
 
