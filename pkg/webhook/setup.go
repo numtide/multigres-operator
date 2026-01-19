@@ -74,7 +74,11 @@ func Setup(mgr ctrl.Manager, res *resolver.Resolver, opts Options) error {
 			opts.Namespace,
 		)
 	}
-	childValidator := handlers.NewChildResourceValidator(operatorPrincipal)
+	childValidator := handlers.NewChildResourceValidator(
+		operatorPrincipal,
+		"system:serviceaccount:kube-system:generic-garbage-collector",
+		"system:serviceaccount:kube-system:namespace-controller",
+	)
 
 	childResources := []client.Object{
 		&multigresv1alpha1.Cell{},

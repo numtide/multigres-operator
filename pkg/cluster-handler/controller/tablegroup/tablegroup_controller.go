@@ -13,14 +13,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-)
-
-const (
-	finalizerName = "tablegroup.multigres.com/finalizer"
 )
 
 // TableGroupReconciler reconciles a TableGroup object.
@@ -51,21 +46,12 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to get TableGroup: %w", err)
 	}
 
-	// Handle Deletion
+	// Reconcile Loop: Create/Update/Prune Shards
+	// If being deleted, let Kubernetes GC handle cleanup
 	if !tg.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, tg)
-	}
-
-	// Add Finalizer
-	if !controllerutil.ContainsFinalizer(tg, finalizerName) {
-		controllerutil.AddFinalizer(tg, finalizerName)
-		if err := r.Update(ctx, tg); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-		}
 		return ctrl.Result{}, nil
 	}
 
-	// Reconcile Loop: Create/Update/Prune Shards
 	activeShardNames := make(map[string]bool, len(tg.Spec.Shards))
 
 	for _, shardSpec := range tg.Spec.Shards {
@@ -164,58 +150,6 @@ func (r *TableGroupReconciler) Reconcile(
 	}
 
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-}
-
-func (r *TableGroupReconciler) handleDelete(
-	ctx context.Context,
-	tg *multigresv1alpha1.TableGroup,
-) (ctrl.Result, error) {
-	if controllerutil.ContainsFinalizer(tg, finalizerName) {
-		// List all Shards owned by this TableGroup
-		shards := &multigresv1alpha1.ShardList{}
-		if err := r.List(ctx, shards, client.InNamespace(tg.Namespace), client.MatchingLabels{
-			"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
-			"multigres.com/database":   tg.Spec.DatabaseName,
-			"multigres.com/tablegroup": tg.Spec.TableGroupName,
-		}); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to list shards for deletion: %w", err)
-		}
-
-		// Delete them
-		for _, s := range shards.Items {
-			if s.GetDeletionTimestamp().IsZero() {
-				if err := r.Delete(ctx, &s); err != nil {
-					if !errors.IsNotFound(err) {
-						return ctrl.Result{}, fmt.Errorf(
-							"failed to delete shard %s: %w",
-							s.Name,
-							err,
-						)
-					}
-				}
-			}
-		}
-
-		// If any shards remain, wait
-		if len(shards.Items) > 0 {
-			r.Recorder.Eventf(
-				tg,
-				"Normal",
-				"Cleanup",
-				"Waiting for %d shards to be deleted",
-				len(shards.Items),
-			)
-			// Requeue to check again
-			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-		}
-
-		// All shards gone, remove finalizer
-		controllerutil.RemoveFinalizer(tg, finalizerName)
-		if err := r.Update(ctx, tg); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
-		}
-	}
-	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

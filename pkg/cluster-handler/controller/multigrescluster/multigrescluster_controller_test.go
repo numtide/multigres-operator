@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -235,9 +234,9 @@ func setupFixtures(tb testing.TB) (
 
 	baseCluster := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       clusterName,
-			Namespace:  namespace,
-			Finalizers: []string{finalizerName},
+			Name:      clusterName,
+			Namespace: namespace,
+			// Finalizers removed
 		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			Images: multigresv1alpha1.ClusterImages{
@@ -286,26 +285,10 @@ func parseQty(s string) resource.Quantity {
 // ============================================================================
 
 func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
-	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, finalizerName := setupFixtures(t)
+	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, _ := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]reconcileTestCase{
-		"Create: Adds Finalizer": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Finalizers = nil // Explicitly remove finalizer to test addition
-			},
-			existingObjects: []client.Object{},
-			validate: func(t testing.TB, c client.Client) {
-				ctx := t.Context()
-				updatedCluster := &multigresv1alpha1.MultigresCluster{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, updatedCluster); err != nil {
-					t.Fatalf("failed to get updated cluster: %v", err)
-				}
-				if !controllerutil.ContainsFinalizer(updatedCluster, finalizerName) {
-					t.Error("Finalizer was not added to Cluster")
-				}
-			},
-		},
 		"Create: Full Cluster Creation - Verify Images and Wiring": {
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
@@ -319,80 +302,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				}
 			},
 		},
-		"Delete: Allow Finalization if Children Gone": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{},
-			validate: func(t testing.TB, c client.Client) {
-				updated := &multigresv1alpha1.MultigresCluster{}
-				err := c.Get(
-					t.Context(),
-					types.NamespacedName{Name: clusterName, Namespace: namespace},
-					updated,
-				)
-				if err == nil {
-					if controllerutil.ContainsFinalizer(updated, finalizerName) {
-						t.Error("Finalizer was not removed")
-					}
-				}
-			},
-		},
-		"Delete: Block Finalization if Cells Exist": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.Cell{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-zone-a",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			wantErrMsg: "waiting for children to be deleted",
-			// VERIFY EVENT: Ensure the user sees why it's stuck
-			expectedEvents: []string{"Normal Cleanup Waiting for child resources"},
-		},
-		"Delete: Block Finalization if TableGroups Exist": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.TableGroup{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-db1-tg1",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			wantErrMsg: "waiting for children to be deleted",
-		},
-		"Delete: Block Finalization if TopoServer Exists": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.TopoServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-global-topo",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			wantErrMsg: "waiting for children to be deleted",
-		},
+
 		"Error: Fetch Cluster Failed": {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
@@ -400,139 +310,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			},
 			wantErrMsg: "failed to get MultigresCluster",
 		},
-		"Error: Add Finalizer Failed": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Finalizers = nil // Ensure we trigger the Add Finalizer path
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
-			},
-			wantErrMsg: "failed to add finalizer",
-		},
-		"Error: Remove Finalizer Failed": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
-			},
-			wantErrMsg: "failed to remove finalizer",
-		},
-		"Error: CheckChildrenDeleted (List Cells Failed)": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnList: func(list client.ObjectList) error {
-					if _, ok := list.(*multigresv1alpha1.CellList); ok {
-						return errSimulated
-					}
-					return nil
-				},
-			},
-			wantErrMsg: "failed to list cells",
-		},
-		"Error: CheckChildrenDeleted (List TableGroups Failed)": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnList: func(list client.ObjectList) error {
-					if _, ok := list.(*multigresv1alpha1.TableGroupList); ok {
-						return errSimulated
-					}
-					return nil
-				},
-			},
-			wantErrMsg: "failed to list tablegroups",
-		},
-		"Error: CheckChildrenDeleted (List TopoServers Failed)": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnList: func(list client.ObjectList) error {
-					if _, ok := list.(*multigresv1alpha1.TopoServerList); ok {
-						return errSimulated
-					}
-					return nil
-				},
-			},
-			wantErrMsg: "failed to list toposervers",
-		},
-		"Error: Delete Child Cell Failed": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.Cell{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-zone-a",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
-			},
-			wantErrMsg: "failed to delete child",
-		},
-		"Error: Delete Child TableGroup Failed": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.TableGroup{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-db1-tg1",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
-			},
-			wantErrMsg: "failed to delete child",
-		},
-		"Error: Delete Child TopoServer Failed": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				now := metav1.Now()
-				c.DeletionTimestamp = &now
-				c.Finalizers = []string{finalizerName}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.TopoServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-global-topo",
-						Namespace: namespace,
-						Labels:    map[string]string{"multigres.com/cluster": clusterName},
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
-			},
-			wantErrMsg: "failed to delete child",
-		},
+
 		"Error: TableGroup Name Too Long": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{
@@ -611,6 +389,46 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				OnGet: testutil.FailOnNamespacedKeyName("default", namespace, errSimulated),
 			},
 			wantErrMsg: "failed to check for implicit shard template",
+		},
+		"Error: Reconcile Global Components Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
+			},
+			wantErrMsg: "failed to apply global topo server",
+		},
+		"Error: Reconcile Cells Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
+			},
+			wantErrMsg: "failed to apply cell",
+		},
+		"Error: Reconcile Databases Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+			},
+			wantErrMsg: "failed to apply tablegroup",
+		},
+		"Error: Update Status Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			failureConfig: &testutil.FailureConfig{
+				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
+			},
+			wantErrMsg: "failed to update cluster status",
+		},
+		"Success: Early Return on Deletion": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"test.finalizer",
+				} // Prevent immediate deletion by fake client
+			},
+			// Expect NO error and NO events (since it returns early)
+			wantErrMsg: "",
 		},
 	}
 
