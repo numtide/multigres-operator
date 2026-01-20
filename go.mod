@@ -3,11 +3,11 @@ module github.com/numtide/multigres-operator
 go 1.25.0
 
 require (
-	github.com/numtide/multigres-operator/api v0.0.0-20260110025154-da9aa10fb701
+	github.com/numtide/multigres-operator/api v0.0.0-20260120201135-e72eb4b1bd4a
 	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260119180828-5de2bf61aae8
-	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260116114253-fd867f056f16
+	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260120201135-e72eb4b1bd4a
 	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260110015531-40fb79c0dda3
-	github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260119180828-5de2bf61aae8
+	github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260120201135-e72eb4b1bd4a
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
