@@ -28,10 +28,10 @@ const (
 	DefaultSystemTableGroupName = "default"
 
 	// DefaultPostgresImage is the default container image used for PostgreSQL instances.
-	DefaultPostgresImage = "postgres:15-alpine"
+	DefaultPostgresImage = "ghcr.io/multigres/pgctld:main"
 
 	// DefaultEtcdImage is the default container image used for the managed Etcd cluster.
-	DefaultEtcdImage = "registry.k8s.io/etcd:3.5.12-0"
+	DefaultEtcdImage = "gcr.io/etcd-development/etcd:v3.6.7"
 
 	// DefaultMultiAdminImage is the default container image used for the MultiAdmin component.
 	DefaultMultiAdminImage = "ghcr.io/multigres/multigres:main"

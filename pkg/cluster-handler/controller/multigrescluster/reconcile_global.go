@@ -124,14 +124,22 @@ func (r *MultigresClusterReconciler) getGlobalTopoRef(
 
 	address := ""
 	if spec.Etcd != nil {
-		address = fmt.Sprintf("%s-global-topo-client.%s.svc:2379", cluster.Name, cluster.Namespace)
+		address = fmt.Sprintf("%s-global-topo.%s.svc:2379", cluster.Name, cluster.Namespace)
 	} else if spec.External != nil && len(spec.External.Endpoints) > 0 {
 		address = string(spec.External.Endpoints[0])
 	}
 
+	rootPath := "/multigres/global"
+	if spec.External != nil && spec.External.RootPath != "" {
+		rootPath = spec.External.RootPath
+	}
+	if spec.Etcd != nil && spec.Etcd.RootPath != "" {
+		rootPath = spec.Etcd.RootPath
+	}
+
 	return multigresv1alpha1.GlobalTopoServerRef{
 		Address:        address,
-		RootPath:       "/multigres/global",
+		RootPath:       rootPath,
 		Implementation: "etcd2",
 	}, nil
 }

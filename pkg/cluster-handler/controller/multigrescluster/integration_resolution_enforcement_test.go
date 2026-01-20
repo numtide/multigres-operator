@@ -121,7 +121,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 					},
 					AllCells: cellNames,
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-						Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+						Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 						RootPath:       "/multigres/global",
 						Implementation: "etcd2",
 					},
@@ -188,7 +188,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				},
 				AllCells: []multigresv1alpha1.CellName{"zone-a"},
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-					Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+					Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 					RootPath:       "/multigres/global",
 					Implementation: "etcd2",
 				},
@@ -265,7 +265,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
 
 		wantTG := &multigresv1alpha1.TableGroup{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-postgres-default", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-8b65dfba", Namespace: testNamespace},
 			Spec: multigresv1alpha1.TableGroupSpec{
 				DatabaseName:   "postgres",
 				TableGroupName: "default",
@@ -277,7 +277,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 					ImagePullPolicy: resolver.DefaultImagePullPolicy,
 				},
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-					Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+					Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 					RootPath:       "/multigres/global",
 					Implementation: "etcd2",
 				},
@@ -312,7 +312,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 		}
 
 		if err := watcher.WaitForMatch(wantTG); err != nil {
-			t.Error("List replacement failed: TableGroup spec does not match expected state")
+			t.Errorf("List replacement failed: %v", err)
 		}
 	})
 }
@@ -360,7 +360,7 @@ func TestMultigresCluster_EnforcementLogic(t *testing.T) {
 			},
 			AllCells: []multigresv1alpha1.CellName{"zone-a"},
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-				Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+				Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 				RootPath:       "/multigres/global",
 				Implementation: "etcd2",
 			},

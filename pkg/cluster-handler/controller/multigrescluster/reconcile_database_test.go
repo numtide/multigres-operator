@@ -5,13 +5,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestReconcile_Databases(t *testing.T) {
@@ -26,7 +30,7 @@ func TestReconcile_Databases(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
-				tgName := clusterName + "-postgres-default"
+				tgName := clusterName + "-8b65dfba"
 				tg := &multigresv1alpha1.TableGroup{}
 				if err := c.Get(ctx, types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
 					t.Fatalf("System Catalog TableGroup not found: %v", err)
@@ -207,9 +211,9 @@ func TestReconcile_Databases(t *testing.T) {
 				c.Spec.Databases[0].Name = longName
 				c.Spec.Databases[0].TableGroups[0].Name = longName
 			},
-			wantErrMsg: "exceeds 50 characters",
+			wantErrMsg: "",
 		},
-		"Error: Build TableGroup Failed (Name Too Long)": {
+		"Build TableGroup: Hashing Handles Long Names": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
 					External: &multigresv1alpha1.ExternalTopoServerSpec{
@@ -232,9 +236,91 @@ func TestReconcile_Databases(t *testing.T) {
 				}
 			},
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			wantErrMsg:      "failed to build tablegroup",
+			wantErrMsg:      "",
 		},
 	}
 
 	runReconcileTest(t, tests)
+}
+
+func TestReconcileDatabases_BuildError_SchemeMismatch(t *testing.T) {
+	// 1. Create a scheme that only knows about TableGroup, but NOT MultigresCluster.
+	// This will cause SetControllerReference to fail because it cannot look up the GVK for the owner (Cluster).
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypes(multigresv1alpha1.GroupVersion,
+		&multigresv1alpha1.TableGroup{},
+		&multigresv1alpha1.TableGroupList{},
+		&multigresv1alpha1.CoreTemplate{},
+		&multigresv1alpha1.CellTemplate{},
+	)
+	metav1.AddToGroupVersion(scheme, multigresv1alpha1.GroupVersion)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scheme-test-cluster",
+			Namespace: "default",
+			UID:       "valid-uid", // UID is fine, Scheme is the problem
+		},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+				External: &multigresv1alpha1.ExternalTopoServerSpec{
+					Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
+				},
+			},
+			Databases: []multigresv1alpha1.DatabaseConfig{
+				{
+					Name: "db1",
+					TableGroups: []multigresv1alpha1.TableGroupConfig{
+						{Name: "tg1"},
+					},
+				},
+			},
+		},
+	}
+
+	// Fake client needs to know about TableGroup to List them (which returns empty)
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	r := &MultigresClusterReconciler{
+		Client:   cl,
+		Scheme:   scheme, // <--- This scheme is missing MultigresCluster GVK
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	res := resolver.NewResolver(cl, "default", multigresv1alpha1.TemplateDefaults{})
+
+	// Pre-create a shard template so ResolveShard doesn't fail
+	shardTpl := &multigresv1alpha1.ShardTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "default-shard", Namespace: "default"},
+		Spec: multigresv1alpha1.ShardTemplateSpec{
+			MultiOrch: &multigresv1alpha1.MultiOrchSpec{
+				StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+				Cells:         []multigresv1alpha1.CellName{"a"},
+			},
+			Pools: map[string]multigresv1alpha1.PoolSpec{
+				"p": {Type: "readWrite", Cells: []multigresv1alpha1.CellName{"a"}},
+			},
+		},
+	}
+	// We need to add ShardTemplate to the scheme so the client can create it?
+	// Actually, the fake client might complain if we try to create an unknown type.
+	// So we should add ShardTemplate to the scheme too.
+	scheme.AddKnownTypes(multigresv1alpha1.GroupVersion, &multigresv1alpha1.ShardTemplate{})
+
+	if err := cl.Create(t.Context(), shardTpl); err != nil {
+		t.Fatal(err)
+	}
+	cluster.Spec.TemplateDefaults.ShardTemplate = "default-shard"
+
+	// Execution
+	err := r.reconcileDatabases(t.Context(), cluster, res)
+
+	// User Verification
+	if err == nil {
+		t.Error("Expected error due to missing MultigresCluster GVK in scheme, got nil")
+	} else if !strings.Contains(err.Error(), "failed to build tablegroup") {
+		t.Errorf("Expected 'failed to build tablegroup' error, got: %v", err)
+	} else {
+		t.Logf("Got expected error: %v", err)
+	}
 }

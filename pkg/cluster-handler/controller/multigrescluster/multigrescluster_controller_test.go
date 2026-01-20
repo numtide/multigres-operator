@@ -311,7 +311,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			wantErrMsg: "failed to get MultigresCluster",
 		},
 
-		"Error: TableGroup Name Too Long": {
+		"Success: TableGroup Name Too Long (Hashed)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{
 					{
@@ -326,7 +326,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				}
 			},
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			wantErrMsg:      "exceeds 50 characters",
+			wantErrMsg:      "",
 		},
 		"Error: Apply TableGroup Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
@@ -417,6 +417,56 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
 			},
 			wantErrMsg: "failed to update cluster status",
+		},
+		"Error: getGlobalTopoRef Failed (Cells)": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func() func(client.ObjectKey) error {
+					count := 0
+					return func(key client.ObjectKey) error {
+						if key.Name == "default-core" {
+							count++
+							// Call 1: reconcileGlobalComponents -> reconcileGlobalTopoServer
+							// Call 2: reconcileGlobalComponents -> reconcileMultiAdmin
+							// Call 3: reconcileCells -> getGlobalTopoRef (Fails)
+							if count == 3 {
+								return errSimulated
+							}
+						}
+						return nil
+					}
+				}(),
+			},
+			wantErrMsg: "failed to get global topo ref",
+		},
+		"Success: External Global Topo Resolution": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					External: &multigresv1alpha1.ExternalTopoServerSpec{
+						Endpoints: []multigresv1alpha1.EndpointUrl{"http://external:2379"},
+						RootPath:  "/custom/root",
+					},
+				}
+			},
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			validate: func(t testing.TB, c client.Client) {
+				cell := &multigresv1alpha1.Cell{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
+					t.Fatal("Expected Cell 'zone-a' to exist")
+				}
+				if cell.Spec.GlobalTopoServer.Address != "http://external:2379" {
+					t.Errorf(
+						"Expected external address http://external:2379, got %s",
+						cell.Spec.GlobalTopoServer.Address,
+					)
+				}
+				if cell.Spec.GlobalTopoServer.RootPath != "/custom/root" {
+					t.Errorf(
+						"Expected external root path /custom/root, got %s",
+						cell.Spec.GlobalTopoServer.RootPath,
+					)
+				}
+			},
 		},
 		"Success: Early Return on Deletion": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},

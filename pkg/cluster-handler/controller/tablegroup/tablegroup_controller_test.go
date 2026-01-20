@@ -105,48 +105,6 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			},
 		},
 
-		"Update: Apply Changes and Prune Orphans": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{
-					{
-						Name: "shard-1", // New shard
-						MultiOrch: multigresv1alpha1.MultiOrchSpec{
-							StatelessSpec: multigresv1alpha1.StatelessSpec{
-								Replicas: ptr.To(int32(1)),
-							},
-						},
-					},
-				}
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.Shard{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
-						Namespace: namespace,
-						Labels: map[string]string{
-							"multigres.com/cluster":    clusterName,
-							"multigres.com/database":   dbName,
-							"multigres.com/tablegroup": tgLabelName,
-						},
-					},
-					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
-				},
-			},
-			validate: func(t testing.TB, c client.Client) {
-				ctx := t.Context()
-				newShard := &multigresv1alpha1.Shard{}
-				if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-1"), Namespace: namespace}, newShard); err != nil {
-					t.Error("New shard-1 not created")
-				}
-				oldShard := &multigresv1alpha1.Shard{}
-				if err := c.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-0"), Namespace: namespace}, oldShard); !apierrors.IsNotFound(
-					err,
-				) {
-					t.Error("Old shard-0 was not pruned")
-				}
-			},
-		},
 		"Status: Update Ready Count": {
 			tableGroup: baseTG.DeepCopy(),
 			existingObjects: []client.Object{

@@ -141,6 +141,7 @@ spec:
     # --- OPTION 1: Inline Etcd Spec ---
     etcd:
       image: "quay.io/coreos/etcd:v3.5"
+      rootPath: "/multigres/global" # Optional: defaults to /multigres/global
       replicas: 3
       storage:
         size: "10Gi"
@@ -416,6 +417,7 @@ spec:
   globalTopoServer:
     etcd:
       image: "quay.io/coreos/etcd:v3.5"
+      rootPath: "/multigres/global"
       replicas: 3
       storage:
         size: "10Gi"
@@ -490,6 +492,7 @@ spec:
   # localTopoServer:
   #   etcd:
   #     image: "quay.io/coreos/etcd:v3.5"
+  #     rootPath: "/multigres/us-east-1a"
   #     replicas: 3
   #     storage:
   #       class: "standard-gp3"
@@ -640,6 +643,7 @@ spec:
       size: "10Gi"
       class: "standard-gp3"
     image: "quay.io/coreos/etcd:v3.5"
+    rootPath: "/multigres/global"
     resources:
       requests:
         cpu: "500m"

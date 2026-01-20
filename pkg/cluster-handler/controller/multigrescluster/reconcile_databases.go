@@ -31,7 +31,8 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 	for _, db := range cluster.Spec.Databases {
 		for _, tg := range db.TableGroups {
 			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, db.Name, tg.Name)
-			activeTGNames[tgNameFull] = true
+			// ACTIVE MAP REGISTRATION MOVED DOWN: We must use the desired.Name (which might be hashed)
+			// instead of the logical tgNameFull.
 
 			resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
 
@@ -86,6 +87,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 			if err != nil {
 				return fmt.Errorf("failed to build tablegroup '%s': %w", tgNameFull, err)
 			}
+			activeTGNames[desired.Name] = true
 
 			// Server Side Apply
 			desired.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("TableGroup"))

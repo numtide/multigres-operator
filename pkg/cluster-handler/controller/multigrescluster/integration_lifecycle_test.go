@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -105,9 +106,60 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
-								Name:      "multiadmin",
-								Image:     resolver.DefaultMultiAdminImage,
+								Name:  "multiadmin",
+								Image: resolver.DefaultMultiAdminImage,
+								Command: []string{
+									"/multigres/bin/multiadmin",
+								},
+								Args: []string{
+									"--http-port=18000",
+									"--grpc-port=18070",
+									"--topo-global-server-addresses=annotation-bomb-global-topo." + testNamespace + ".svc:2379",
+									"--topo-global-root=/multigres/global",
+									"--service-map=grpc-multiadmin",
+									"--pprof-http=true",
+								},
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: 18000,
+										Protocol:      corev1.ProtocolTCP,
+									},
+									{
+										Name:          "grpc",
+										ContainerPort: 18070,
+										Protocol:      corev1.ProtocolTCP,
+									},
+								},
 								Resources: resolver.DefaultResourcesAdmin(),
+								LivenessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path:   "/live",
+											Port:   intstr.FromInt(18000),
+											Scheme: corev1.URISchemeHTTP,
+										},
+									},
+									InitialDelaySeconds: 10,
+									TimeoutSeconds:      1,
+									PeriodSeconds:       10,
+									SuccessThreshold:    1,
+									FailureThreshold:    3,
+								},
+								ReadinessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path:   "/ready",
+											Port:   intstr.FromInt(18000),
+											Scheme: corev1.URISchemeHTTP,
+										},
+									},
+									InitialDelaySeconds: 5,
+									TimeoutSeconds:      1,
+									PeriodSeconds:       5,
+									SuccessThreshold:    1,
+									FailureThreshold:    3,
+								},
 							},
 						},
 					},
@@ -153,7 +205,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 				},
 				AllCells: []multigresv1alpha1.CellName{"zone-a"},
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-					Address:        "zombie-test-global-topo-client.default.svc:2379",
+					Address:        "zombie-test-global-topo.default.svc:2379",
 					RootPath:       "/multigres/global",
 					Implementation: "etcd2",
 				},
@@ -197,7 +249,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 				},
 				AllCells: []multigresv1alpha1.CellName{"zone-b"},
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-					Address:        "zombie-test-global-topo-client.default.svc:2379",
+					Address:        "zombie-test-global-topo.default.svc:2379",
 					RootPath:       "/multigres/global",
 					Implementation: "etcd2",
 				},
@@ -258,9 +310,60 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
-							Name:      "multiadmin",
-							Image:     "admin:v1",
+							Name:  "multiadmin",
+							Image: "admin:v1",
+							Command: []string{
+								"/multigres/bin/multiadmin",
+							},
+							Args: []string{
+								"--http-port=18000",
+								"--grpc-port=18070",
+								"--topo-global-server-addresses=mutability-test-global-topo." + testNamespace + ".svc:2379",
+								"--topo-global-root=/multigres/global",
+								"--service-map=grpc-multiadmin",
+								"--pprof-http=true",
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 18000,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "grpc",
+									ContainerPort: 18070,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
 							Resources: resolver.DefaultResourcesAdmin(),
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/live",
+										Port:   intstr.FromInt(18000),
+										Scheme: corev1.URISchemeHTTP,
+									},
+								},
+								InitialDelaySeconds: 10,
+								TimeoutSeconds:      1,
+								PeriodSeconds:       10,
+								SuccessThreshold:    1,
+								FailureThreshold:    3,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/ready",
+										Port:   intstr.FromInt(18000),
+										Scheme: corev1.URISchemeHTTP,
+									},
+								},
+								InitialDelaySeconds: 5,
+								TimeoutSeconds:      1,
+								PeriodSeconds:       5,
+								SuccessThreshold:    1,
+								FailureThreshold:    3,
+							},
 						}},
 					},
 				},
@@ -298,9 +401,60 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
-							Name:      "multiadmin",
-							Image:     "admin:v2",
+							Name:  "multiadmin",
+							Image: "admin:v2",
+							Command: []string{
+								"/multigres/bin/multiadmin",
+							},
+							Args: []string{
+								"--http-port=18000",
+								"--grpc-port=18070",
+								"--topo-global-server-addresses=mutability-test-global-topo." + testNamespace + ".svc:2379",
+								"--topo-global-root=/multigres/global",
+								"--service-map=grpc-multiadmin",
+								"--pprof-http=true",
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 18000,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "grpc",
+									ContainerPort: 18070,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
 							Resources: resolver.DefaultResourcesAdmin(),
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/live",
+										Port:   intstr.FromInt(18000),
+										Scheme: corev1.URISchemeHTTP,
+									},
+								},
+								InitialDelaySeconds: 10,
+								TimeoutSeconds:      1,
+								PeriodSeconds:       10,
+								SuccessThreshold:    1,
+								FailureThreshold:    3,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/ready",
+										Port:   intstr.FromInt(18000),
+										Scheme: corev1.URISchemeHTTP,
+									},
+								},
+								InitialDelaySeconds: 5,
+								TimeoutSeconds:      1,
+								PeriodSeconds:       5,
+								SuccessThreshold:    1,
+								FailureThreshold:    3,
+							},
 						}},
 					},
 				},
