@@ -10,21 +10,21 @@ spec:
       replicas: 3
       storage:
         size: "10Gi"
-        class: "standard-gp3"
+        class: "standard"
       resources:
         requests:
-          cpu: "500m"
-          memory: "1Gi"
+          cpu: "100m"
+          memory: "128Mi"
         limits:
-          cpu: "1"
-          memory: "2Gi"
+          cpu: "200m"
+          memory: "256Mi"
 
   multiadmin:
     replicas: 2
     resources:
       requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
         cpu: "200m"
         memory: "256Mi"
-      limits:
-        cpu: "500m"
-        memory: "512Mi"
