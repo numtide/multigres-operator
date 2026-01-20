@@ -1206,6 +1206,11 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
+                      rootPath:
+                        description: RootPath is the etcd prefix for this cluster.
+                        maxLength: 512
+                        minLength: 1
+                        type: string
                       storage:
                         description: Storage configuration for Etcd data.
                         properties:
@@ -1256,6 +1261,11 @@ spec:
                         x-kubernetes-validations:
                         - message: endpoints must be valid URLs
                           rule: self.all(x, x.matches('^https?://'))
+                      rootPath:
+                        description: RootPath is the etcd prefix for this cluster.
+                        maxLength: 512
+                        minLength: 1
+                        type: string
                     required:
                     - endpoints
                     type: object

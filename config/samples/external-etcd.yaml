@@ -1,20 +1,21 @@
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
-  name: external-etcd-cluster
+  name: ext-etcd
   namespace: default
 spec:
   # ----------------------------------------------------------------
   # 1. Global Topology (External)
   # ----------------------------------------------------------------
-  # Connects to an existing, external Etcd cluster (e.g. cloud managed).
+  # Connects to the external Etcd cluster defined below.
+  # This demonstrates how to connect to an existing Etcd cluster.
   globalTopoServer:
     external:
       endpoints:
-        - "https://etcd-1.infra.local:2379"
-        - "https://etcd-2.infra.local:2379"
-      caSecret: "etcd-ca-secret"
-      clientCertSecret: "etcd-client-cert-secret"
+        - "http://external-etcd-service.default.svc:2379"
+      # TLS is optional. For this sample we use HTTP (no secrets required).
+      # caSecret: "etcd-ca-secret"
+      # clientCertSecret: "etcd-client-cert-secret"
       rootPath: "/multigres/global"
 
   # ----------------------------------------------------------------
@@ -28,19 +29,60 @@ spec:
 
     # Cell B: High-Isolation Configuration
     # This cell has its own dedicated, Operator-managed Etcd cluster.
-    # It does NOT use the global etcd for cell-level data.
-    # Benefit: If the external global etcd has an outage, this cell
-    # remains fully functional for intra-cell traffic.
     - name: "zone-b-isolated"
       zone: "us-east-1b"
       spec:
         localTopoServer:
           etcd:
-            image: "quay.io/coreos/etcd:v3.5"
+            image: "gcr.io/etcd-development/etcd:v3.6.7"
             replicas: 3
             storage:
-              size: "5Gi"
+              size: "1Gi"
               class: "standard-gp3"
-        # Since we are defining 'spec', we must also define the gateway
         multigateway:
            replicas: 2
+---
+# ----------------------------------------------------------------
+# External Etcd Cluster Resource (For Demonstration)
+# ----------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-etcd
+  namespace: default
+  labels:
+    app: external-etcd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: external-etcd
+  template:
+    metadata:
+      labels:
+        app: external-etcd
+    spec:
+      containers:
+        - name: etcd
+          image: "gcr.io/etcd-development/etcd:v3.6.7"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/etcd
+            - "--advertise-client-urls=http://0.0.0.0:2379"
+            - "--listen-client-urls=http://0.0.0.0:2379"
+          ports:
+            - containerPort: 2379
+              name: client
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-etcd-service
+  namespace: default
+spec:
+  selector:
+    app: external-etcd
+  ports:
+    - protocol: TCP
+      port: 2379
+      targetPort: 2379

@@ -110,7 +110,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 									Default: true,
 									Shards: []multigresv1alpha1.ShardConfig{
 										{
-											Name: "0",
+											Name: "0-inf",
 											Spec: &multigresv1alpha1.ShardInlineSpec{
 												MultiOrch: multigresv1alpha1.MultiOrchSpec{
 													StatelessSpec: multigresv1alpha1.StatelessSpec{

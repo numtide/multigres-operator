@@ -55,9 +55,17 @@ func TestBuildTableGroup(t *testing.T) {
 		tgCfg := &multigresv1alpha1.TableGroupConfig{Name: longName}
 		resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
 
-		_, err := BuildTableGroup(cluster, dbName, tgCfg, resolvedShards, globalTopoRef, scheme)
-		if err == nil {
-			t.Error("Expected error for name too long, got nil")
+		got, err := BuildTableGroup(cluster, dbName, tgCfg, resolvedShards, globalTopoRef, scheme)
+		if err != nil {
+			t.Errorf("BuildTableGroup() error = %v, want nil", err)
+		}
+		// Cluster Name (10) + Hash (8) + Hyphen (1) = 19 chars
+		// expected prefix: "my-cluster-"
+		if !strings.HasPrefix(got.Name, "my-cluster-") {
+			t.Errorf("Expected hashed name starting with 'my-cluster-', got %s", got.Name)
+		}
+		if len(got.Name) > 63 {
+			t.Errorf("Expected name length <= 63, got %d", len(got.Name))
 		}
 	})
 

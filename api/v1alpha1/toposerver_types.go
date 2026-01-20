@@ -100,6 +100,12 @@ type EtcdSpec struct {
 	// Resources defines the compute resource requirements.
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// RootPath is the etcd prefix for this cluster.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	RootPath string `json:"rootPath,omitempty"`
 }
 
 // GlobalTopoServerSpec defines the configuration for the global topology server.
@@ -138,6 +144,12 @@ type ExternalTopoServerSpec struct {
 	// +optional
 	// +kubebuilder:validation:MaxLength=253
 	ClientCertSecret string `json:"clientCertSecret,omitempty"`
+
+	// RootPath is the etcd prefix for this cluster.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	RootPath string `json:"rootPath,omitempty"`
 }
 
 // LocalTopoServerSpec defines configuration for Cell-local topology.

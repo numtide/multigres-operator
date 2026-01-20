@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -245,9 +246,60 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 								ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
 								Containers: []corev1.Container{
 									{
-										Name:      "multiadmin",
-										Image:     "admin:latest",
+										Name:  "multiadmin",
+										Image: "admin:latest",
+										Command: []string{
+											"/multigres/bin/multiadmin",
+										},
+										Args: []string{
+											"--http-port=18000",
+											"--grpc-port=18070",
+											"--topo-global-server-addresses=" + clusterName + "-global-topo." + testNamespace + ".svc:2379",
+											"--topo-global-root=/multigres/global",
+											"--service-map=grpc-multiadmin",
+											"--pprof-http=true",
+										},
+										Ports: []corev1.ContainerPort{
+											{
+												Name:          "http",
+												ContainerPort: 18000,
+												Protocol:      corev1.ProtocolTCP,
+											},
+											{
+												Name:          "grpc",
+												ContainerPort: 18070,
+												Protocol:      corev1.ProtocolTCP,
+											},
+										},
 										Resources: resolver.DefaultResourcesAdmin(),
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/live",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 10,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       10,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/ready",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 5,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       5,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
 									},
 								},
 							},
@@ -276,7 +328,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 						AllCells: []multigresv1alpha1.CellName{"zone-a"},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-							Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+							Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
 							Implementation: "etcd2",
 						},
@@ -289,7 +341,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 				// 4. TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-postgres-default",
+						Name:      clusterName + "-8b65dfba",
 						Namespace: testNamespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    clusterName,
@@ -310,7 +362,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
 						},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-							Address:        clusterName + "-global-topo-client." + testNamespace + ".svc:2379",
+							Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
 							Implementation: "etcd2",
 						},
@@ -402,9 +454,60 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
-										Name:      "multiadmin",
-										Image:     resolver.DefaultMultiAdminImage,
+										Name:  "multiadmin",
+										Image: resolver.DefaultMultiAdminImage,
+										Command: []string{
+											"/multigres/bin/multiadmin",
+										},
+										Args: []string{
+											"--http-port=18000",
+											"--grpc-port=18070",
+											"--topo-global-server-addresses=minimal-cluster-global-topo." + testNamespace + ".svc:2379",
+											"--topo-global-root=/multigres/global",
+											"--service-map=grpc-multiadmin",
+											"--pprof-http=true",
+										},
+										Ports: []corev1.ContainerPort{
+											{
+												Name:          "http",
+												ContainerPort: 18000,
+												Protocol:      corev1.ProtocolTCP,
+											},
+											{
+												Name:          "grpc",
+												ContainerPort: 18070,
+												Protocol:      corev1.ProtocolTCP,
+											},
+										},
 										Resources: resolver.DefaultResourcesAdmin(),
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/live",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 10,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       10,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/ready",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 5,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       5,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
 									},
 								},
 							},
@@ -432,7 +535,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 						AllCells: []multigresv1alpha1.CellName{"zone-a"},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-							Address:        "minimal-cluster-global-topo-client." + testNamespace + ".svc:2379",
+							Address:        "minimal-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
 							Implementation: "etcd2",
 						},
@@ -445,7 +548,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 				// 4. Injected TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "minimal-cluster-postgres-default",
+						Name:      "minimal-cluster-8b65dfba",
 						Namespace: testNamespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    "minimal-cluster",
@@ -465,13 +568,13 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							ImagePullPolicy: resolver.DefaultImagePullPolicy,
 						},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-							Address:        "minimal-cluster-global-topo-client." + testNamespace + ".svc:2379",
+							Address:        "minimal-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
 							Implementation: "etcd2",
 						},
 						Shards: []multigresv1alpha1.ShardResolvedSpec{
 							{
-								Name: "0",
+								Name: "0-inf",
 								MultiOrch: multigresv1alpha1.MultiOrchSpec{
 									Cells: []multigresv1alpha1.CellName{"zone-a"},
 									StatelessSpec: multigresv1alpha1.StatelessSpec{
@@ -555,9 +658,60 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
 									{
-										Name:      "multiadmin",
-										Image:     resolver.DefaultMultiAdminImage,
+										Name:  "multiadmin",
+										Image: resolver.DefaultMultiAdminImage,
+										Command: []string{
+											"/multigres/bin/multiadmin",
+										},
+										Args: []string{
+											"--http-port=18000",
+											"--grpc-port=18070",
+											"--topo-global-server-addresses=lazy-cluster-global-topo." + testNamespace + ".svc:2379",
+											"--topo-global-root=/multigres/global",
+											"--service-map=grpc-multiadmin",
+											"--pprof-http=true",
+										},
+										Ports: []corev1.ContainerPort{
+											{
+												Name:          "http",
+												ContainerPort: 18000,
+												Protocol:      corev1.ProtocolTCP,
+											},
+											{
+												Name:          "grpc",
+												ContainerPort: 18070,
+												Protocol:      corev1.ProtocolTCP,
+											},
+										},
 										Resources: resolver.DefaultResourcesAdmin(),
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/live",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 10,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       10,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/ready",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 5,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       5,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
 									},
 								},
 							},
@@ -585,7 +739,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 						AllCells: []multigresv1alpha1.CellName{"zone-a"},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-							Address:        "lazy-cluster-global-topo-client." + testNamespace + ".svc:2379",
+							Address:        "lazy-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
 							Implementation: "etcd2",
 						},
@@ -598,7 +752,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 				// 4. Injected TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "lazy-cluster-postgres-default",
+						Name:      "lazy-cluster-8b65dfba",
 						Namespace: testNamespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    "lazy-cluster",
@@ -618,13 +772,13 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							ImagePullPolicy: resolver.DefaultImagePullPolicy,
 						},
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-							Address:        "lazy-cluster-global-topo-client." + testNamespace + ".svc:2379",
+							Address:        "lazy-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
 							Implementation: "etcd2",
 						},
 						Shards: []multigresv1alpha1.ShardResolvedSpec{
 							{
-								Name: "0",
+								Name: "0-inf",
 								MultiOrch: multigresv1alpha1.MultiOrchSpec{
 									Cells: []multigresv1alpha1.CellName{"zone-a"},
 									StatelessSpec: multigresv1alpha1.StatelessSpec{

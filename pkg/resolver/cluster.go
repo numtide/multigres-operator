@@ -86,7 +86,7 @@ func (r *Resolver) PopulateClusterDefaults(
 		for j := range cluster.Spec.Databases[i].TableGroups {
 			if len(cluster.Spec.Databases[i].TableGroups[j].Shards) == 0 {
 				shardCfg := multigresv1alpha1.ShardConfig{
-					Name: "0",
+					Name: "0-inf",
 				}
 
 				if len(defaultCells) > 0 {
@@ -240,5 +240,8 @@ func mergeEtcdSpec(base *multigresv1alpha1.EtcdSpec, override *multigresv1alpha1
 	}
 	if !isResourcesZero(override.Resources) {
 		base.Resources = *override.Resources.DeepCopy()
+	}
+	if override.RootPath != "" {
+		base.RootPath = override.RootPath
 	}
 }

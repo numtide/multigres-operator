@@ -65,7 +65,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 									Name:    DefaultSystemTableGroupName,
 									Default: true,
 									Shards: []multigresv1alpha1.ShardConfig{
-										{Name: "0"},
+										{Name: "0-inf"},
 									},
 								},
 							},
@@ -107,7 +107,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 									Name:    DefaultSystemTableGroupName,
 									Default: true,
 									Shards: []multigresv1alpha1.ShardConfig{
-										{Name: "0"},
+										{Name: "0-inf"},
 									},
 								},
 							},
@@ -162,7 +162,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 									Name: "my-tg",
 									Shards: []multigresv1alpha1.ShardConfig{
 										{
-											Name: "0",
+											Name: "0-inf",
 											Spec: &multigresv1alpha1.ShardInlineSpec{
 												MultiOrch: multigresv1alpha1.MultiOrchSpec{
 													Cells: []multigresv1alpha1.CellName{
@@ -232,7 +232,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 									Name: "tg",
 									Shards: []multigresv1alpha1.ShardConfig{
 										{
-											Name: "0",
+											Name: "0-inf",
 											Spec: &multigresv1alpha1.ShardInlineSpec{
 												MultiOrch: multigresv1alpha1.MultiOrchSpec{
 													Cells: []multigresv1alpha1.CellName{"zone-a"},
@@ -469,6 +469,7 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:    "override-image",
 							Replicas: ptr.To(int32(99)),
+							RootPath: "/override/path",
 							Storage:  multigresv1alpha1.StorageSpec{Size: "99Gi"},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
@@ -484,6 +485,7 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:    "override-image",
 					Replicas: ptr.To(int32(99)),
+					RootPath: "/override/path",
 					Storage:  multigresv1alpha1.StorageSpec{Size: "99Gi"},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{

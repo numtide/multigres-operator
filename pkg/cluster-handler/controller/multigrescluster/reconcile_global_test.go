@@ -68,25 +68,29 @@ func TestReconcile_Global(t *testing.T) {
 				}
 			},
 		},
-		"Create: MultiAdmin with PodLabels": {
+
+		"Create: Managed Etcd with RootPath": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.MultiAdmin = &multigresv1alpha1.MultiAdminConfig{
-					Spec: &multigresv1alpha1.StatelessSpec{
-						PodLabels: map[string]string{"custom": "label"},
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						Image:    "etcd:test",
+						RootPath: "/custom/root",
 					},
 				}
 			},
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
-				deploy := &appsv1.Deployment{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
+				ctx := t.Context()
+				ts := &multigresv1alpha1.TopoServer{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal(err)
 				}
-				if deploy.Spec.Template.Labels["custom"] != "label" {
-					t.Error("PodLabels were not applied")
+				if got, want := ts.Spec.Etcd.RootPath, "/custom/root"; got != want {
+					t.Errorf("RootPath mismatch got %q, want %q", got, want)
 				}
 			},
 		},
+
 		"Create: External Topo Integration": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{

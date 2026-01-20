@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -42,6 +43,7 @@ func BuildGlobalTopoServer(
 				Replicas:  spec.Etcd.Replicas,
 				Storage:   spec.Etcd.Storage,
 				Resources: spec.Etcd.Resources,
+				RootPath:  spec.Etcd.RootPath,
 			},
 		},
 	}
@@ -100,9 +102,56 @@ func BuildMultiAdminDeployment(
 					ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
 					Containers: []corev1.Container{
 						{
-							Name:      "multiadmin",
-							Image:     cluster.Spec.Images.MultiAdmin,
+							Name:  "multiadmin",
+							Image: cluster.Spec.Images.MultiAdmin,
+							Command: []string{
+								"/multigres/bin/multiadmin",
+							},
+							Args: []string{
+								"--http-port=18000",
+								"--grpc-port=18070",
+								fmt.Sprintf(
+									"--topo-global-server-addresses=%s-global-topo.%s.svc:2379",
+									cluster.Name,
+									cluster.Namespace,
+								),
+								"--topo-global-root=/multigres/global",
+								"--service-map=grpc-multiadmin",
+								"--pprof-http=true",
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 18000,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "grpc",
+									ContainerPort: 18070,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
 							Resources: spec.Resources,
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/live",
+										Port: intstr.FromInt(18000),
+									},
+								},
+								InitialDelaySeconds: 10,
+								PeriodSeconds:       10,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/ready",
+										Port: intstr.FromInt(18000),
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       5,
+							},
 						},
 					},
 					Affinity: spec.Affinity,
