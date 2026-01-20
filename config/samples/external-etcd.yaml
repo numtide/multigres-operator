@@ -38,7 +38,7 @@ spec:
             replicas: 3
             storage:
               size: "1Gi"
-              class: "standard-gp3"
+              class: "standard"
         multigateway:
            replicas: 2
 ---

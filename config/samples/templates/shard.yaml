@@ -18,21 +18,21 @@ spec:
       type: "readWrite"
       replicasPerCell: 2
       storage:
-        class: "gp3"
+        class: "standard"
         size: "100Gi"
       postgres:
          resources:
             requests:
-              cpu: "1"
-              memory: "2Gi"
+              cpu: "100m"
+              memory: "256Mi"
             limits:
-              cpu: "2"
-              memory: "4Gi"
+              cpu: "500m"
+              memory: "512Mi"
       multipooler:
          resources:
             requests:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "100m"
+              memory: "128Mi"
             limits:
-              cpu: "1"
-              memory: "1Gi"
+              cpu: "200m"
+              memory: "256Mi"
