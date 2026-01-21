@@ -11,6 +11,8 @@ spec:
     kind: Cell
     listKind: CellList
     plural: cells
+    shortNames:
+    - cel
     singular: cell
   scope: Namespaced
   versions:

@@ -11,6 +11,8 @@ spec:
     kind: TopoServer
     listKind: TopoServerList
     plural: toposervers
+    shortNames:
+    - tps
     singular: toposerver
   scope: Namespaced
   versions:

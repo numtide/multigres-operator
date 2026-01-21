@@ -43,6 +43,7 @@ type CellTemplateSpec struct {
 // +kubebuilder:resource:scope=Namespaced
 
 // CellTemplate is the Schema for the celltemplates API
+// +kubebuilder:resource:shortName=cet
 type CellTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

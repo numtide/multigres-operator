@@ -11,6 +11,8 @@ spec:
     kind: ShardTemplate
     listKind: ShardTemplateList
     plural: shardtemplates
+    shortNames:
+    - sht
     singular: shardtemplate
   scope: Namespaced
   versions:

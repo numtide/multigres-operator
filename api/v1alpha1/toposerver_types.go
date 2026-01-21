@@ -193,6 +193,7 @@ type GlobalTopoServerRef struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
 // TopoServer is the Schema for the toposervers API
+// +kubebuilder:resource:shortName=tps
 type TopoServer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

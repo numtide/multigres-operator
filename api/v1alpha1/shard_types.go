@@ -187,6 +187,7 @@ type ShardStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
 // Shard is the Schema for the shards API
+// +kubebuilder:resource:shortName=srd
 type Shard struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
