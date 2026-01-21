@@ -11,6 +11,8 @@ spec:
     kind: CellTemplate
     listKind: CellTemplateList
     plural: celltemplates
+    shortNames:
+    - cet
     singular: celltemplate
   scope: Namespaced
   versions:

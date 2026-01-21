@@ -140,6 +140,7 @@ type CellStatus struct {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
 // Cell is the Schema for the cells API
+// +kubebuilder:resource:shortName=cel
 type Cell struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

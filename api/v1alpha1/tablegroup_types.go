@@ -104,6 +104,7 @@ type TableGroupStatus struct {
 // +kubebuilder:printcolumn:name="Shards",type="integer",JSONPath=".status.readyShards"
 
 // TableGroup is the Schema for the tablegroups API
+// +kubebuilder:resource:shortName=tbg
 type TableGroup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -11,6 +11,8 @@ spec:
     kind: Shard
     listKind: ShardList
     plural: shards
+    shortNames:
+    - srd
     singular: shard
   scope: Namespaced
   versions:

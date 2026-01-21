@@ -357,6 +357,7 @@ type DatabaseStatusSummary struct {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // MultigresCluster is the Schema for the multigresclusters API
+// +kubebuilder:resource:shortName=mgc
 type MultigresCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

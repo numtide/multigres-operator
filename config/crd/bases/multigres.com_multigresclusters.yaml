@@ -11,6 +11,8 @@ spec:
     kind: MultigresCluster
     listKind: MultigresClusterList
     plural: multigresclusters
+    shortNames:
+    - mgc
     singular: multigrescluster
   scope: Namespaced
   versions:

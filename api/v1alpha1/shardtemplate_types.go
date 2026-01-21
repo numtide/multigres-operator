@@ -44,6 +44,7 @@ type ShardTemplateSpec struct {
 // +kubebuilder:resource:scope=Namespaced
 
 // ShardTemplate is the Schema for the shardtemplates API
+// +kubebuilder:resource:shortName=sht
 type ShardTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

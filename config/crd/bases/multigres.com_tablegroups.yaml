@@ -11,6 +11,8 @@ spec:
     kind: TableGroup
     listKind: TableGroupList
     plural: tablegroups
+    shortNames:
+    - tbg
     singular: tablegroup
   scope: Namespaced
   versions:

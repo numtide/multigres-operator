@@ -11,6 +11,8 @@ spec:
     kind: CoreTemplate
     listKind: CoreTemplateList
     plural: coretemplates
+    shortNames:
+    - cot
     singular: coretemplate
   scope: Namespaced
   versions:

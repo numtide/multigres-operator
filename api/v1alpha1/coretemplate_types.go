@@ -44,6 +44,7 @@ type CoreTemplateSpec struct {
 // +kubebuilder:resource:scope=Namespaced
 
 // CoreTemplate is the Schema for the coretemplates API
+// +kubebuilder:resource:shortName=cot
 type CoreTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
