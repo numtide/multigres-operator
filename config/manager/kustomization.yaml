@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: ghcr.io/numtide/multigres-operator
-  newTag: e591466-dirty
+  newTag: latest

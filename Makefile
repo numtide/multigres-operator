@@ -387,8 +387,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
+	$(KUSTOMIZE) build config/default | sed 's|ghcr.io/numtide/multigres-operator:latest|${IMG}|g' | $(KUBECTL) apply --server-side -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
@@ -423,8 +422,7 @@ kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cl
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator..."
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | sed 's|ghcr.io/numtide/multigres-operator:latest|$(IMG)|g' | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
@@ -434,9 +432,9 @@ kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-lo
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator (Cert-Manager Mode)..."
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# POINT TO THE OVERLAY:
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/deploy-certmanager | \
+		sed 's|ghcr.io/numtide/multigres-operator:latest|$(IMG)|g' | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
@@ -446,8 +444,7 @@ kind-deploy-no-webhook: kind-up install-certmanager manifests kustomize kind-loa
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator..."
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/no-webhook | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/no-webhook | sed 's|ghcr.io/numtide/multigres-operator:latest|$(IMG)|g' | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
