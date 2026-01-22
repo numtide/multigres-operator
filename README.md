@@ -199,6 +199,6 @@ Please be aware of the following constraints in the current version:
 *   **Database Limit**: Only **1** database is supported per cluster. It must be named `postgres` and marked `default: true`.
 *   **Shard Naming**: Shards currently must be named `0-inf` - this is a limitation of the current implementation of Multigres.
 *   **Naming Lengths**:
-    *   **TableGroup Names**: Max 63 characters. If a generated name exceeds this, you might encounter validation errors.
-    *   **Cluster Name + Database Name**: Recommended to be under 50 characters combined to ensure generated child resource names fit within Kubernetes limits (63 chars).
+    *   **TableGroup Names**: If the combined name (`cluster-db-tg`) exceeds **28 characters**, the operator automatically hashes the database and tablegroup names to ensure that the resulting child resource names (Shards, Pods, StatefulSets) stay within Kubernetes limits (63 chars).
+    *   **Cluster Name**: Recommended to be under **20 characters** to ensure that even with hashing, suffixes fit comfortably.
 *   **Immutable Fields**: Some fields like `zone` and `region` in Cell definitions are immutable after creation.
