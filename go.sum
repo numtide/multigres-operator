@@ -118,6 +118,8 @@ github.com/numtide/multigres-operator/api v0.0.0-20260110025154-da9aa10fb701 h1:
 github.com/numtide/multigres-operator/api v0.0.0-20260110025154-da9aa10fb701/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/api v0.0.0-20260120201135-e72eb4b1bd4a h1:L8TAxL4M8Sz6Fj11AlYX1+7X+OamXv9lkcvq3IA2TyY=
 github.com/numtide/multigres-operator/api v0.0.0-20260120201135-e72eb4b1bd4a/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
+github.com/numtide/multigres-operator/api v0.0.0-20260122120956-3706cba9e0ed h1:DVb1AcZv7x0mjpiZq76DELviCr5GFu2e7icxuzbo8VE=
+github.com/numtide/multigres-operator/api v0.0.0-20260122120956-3706cba9e0ed/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260115201516-44b30bf5dd8e h1:JInA6FlDGZknvvrDvEV1NqqhkU6UUpYo5OY94XMFmtc=
 github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:MSMdL/Be0qtXsV7qGWidDeepGGCFc9MmTqG7hk/h1pQ=
 github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260117103319-0310da4fde93 h1:cZgIfvDyCknmq4nk738SkakXKj8qn9iAvKcbWsLW92g=
