@@ -165,6 +165,7 @@ type MultiAdminConfig struct {
 
 // CellConfig defines a cell in the cluster.
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.cellTemplate))",message="cannot specify both 'spec' and 'cellTemplate'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.overrides))",message="cannot specify both 'spec' and 'overrides'"
 // +kubebuilder:validation:XValidation:rule="has(self.zone) != has(self.region)",message="must specify either 'zone' or 'region', but not both"
 type CellConfig struct {
 	// Name is the logical name of the cell.
@@ -262,6 +263,7 @@ type TableGroupConfig struct {
 
 // ShardConfig defines a specific shard.
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.shardTemplate))",message="cannot specify both 'spec' and 'shardTemplate'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.overrides))",message="cannot specify both 'spec' and 'overrides'"
 type ShardConfig struct {
 	// Name is the identifier of the shard (e.g., "0", "1").
 	// +kubebuilder:validation:MinLength=1

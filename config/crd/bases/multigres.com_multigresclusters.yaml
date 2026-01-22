@@ -2293,6 +2293,8 @@ spec:
                   x-kubernetes-validations:
                   - message: cannot specify both 'spec' and 'cellTemplate'
                     rule: '!(has(self.spec) && has(self.cellTemplate))'
+                  - message: cannot specify both 'spec' and 'overrides'
+                    rule: '!(has(self.spec) && has(self.overrides))'
                   - message: must specify either 'zone' or 'region', but not both
                     rule: has(self.zone) != has(self.region)
                 maxItems: 50
@@ -6941,6 +6943,8 @@ spec:
                               x-kubernetes-validations:
                               - message: cannot specify both 'spec' and 'shardTemplate'
                                 rule: '!(has(self.spec) && has(self.shardTemplate))'
+                              - message: cannot specify both 'spec' and 'overrides'
+                                rule: '!(has(self.spec) && has(self.overrides))'
                             maxItems: 32
                             type: array
                             x-kubernetes-list-map-keys:
