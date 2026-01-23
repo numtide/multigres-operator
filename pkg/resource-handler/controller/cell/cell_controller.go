@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -189,7 +190,9 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	}
 
 	// Update conditions
-	cell.Status.Conditions = r.buildConditions(cell, mgDeploy)
+	r.setConditions(cell, mgDeploy)
+	cell.Status.GatewayReplicas = mgDeploy.Status.Replicas
+	cell.Status.GatewayReadyReplicas = mgDeploy.Status.ReadyReplicas
 
 	if err := r.Status().Update(ctx, cell); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -198,39 +201,53 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	return nil
 }
 
-// buildConditions creates status conditions based on observed state.
-func (r *CellReconciler) buildConditions(
+// setConditions creates status conditions based on observed state using meta.SetStatusCondition.
+func (r *CellReconciler) setConditions(
 	cell *multigresv1alpha1.Cell,
 	mgDeploy *appsv1.Deployment,
-) []metav1.Condition {
-	conditions := []metav1.Condition{}
-
-	// Ready condition - MultiGateway must be ready
-	readyCondition := metav1.Condition{
-		Type:               "Ready",
+) {
+	// Available condition - True if at least one replica is ready (serviceable)
+	availCond := metav1.Condition{
+		Type:               "Available",
 		ObservedGeneration: cell.Generation,
-		LastTransitionTime: metav1.Now(),
+		Status:             metav1.ConditionFalse,
+		Reason:             "MultiGatewayUnavailable",
+		Message:            "No ready replicas available",
 	}
 
-	mgReady := mgDeploy.Status.ReadyReplicas == mgDeploy.Status.Replicas &&
-		mgDeploy.Status.Replicas > 0
-
-	if mgReady {
-		readyCondition.Status = metav1.ConditionTrue
-		readyCondition.Reason = "MultiGatewayReady"
-		readyCondition.Message = fmt.Sprintf(
-			"MultiGateway %d/%d ready",
+	if mgDeploy.Status.ReadyReplicas > 0 {
+		availCond.Status = metav1.ConditionTrue
+		availCond.Reason = "MultiGatewayAvailable"
+		availCond.Message = fmt.Sprintf(
+			"MultiGateway %d/%d replicas ready",
 			mgDeploy.Status.ReadyReplicas,
 			mgDeploy.Status.Replicas,
 		)
-	} else {
-		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = "MultiGatewayNotReady"
-		readyCondition.Message = fmt.Sprintf("MultiGateway %d/%d ready", mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
+	}
+	meta.SetStatusCondition(&cell.Status.Conditions, availCond)
+
+	// Ready condition - True if all replicas are ready (desired state reached)
+	readyCond := metav1.Condition{
+		Type:               "Ready",
+		ObservedGeneration: cell.Generation,
+		Status:             metav1.ConditionFalse,
+		Reason:             "MultiGatewayNotReady",
+		Message: fmt.Sprintf(
+			"MultiGateway %d/%d ready, waiting for full convergence",
+			mgDeploy.Status.ReadyReplicas,
+			mgDeploy.Status.Replicas,
+		),
 	}
 
-	conditions = append(conditions, readyCondition)
-	return conditions
+	allReady := mgDeploy.Status.ReadyReplicas == mgDeploy.Status.Replicas &&
+		mgDeploy.Status.Replicas > 0
+
+	if allReady {
+		readyCond.Status = metav1.ConditionTrue
+		readyCond.Reason = "MultiGatewayReady"
+		readyCond.Message = "All replicas match desired state"
+	}
+	meta.SetStatusCondition(&cell.Status.Conditions, readyCond)
 }
 
 // SetupWithManager sets up the controller with the Manager.

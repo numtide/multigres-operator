@@ -260,8 +260,8 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	}
 }
 
-// TestBuildConditions_ZeroReplicas tests buildConditions when deployments have zero replicas.
-func TestBuildConditions_ZeroReplicas(t *testing.T) {
+// TestSetConditions_ZeroReplicas tests setConditions when deployments have zero replicas.
+func TestSetConditions_ZeroReplicas(t *testing.T) {
 	reconciler := &CellReconciler{}
 
 	cell := &multigresv1alpha1.Cell{
@@ -282,20 +282,32 @@ func TestBuildConditions_ZeroReplicas(t *testing.T) {
 		},
 	}
 
-	conditions := reconciler.buildConditions(cell, mgDeploy)
+	reconciler.setConditions(cell, mgDeploy)
+	conditions := cell.Status.Conditions
 
-	if len(conditions) == 0 {
-		t.Fatal("buildConditions() should return conditions")
+	if len(conditions) != 2 {
+		t.Fatalf("setConditions() should set 2 conditions, got %d", len(conditions))
 	}
 
-	readyCondition := conditions[0]
-	if readyCondition.Type != "Ready" {
-		t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
+	availCond := conditions[0]
+	if availCond.Type != "Available" {
+		t.Errorf("Condition type = %s, want Available", availCond.Type)
 	}
-	if readyCondition.Status != metav1.ConditionFalse {
-		t.Errorf("Condition status = %s, want False (zero replicas)", readyCondition.Status)
+	if availCond.Status != metav1.ConditionFalse {
+		t.Errorf("Condition status = %s, want False (zero replicas)", availCond.Status)
 	}
-	if readyCondition.Reason != "MultiGatewayNotReady" {
-		t.Errorf("Condition reason = %s, want MultiGatewayNotReady", readyCondition.Reason)
+	if availCond.Reason != "MultiGatewayUnavailable" {
+		t.Errorf("Condition reason = %s, want MultiGatewayUnavailable", availCond.Reason)
+	}
+
+	readyCond := conditions[1]
+	if readyCond.Type != "Ready" {
+		t.Errorf("Condition type = %s, want Ready", readyCond.Type)
+	}
+	if readyCond.Status != metav1.ConditionFalse {
+		t.Errorf("Condition status = %s, want False", readyCond.Status)
+	}
+	if readyCond.Reason != "MultiGatewayNotReady" {
+		t.Errorf("Condition reason = %s, want MultiGatewayNotReady", readyCond.Reason)
 	}
 }
