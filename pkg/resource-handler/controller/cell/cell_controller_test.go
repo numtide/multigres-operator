@@ -19,6 +19,33 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
+// conditionAssertion defines expected condition state for testing
+type conditionAssertion struct {
+	Type   string
+	Status metav1.ConditionStatus
+	Reason string
+}
+
+// assertConditions verifies conditions match expectations
+func assertConditions(t testing.TB, got []metav1.Condition, want ...conditionAssertion) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("condition count = %d, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		g := got[i]
+		if g.Type != w.Type {
+			t.Errorf("condition[%d].Type = %q, want %q", i, g.Type, w.Type)
+		}
+		if g.Status != w.Status {
+			t.Errorf("condition[%d].Status = %q, want %q", i, g.Status, w.Status)
+		}
+		if g.Reason != w.Reason {
+			t.Errorf("condition[%d].Reason = %q, want %q", i, g.Reason, w.Reason)
+		}
+	}
+}
+
 func TestCellReconciler_Reconcile(t *testing.T) {
 	t.Parallel()
 
@@ -229,41 +256,30 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get Cell: %v", err)
 				}
 
-				if len(updatedCell.Status.Conditions) != 2 {
-					t.Errorf(
-						"Status.Conditions len = %d, want 2",
-						len(updatedCell.Status.Conditions),
-					)
-				} else {
-					availCond := updatedCell.Status.Conditions[0]
-					if availCond.Type != "Available" || availCond.Status != metav1.ConditionTrue {
-						t.Errorf("Expected Available=True, got %s=%s", availCond.Type, availCond.Status)
-					}
-					if availCond.Reason != "MultiGatewayAvailable" {
-						t.Errorf("Expected Reason=MultiGatewayAvailable, got %s", availCond.Reason)
-					}
+				assertConditions(
+					t,
+					updatedCell.Status.Conditions,
+					conditionAssertion{
+						Type:   "Available",
+						Status: metav1.ConditionTrue,
+						Reason: "MultiGatewayAvailable",
+					},
+					conditionAssertion{
+						Type:   "Ready",
+						Status: metav1.ConditionTrue,
+						Reason: "MultiGatewayReady",
+					},
+				)
 
-					readyCond := updatedCell.Status.Conditions[1]
-					if readyCond.Type != "Ready" || readyCond.Status != metav1.ConditionTrue {
-						t.Errorf("Expected Ready=True, got %s=%s", readyCond.Type, readyCond.Status)
-					}
-					if readyCond.Reason != "MultiGatewayReady" {
-						t.Errorf("Expected Reason=MultiGatewayReady, got %s", readyCond.Reason)
-					}
+				if got, want := updatedCell.Status.GatewayReplicas, int32(2); got != want {
+					t.Errorf("GatewayReplicas = %d, want %d", got, want)
 				}
-
-				if updatedCell.Status.GatewayReplicas != 2 {
-					t.Errorf("GatewayReplicas = %d, want 2", updatedCell.Status.GatewayReplicas)
-				}
-				if updatedCell.Status.GatewayReadyReplicas != 2 {
-					t.Errorf(
-						"GatewayReadyReplicas = %d, want 2",
-						updatedCell.Status.GatewayReadyReplicas,
-					)
+				if got, want := updatedCell.Status.GatewayReadyReplicas, int32(2); got != want {
+					t.Errorf("GatewayReadyReplicas = %d, want %d", got, want)
 				}
 
 				if !slices.Contains(updatedCell.Finalizers, "cell.multigres.com/finalizer") {
-					t.Errorf("Finalizer should be present")
+					t.Error("Finalizer should be present")
 				}
 			},
 		},
@@ -310,40 +326,21 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					t.Fatalf("Failed to get Cell: %v", err)
 				}
 
-				if len(updatedCell.Status.Conditions) == 0 {
-					t.Fatal("Status.Conditions should not be empty")
-				}
-
-				if len(updatedCell.Status.Conditions) != 2 {
-					t.Fatalf(
-						"Status.Conditions len = %d, want 2",
-						len(updatedCell.Status.Conditions),
-					)
-				}
-
-				availCond := updatedCell.Status.Conditions[0]
-				if availCond.Type != "Available" {
-					t.Errorf("Condition type = %s, want Available", availCond.Type)
-				}
-				// 2/3 replicas ready -> Available = True
-				if availCond.Status != metav1.ConditionTrue {
-					t.Errorf("Condition status = %s, want True", availCond.Status)
-				}
-				if availCond.Reason != "MultiGatewayAvailable" {
-					t.Errorf("Condition reason = %s, want MultiGatewayAvailable", availCond.Reason)
-				}
-
-				readyCond := updatedCell.Status.Conditions[1]
-				if readyCond.Type != "Ready" {
-					t.Errorf("Condition type = %s, want Ready", readyCond.Type)
-				}
-				// 2/3 replicas ready -> Ready = False
-				if readyCond.Status != metav1.ConditionFalse {
-					t.Errorf("Condition status = %s, want False", readyCond.Status)
-				}
-				if readyCond.Reason != "MultiGatewayNotReady" {
-					t.Errorf("Condition reason = %s, want MultiGatewayNotReady", readyCond.Reason)
-				}
+				// With 2/3 replicas ready: Available=True (service is up), Ready=False (not converged)
+				assertConditions(
+					t,
+					updatedCell.Status.Conditions,
+					conditionAssertion{
+						Type:   "Available",
+						Status: metav1.ConditionTrue,
+						Reason: "MultiGatewayAvailable",
+					},
+					conditionAssertion{
+						Type:   "Ready",
+						Status: metav1.ConditionFalse,
+						Reason: "MultiGatewayNotReady",
+					},
+				)
 			},
 		},
 		////----------------------------------------
