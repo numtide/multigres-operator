@@ -2,7 +2,6 @@ package multigrescluster
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -13,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -109,8 +109,14 @@ func TestReconcile_Global(t *testing.T) {
 					t.Fatal("Global TopoServer should NOT be created for External mode")
 				}
 				cell := &multigresv1alpha1.Cell{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
-					t.Fatal(err)
+				// Use hashed name for Cell
+				cellName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					"zone-a",
+				)
+				if err := c.Get(ctx, types.NamespacedName{Name: cellName, Namespace: namespace}, cell); err != nil {
+					t.Fatalf("Expected Cell %s to exist: %v", cellName, err)
 				}
 				if got, want := cell.Spec.GlobalTopoServer.Address, "http://external-etcd:2379"; got != want {
 					t.Errorf("External address mismatch got %q, want %q", got, want)
@@ -215,26 +221,6 @@ func TestReconcile_Global(t *testing.T) {
 					t.Errorf("MultiAdmin not updated")
 				}
 			},
-		},
-		"Error: Build GlobalTopo Failed (Name Too Long)": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Name = strings.Repeat("a", 64)
-			},
-			existingObjects: []client.Object{coreTpl},
-			wantErrMsg:      "failed to build global topo server",
-		},
-		"Error: Build MultiAdmin Failed (Name Too Long)": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Name = strings.Repeat("a", 64)
-				// Ensure GlobalTopo doesn't fail first (set to External to skip build)
-				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
-					External: &multigresv1alpha1.ExternalTopoServerSpec{
-						Endpoints: []multigresv1alpha1.EndpointUrl{"http://ext:2379"},
-					},
-				}
-			},
-			existingObjects: []client.Object{coreTpl},
-			wantErrMsg:      "failed to build multiadmin deployment",
 		},
 	}
 

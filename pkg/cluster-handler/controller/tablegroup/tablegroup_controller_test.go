@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -94,7 +95,14 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
-				shardNameFull := fmt.Sprintf("%s-%s", tgName, "shard-0")
+				// Expect hashed name: md5("test-cluster", "db1", "tg1", "shard-0") -> "0a..."
+				shardNameFull := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					dbName,
+					tgLabelName,
+					"shard-0",
+				)
 				shard := &multigresv1alpha1.Shard{}
 				if err := c.Get(ctx, types.NamespacedName{Name: shardNameFull, Namespace: namespace}, shard); err != nil {
 					t.Fatalf("Shard %s not created: %v", shardNameFull, err)
@@ -110,7 +118,13 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
+						Name: names.JoinWithConstraints(
+							names.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
 						Namespace: namespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    clusterName,
@@ -239,7 +253,13 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
+						Name: names.JoinWithConstraints(
+							names.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
 						Namespace: namespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    clusterName,
@@ -252,7 +272,14 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			},
 			validate: func(t testing.TB, c client.Client) {
 				shard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: fmt.Sprintf("%s-%s", tgName, "shard-0"), Namespace: namespace}, shard); err != nil {
+				shardName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					dbName,
+					tgLabelName,
+					"shard-0",
+				)
+				if err := c.Get(t.Context(), types.NamespacedName{Name: shardName, Namespace: namespace}, shard); err != nil {
 					t.Fatal(err)
 				}
 				if *shard.Spec.MultiOrch.Replicas != 5 {
@@ -285,6 +312,14 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			nilRecorder:     true,
+		},
+		"Success: Build Shard (Long Name - Truncated)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards[0].Name = "a" + string(make([]byte, 64)) // > 63 chars
+			},
+			existingObjects: []client.Object{},
+			// No validation needed if we just want to ensure it succeeds without error
 		},
 	}
 
@@ -370,7 +405,13 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: testutil.FailOnObjectName(
-					fmt.Sprintf("%s-%s", tgName, "shard-0"),
+					names.JoinWithConstraints(
+						names.DefaultConstraints,
+						clusterName,
+						dbName,
+						tgLabelName,
+						"shard-0",
+					),
 					errSimulated,
 				),
 			},
@@ -414,7 +455,13 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("%s-%s", tgName, "shard-0"),
+						Name: names.JoinWithConstraints(
+							names.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
 						Namespace: namespace,
 						Labels: map[string]string{
 							"multigres.com/cluster":    clusterName,
@@ -427,7 +474,13 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnDelete: testutil.FailOnObjectName(
-					fmt.Sprintf("%s-%s", tgName, "shard-0"),
+					names.JoinWithConstraints(
+						names.DefaultConstraints,
+						clusterName,
+						dbName,
+						tgLabelName,
+						"shard-0",
+					),
 					errSimulated,
 				),
 			},
@@ -438,15 +491,6 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnStatusUpdate: testutil.FailOnObjectName(tgName, errSimulated),
 			},
-		},
-
-		"Error: Build Shard Failed (Long Name)": {
-			tableGroup: baseTG.DeepCopy(),
-			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				tg.Spec.Shards[0].Name = "a" + string(make([]byte, 64)) // > 63 chars
-			},
-			existingObjects: []client.Object{},
-			// No failureConfig needed as failure comes from builder logic, propagated to Reconcile
 		},
 	}
 

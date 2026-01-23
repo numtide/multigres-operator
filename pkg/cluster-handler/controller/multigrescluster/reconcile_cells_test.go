@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +43,10 @@ func TestReconcile_Cells(t *testing.T) {
 		},
 		"Error: Apply Cell Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnPatch: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
+				OnPatch: testutil.FailOnObjectName(
+					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "zone-a"),
+					errSimulated,
+				),
 			},
 			wantErrMsg: "failed to apply cell",
 		},
@@ -57,14 +61,21 @@ func TestReconcile_Cells(t *testing.T) {
 				},
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-zone-b",
+						Name: names.JoinWithConstraints(
+							names.DefaultConstraints,
+							clusterName,
+							"zone-b",
+						),
 						Namespace: namespace,
 						Labels:    map[string]string{"multigres.com/cluster": clusterName},
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-zone-b", errSimulated),
+				OnDelete: testutil.FailOnObjectName(
+					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "zone-b"),
+					errSimulated,
+				),
 			},
 			wantErrMsg: "failed to delete orphaned cell",
 		},
@@ -115,7 +126,11 @@ func TestReconcile_Cells(t *testing.T) {
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-zone-a",
+						Name: names.JoinWithConstraints(
+							names.DefaultConstraints,
+							clusterName,
+							"zone-a",
+						),
 						Namespace: namespace,
 						Labels: map[string]string{
 							"multigres.com/cluster": clusterName,
@@ -135,7 +150,11 @@ func TestReconcile_Cells(t *testing.T) {
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-orphan-zone",
+						Name: names.JoinWithConstraints(
+							names.DefaultConstraints,
+							clusterName,
+							"orphan-zone",
+						),
 						Namespace: namespace,
 						Labels:    map[string]string{"multigres.com/cluster": clusterName},
 					},
@@ -143,7 +162,7 @@ func TestReconcile_Cells(t *testing.T) {
 				},
 			},
 		},
-		"Error: Build Cell Failed (Name Too Long)": {
+		"Success: Build Cell (Name Too Long - Truncated)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				// Use normal cluster name, but put a long name in Cells config
 				c.Spec.Cells = []multigresv1alpha1.CellConfig{
@@ -159,7 +178,7 @@ func TestReconcile_Cells(t *testing.T) {
 				c.Spec.MultiAdmin = nil
 			},
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
-			wantErrMsg:      "failed to build cell",
+			wantErrMsg:      "",
 		},
 	}
 

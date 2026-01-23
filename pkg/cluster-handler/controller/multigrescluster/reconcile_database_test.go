@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	"k8s.io/client-go/tools/record"
@@ -30,7 +31,14 @@ func TestReconcile_Databases(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
-				tgName := clusterName + "-8b65dfba"
+
+				// System catalog is always "postgres" db, "default" tablegroup
+				tgName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					"postgres",
+					"default",
+				)
 				tg := &multigresv1alpha1.TableGroup{}
 				if err := c.Get(ctx, types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
 					t.Fatalf("System Catalog TableGroup not found: %v", err)
@@ -66,9 +74,15 @@ func TestReconcile_Databases(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				tg := &multigresv1alpha1.TableGroup{}
+				tgName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					"db1",
+					"tg1",
+				)
 				if err := c.Get(
 					t.Context(),
-					types.NamespacedName{Name: clusterName + "-db1-tg1", Namespace: namespace},
+					types.NamespacedName{Name: tgName, Namespace: namespace},
 					tg,
 				); err != nil {
 					t.Fatalf("failed to get tablegroup: %v", err)
@@ -106,7 +120,12 @@ func TestReconcile_Databases(t *testing.T) {
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				tg := &multigresv1alpha1.TableGroup{}
-				tgName := clusterName + "-db1-tg1"
+				tgName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					"db1",
+					"tg1",
+				)
 				if err := c.Get(ctx, types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
 					t.Fatal(err)
 				}
@@ -146,7 +165,10 @@ func TestReconcile_Databases(t *testing.T) {
 		},
 		"Error: Apply TableGroup Failed": {
 			failureConfig: &testutil.FailureConfig{
-				OnPatch: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+				OnPatch: testutil.FailOnObjectName(
+					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1"),
+					errSimulated,
+				),
 			},
 			wantErrMsg: "failed to apply tablegroup",
 		},

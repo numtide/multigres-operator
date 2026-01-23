@@ -1,7 +1,7 @@
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
-  name: advanced-cluster
+  name: inline
   namespace: default
 spec:
   # ----------------------------------------------------------------

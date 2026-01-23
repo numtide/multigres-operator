@@ -1,13 +1,12 @@
 package tablegroup
 
 import (
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 // BuildShard constructs the desired Shard resource.
@@ -16,14 +15,15 @@ func BuildShard(
 	shardSpec *multigresv1alpha1.ShardResolvedSpec,
 	scheme *runtime.Scheme,
 ) (*multigresv1alpha1.Shard, error) {
-	if len(shardSpec.Name) > 63 {
-		return nil, fmt.Errorf(
-			"shard name '%s' exceeds 63 characters; limit required for label validation",
-			shardSpec.Name,
-		)
-	}
-
-	shardNameFull := fmt.Sprintf("%s-%s", tg.Name, shardSpec.Name)
+	// Build shard name from logical parts (cluster, database, tablegroup, shard)
+	// NOT using tg.Name which includes the parent's hash
+	shardNameFull := names.JoinWithConstraints(
+		names.DefaultConstraints,
+		tg.Labels["multigres.com/cluster"],
+		tg.Spec.DatabaseName,
+		tg.Spec.TableGroupName,
+		shardSpec.Name,
+	)
 
 	shardCR := &multigresv1alpha1.Shard{
 		ObjectMeta: metav1.ObjectMeta{

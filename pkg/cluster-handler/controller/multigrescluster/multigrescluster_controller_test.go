@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -294,8 +295,13 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				ctx := t.Context()
 				// Verify Cell (Basic wiring check)
 				cell := &multigresv1alpha1.Cell{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
-					t.Fatal("Expected Cell 'zone-a' to exist")
+				cellName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					"zone-a",
+				)
+				if err := c.Get(ctx, types.NamespacedName{Name: cellName, Namespace: namespace}, cell); err != nil {
+					t.Fatalf("Expected Cell %s to exist: %v", cellName, err)
 				}
 				if got, want := cell.Spec.Images.MultiGateway, "gateway:latest"; got != want {
 					t.Errorf("Cell image mismatch got %q, want %q", got, want)
@@ -331,7 +337,10 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 		"Error: Apply TableGroup Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
-				OnPatch: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+				OnPatch: testutil.FailOnObjectName(
+					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1"),
+					errSimulated,
+				),
 			},
 			wantErrMsg: "failed to apply tablegroup",
 		},
@@ -340,14 +349,27 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-db1-orphan-tg",
+						Name: names.JoinWithConstraints(
+							names.DefaultConstraints,
+							clusterName,
+							"db1",
+							"orphan-tg",
+						),
 						Namespace: namespace,
 						Labels:    map[string]string{"multigres.com/cluster": clusterName},
 					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-db1-orphan-tg", errSimulated),
+				OnDelete: testutil.FailOnObjectName(
+					names.JoinWithConstraints(
+						names.DefaultConstraints,
+						clusterName,
+						"db1",
+						"orphan-tg",
+					),
+					errSimulated,
+				),
 			},
 			wantErrMsg: "failed to delete orphaned tablegroup",
 		},
@@ -400,14 +422,20 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 		"Error: Reconcile Cells Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
-				OnPatch: testutil.FailOnObjectName(clusterName+"-zone-a", errSimulated),
+				OnPatch: testutil.FailOnObjectName(
+					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "zone-a"),
+					errSimulated,
+				),
 			},
 			wantErrMsg: "failed to apply cell",
 		},
 		"Error: Reconcile Databases Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
-				OnPatch: testutil.FailOnObjectName(clusterName+"-db1-tg1", errSimulated),
+				OnPatch: testutil.FailOnObjectName(
+					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1"),
+					errSimulated,
+				),
 			},
 			wantErrMsg: "failed to apply tablegroup",
 		},
@@ -451,8 +479,13 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				cell := &multigresv1alpha1.Cell{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-zone-a", Namespace: namespace}, cell); err != nil {
-					t.Fatal("Expected Cell 'zone-a' to exist")
+				cellName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					"zone-a",
+				)
+				if err := c.Get(t.Context(), types.NamespacedName{Name: cellName, Namespace: namespace}, cell); err != nil {
+					t.Fatalf("Expected Cell %s to exist: %v", cellName, err)
 				}
 				if cell.Spec.GlobalTopoServer.Address != "http://external:2379" {
 					t.Errorf(

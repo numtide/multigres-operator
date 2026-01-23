@@ -1,15 +1,12 @@
 package multigrescluster
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 // BuildTableGroup constructs the desired TableGroup resource.
@@ -21,21 +18,12 @@ func BuildTableGroup(
 	globalTopoRef multigresv1alpha1.GlobalTopoServerRef,
 	scheme *runtime.Scheme,
 ) (*multigresv1alpha1.TableGroup, error) {
-	tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, dbName, tgCfg.Name)
-	// If the generated name is too long (> 40 chars), we hash the database and tablegroup names
-	// to ensure the resulting Shard/Pod names (which append suffixes) stay within the 63-char label limit.
-	// The StatefulSet controller adds a hash suffix (~10 chars) to its ControllerRevision labels,
-	// so we target a safe limit of ~50 chars total for the StatefulSet name.
-	// The StatefulSet controller adds a hash suffix (~10 chars) to its ControllerRevision/Pod labels.
-	// With standard suffixes (-0-pool-default-zone-a = 22 chars), we have ~31 chars left for the base name.
-	// We set the limit to 28 to be safe.
-	if len(tgNameFull) > 28 {
-		h := sha1.New()
-		h.Write([]byte(dbName + "-" + tgCfg.Name))
-		hash := hex.EncodeToString(h.Sum(nil))
-		// Use cluster name + first 8 chars of hash
-		tgNameFull = fmt.Sprintf("%s-%s", cluster.Name, hash[:8])
-	}
+	tgNameFull := names.JoinWithConstraints(
+		names.DefaultConstraints,
+		cluster.Name,
+		dbName,
+		tgCfg.Name,
+	)
 
 	tgCR := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{

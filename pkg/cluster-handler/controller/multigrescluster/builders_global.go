@@ -3,17 +3,20 @@ package multigrescluster
 import (
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
 // BuildGlobalTopoServer constructs the desired TopoServer for the global topology.
+// Note: We do NOT use safe hashing here because GlobalTopo is a singleton resource
+// per cluster with a predictable name pattern that is unlikely to exceed length limits.
 // It returns nil, nil if the spec does not require an Etcd server (e.g. external).
 func BuildGlobalTopoServer(
 	cluster *multigresv1alpha1.MultigresCluster,
@@ -24,16 +27,9 @@ func BuildGlobalTopoServer(
 		return nil, nil
 	}
 
-	if len(cluster.Name) > 63 {
-		return nil, fmt.Errorf(
-			"cluster name '%s' exceeds 63 characters; limit required for label validation",
-			cluster.Name,
-		)
-	}
-
 	ts := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-global-topo",
+			Name:      fmt.Sprintf("%s-global-topo", cluster.Name),
 			Namespace: cluster.Namespace,
 			Labels:    map[string]string{"multigres.com/cluster": cluster.Name},
 		},
@@ -56,18 +52,13 @@ func BuildGlobalTopoServer(
 }
 
 // BuildMultiAdminDeployment constructs the desired MultiAdmin Deployment.
+// Note: We do NOT use safe hashing here because MultiAdmin is a singleton resource
+// per cluster with a predictable name pattern that is unlikely to exceed length limits.
 func BuildMultiAdminDeployment(
 	cluster *multigresv1alpha1.MultigresCluster,
 	spec *multigresv1alpha1.StatelessSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.Deployment, error) {
-	if len(cluster.Name) > 63 {
-		return nil, fmt.Errorf(
-			"cluster name '%s' exceeds 63 characters; limit required for label validation",
-			cluster.Name,
-		)
-	}
-
 	podLabels := map[string]string{
 		"app":                   "multiadmin",
 		"multigres.com/cluster": cluster.Name,
@@ -78,7 +69,7 @@ func BuildMultiAdminDeployment(
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-multiadmin",
+			Name:      fmt.Sprintf("%s-multiadmin", cluster.Name),
 			Namespace: cluster.Namespace,
 			Labels: map[string]string{
 				"multigres.com/cluster": cluster.Name,

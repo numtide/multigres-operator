@@ -55,14 +55,14 @@ func (r *TableGroupReconciler) Reconcile(
 	activeShardNames := make(map[string]bool, len(tg.Spec.Shards))
 
 	for _, shardSpec := range tg.Spec.Shards {
-		shardNameFull := fmt.Sprintf("%s-%s", tg.Name, shardSpec.Name)
-		activeShardNames[shardNameFull] = true
-
 		desired, err := BuildShard(tg, &shardSpec, r.Scheme)
 		if err != nil {
-			l.Error(err, "Failed to build shard", "shard", shardNameFull)
+			l.Error(err, "Failed to build shard", "shard", shardSpec.Name)
 			return ctrl.Result{}, fmt.Errorf("failed to build shard: %w", err)
 		}
+
+		// Use the ACTUAL name that BuildShard creates, not a manually computed one
+		activeShardNames[desired.Name] = true
 
 		// Use Server-Side Apply
 		desired.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("Shard"))
@@ -73,7 +73,7 @@ func (r *TableGroupReconciler) Reconcile(
 			client.ForceOwnership,
 			client.FieldOwner("multigres-operator"),
 		); err != nil {
-			l.Error(err, "Failed to apply shard", "shard", shardNameFull)
+			l.Error(err, "Failed to apply shard", "shard", desired.Name)
 			return ctrl.Result{}, fmt.Errorf("failed to apply shard: %w", err)
 		}
 
