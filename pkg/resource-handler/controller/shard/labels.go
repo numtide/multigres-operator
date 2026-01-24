@@ -14,14 +14,14 @@ func buildPoolLabelsWithCell(
 	cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 ) map[string]string {
-	fullPoolName := buildPoolNameWithCell(shard, poolName, cellName)
 
-	labels := metadata.BuildStandardLabels(fullPoolName, PoolComponentName)
+	clusterName := shard.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, PoolComponentName)
 	metadata.AddCellLabel(labels, cellName)
 	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
 	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
 
-	metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
+	labels = metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 
 	return labels
 }

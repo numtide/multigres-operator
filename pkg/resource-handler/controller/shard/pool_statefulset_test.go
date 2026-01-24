@@ -33,6 +33,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -53,13 +54,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -78,13 +80,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
 							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
+							"multigres.com/cluster":        "test-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -95,13 +98,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
 								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
+								"multigres.com/cluster":        "test-cluster",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -186,6 +190,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "test-shard",
 											Namespace: "default",
 											UID:       "test-uid",
+											Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -226,6 +231,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Name:      "shard-001",
 					Namespace: "prod",
 					UID:       "prod-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -249,13 +255,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "prod",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-pool-replica-zone-west",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone-west",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "prod-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -274,13 +281,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-001-pool-replica-zone-west",
+							"app.kubernetes.io/instance":   "prod-cluster",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
 							"multigres.com/cell":           "zone-west",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
+							"multigres.com/cluster":        "prod-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -291,13 +299,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-001-pool-replica-zone-west",
+								"app.kubernetes.io/instance":   "prod-cluster",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
 								"multigres.com/cell":           "zone-west",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
+								"multigres.com/cluster":        "prod-cluster",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -307,7 +316,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							InitContainers: []corev1.Container{
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
-										ObjectMeta: metav1.ObjectMeta{Name: "shard-001"},
+										ObjectMeta: metav1.ObjectMeta{Name: "shard-001", Labels: map[string]string{"multigres.com/cluster": "prod-cluster"}},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
 											TableGroupName: "default",
@@ -385,6 +394,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "shard-001",
 											Namespace: "prod",
 											UID:       "prod-uid",
+											Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -426,6 +436,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Name:      "shard-002",
 					Namespace: "default",
 					UID:       "uid-002",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -445,13 +456,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-readOnly-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -470,13 +482,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-002-pool-readOnly-zone1",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
 							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
+							"multigres.com/cluster":        "test-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -487,13 +500,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-002-pool-readOnly-zone1",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
 								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
+								"multigres.com/cluster":        "test-cluster",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -503,7 +517,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							InitContainers: []corev1.Container{
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
-										ObjectMeta: metav1.ObjectMeta{Name: "shard-002"},
+										ObjectMeta: metav1.ObjectMeta{Name: "shard-002", Labels: map[string]string{"multigres.com/cluster": "test-cluster"}},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
 											TableGroupName: "default",
@@ -577,6 +591,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "shard-002",
 											Namespace: "default",
 											UID:       "uid-002",
+											Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -617,6 +632,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Name:      "shard-affinity",
 					Namespace: "default",
 					UID:       "affinity-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -654,13 +670,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-affinity-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -679,13 +696,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "shard-affinity-pool-primary-zone1",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  PoolComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
 							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
+							"multigres.com/cluster":        "test-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -696,13 +714,14 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "shard-affinity-pool-primary-zone1",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  PoolComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
 								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
+								"multigres.com/cluster":        "test-cluster",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -712,7 +731,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							InitContainers: []corev1.Container{
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
-										ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity"},
+										ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity", Labels: map[string]string{"multigres.com/cluster": "test-cluster"}},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
 											TableGroupName: "default",
@@ -804,6 +823,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "shard-affinity",
 											Namespace: "default",
 											UID:       "affinity-uid",
+											Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -886,13 +906,13 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 				tc.want.Name = hashedName
 				tc.want.Spec.ServiceName = hashedSvcName
 				if tc.want.Labels != nil {
-					tc.want.Labels["app.kubernetes.io/instance"] = hashedName
+					// tc.want.Labels["app.kubernetes.io/instance"] = hashedName
 				}
 				if tc.want.Spec.Selector != nil {
-					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
+					// tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
 				}
 				if tc.want.Spec.Template.ObjectMeta.Labels != nil {
-					tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
+					// tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
 				}
 				for i, vol := range tc.want.Spec.Template.Spec.Volumes {
 					if vol.Name == "backup-data-vol" && vol.PersistentVolumeClaim != nil {
@@ -1020,6 +1040,7 @@ func TestBuildBackupPVC(t *testing.T) {
 			Name:      "test-shard",
 			Namespace: "default",
 			UID:       "test-uid",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 		},
 	}
 
@@ -1035,13 +1056,14 @@ func TestBuildBackupPVC(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "",
 						"multigres.com/tablegroup":     "",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -1076,13 +1098,14 @@ func TestBuildBackupPVC(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "",
 						"multigres.com/tablegroup":     "",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -1123,13 +1146,14 @@ func TestBuildBackupPVC(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "",
 						"multigres.com/tablegroup":     "",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -1159,10 +1183,9 @@ func TestBuildBackupPVC(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if tc.want != nil {
 				hashedPVCName := buildHashedBackupPVCName(shard, "primary", "zone1")
-				hashedPoolName := buildHashedPoolName(shard, "primary", "zone1")
 				tc.want.Name = hashedPVCName
 				if tc.want.Labels != nil {
-					tc.want.Labels["app.kubernetes.io/instance"] = hashedPoolName
+					// tc.want.Labels["app.kubernetes.io/instance"] = hashedPoolName
 				}
 			}
 

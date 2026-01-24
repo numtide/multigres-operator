@@ -32,6 +32,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Name:      "test-cell",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -70,7 +71,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cell-multigateway",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -80,7 +81,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-cell-multigateway",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -131,6 +132,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Name:      "cell-custom-replicas",
 					Namespace: "test-ns",
 					UID:       "custom-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
@@ -151,7 +153,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Namespace: "test-ns",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "cell-custom-replicas-multigateway",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -172,7 +174,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "cell-custom-replicas-multigateway",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -182,7 +184,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "cell-custom-replicas-multigateway",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -233,6 +235,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Name:      "cell-custom-image",
 					Namespace: "default",
 					UID:       "image-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone3",
@@ -253,7 +256,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "cell-custom-image-multigateway",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -274,7 +277,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "cell-custom-image-multigateway",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -284,7 +287,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "cell-custom-image-multigateway",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -335,6 +338,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Name:      "cell-affinity",
 					Namespace: "default",
 					UID:       "affinity-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone4",
@@ -371,7 +375,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "cell-affinity-multigateway",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -392,7 +396,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "cell-affinity-multigateway",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -402,7 +406,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "cell-affinity-multigateway",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -470,6 +474,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Name:      "cell-resources",
 					Namespace: "default",
 					UID:       "resources-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone5",
@@ -499,7 +504,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "cell-resources-multigateway",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -520,7 +525,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "cell-resources-multigateway",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  "multigateway",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
@@ -530,7 +535,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "cell-resources-multigateway",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  "multigateway",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
@@ -602,7 +607,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 	// Calculate expected names dynamically to handle hashing
 	buildName := func(cell *multigresv1alpha1.Cell) string {
 		clusterName := cell.Labels["multigres.com/cluster"]
-		return names.JoinWithConstraints(names.ServiceConstraints, clusterName, cell.Spec.Name, "multigateway")
+		// Deployment uses DefaultConstraints
+		return names.JoinWithConstraints(names.DefaultConstraints, clusterName, cell.Spec.Name, "multigateway")
 	}
 
 	for name, tc := range tests {
@@ -612,13 +618,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				expectedName := buildName(tc.cell)
 				tc.want.Name = expectedName
 				if tc.want.Labels != nil {
-					tc.want.Labels["app.kubernetes.io/instance"] = expectedName
+					tc.want.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 				}
 				if tc.want.Spec.Selector != nil {
-					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = expectedName
+					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 				}
 				if tc.want.Spec.Template.ObjectMeta.Labels != nil {
-					tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = expectedName
+					tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 				}
 			}
 
@@ -656,6 +662,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 					Name:      "test-cell",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -668,7 +675,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cell-multigateway",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -688,7 +695,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cell-multigateway",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -722,6 +729,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 					Name:      "production-cell",
 					Namespace: "prod-ns",
 					UID:       "prod-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "us-west",
@@ -734,7 +742,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 					Namespace: "prod-ns",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-cell-multigateway",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -754,7 +762,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-cell-multigateway",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  "multigateway",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
@@ -810,10 +818,10 @@ func TestBuildMultiGatewayService(t *testing.T) {
 				expectedName := buildName(tc.cell)
 				tc.want.Name = expectedName
 				if tc.want.Labels != nil {
-					tc.want.Labels["app.kubernetes.io/instance"] = expectedName
+					tc.want.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 				}
 				if tc.want.Spec.Selector != nil {
-					tc.want.Spec.Selector["app.kubernetes.io/instance"] = expectedName
+					tc.want.Spec.Selector["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 				}
 			}
 

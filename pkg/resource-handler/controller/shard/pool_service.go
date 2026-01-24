@@ -53,12 +53,6 @@ func BuildPoolHeadlessService(
 	return svc, nil
 }
 
-// buildPoolNameWithCell generates the name for pool resources in a specific cell.
-// Format: {shardName}-pool-{poolName}-{cellName}
-// For pools spanning multiple cells, this creates unique names per cell.
-// cellName must not be empty - pools must belong to a cell.
-// buildPoolNameWithCell generates the name for pool resources in a specific cell.
-// Format: {cluster}-{db}-{tg}-{shard}-pool-{poolName}-{cellName}
 func buildPoolNameWithCell(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
 	// Logic: Use LOGICAL parts from Spec/Labels to avoid double hashing.
 	// shard.Name is already hashed (cluster-db-tg-shard-HASH).

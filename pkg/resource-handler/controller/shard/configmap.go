@@ -10,7 +10,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
 )
 
 // DefaultPgHbaTemplate is the default pg_hba.conf template for pooler instances.
@@ -29,13 +29,9 @@ func BuildPgHbaConfigMap(
 	// TODO: Add Shard.Spec.PgHbaTemplate field to allow custom templates
 	template := DefaultPgHbaTemplate
 
-	labels := map[string]string{
-		"app.kubernetes.io/name":       "multigres",
-		"app.kubernetes.io/instance":   names.JoinWithConstraints(names.ServiceConstraints, shard.Name),
-		"app.kubernetes.io/component":  "pg-hba-config",
-		"app.kubernetes.io/part-of":    "multigres",
-		"app.kubernetes.io/managed-by": "multigres-operator",
-	}
+	clusterName := shard.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, "pg-hba-config")
+	labels = metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

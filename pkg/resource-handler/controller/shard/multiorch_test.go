@@ -12,6 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 func TestBuildMultiOrchDeployment(t *testing.T) {
@@ -31,6 +32,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -53,10 +55,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-multiorch-zone-a",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 						"multigres.com/cell":           "zone-a",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
@@ -77,10 +80,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-shard-multiorch-zone-a",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  MultiOrchComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cluster":        "test-cluster",
 							"multigres.com/cell":           "zone-a",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
@@ -90,10 +94,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-shard-multiorch-zone-a",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  MultiOrchComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "test-cluster",
 								"multigres.com/cell":           "zone-a",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
@@ -122,6 +127,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Name:      "production-shard",
 					Namespace: "prod-ns",
 					UID:       "prod-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "proddb",
@@ -147,10 +153,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Namespace: "prod-ns",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-shard-multiorch-zone1",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "prod-cluster",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "proddb",
 						"multigres.com/tablegroup":     "prod-tg",
@@ -171,10 +178,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "production-shard-multiorch-zone1",
+							"app.kubernetes.io/instance":   "prod-cluster",
 							"app.kubernetes.io/component":  MultiOrchComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cluster":        "prod-cluster",
 							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "proddb",
 							"multigres.com/tablegroup":     "prod-tg",
@@ -184,10 +192,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "production-shard-multiorch-zone1",
+								"app.kubernetes.io/instance":   "prod-cluster",
 								"app.kubernetes.io/component":  MultiOrchComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "prod-cluster",
 								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "proddb",
 								"multigres.com/tablegroup":     "prod-tg",
@@ -216,6 +225,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Name:      "replicas-shard",
 					Namespace: "default",
 					UID:       "replicas-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "repl-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -241,10 +251,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "replicas-shard-multiorch-zone1",
+						"app.kubernetes.io/instance":   "repl-cluster",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "repl-cluster",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
@@ -265,10 +276,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "replicas-shard-multiorch-zone1",
+							"app.kubernetes.io/instance":   "repl-cluster",
 							"app.kubernetes.io/component":  MultiOrchComponentName,
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cluster":        "repl-cluster",
 							"multigres.com/cell":           "zone1",
 							"multigres.com/database":       "testdb",
 							"multigres.com/tablegroup":     "default",
@@ -278,10 +290,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "replicas-shard-multiorch-zone1",
+								"app.kubernetes.io/instance":   "repl-cluster",
 								"app.kubernetes.io/component":  MultiOrchComponentName,
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "repl-cluster",
 								"multigres.com/cell":           "zone1",
 								"multigres.com/database":       "testdb",
 								"multigres.com/tablegroup":     "default",
@@ -324,17 +337,8 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			if tc.want != nil {
-				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName)
+				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName, names.DefaultConstraints)
 				tc.want.Name = hashedName
-				if tc.want.Labels != nil {
-					tc.want.Labels["app.kubernetes.io/instance"] = hashedName
-				}
-				if tc.want.Spec.Selector != nil {
-					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
-				}
-				if tc.want.Spec.Template.ObjectMeta.Labels != nil {
-					tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
-				}
 			}
 
 			got, err := BuildMultiOrchDeployment(tc.shard, tc.cellName, tc.scheme)
@@ -372,6 +376,7 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -386,10 +391,11 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-multiorch-zone-a",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 						"multigres.com/cell":           "zone-a",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
@@ -409,10 +415,11 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-multiorch-zone-a",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 						"multigres.com/cell":           "zone-a",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
@@ -440,6 +447,7 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Name:      "production-shard",
 					Namespace: "prod-ns",
 					UID:       "prod-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "proddb",
@@ -454,10 +462,11 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Namespace: "prod-ns",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-shard-multiorch-zone2",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "prod-cluster",
 						"multigres.com/cell":           "zone2",
 						"multigres.com/database":       "proddb",
 						"multigres.com/tablegroup":     "prod-tg",
@@ -477,10 +486,11 @@ func TestBuildMultiOrchService(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "production-shard-multiorch-zone2",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  MultiOrchComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "prod-cluster",
 						"multigres.com/cell":           "zone2",
 						"multigres.com/database":       "proddb",
 						"multigres.com/tablegroup":     "prod-tg",
@@ -522,14 +532,8 @@ func TestBuildMultiOrchService(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			if tc.want != nil {
-				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName)
+				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName, names.ServiceConstraints)
 				tc.want.Name = hashedName
-				if tc.want.Labels != nil {
-					tc.want.Labels["app.kubernetes.io/instance"] = hashedName
-				}
-				if tc.want.Spec.Selector != nil {
-					tc.want.Spec.Selector["app.kubernetes.io/instance"] = hashedName
-				}
 			}
 
 			got, err := BuildMultiOrchService(tc.shard, tc.cellName, tc.scheme)

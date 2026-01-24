@@ -33,7 +33,8 @@ func BuildMultiOrchDeployment(
 		replicas = *shard.Spec.MultiOrch.Replicas
 	}
 
-	name := buildMultiOrchNameWithCell(shard, cellName)
+	// Use DefaultConstraints (253 chars) for Deployments => Long, Readable Names
+	name := buildMultiOrchNameWithCell(shard, cellName, names.DefaultConstraints)
 	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	deployment := &appsv1.Deployment{
@@ -75,7 +76,8 @@ func BuildMultiOrchService(
 	cellName string,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := buildMultiOrchNameWithCell(shard, cellName)
+	// Use ServiceConstraints (63 chars) for Services => Truncated, Safe Names
+	name := buildMultiOrchNameWithCell(shard, cellName, names.ServiceConstraints)
 	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	svc := &corev1.Service{
@@ -100,12 +102,12 @@ func BuildMultiOrchService(
 
 // buildMultiOrchNameWithCell generates the name for MultiOrch resources in a specific cell.
 // Format: {cluster}-{db}-{tg}-{shard}-multiorch-{cellName}
-func buildMultiOrchNameWithCell(shard *multigresv1alpha1.Shard, cellName string) string {
+func buildMultiOrchNameWithCell(shard *multigresv1alpha1.Shard, cellName string, constraints names.Constraints) string {
 	// Logic: Use LOGICAL parts from Spec/Labels to avoid double hashing.
 	// shard.Name is already hashed (cluster-db-tg-shard-HASH).
 	clusterName := shard.Labels["multigres.com/cluster"]
 	return names.JoinWithConstraints(
-		names.ServiceConstraints,
+		constraints,
 		clusterName,
 		shard.Spec.DatabaseName,
 		shard.Spec.TableGroupName,
@@ -120,11 +122,11 @@ func buildMultiOrchLabelsWithCell(
 	shard *multigresv1alpha1.Shard,
 	cellName string,
 ) map[string]string {
-	name := buildMultiOrchNameWithCell(shard, cellName)
-	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
+	clusterName := shard.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, MultiOrchComponentName)
 	metadata.AddCellLabel(labels, cellName)
 	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
 	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
-	metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
+	labels = metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 	return labels
 }

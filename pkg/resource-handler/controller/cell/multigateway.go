@@ -35,9 +35,21 @@ const (
 	MultiGatewayPostgresPort int32 = 15432
 )
 
-// BuildMultiGatewayName generates the safe hashed name for MultiGateway resources.
-// It uses logical parts (cluster + cell name) to avoid double hashing.
-func BuildMultiGatewayName(cell *multigresv1alpha1.Cell) string {
+// BuildMultiGatewayDeploymentName generates the Deployment name.
+// It uses DefaultConstraints (253 chars) to use readable long names.
+func BuildMultiGatewayDeploymentName(cell *multigresv1alpha1.Cell) string {
+	clusterName := cell.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.DefaultConstraints,
+		clusterName,
+		cell.Spec.Name,
+		"multigateway",
+	)
+}
+
+// BuildMultiGatewayServiceName generates the Service name.
+// It uses ServiceConstraints (63 chars) for DNS safety.
+func BuildMultiGatewayServiceName(cell *multigresv1alpha1.Cell) string {
 	clusterName := cell.Labels["multigres.com/cluster"]
 	return names.JoinWithConstraints(
 		names.ServiceConstraints,
@@ -62,8 +74,9 @@ func BuildMultiGatewayDeployment(
 		image = cell.Spec.Images.MultiGateway
 	}
 
-	name := BuildMultiGatewayName(cell)
-	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
+	name := BuildMultiGatewayDeploymentName(cell)
+	clusterName := cell.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, MultiGatewayComponentName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -132,8 +145,9 @@ func BuildMultiGatewayService(
 	cell *multigresv1alpha1.Cell,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := BuildMultiGatewayName(cell)
-	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
+	name := BuildMultiGatewayServiceName(cell)
+	clusterName := cell.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, MultiGatewayComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

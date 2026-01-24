@@ -20,7 +20,9 @@ func BuildHeadlessService(
 ) (*corev1.Service, error) {
 	// TODO: Support cell-local TopoServers by adding CellName field to TopoServerSpec
 	// For now, TopoServer is always global topology
-	labels := metadata.BuildStandardLabels(toposerver.Name, ComponentName)
+	clusterName := toposerver.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, ComponentName)
+	labels = metadata.MergeLabels(labels, toposerver.GetObjectMeta().GetLabels())
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -51,7 +53,9 @@ func BuildClientService(
 ) (*corev1.Service, error) {
 	// TODO: Support cell-local TopoServers by adding CellName field to TopoServerSpec
 	// For now, TopoServer is always global topology
-	labels := metadata.BuildStandardLabels(toposerver.Name, ComponentName)
+	clusterName := toposerver.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, ComponentName)
+	labels = metadata.MergeLabels(labels, toposerver.GetObjectMeta().GetLabels())
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

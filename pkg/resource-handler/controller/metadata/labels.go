@@ -68,40 +68,17 @@ const (
 	LabelMultigresShardTemplate = "multigres.com/shard-template"
 )
 
-// BuildStandardLabels builds the standard Kubernetes labels for a Multigres
-// component. These labels are applied to all resources managed by the operator.
-//
-// Parameters:
-//   - resourceName: The name of the custom resource instance (e.g., "my-etcd-cluster")
-//   - componentName: The component type (e.g., "etcd", "gateway", "orch", "pooler")
-//
-// Standard labels include:
-//   - app.kubernetes.io/name: "multigres"
-//   - app.kubernetes.io/instance: <resourceName>
-//   - app.kubernetes.io/component: <componentName>
-//   - app.kubernetes.io/part-of: "multigres"
-//   - app.kubernetes.io/managed-by: "multigres-operator"
-//
-// Example usage:
-//
-//	labels := BuildStandardLabels("my-etcd", "etcd")
-//	// Returns: {
-//	//   "app.kubernetes.io/name": "multigres",
-//	//   "app.kubernetes.io/instance": "my-etcd",
-//	//   "app.kubernetes.io/component": "etcd",
-//	//   "app.kubernetes.io/part-of": "multigres",
-//	//   "app.kubernetes.io/managed-by": "multigres-operator",
-//	// }
-func BuildStandardLabels(resourceName, componentName string) map[string]string {
-	labels := map[string]string{
+// BuildStandardLabels returns a map of standard kubernetes labels.
+// clusterName should be the name of the MultigresCluster CR (used for instance label).
+// component is the name of the component (e.g. multigateway, multiorch, pool).
+func BuildStandardLabels(clusterName, component string) map[string]string {
+	return map[string]string{
 		LabelAppName:      AppNameMultigres,
-		LabelAppInstance:  resourceName,
-		LabelAppComponent: componentName,
+		LabelAppInstance:  clusterName,
+		LabelAppComponent: component,
 		LabelAppPartOf:    AppNameMultigres,
 		LabelAppManagedBy: ManagedByMultigres,
 	}
-
-	return labels
 }
 
 // AddCellLabel adds the cell label to the provided labels map.

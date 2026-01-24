@@ -66,6 +66,7 @@ func TestCellReconciliation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cell",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
@@ -152,6 +153,7 @@ func TestCellReconciliation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "custom-replicas-cell",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
@@ -238,6 +240,7 @@ func TestCellReconciliation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "custom-images-cell",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone3",
@@ -324,6 +327,7 @@ func TestCellReconciliation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "affinity-cell",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone4",
@@ -480,38 +484,44 @@ func TestCellReconciliation(t *testing.T) {
 
 			// Patch wantResources with hashed names
 			for _, obj := range tc.wantResources {
-				// Replicate controller logic for naming
-				// BuildMultiGatewayName logic: clusterName + cell.Spec.Name + "multigateway"
 				clusterName := tc.cell.Labels["multigres.com/cluster"]
-				hashedName := names.JoinWithConstraints(
+
+				// Replicate controller logic for naming
+				hashedDeployName := names.JoinWithConstraints(
+					names.DefaultConstraints,
+					clusterName,
+					tc.cell.Spec.Name,
+					"multigateway",
+				)
+				hashedSvcName := names.JoinWithConstraints(
 					names.ServiceConstraints,
 					clusterName,
 					tc.cell.Spec.Name,
 					"multigateway",
 				)
 
-				obj.SetName(hashedName)
-
 				// Update labels
 				labels := obj.GetLabels()
 				if labels != nil {
-					labels["app.kubernetes.io/instance"] = hashedName
+					labels["app.kubernetes.io/instance"] = clusterName // Instance is cluster name
 					obj.SetLabels(labels)
 				}
 
 				// Update selector if Deployment
 				if deploy, ok := obj.(*appsv1.Deployment); ok {
+					obj.SetName(hashedDeployName)
 					if deploy.Spec.Selector != nil {
-						deploy.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
+						deploy.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = clusterName
 					}
 					if deploy.Spec.Template.ObjectMeta.Labels != nil {
-						deploy.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
+						deploy.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = clusterName
 					}
 				}
 				// Update selector if Service
 				if svc, ok := obj.(*corev1.Service); ok {
+					obj.SetName(hashedSvcName)
 					if svc.Spec.Selector != nil {
-						svc.Spec.Selector["app.kubernetes.io/instance"] = hashedName
+						svc.Spec.Selector["app.kubernetes.io/instance"] = clusterName
 					}
 				}
 			}
@@ -530,7 +540,7 @@ func cellLabels(t testing.TB, instanceName, component, cellName string) map[stri
 	t.Helper()
 	return map[string]string{
 		"app.kubernetes.io/component":  component,
-		"app.kubernetes.io/instance":   instanceName,
+		"app.kubernetes.io/instance":   "test-cluster", // Use literal cluster name for instance label
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
