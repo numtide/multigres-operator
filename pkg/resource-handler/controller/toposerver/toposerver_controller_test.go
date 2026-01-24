@@ -46,6 +46,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -100,6 +101,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "existing-toposerver",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{
@@ -164,6 +166,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
+					Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -174,6 +177,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
+						Labels: map[string]string{
+							"multigres.com/cluster": "test-cluster",
+						},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 				},
@@ -197,6 +203,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver-ready",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{
@@ -256,6 +263,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -271,6 +279,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver-status",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -295,6 +304,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -315,6 +325,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -354,6 +365,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver-svc",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -385,6 +397,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -406,6 +419,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -440,6 +454,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -466,6 +481,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -486,6 +502,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{
@@ -520,6 +537,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Name:       "test-toposerver",
 					Namespace:  "default",
 					Finalizers: []string{"toposerver.multigres.com/finalizer"},
+					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -539,6 +557,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -555,6 +574,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
+					Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -565,6 +585,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
+						Labels: map[string]string{
+							"multigres.com/cluster": "test-cluster",
+						},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 				},
@@ -579,6 +602,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},

@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestBuildTableGroup(t *testing.T) {
@@ -40,8 +40,8 @@ func TestBuildTableGroup(t *testing.T) {
 		}
 
 		// Calculate expected hash: md5("my-cluster", "my-db", "tg-1") -> "d5708433"
-		expectedName := names.JoinWithConstraints(
-			names.DefaultConstraints,
+		expectedName := name.JoinWithConstraints(
+			name.DefaultConstraints,
 			"my-cluster",
 			"my-db",
 			"tg-1",

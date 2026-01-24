@@ -6,7 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // BuildShard constructs the desired Shard resource.
@@ -17,8 +17,8 @@ func BuildShard(
 ) (*multigresv1alpha1.Shard, error) {
 	// Build shard name from logical parts (cluster, database, tablegroup, shard)
 	// NOT using tg.Name which includes the parent's hash
-	shardNameFull := names.JoinWithConstraints(
-		names.DefaultConstraints,
+	shardNameFull := name.JoinWithConstraints(
+		name.DefaultConstraints,
 		tg.Labels["multigres.com/cluster"],
 		tg.Spec.DatabaseName,
 		tg.Spec.TableGroupName,

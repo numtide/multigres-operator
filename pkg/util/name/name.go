@@ -23,7 +23,7 @@ limitations under the License.
 //  2. For singleton or static resources (e.g., GlobalTopo, MultiAdmin) that are 1:1 with
 //     the cluster and have predictable short names, we use simple string concatenation
 //     without hashing for better readability and predictability.
-package names
+package name
 
 import (
 	"crypto/md5"
@@ -78,6 +78,15 @@ var (
 	// ServiceConstraints are name constraints for Service objects.
 	ServiceConstraints = Constraints{
 		MaxLength:      63,
+		ValidFirstChar: isLowercaseLetter,
+	}
+	// StatefulSetConstraints are name constraints for StatefulSet objects.
+	// We need to account for the suffix appended to the Pod name, e.g. "-0",
+	// as well as the controller-revision-hash label which appends a hash.
+	// To be safe, we reserve 11 characters for the suffix/hash.
+	// 63 - 11 = 52.
+	StatefulSetConstraints = Constraints{
+		MaxLength:      52,
 		ValidFirstChar: isLowercaseLetter,
 	}
 )

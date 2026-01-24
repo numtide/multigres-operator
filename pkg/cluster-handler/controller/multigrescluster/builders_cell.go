@@ -6,7 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // BuildCell constructs the desired Cell resource.
@@ -21,8 +21,8 @@ func BuildCell(
 ) (*multigresv1alpha1.Cell, error) {
 	cellCR := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: names.JoinWithConstraints(
-				names.DefaultConstraints,
+			Name: name.JoinWithConstraints(
+				name.DefaultConstraints,
 				cluster.Name,
 				cellCfg.Name,
 			),

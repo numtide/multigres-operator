@@ -1,17 +1,20 @@
 module github.com/numtide/multigres-operator/pkg/cluster-handler
 
-go 1.25.0
+go 1.25.2
 
 require (
 	github.com/numtide/multigres-operator/api v0.0.0-20260122120956-3706cba9e0ed
 	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260120201135-e72eb4b1bd4a
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e
+	github.com/numtide/multigres-operator/pkg/util v0.0.0
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.3
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	sigs.k8s.io/controller-runtime v0.22.4
 )
+
+replace github.com/numtide/multigres-operator/pkg/util => ../util
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect

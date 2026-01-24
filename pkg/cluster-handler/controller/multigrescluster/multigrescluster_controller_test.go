@@ -20,8 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // ============================================================================
@@ -295,8 +295,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				ctx := t.Context()
 				// Verify Cell (Basic wiring check)
 				cell := &multigresv1alpha1.Cell{}
-				cellName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				cellName := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					"zone-a",
 				)
@@ -338,7 +338,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: testutil.FailOnObjectName(
-					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1"),
+					name.JoinWithConstraints(name.DefaultConstraints, clusterName, "db1", "tg1"),
 					errSimulated,
 				),
 			},
@@ -349,8 +349,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: names.JoinWithConstraints(
-							names.DefaultConstraints,
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
 							clusterName,
 							"db1",
 							"orphan-tg",
@@ -362,8 +362,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnDelete: testutil.FailOnObjectName(
-					names.JoinWithConstraints(
-						names.DefaultConstraints,
+					name.JoinWithConstraints(
+						name.DefaultConstraints,
 						clusterName,
 						"db1",
 						"orphan-tg",
@@ -423,7 +423,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: testutil.FailOnObjectName(
-					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "zone-a"),
+					name.JoinWithConstraints(name.DefaultConstraints, clusterName, "zone-a"),
 					errSimulated,
 				),
 			},
@@ -433,7 +433,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: testutil.FailOnObjectName(
-					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1"),
+					name.JoinWithConstraints(name.DefaultConstraints, clusterName, "db1", "tg1"),
 					errSimulated,
 				),
 			},
@@ -479,8 +479,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				cell := &multigresv1alpha1.Cell{}
-				cellName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				cellName := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					"zone-a",
 				)

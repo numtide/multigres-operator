@@ -10,12 +10,12 @@ import (
 
 func TestBuildStandardLabels(t *testing.T) {
 	tests := map[string]struct {
-		resourceName  string
+		clusterName   string
 		componentName string
 		want          map[string]string
 	}{
 		"typical case": {
-			resourceName:  "my-etcd-cluster",
+			clusterName:   "my-etcd-cluster",
 			componentName: "etcd",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
@@ -26,7 +26,7 @@ func TestBuildStandardLabels(t *testing.T) {
 			},
 		},
 		"empty strings allowed": {
-			resourceName:  "",
+			clusterName:   "",
 			componentName: "",
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
@@ -40,7 +40,7 @@ func TestBuildStandardLabels(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := metadata.BuildStandardLabels(tc.resourceName, tc.componentName)
+			got := metadata.BuildStandardLabels(tc.clusterName, tc.componentName)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("BuildStandardLabels() mismatch (-want +got):\n%s", diff)
 			}
@@ -179,7 +179,7 @@ func TestLabelOperations_ComplexScenarios(t *testing.T) {
 	}{
 		"build standard labels then add all multigres labels": {
 			setupFunc: func() map[string]string {
-				labels := metadata.BuildStandardLabels("my-shard", "shard-pool")
+				labels := metadata.BuildStandardLabels("my-cluster", "shard-pool")
 				metadata.AddCellLabel(labels, "zone1")
 				metadata.AddClusterLabel(labels, "prod-cluster")
 				metadata.AddShardLabel(labels, "shard-0")
@@ -189,7 +189,7 @@ func TestLabelOperations_ComplexScenarios(t *testing.T) {
 			},
 			want: map[string]string{
 				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   "my-shard",
+				"app.kubernetes.io/instance":   "my-cluster",
 				"app.kubernetes.io/component":  "shard-pool",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",

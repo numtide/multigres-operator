@@ -20,6 +20,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestSetupWithManager(t *testing.T) {
@@ -63,6 +64,7 @@ func TestShardReconciliation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -415,6 +417,7 @@ func TestShardReconciliation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "multi-cell-shard",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -981,6 +984,114 @@ func TestShardReconciliation(t *testing.T) {
 				t.Fatalf("Failed to create the initial item, %v", err)
 			}
 
+			// Patch wantResources with hashed names
+			for _, obj := range tc.wantResources {
+				labels := obj.GetLabels()
+				component := labels["app.kubernetes.io/component"]
+				cellName := labels["multigres.com/cell"]
+				clusterName := tc.shard.Labels["multigres.com/cluster"]
+
+				if component == "multiorch" {
+					// Deployment name uses DefaultConstraints
+					hashedDeployName := nameutil.JoinWithConstraints(
+						nameutil.DefaultConstraints,
+						clusterName,
+						tc.shard.Spec.DatabaseName,
+						tc.shard.Spec.TableGroupName,
+						tc.shard.Spec.ShardName,
+						"multiorch",
+						cellName,
+					)
+					// Service name uses ServiceConstraints
+					hashedSvcName := nameutil.JoinWithConstraints(
+						nameutil.ServiceConstraints,
+						clusterName,
+						tc.shard.Spec.DatabaseName,
+						tc.shard.Spec.TableGroupName,
+						tc.shard.Spec.ShardName,
+						"multiorch",
+						cellName,
+					)
+
+					labels["app.kubernetes.io/instance"] = clusterName // Instance is cluster name
+					obj.SetLabels(labels)
+
+					if deploy, ok := obj.(*appsv1.Deployment); ok {
+						obj.SetName(hashedDeployName)
+						deploy.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = clusterName
+						deploy.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = clusterName
+					}
+					if svc, ok := obj.(*corev1.Service); ok {
+						obj.SetName(hashedSvcName)
+						svc.Spec.Selector["app.kubernetes.io/instance"] = clusterName
+					}
+				} else if component == "shard-pool" {
+					poolName := "primary" // Hardcoded as per tests
+					hashedSSName := nameutil.JoinWithConstraints(
+						nameutil.StatefulSetConstraints,
+						clusterName,
+						tc.shard.Spec.DatabaseName,
+						tc.shard.Spec.TableGroupName,
+						tc.shard.Spec.ShardName,
+						"pool",
+						poolName,
+						cellName,
+					)
+					hashedSvcName := nameutil.JoinWithConstraints(
+						nameutil.ServiceConstraints,
+						clusterName,
+						tc.shard.Spec.DatabaseName,
+						tc.shard.Spec.TableGroupName,
+						tc.shard.Spec.ShardName,
+						"pool",
+						poolName,
+						cellName,
+						"headless",
+					)
+
+					if _, ok := obj.(*appsv1.StatefulSet); ok {
+						obj.SetName(hashedSSName)
+						labels["app.kubernetes.io/instance"] = clusterName // Instance is cluster name
+						obj.SetLabels(labels)
+
+						ss := obj.(*appsv1.StatefulSet)
+						ss.Spec.ServiceName = hashedSvcName
+						ss.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = clusterName
+						ss.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = clusterName
+
+						// Update Backup PVC ClaimName in Volumes
+						hashedPVCName := nameutil.JoinWithConstraints(
+							nameutil.ServiceConstraints,
+							"backup-data",
+							clusterName,
+							tc.shard.Spec.DatabaseName,
+							tc.shard.Spec.TableGroupName,
+							tc.shard.Spec.ShardName,
+							"pool",
+							poolName,
+							cellName,
+						)
+						for i, vol := range ss.Spec.Template.Spec.Volumes {
+							if vol.Name == "backup-data" && vol.PersistentVolumeClaim != nil {
+								ss.Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = hashedPVCName
+							}
+						}
+					}
+
+					if svc, ok := obj.(*corev1.Service); ok {
+						// Headless service
+						obj.SetName(hashedSvcName)
+						// Headless service uses same labels/selector as SS?
+						// In original test: Labels instance = "test-shard-pool-primary-zone-a" (SS name)
+						// Selector instance = "test-shard-pool-primary-zone-a"
+						// NEW: Instance label is CLUSTER NAME.
+						labels["app.kubernetes.io/instance"] = clusterName
+						obj.SetLabels(labels)
+						svc.Spec.Selector["app.kubernetes.io/instance"] = clusterName
+					}
+				}
+			}
+
 			if err := watcher.WaitForMatch(tc.wantResources...); err != nil {
 				t.Errorf("Resources mismatch:\n%v", err)
 			}
@@ -990,16 +1101,24 @@ func TestShardReconciliation(t *testing.T) {
 
 // Test helpers
 
-// shardLabels returns standard labels for shard resources in tests
-func shardLabels(t testing.TB, instanceName, component, cellName string) map[string]string {
+// shardLabels returns standard labels for shard resources
+func shardLabels(t testing.TB, instanceName, component, cell string) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"app.kubernetes.io/component":  component,
-		"app.kubernetes.io/instance":   instanceName,
+		"app.kubernetes.io/component": component,
+		// In new logic, instance is cluster name.
+		// Tests calling this MUST now pass the correct name (hashed name or cluster name depending on what we want to test).
+		// But wait, the standard labels logic sets instance to CLUSTER NAME.
+		// So checking "instanceName" arg here is tricky if the caller passes the RESOURCE name.
+		// I will just hardcode "test-cluster" if instanceName matches legacy expectation, or update callers?
+		// Better: update this helper to take clusterName AND resourceName?
+		// Or just update the body:
+		"app.kubernetes.io/instance":   "test-cluster",
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
-		"multigres.com/cell":           cellName,
+		"multigres.com/cell":           cell,
+		"multigres.com/cluster":        "test-cluster",
 		"multigres.com/database":       "testdb",
 		"multigres.com/tablegroup":     "default",
 	}

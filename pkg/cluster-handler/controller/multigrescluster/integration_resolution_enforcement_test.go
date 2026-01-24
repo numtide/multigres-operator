@@ -10,6 +10,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -105,7 +106,11 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 			}
 			return &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName + "-" + zone,
+					Name: nameutil.JoinWithConstraints(
+						nameutil.DefaultConstraints,
+						clusterName,
+						zone,
+					),
 					Namespace: testNamespace,
 				},
 				Spec: multigresv1alpha1.CellSpec{
@@ -174,7 +179,14 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 		// That template has Replicas: 1.
 		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
 		wantCell := &multigresv1alpha1.Cell{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nameutil.JoinWithConstraints(
+					nameutil.DefaultConstraints,
+					clusterName,
+					"zone-a",
+				),
+				Namespace: testNamespace,
+			},
 			Spec: multigresv1alpha1.CellSpec{
 				Name: "zone-a",
 				Zone: "us-east-1a",
@@ -265,7 +277,15 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
 
 		wantTG := &multigresv1alpha1.TableGroup{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-8b65dfba", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: nameutil.JoinWithConstraints(
+					nameutil.DefaultConstraints,
+					clusterName,
+					"postgres",
+					"default",
+				),
+				Namespace: testNamespace,
+			},
 			Spec: multigresv1alpha1.TableGroupSpec{
 				DatabaseName:   "postgres",
 				TableGroupName: "default",
@@ -346,7 +366,14 @@ func TestMultigresCluster_EnforcementLogic(t *testing.T) {
 
 	// 1. Expected Cell state
 	wantCell := &multigresv1alpha1.Cell{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterName + "-zone-a", Namespace: testNamespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nameutil.JoinWithConstraints(
+				nameutil.DefaultConstraints,
+				clusterName,
+				"zone-a",
+			),
+			Namespace: testNamespace,
+		},
 		Spec: multigresv1alpha1.CellSpec{
 			Name: "zone-a",
 			Zone: "us-east-1a",

@@ -114,7 +114,7 @@ func (r *CellReconciler) reconcileMultiGatewayDeployment(
 	}
 
 	existing := &appsv1.Deployment{}
-	name := cell.Name + "-multigateway"
+	name := BuildMultiGatewayDeploymentName(cell)
 	err = r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: name}, existing)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -148,7 +148,7 @@ func (r *CellReconciler) reconcileMultiGatewayService(
 	}
 
 	existing := &corev1.Service{}
-	name := cell.Name + "-multigateway"
+	name := BuildMultiGatewayServiceName(cell)
 	err = r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: name}, existing)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -178,7 +178,7 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	mgDeploy := &appsv1.Deployment{}
 	err := r.Get(
 		ctx,
-		client.ObjectKey{Namespace: cell.Namespace, Name: cell.Name + "-multigateway"},
+		client.ObjectKey{Namespace: cell.Namespace, Name: BuildMultiGatewayDeploymentName(cell)},
 		mgDeploy,
 	)
 	if err != nil {

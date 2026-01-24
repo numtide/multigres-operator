@@ -30,6 +30,7 @@ func TestBuildStatefulSet(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -40,10 +41,11 @@ func TestBuildStatefulSet(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-toposerver",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "toposerver",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -62,10 +64,11 @@ func TestBuildStatefulSet(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-toposerver",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  "toposerver",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cluster":        "test-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -76,10 +79,11 @@ func TestBuildStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-toposerver",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  "toposerver",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "test-cluster",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -133,6 +137,7 @@ func TestBuildStatefulSet(t *testing.T) {
 					Name:      "toposerver-custom",
 					Namespace: "test",
 					UID:       "custom-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "custom-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{
@@ -148,10 +153,11 @@ func TestBuildStatefulSet(t *testing.T) {
 					Namespace: "test",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "toposerver-custom",
+						"app.kubernetes.io/instance":   "custom-cluster",
 						"app.kubernetes.io/component":  "toposerver",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "custom-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -170,10 +176,11 @@ func TestBuildStatefulSet(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "toposerver-custom",
+							"app.kubernetes.io/instance":   "custom-cluster",
 							"app.kubernetes.io/component":  "toposerver",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cluster":        "custom-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -184,10 +191,11 @@ func TestBuildStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "toposerver-custom",
+								"app.kubernetes.io/instance":   "custom-cluster",
 								"app.kubernetes.io/component":  "toposerver",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "custom-cluster",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -241,6 +249,7 @@ func TestBuildStatefulSet(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{
@@ -258,10 +267,11 @@ func TestBuildStatefulSet(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-toposerver",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "toposerver",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -280,10 +290,11 @@ func TestBuildStatefulSet(t *testing.T) {
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-toposerver",
+							"app.kubernetes.io/instance":   "test-cluster",
 							"app.kubernetes.io/component":  "toposerver",
 							"app.kubernetes.io/part-of":    "multigres",
 							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/cluster":        "test-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -294,10 +305,11 @@ func TestBuildStatefulSet(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
 								"app.kubernetes.io/name":       "multigres",
-								"app.kubernetes.io/instance":   "test-toposerver",
+								"app.kubernetes.io/instance":   "test-cluster",
 								"app.kubernetes.io/component":  "toposerver",
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "test-cluster",
 							},
 						},
 						Spec: corev1.PodSpec{

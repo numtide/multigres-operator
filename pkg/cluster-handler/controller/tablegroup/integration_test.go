@@ -19,6 +19,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestSetupWithManager(t *testing.T) {
@@ -264,6 +265,21 @@ func TestTableGroupReconciliation(t *testing.T) {
 			// 4. Create the Input
 			if err := k8sClient.Create(ctx, tc.tableGroup); err != nil {
 				t.Fatalf("Failed to create the initial tablegroup, %v", err)
+			}
+
+			// Patch wantResources with hashed names
+			for _, obj := range tc.wantResources {
+				if shard, ok := obj.(*multigresv1alpha1.Shard); ok {
+					clusterName := tc.tableGroup.Labels["multigres.com/cluster"]
+					hashedName := nameutil.JoinWithConstraints(
+						nameutil.DefaultConstraints,
+						clusterName,
+						tc.tableGroup.Spec.DatabaseName,
+						tc.tableGroup.Spec.TableGroupName,
+						shard.Spec.ShardName,
+					)
+					shard.Name = hashedName
+				}
 			}
 
 			// 5. Assert Logic

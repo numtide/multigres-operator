@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestBuildCell(t *testing.T) {
@@ -59,7 +59,7 @@ func TestBuildCell(t *testing.T) {
 		}
 
 		// Calculate expected hash: md5("my-cluster", "zone-a") -> "6b6f7386"
-		expectedName := names.JoinWithConstraints(names.DefaultConstraints, "my-cluster", "zone-a")
+		expectedName := name.JoinWithConstraints(name.DefaultConstraints, "my-cluster", "zone-a")
 		if got.Name != expectedName {
 			t.Errorf("Name = %v, want %v", got.Name, expectedName)
 		}

@@ -27,6 +27,7 @@ func TestBuildPgHbaConfigMap(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 			},
 			wantErr: false,
@@ -37,6 +38,7 @@ func TestBuildPgHbaConfigMap(t *testing.T) {
 					Name:      "production-shard",
 					Namespace: "prod",
 					UID:       "prod-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
 				},
 			},
 			wantErr: false,
@@ -92,10 +94,11 @@ func TestBuildPgHbaConfigMap(t *testing.T) {
 			// Verify labels
 			expectedLabels := map[string]string{
 				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   tc.shard.Name,
+				"app.kubernetes.io/instance":   tc.shard.Labels["multigres.com/cluster"],
 				"app.kubernetes.io/component":  "pg-hba-config",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",
+				"multigres.com/cluster":        tc.shard.Labels["multigres.com/cluster"],
 			}
 			if diff := cmp.Diff(expectedLabels, cm.Labels); diff != "" {
 				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
