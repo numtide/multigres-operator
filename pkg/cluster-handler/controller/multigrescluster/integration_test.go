@@ -148,7 +148,7 @@ func clusterOwnerRefs(t testing.TB, clusterName string) []metav1.OwnerReference 
 func TestMultigresCluster_HappyPath(t *testing.T) {
 	t.Parallel()
 
-	const clusterName = "test-integration-cluster"
+	const clusterName = "test-cluster"
 
 	tests := map[string]struct {
 		cluster       *multigresv1alpha1.MultigresCluster

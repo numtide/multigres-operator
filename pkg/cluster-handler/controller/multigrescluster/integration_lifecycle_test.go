@@ -27,9 +27,12 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 	t.Run("TableGroup Long Name Hashing", func(t *testing.T) {
 		t.Parallel()
 		k8sClient, _ := setupIntegration(t)
-		// Name length math: 18 (cluster) + 10 (db) + 30 (tg) + 2 (hyphens) = 60 chars > 50 chars
-		longClusterName := "validation-cluster"
-		longTGName := "this-is-a-very-long-tablegroup" // 30 chars
+		// Name length math: 25 (cluster) + 8 (db) + 25 (tg) + 2 (hyphens) = 60 chars.
+		longClusterName := "valid-cluster-name-123456" // 25 chars
+		longTGName := "valid-tg-name-12345678901"      // 25 chars
+		// Wait, we need > 63 chars to trigger hashing for labels.
+		// Let's use max allowed: 25 (cluster) + 30 (db) + 25 (tg) + 2 = 82 chars.
+
 		cluster := &multigresv1alpha1.MultigresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: longClusterName, Namespace: testNamespace},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
@@ -78,7 +81,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// 250 chars is near limit (256). If controller appends to this value, it might fail.
 		longAnnotation := strings.Repeat("a", 250)
 		cluster := &multigresv1alpha1.MultigresCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "annotation-bomb", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: "short-annot-bomb", Namespace: testNamespace},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
 				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
 					Spec: &multigresv1alpha1.StatelessSpec{
@@ -94,19 +97,19 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// Verify MultiAdmin Deployment created successfully WITH annotation
 		deploy := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            "annotation-bomb-multiadmin",
+				Name:            "short-annot-bomb-multiadmin",
 				Namespace:       testNamespace,
-				Labels:          clusterLabels(t, "annotation-bomb", "multiadmin", ""),
-				OwnerReferences: clusterOwnerRefs(t, "annotation-bomb"),
+				Labels:          clusterLabels(t, "short-annot-bomb", "multiadmin", ""),
+				OwnerReferences: clusterOwnerRefs(t, "short-annot-bomb"),
 			},
 			Spec: appsv1.DeploymentSpec{
 				Replicas: ptr.To(resolver.DefaultAdminReplicas),
 				Selector: &metav1.LabelSelector{
-					MatchLabels: clusterLabels(t, "annotation-bomb", "multiadmin", ""),
+					MatchLabels: clusterLabels(t, "short-annot-bomb", "multiadmin", ""),
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels:      clusterLabels(t, "annotation-bomb", "multiadmin", ""),
+						Labels:      clusterLabels(t, "short-annot-bomb", "multiadmin", ""),
 						Annotations: map[string]string{"heavy-annotation": longAnnotation},
 					},
 					Spec: corev1.PodSpec{
@@ -120,7 +123,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 								Args: []string{
 									"--http-port=18000",
 									"--grpc-port=18070",
-									"--topo-global-server-addresses=annotation-bomb-global-topo." + testNamespace + ".svc:2379",
+									"--topo-global-server-addresses=short-annot-bomb-global-topo." + testNamespace + ".svc:2379",
 									"--topo-global-root=/multigres/global",
 									"--service-map=grpc-multiadmin",
 									"--pprof-http=true",
@@ -296,7 +299,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		t.Parallel()
 		k8sClient, watcher := setupIntegration(t)
 		cluster := &multigresv1alpha1.MultigresCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "mutability-test", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: "mut-test", Namespace: testNamespace},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
 				Images: multigresv1alpha1.ClusterImages{MultiAdmin: "admin:v1"},
 			},
@@ -308,19 +311,20 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// Wait for v1
 		deploy := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            "mutability-test-multiadmin",
+
+				Name:            "mut-test-multiadmin",
 				Namespace:       testNamespace,
-				Labels:          clusterLabels(t, "mutability-test", "multiadmin", ""),
-				OwnerReferences: clusterOwnerRefs(t, "mutability-test"),
+				Labels:          clusterLabels(t, "mut-test", "multiadmin", ""),
+				OwnerReferences: clusterOwnerRefs(t, "mut-test"),
 			},
 			Spec: appsv1.DeploymentSpec{
 				Replicas: ptr.To(resolver.DefaultAdminReplicas),
 				Selector: &metav1.LabelSelector{
-					MatchLabels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+					MatchLabels: clusterLabels(t, "mut-test", "multiadmin", ""),
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+						Labels: clusterLabels(t, "mut-test", "multiadmin", ""),
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
@@ -332,7 +336,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 							Args: []string{
 								"--http-port=18000",
 								"--grpc-port=18070",
-								"--topo-global-server-addresses=mutability-test-global-topo." + testNamespace + ".svc:2379",
+								"--topo-global-server-addresses=mut-test-global-topo." + testNamespace + ".svc:2379",
 								"--topo-global-root=/multigres/global",
 								"--service-map=grpc-multiadmin",
 								"--pprof-http=true",
@@ -399,19 +403,19 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// Verify v2
 		deployV2 := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            "mutability-test-multiadmin",
+				Name:            "mut-test-multiadmin",
 				Namespace:       testNamespace,
-				Labels:          clusterLabels(t, "mutability-test", "multiadmin", ""),
-				OwnerReferences: clusterOwnerRefs(t, "mutability-test"),
+				Labels:          clusterLabels(t, "mut-test", "multiadmin", ""),
+				OwnerReferences: clusterOwnerRefs(t, "mut-test"),
 			},
 			Spec: appsv1.DeploymentSpec{
 				Replicas: ptr.To(resolver.DefaultAdminReplicas),
 				Selector: &metav1.LabelSelector{
-					MatchLabels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+					MatchLabels: clusterLabels(t, "mut-test", "multiadmin", ""),
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
-						Labels: clusterLabels(t, "mutability-test", "multiadmin", ""),
+						Labels: clusterLabels(t, "mut-test", "multiadmin", ""),
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
@@ -423,7 +427,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 							Args: []string{
 								"--http-port=18000",
 								"--grpc-port=18070",
-								"--topo-global-server-addresses=mutability-test-global-topo." + testNamespace + ".svc:2379",
+								"--topo-global-server-addresses=mut-test-global-topo." + testNamespace + ".svc:2379",
 								"--topo-global-root=/multigres/global",
 								"--service-map=grpc-multiadmin",
 								"--pprof-http=true",
