@@ -61,7 +61,7 @@ spec:
                       type: string
                     name:
                       description: Name is the logical name of the cell.
-                      maxLength: 63
+                      maxLength: 30
                       minLength: 1
                       type: string
                     overrides:
@@ -1098,7 +1098,7 @@ spec:
                     region:
                       description: Region indicates the physical region (mutually
                         exclusive with zone typically, but allowed here).
-                      maxLength: 63
+                      maxLength: 30
                       minLength: 1
                       type: string
                     spec:
@@ -2284,7 +2284,7 @@ spec:
                       type: object
                     zone:
                       description: Zone indicates the physical availability zone.
-                      maxLength: 63
+                      maxLength: 30
                       minLength: 1
                       type: string
                   required:
@@ -2314,7 +2314,7 @@ spec:
                       type: boolean
                     name:
                       description: Name is the logical name of the database.
-                      maxLength: 63
+                      maxLength: 30
                       minLength: 1
                       type: string
                     tablegroups:
@@ -2329,7 +2329,7 @@ spec:
                             type: boolean
                           name:
                             description: Name is the logical name of the table group.
-                            maxLength: 63
+                            maxLength: 25
                             minLength: 1
                             type: string
                           shards:
@@ -2340,7 +2340,7 @@ spec:
                                 name:
                                   description: Name is the identifier of the shard
                                     (e.g., "0", "1").
-                                  maxLength: 63
+                                  maxLength: 25
                                   minLength: 1
                                   type: string
                                 overrides:
@@ -4634,8 +4634,8 @@ spec:
                                       maxProperties: 8
                                       type: object
                                       x-kubernetes-validations:
-                                      - message: pool names must be < 63 chars
-                                        rule: self.all(key, size(key) < 63)
+                                      - message: pool names must be <= 25 chars
+                                        rule: self.all(key, size(key) <= 25)
                                   type: object
                                 shardTemplate:
                                   description: ShardTemplate refers to a ShardTemplate
@@ -6934,8 +6934,8 @@ spec:
                                       maxProperties: 8
                                       type: object
                                       x-kubernetes-validations:
-                                      - message: pool names must be < 63 chars
-                                        rule: self.all(key, size(key) < 63)
+                                      - message: pool names must be <= 25 chars
+                                        rule: self.all(key, size(key) <= 25)
                                   type: object
                               required:
                               - name
@@ -8255,8 +8255,8 @@ spec:
                 maxProperties: 50
                 type: object
                 x-kubernetes-validations:
-                - message: cell names must be < 63 chars
-                  rule: self.all(key, size(key) < 63)
+                - message: cell names must be <= 30 chars
+                  rule: self.all(key, size(key) <= 30)
               conditions:
                 description: Conditions represent the latest available observations.
                 items:
@@ -8333,14 +8333,17 @@ spec:
                 maxProperties: 50
                 type: object
                 x-kubernetes-validations:
-                - message: database names must be < 63 chars
-                  rule: self.all(key, size(key) < 63)
+                - message: database names must be <= 30 chars
+                  rule: self.all(key, size(key) <= 30)
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64
                 type: integer
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: MultigresCluster name must be at most 25 characters
+          rule: self.metadata.name.size() <= 25
     served: true
     storage: true
     subresources:

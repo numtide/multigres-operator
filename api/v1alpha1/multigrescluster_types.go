@@ -170,18 +170,18 @@ type MultiAdminConfig struct {
 type CellConfig struct {
 	// Name is the logical name of the cell.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=30
 	Name string `json:"name"`
 
 	// Zone indicates the physical availability zone.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=30
 	Zone string `json:"zone,omitempty"`
 	// Region indicates the physical region (mutually exclusive with zone typically, but allowed here).
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=30
 	Region string `json:"region,omitempty"`
 
 	// CellTemplate refers to a CellTemplate CR.
@@ -225,7 +225,7 @@ type CellInlineSpec struct {
 type DatabaseConfig struct {
 	// Name is the logical name of the database.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=30
 	Name string `json:"name"`
 
 	// Default indicates if this is the system default database.
@@ -246,7 +246,7 @@ type DatabaseConfig struct {
 type TableGroupConfig struct {
 	// Name is the logical name of the table group.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=25
 	Name string `json:"name"`
 
 	// Default indicates if this is the default/unsharded group.
@@ -267,7 +267,7 @@ type TableGroupConfig struct {
 type ShardConfig struct {
 	// Name is the identifier of the shard (e.g., "0", "1").
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=25
 	Name string `json:"name"`
 
 	// ShardTemplate refers to a ShardTemplate CR.
@@ -294,7 +294,7 @@ type ShardOverrides struct {
 	// Pools overrides. Keyed by pool name.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
-	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 25)",message="pool names must be <= 25 chars"
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
 
@@ -307,7 +307,7 @@ type ShardInlineSpec struct {
 	// Pools configuration. Keyed by pool name.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
-	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 25)",message="pool names must be <= 25 chars"
 	Pools map[string]PoolSpec `json:"pools,omitempty"`
 }
 
@@ -327,13 +327,13 @@ type MultigresClusterStatus struct {
 	// Cells status summary.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=50
-	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="cell names must be < 63 chars"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 30)",message="cell names must be <= 30 chars"
 	Cells map[string]CellStatusSummary `json:"cells,omitempty"`
 
 	// Databases status summary.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=50
-	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="database names must be < 63 chars"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 30)",message="database names must be <= 30 chars"
 	Databases map[string]DatabaseStatusSummary `json:"databases,omitempty"`
 }
 
@@ -360,6 +360,7 @@ type DatabaseStatusSummary struct {
 
 // MultigresCluster is the Schema for the multigresclusters API
 // +kubebuilder:resource:shortName=mgc
+// +kubebuilder:validation:XValidation:rule="self.metadata.name.size() <= 25",message="MultigresCluster name must be at most 25 characters"
 type MultigresCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

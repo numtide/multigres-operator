@@ -1,7 +1,7 @@
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
-  name: minimal-cluster
+  name: minimal
   namespace: default
 spec:
   # A minimal cluster requires at least one cell definition.
