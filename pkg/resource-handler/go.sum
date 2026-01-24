@@ -94,6 +94,8 @@ github.com/numtide/multigres-operator/api v0.0.0-20260122120956-3706cba9e0ed h1:
 github.com/numtide/multigres-operator/api v0.0.0-20260122120956-3706cba9e0ed/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e h1:HGtBToLG0qS5exOHD8Fqy3aAAJ6LPW2Az5il1fnnbPM=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
+github.com/numtide/multigres-operator/pkg/util v0.0.0-20260124160810-d3e4ae22c7c8 h1:3PqCJEEsxV8K6MSV1XyPgs75VPt638CAFzAzOY1EYg4=
+github.com/numtide/multigres-operator/pkg/util v0.0.0-20260124160810-d3e4ae22c7c8/go.mod h1:1N6xxkcaV9kPOYPUFVlWzLsWVLQAa134GaXRJ0E08K8=
 github.com/onsi/ginkgo/v2 v2.22.0 h1:Yed107/8DjTr0lKCNt7Dn8yQ6ybuDRQoMGrNFKzMfHg=
 github.com/onsi/ginkgo/v2 v2.22.0/go.mod h1:7Du3c42kxCUegi0IImZ1wUQzMBVecgIHjR1C+NkhLQo=
 github.com/onsi/gomega v1.36.1 h1:bJDPBO7ibjxcbHMgSCoo4Yj18UWbKDlLwX1x9sybDcw=

@@ -6,7 +6,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/numtide/multigres-operator/api v0.0.0-20260122120956-3706cba9e0ed
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e
-	github.com/numtide/multigres-operator/pkg/util v0.0.0
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260124160810-d3e4ae22c7c8
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
@@ -14,8 +14,6 @@ require (
 )
 
 require github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
-
-replace github.com/numtide/multigres-operator/pkg/util => ../util
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
