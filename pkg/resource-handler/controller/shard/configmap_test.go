@@ -10,6 +10,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 func TestBuildPgHbaConfigMap(t *testing.T) {
@@ -92,7 +93,7 @@ func TestBuildPgHbaConfigMap(t *testing.T) {
 			// Verify labels
 			expectedLabels := map[string]string{
 				"app.kubernetes.io/name":       "multigres",
-				"app.kubernetes.io/instance":   tc.shard.Name,
+				"app.kubernetes.io/instance":   names.JoinWithConstraints(names.ServiceConstraints, tc.shard.Name),
 				"app.kubernetes.io/component":  "pg-hba-config",
 				"app.kubernetes.io/part-of":    "multigres",
 				"app.kubernetes.io/managed-by": "multigres-operator",

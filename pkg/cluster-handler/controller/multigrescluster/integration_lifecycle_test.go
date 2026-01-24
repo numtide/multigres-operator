@@ -17,13 +17,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 )
 
 func TestMultigresCluster_Lifecycle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("TableGroup Name Length Limit", func(t *testing.T) {
+	t.Run("TableGroup Long Name Hashing", func(t *testing.T) {
 		t.Parallel()
 		k8sClient, _ := setupIntegration(t)
 		// Name length math: 18 (cluster) + 10 (db) + 30 (tg) + 2 (hyphens) = 60 chars > 50 chars
@@ -51,12 +52,17 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 			t.Fatalf("Failed to create cluster: %v", err)
 		}
 
-		// Verify the TableGroup does NOT exist
+		// Verify the TableGroup DOES exist (hashed)
 		time.Sleep(2 * time.Second)
-		tgName := longClusterName + "-postgres-" + longTGName
+		tgName := names.JoinWithConstraints(
+			names.DefaultConstraints,
+			longClusterName,
+			"postgres",
+			longTGName,
+		)
 		err := k8sClient.Get(t.Context(), client.ObjectKey{Name: tgName, Namespace: testNamespace}, &multigresv1alpha1.TableGroup{})
-		if !apierrors.IsNotFound(err) {
-			t.Errorf("Expected TableGroup %s to NOT be created due to length limit, but it exists (err: %v)", tgName, err)
+		if err != nil {
+			t.Errorf("Expected TableGroup %s to be created using hashing, but got error: %v", tgName, err)
 		}
 
 		// Ensure Cluster exists
@@ -187,7 +193,11 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// Wait for zone-a
 		zoneA := &multigresv1alpha1.Cell{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            "zombie-test-zone-a",
+				Name: names.JoinWithConstraints(
+					names.DefaultConstraints,
+					"zombie-test",
+					"zone-a",
+				),
 				Namespace:       testNamespace,
 				Labels:          clusterLabels(t, "zombie-test", "", "zone-a"),
 				OwnerReferences: clusterOwnerRefs(t, "zombie-test"),
@@ -231,7 +241,11 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// Wait for zone-b creation
 		zoneB := &multigresv1alpha1.Cell{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            "zombie-test-zone-b",
+				Name: names.JoinWithConstraints(
+					names.DefaultConstraints,
+					"zombie-test",
+					"zone-b",
+				),
 				Namespace:       testNamespace,
 				Labels:          clusterLabels(t, "zombie-test", "", "zone-b"),
 				OwnerReferences: clusterOwnerRefs(t, "zombie-test"),

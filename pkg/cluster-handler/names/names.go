@@ -80,6 +80,15 @@ var (
 		MaxLength:      63,
 		ValidFirstChar: isLowercaseLetter,
 	}
+	// StatefulSetConstraints are name constraints for StatefulSet objects.
+	// We need to account for the suffix appended to the Pod name, e.g. "-0",
+	// as well as the controller-revision-hash label which appends a hash.
+	// To be safe, we reserve 11 characters for the suffix/hash.
+	// 63 - 11 = 52.
+	StatefulSetConstraints = Constraints{
+		MaxLength:      52,
+		ValidFirstChar: isLowercaseLetter,
+	}
 )
 
 // Hash computes a hash suffix for the given name parts.

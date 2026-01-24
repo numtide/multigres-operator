@@ -18,6 +18,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -67,8 +68,13 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 		ctx := t.Context()
 
 		tgName := "tg-prune"
+		clusterName := "prune-cluster"
 		tg := &multigresv1alpha1.TableGroup{
-			ObjectMeta: metav1.ObjectMeta{Name: tgName, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tgName,
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": clusterName},
+			},
 			Spec: multigresv1alpha1.TableGroupSpec{
 				DatabaseName: "db1", TableGroupName: "tg1",
 				GlobalTopoServer: globalTopo,
@@ -94,7 +100,10 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 
 		// Wait for both shards
 		shard1 := &multigresv1alpha1.Shard{
-			ObjectMeta: metav1.ObjectMeta{Name: tgName + "-keep-me", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1", "keep-me"),
+				Namespace: "default",
+			},
 			Spec: multigresv1alpha1.ShardSpec{
 				DatabaseName:     "db1",
 				TableGroupName:   "tg1",
@@ -105,7 +114,10 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 			},
 		}
 		shard2 := &multigresv1alpha1.Shard{
-			ObjectMeta: metav1.ObjectMeta{Name: tgName + "-delete-me", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1", "delete-me"),
+				Namespace: "default",
+			},
 			Spec: multigresv1alpha1.ShardSpec{
 				DatabaseName:     "db1",
 				TableGroupName:   "tg1",
@@ -155,8 +167,13 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 		ctx := t.Context()
 
 		tgName := "tg-enforce"
+		clusterName := "enforce-cluster"
 		tg := &multigresv1alpha1.TableGroup{
-			ObjectMeta: metav1.ObjectMeta{Name: tgName, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tgName,
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": clusterName},
+			},
 			Spec: multigresv1alpha1.TableGroupSpec{
 				DatabaseName:     "db1",
 				TableGroupName:   "tg1",
@@ -182,7 +199,10 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 
 		// 1. Wait for Shard (Initial Good State)
 		goodShard := &multigresv1alpha1.Shard{
-			ObjectMeta: metav1.ObjectMeta{Name: tgName + "-s1", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1", "s1"),
+				Namespace: "default",
+			},
 			Spec: multigresv1alpha1.ShardSpec{
 				DatabaseName:     "db1",
 				TableGroupName:   "tg1",

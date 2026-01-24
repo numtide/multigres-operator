@@ -10,6 +10,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 // DefaultPgHbaTemplate is the default pg_hba.conf template for pooler instances.
@@ -30,7 +31,7 @@ func BuildPgHbaConfigMap(
 
 	labels := map[string]string{
 		"app.kubernetes.io/name":       "multigres",
-		"app.kubernetes.io/instance":   shard.Name,
+		"app.kubernetes.io/instance":   names.JoinWithConstraints(names.ServiceConstraints, shard.Name),
 		"app.kubernetes.io/component":  "pg-hba-config",
 		"app.kubernetes.io/part-of":    "multigres",
 		"app.kubernetes.io/managed-by": "multigres-operator",

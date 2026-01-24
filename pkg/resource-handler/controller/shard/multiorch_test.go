@@ -323,6 +323,20 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			if tc.want != nil {
+				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName)
+				tc.want.Name = hashedName
+				if tc.want.Labels != nil {
+					tc.want.Labels["app.kubernetes.io/instance"] = hashedName
+				}
+				if tc.want.Spec.Selector != nil {
+					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
+				}
+				if tc.want.Spec.Template.ObjectMeta.Labels != nil {
+					tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
+				}
+			}
+
 			got, err := BuildMultiOrchDeployment(tc.shard, tc.cellName, tc.scheme)
 
 			if (err != nil) != tc.wantErr {
@@ -507,6 +521,17 @@ func TestBuildMultiOrchService(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			if tc.want != nil {
+				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName)
+				tc.want.Name = hashedName
+				if tc.want.Labels != nil {
+					tc.want.Labels["app.kubernetes.io/instance"] = hashedName
+				}
+				if tc.want.Spec.Selector != nil {
+					tc.want.Spec.Selector["app.kubernetes.io/instance"] = hashedName
+				}
+			}
+
 			got, err := BuildMultiOrchService(tc.shard, tc.cellName, tc.scheme)
 
 			if (err != nil) != tc.wantErr {

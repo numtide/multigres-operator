@@ -459,7 +459,7 @@ func (r *ShardReconciler) updatePoolsStatus(
 			cellName := string(cell)
 			cellsSet[cell] = true
 
-			stsName := buildPoolNameWithCell(shard.Name, poolName, cellName)
+			stsName := buildPoolNameWithCell(shard, poolName, cellName)
 			sts := &appsv1.StatefulSet{}
 			err := r.Get(
 				ctx,
@@ -499,7 +499,7 @@ func (r *ShardReconciler) updateMultiOrchStatus(
 		cellName := string(cell)
 		cellsSet[cell] = true
 
-		deployName := buildMultiOrchNameWithCell(shard.Name, cellName)
+		deployName := buildMultiOrchNameWithCell(shard, cellName)
 		deploy := &appsv1.Deployment{}
 		err := r.Get(
 			ctx,

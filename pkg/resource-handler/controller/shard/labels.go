@@ -14,7 +14,7 @@ func buildPoolLabelsWithCell(
 	cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 ) map[string]string {
-	fullPoolName := buildPoolNameWithCell(shard.Name, poolName, cellName)
+	fullPoolName := buildPoolNameWithCell(shard, poolName, cellName)
 
 	labels := metadata.BuildStandardLabels(fullPoolName, PoolComponentName)
 	metadata.AddCellLabel(labels, cellName)

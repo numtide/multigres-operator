@@ -13,6 +13,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 func TestBuildMultiGatewayDeployment(t *testing.T) {
@@ -598,8 +599,29 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 		},
 	}
 
+	// Calculate expected names dynamically to handle hashing
+	buildName := func(cell *multigresv1alpha1.Cell) string {
+		clusterName := cell.Labels["multigres.com/cluster"]
+		return names.JoinWithConstraints(names.ServiceConstraints, clusterName, cell.Spec.Name, "multigateway")
+	}
+
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			// Update expected name in the want object
+			if tc.want != nil {
+				expectedName := buildName(tc.cell)
+				tc.want.Name = expectedName
+				if tc.want.Labels != nil {
+					tc.want.Labels["app.kubernetes.io/instance"] = expectedName
+				}
+				if tc.want.Spec.Selector != nil {
+					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = expectedName
+				}
+				if tc.want.Spec.Template.ObjectMeta.Labels != nil {
+					tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = expectedName
+				}
+			}
+
 			got, err := BuildMultiGatewayDeployment(tc.cell, tc.scheme)
 
 			if (err != nil) != tc.wantErr {
@@ -775,8 +797,26 @@ func TestBuildMultiGatewayService(t *testing.T) {
 		},
 	}
 
+	// Calculate expected names dynamically to handle hashing
+	buildName := func(cell *multigresv1alpha1.Cell) string {
+		clusterName := cell.Labels["multigres.com/cluster"]
+		return names.JoinWithConstraints(names.ServiceConstraints, clusterName, cell.Spec.Name, "multigateway")
+	}
+
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			// Update expected name in the want object
+			if tc.want != nil {
+				expectedName := buildName(tc.cell)
+				tc.want.Name = expectedName
+				if tc.want.Labels != nil {
+					tc.want.Labels["app.kubernetes.io/instance"] = expectedName
+				}
+				if tc.want.Spec.Selector != nil {
+					tc.want.Spec.Selector["app.kubernetes.io/instance"] = expectedName
+				}
+			}
+
 			got, err := BuildMultiGatewayService(tc.cell, tc.scheme)
 
 			if (err != nil) != tc.wantErr {

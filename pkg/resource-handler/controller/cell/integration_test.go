@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
@@ -475,6 +476,44 @@ func TestCellReconciliation(t *testing.T) {
 
 			if err := client.Create(ctx, tc.cell); err != nil {
 				t.Fatalf("Failed to create the initial item, %v", err)
+			}
+
+			// Patch wantResources with hashed names
+			for _, obj := range tc.wantResources {
+				// Replicate controller logic for naming
+				// BuildMultiGatewayName logic: clusterName + cell.Spec.Name + "multigateway"
+				clusterName := tc.cell.Labels["multigres.com/cluster"]
+				hashedName := names.JoinWithConstraints(
+					names.ServiceConstraints,
+					clusterName,
+					tc.cell.Spec.Name,
+					"multigateway",
+				)
+
+				obj.SetName(hashedName)
+
+				// Update labels
+				labels := obj.GetLabels()
+				if labels != nil {
+					labels["app.kubernetes.io/instance"] = hashedName
+					obj.SetLabels(labels)
+				}
+
+				// Update selector if Deployment
+				if deploy, ok := obj.(*appsv1.Deployment); ok {
+					if deploy.Spec.Selector != nil {
+						deploy.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
+					}
+					if deploy.Spec.Template.ObjectMeta.Labels != nil {
+						deploy.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
+					}
+				}
+				// Update selector if Service
+				if svc, ok := obj.(*corev1.Service); ok {
+					if svc.Spec.Selector != nil {
+						svc.Spec.Selector["app.kubernetes.io/instance"] = hashedName
+					}
+				}
 			}
 
 			if err := watcher.WaitForMatch(tc.wantResources...); err != nil {

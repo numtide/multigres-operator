@@ -5,6 +5,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 const (
@@ -390,12 +391,25 @@ func buildPgctldVolume() corev1.Volume {
 // buildBackupVolume creates the backup volume for pgbackrest.
 // References a PVC that is created separately and shared across all pods in a pool.
 // For single-node clusters (kind), ReadWriteOnce works since all pods are on the same node.
-func buildBackupVolume(poolName string) corev1.Volume {
+func buildBackupVolume(shard *multigresv1alpha1.Shard, poolName, cellName string) corev1.Volume {
+	clusterName := shard.Labels["multigres.com/cluster"]
+	claimName := names.JoinWithConstraints(
+		names.ServiceConstraints,
+		"backup-data",
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+	)
+
 	return corev1.Volume{
 		Name: BackupVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: "backup-data-" + poolName,
+				ClaimName: claimName,
 			},
 		},
 	}

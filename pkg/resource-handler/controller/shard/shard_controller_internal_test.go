@@ -15,8 +15,68 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
+
+// Helper functions moved from shard_controller_test_util_test.go
+
+func buildHashedPoolName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.StatefulSetConstraints,
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+	)
+}
+
+func buildHashedPoolHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.ServiceConstraints,
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+		"headless",
+	)
+}
+
+func buildHashedBackupPVCName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.ServiceConstraints,
+		"backup-data",
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+	)
+}
+
+func buildHashedMultiOrchName(shard *multigresv1alpha1.Shard, cellName string) string {
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.ServiceConstraints,
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"multiorch",
+		cellName,
+	)
+}
 
 func TestBuildConditions(t *testing.T) {
 	tests := map[string]struct {
@@ -304,7 +364,7 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 func TestReconcile_GetError(t *testing.T) {
 	tests := map[string]struct {
 		setupShard    func() *multigresv1alpha1.Shard
-		failOnKeyName string
+		getFailKey    func(*multigresv1alpha1.Shard) string
 		reconcileFunc func(*ShardReconciler, context.Context, *multigresv1alpha1.Shard) error
 	}{
 		"MultiOrchDeployment": {
@@ -315,13 +375,17 @@ func TestReconcile_GetError(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: multigresv1alpha1.ShardSpec{
+						DatabaseName:   "testdb",
+						TableGroupName: "default",
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							Cells: []multigresv1alpha1.CellName{"cell1"},
 						},
 					},
 				}
 			},
-			failOnKeyName: "test-shard-multiorch-cell1",
+			getFailKey: func(s *multigresv1alpha1.Shard) string {
+				return buildHashedMultiOrchName(s, "cell1")
+			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
 				return r.reconcileMultiOrchDeployment(ctx, shard, "cell1")
 			},
@@ -333,9 +397,15 @@ func TestReconcile_GetError(t *testing.T) {
 						Name:      "test-shard",
 						Namespace: "default",
 					},
+					Spec: multigresv1alpha1.ShardSpec{
+						DatabaseName:   "testdb",
+						TableGroupName: "default",
+					},
 				}
 			},
-			failOnKeyName: "test-shard-multiorch-cell1",
+			getFailKey: func(s *multigresv1alpha1.Shard) string {
+				return buildHashedMultiOrchName(s, "cell1")
+			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
 				return r.reconcileMultiOrchService(ctx, shard, "cell1")
 			},
@@ -347,9 +417,15 @@ func TestReconcile_GetError(t *testing.T) {
 						Name:      "test-shard",
 						Namespace: "default",
 					},
+					Spec: multigresv1alpha1.ShardSpec{
+						DatabaseName:   "testdb",
+						TableGroupName: "default",
+					},
 				}
 			},
-			failOnKeyName: "test-shard-pool-pool1-cell1",
+			getFailKey: func(s *multigresv1alpha1.Shard) string {
+				return buildHashedPoolName(s, "pool1", "cell1")
+			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
 				poolSpec := multigresv1alpha1.PoolSpec{
 					Cells: []multigresv1alpha1.CellName{"cell1"},
@@ -364,9 +440,15 @@ func TestReconcile_GetError(t *testing.T) {
 						Name:      "test-shard",
 						Namespace: "default",
 					},
+					Spec: multigresv1alpha1.ShardSpec{
+						DatabaseName:   "testdb",
+						TableGroupName: "default",
+					},
 				}
 			},
-			failOnKeyName: "test-shard-pool-pool1-cell1-headless",
+			getFailKey: func(s *multigresv1alpha1.Shard) string {
+				return buildPoolHeadlessServiceName(s, "pool1", "cell1")
+			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
 				poolSpec := multigresv1alpha1.PoolSpec{
 					Cells: []multigresv1alpha1.CellName{"cell1"},
@@ -384,6 +466,7 @@ func TestReconcile_GetError(t *testing.T) {
 			_ = corev1.AddToScheme(scheme)
 
 			shard := tc.setupShard()
+			failKey := tc.getFailKey(shard)
 
 			// Create client with failure injection
 			baseClient := fake.NewClientBuilder().
@@ -392,7 +475,7 @@ func TestReconcile_GetError(t *testing.T) {
 				Build()
 
 			fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(tc.failOnKeyName, testutil.ErrNetworkTimeout),
+				OnGet: testutil.FailOnKeyName(failKey, testutil.ErrNetworkTimeout),
 			})
 
 			reconciler := &ShardReconciler{
@@ -427,7 +510,7 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 					Build()
 				return testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
 					OnGet: testutil.FailOnKeyName(
-						"test-shard-multiorch-zone1",
+						buildHashedMultiOrchName(shard, "zone1"),
 						testutil.ErrNetworkTimeout,
 					),
 				})
@@ -584,7 +667,7 @@ func TestUpdateStatus_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-shard-pool-pool1-cell1", testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName(buildHashedPoolName(shard, "pool1", "cell1"), testutil.ErrNetworkTimeout),
 	})
 
 	reconciler := &ShardReconciler{

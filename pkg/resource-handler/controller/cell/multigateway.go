@@ -11,6 +11,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
 )
 
@@ -34,6 +35,18 @@ const (
 	MultiGatewayPostgresPort int32 = 15432
 )
 
+// BuildMultiGatewayName generates the safe hashed name for MultiGateway resources.
+// It uses logical parts (cluster + cell name) to avoid double hashing.
+func BuildMultiGatewayName(cell *multigresv1alpha1.Cell) string {
+	clusterName := cell.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.ServiceConstraints,
+		clusterName,
+		cell.Spec.Name,
+		"multigateway",
+	)
+}
+
 // BuildMultiGatewayDeployment creates a Deployment for the MultiGateway component.
 func BuildMultiGatewayDeployment(
 	cell *multigresv1alpha1.Cell,
@@ -49,7 +62,7 @@ func BuildMultiGatewayDeployment(
 		image = cell.Spec.Images.MultiGateway
 	}
 
-	name := cell.Name + "-multigateway"
+	name := BuildMultiGatewayName(cell)
 	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
 
 	deployment := &appsv1.Deployment{
@@ -119,7 +132,7 @@ func BuildMultiGatewayService(
 	cell *multigresv1alpha1.Cell,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := cell.Name + "-multigateway"
+	name := BuildMultiGatewayName(cell)
 	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
 
 	svc := &corev1.Service{

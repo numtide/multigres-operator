@@ -282,6 +282,18 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			if tc.want != nil {
+				hashedName := buildPoolNameWithCell(tc.shard, tc.poolName, tc.cellName)
+				hashedSvcName := buildPoolHeadlessServiceName(tc.shard, tc.poolName, tc.cellName)
+				tc.want.Name = hashedSvcName
+				if tc.want.Labels != nil {
+					tc.want.Labels["app.kubernetes.io/instance"] = hashedName
+				}
+				if tc.want.Spec.Selector != nil {
+					tc.want.Spec.Selector["app.kubernetes.io/instance"] = hashedName
+				}
+			}
+
 			testScheme := scheme
 			if tc.scheme != nil {
 				testScheme = tc.scheme

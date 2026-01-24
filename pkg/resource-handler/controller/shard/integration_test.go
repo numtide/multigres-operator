@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
@@ -979,6 +980,101 @@ func TestShardReconciliation(t *testing.T) {
 
 			if err := client.Create(ctx, tc.shard); err != nil {
 				t.Fatalf("Failed to create the initial item, %v", err)
+			}
+
+			// Patch wantResources with hashed names
+			for _, obj := range tc.wantResources {
+				labels := obj.GetLabels()
+				component := labels["app.kubernetes.io/component"]
+				cellName := labels["multigres.com/cell"]
+				clusterName := tc.shard.Labels["multigres.com/cluster"]
+
+				if component == "multiorch" {
+					hashedName := names.JoinWithConstraints(
+						names.ServiceConstraints,
+						clusterName,
+						tc.shard.Spec.DatabaseName,
+						tc.shard.Spec.TableGroupName,
+						tc.shard.Spec.ShardName,
+						"multiorch",
+						cellName,
+					)
+
+					obj.SetName(hashedName)
+					labels["app.kubernetes.io/instance"] = hashedName
+					obj.SetLabels(labels)
+
+					if deploy, ok := obj.(*appsv1.Deployment); ok {
+						deploy.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
+						deploy.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
+					}
+					if svc, ok := obj.(*corev1.Service); ok {
+						svc.Spec.Selector["app.kubernetes.io/instance"] = hashedName
+					}
+				} else if component == "shard-pool" {
+					poolName := "primary" // Hardcoded as per tests
+					hashedSSName := names.JoinWithConstraints(
+						names.StatefulSetConstraints,
+						clusterName,
+						tc.shard.Spec.DatabaseName,
+						tc.shard.Spec.TableGroupName,
+						tc.shard.Spec.ShardName,
+						"pool",
+						poolName,
+						cellName,
+					)
+					hashedSvcName := names.JoinWithConstraints(
+						names.ServiceConstraints,
+						clusterName,
+						tc.shard.Spec.DatabaseName,
+						tc.shard.Spec.TableGroupName,
+						tc.shard.Spec.ShardName,
+						"pool",
+						poolName,
+						cellName,
+						"headless",
+					)
+
+					if _, ok := obj.(*appsv1.StatefulSet); ok {
+						obj.SetName(hashedSSName)
+						labels["app.kubernetes.io/instance"] = hashedSSName
+						obj.SetLabels(labels)
+
+						ss := obj.(*appsv1.StatefulSet)
+						ss.Spec.ServiceName = hashedSvcName
+						ss.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedSSName
+						ss.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedSSName
+
+						// Update Backup PVC ClaimName in Volumes
+						hashedPVCName := names.JoinWithConstraints(
+							names.ServiceConstraints,
+							"backup-data",
+							clusterName,
+							tc.shard.Spec.DatabaseName,
+							tc.shard.Spec.TableGroupName,
+							tc.shard.Spec.ShardName,
+							"pool",
+							poolName,
+							cellName,
+						)
+						for i, vol := range ss.Spec.Template.Spec.Volumes {
+							if vol.Name == "backup-data" && vol.PersistentVolumeClaim != nil {
+								ss.Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = hashedPVCName
+							}
+						}
+					}
+
+					if svc, ok := obj.(*corev1.Service); ok {
+						// Headless service
+						obj.SetName(hashedSvcName)
+						// Headless service uses same labels/selector as SS?
+						// In original test: Labels instance = "test-shard-pool-primary-zone-a" (SS name)
+						// Selector instance = "test-shard-pool-primary-zone-a"
+						labels["app.kubernetes.io/instance"] = hashedSSName
+						obj.SetLabels(labels)
+						svc.Spec.Selector["app.kubernetes.io/instance"] = hashedSSName
+					}
+				}
 			}
 
 			if err := watcher.WaitForMatch(tc.wantResources...); err != nil {

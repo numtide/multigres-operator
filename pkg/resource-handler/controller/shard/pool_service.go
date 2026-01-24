@@ -9,6 +9,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 )
 
 const (
@@ -25,12 +26,15 @@ func BuildPoolHeadlessService(
 	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := buildPoolNameWithCell(shard.Name, poolName, cellName)
+	// IMPORTANT: Use safe hashing for the headless service name too, or we risk exceeding 63 chars
+	// by appending "-headless" to an already hashed/truncated name.
+	// Logic: Use LOGICAL parts from Spec/Labels to avoid chaining hashes.
+	headlessName := buildPoolHeadlessServiceName(shard, poolName, cellName)
 	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name + "-headless",
+			Name:      headlessName,
 			Namespace: shard.Namespace,
 			Labels:    labels,
 		},
@@ -53,6 +57,36 @@ func BuildPoolHeadlessService(
 // Format: {shardName}-pool-{poolName}-{cellName}
 // For pools spanning multiple cells, this creates unique names per cell.
 // cellName must not be empty - pools must belong to a cell.
-func buildPoolNameWithCell(shardName, poolName, cellName string) string {
-	return fmt.Sprintf("%s-pool-%s-%s", shardName, poolName, cellName)
+// buildPoolNameWithCell generates the name for pool resources in a specific cell.
+// Format: {cluster}-{db}-{tg}-{shard}-pool-{poolName}-{cellName}
+func buildPoolNameWithCell(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+	// Logic: Use LOGICAL parts from Spec/Labels to avoid double hashing.
+	// shard.Name is already hashed (cluster-db-tg-shard-HASH).
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.StatefulSetConstraints,
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+	)
+}
+
+// buildPoolHeadlessServiceName generates the name for pool headless service in a specific cell.
+func buildPoolHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.ServiceConstraints,
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+		"headless",
+	)
 }

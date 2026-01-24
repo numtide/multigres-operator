@@ -1,20 +1,195 @@
 package multigrescluster
 
 import (
+	"context"
 	"errors"
 	"testing"
 
-	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
+
+func TestReconcileGlobal_ErrorPaths(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	t.Run("Error: Resolve Global Topo Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					TemplateRef: "non-existent-core",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileGlobalTopoServer(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to missing global topo spec, got nil")
+		}
+	})
+
+	t.Run("Error: Resolve MultiAdmin Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+					TemplateRef: "non-existent-core",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdmin(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to missing multi admin spec, got nil")
+		}
+	})
+
+	t.Run("Error: Patch Global Topo Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd"},
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(ctx context.Context, cli client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				return errors.New("patch error")
+			},
+		}).WithObjects(cluster).Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+		err := r.reconcileGlobalTopoServer(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil || err.Error() != "failed to apply global topo server: patch error" {
+			t.Errorf("Expected 'patch error', got %v", err)
+		}
+	})
+
+	t.Run("Error: Patch MultiAdmin Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			// MultiAdmin is created by default unless disabled, so it should try to patch.
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(ctx context.Context, cli client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				return errors.New("patch error")
+			},
+		}).WithObjects(cluster).Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+		err := r.reconcileMultiAdmin(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil || err.Error() != "failed to apply multiadmin deployment: patch error" {
+			t.Errorf("Expected 'patch error', got %v", err)
+		}
+		t.Run("Error: Build Global Topo Failed", func(t *testing.T) {
+			cluster := &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd"},
+					},
+				},
+			}
+
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+			// Use empty scheme for Reconciler
+			r := &MultigresClusterReconciler{
+				Client:   c,
+				Scheme:   runtime.NewScheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+
+			err := r.reconcileGlobalTopoServer(
+				context.Background(),
+				cluster,
+				resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			)
+			if err == nil {
+				t.Error("Expected error due to build failure, got nil")
+			}
+		})
+
+		t.Run("Error: Build MultiAdmin Failed", func(t *testing.T) {
+			cluster := &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				// MultiAdmin default enabled
+			}
+
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+			// Use empty scheme for Reconciler
+			r := &MultigresClusterReconciler{
+				Client:   c,
+				Scheme:   runtime.NewScheme(),
+				Recorder: record.NewFakeRecorder(10),
+			}
+
+			err := r.reconcileMultiAdmin(
+				context.Background(),
+				cluster,
+				resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			)
+			if err == nil {
+				t.Error("Expected error due to build failure, got nil")
+			}
+		})
+	})
+}
 
 func TestReconcile_Global(t *testing.T) {
 	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, _ := setupFixtures(t)

@@ -1,7 +1,8 @@
-package shard_test
+package shard
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -15,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
+
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -66,8 +67,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
 				// Verify MultiOrch Deployment was created (with cell suffix)
 				moDeploy := &appsv1.Deployment{}
+				hashedMoName := buildHashedMultiOrchName(shard, "zone1")
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-multiorch-zone1", Namespace: "default"},
+					types.NamespacedName{Name: hashedMoName, Namespace: "default"},
 					moDeploy); err != nil {
 					t.Errorf("MultiOrch Deployment should exist: %v", err)
 				}
@@ -75,23 +77,25 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify MultiOrch Service was created (with cell suffix)
 				moSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-multiorch-zone1", Namespace: "default"},
+					types.NamespacedName{Name: hashedMoName, Namespace: "default"},
 					moSvc); err != nil {
 					t.Errorf("MultiOrch Service should exist: %v", err)
 				}
 
 				// Verify Pool StatefulSet was created (with cell suffix)
+				hashPoolName := buildHashedPoolName(shard, "primary", "zone1")
 				poolSts := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-pool-primary-zone1", Namespace: "default"},
+					types.NamespacedName{Name: hashPoolName, Namespace: "default"},
 					poolSts); err != nil {
 					t.Errorf("Pool StatefulSet should exist: %v", err)
 				}
 
 				// Verify Pool headless Service was created (with cell suffix)
+				hashedHeadless := buildHashedPoolHeadlessServiceName(shard, "primary", "zone1")
 				poolSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-pool-primary-zone1-headless", Namespace: "default"},
+					types.NamespacedName{Name: hashedHeadless, Namespace: "default"},
 					poolSvc); err != nil {
 					t.Errorf("Pool headless Service should exist: %v", err)
 				}
@@ -141,9 +145,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
 				// Verify replica pool StatefulSet
+				hashReplica := buildHashedPoolName(shard, "replica", "zone1")
 				replicaSts := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-replica-zone1", Namespace: "default"},
+					types.NamespacedName{Name: hashReplica, Namespace: "default"},
 					replicaSts); err != nil {
 					t.Errorf("Replica pool StatefulSet should exist: %v", err)
 				} else if *replicaSts.Spec.Replicas != 2 {
@@ -151,9 +156,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 
 				// Verify readOnly pool StatefulSet
+				hashReadOnly := buildHashedPoolName(shard, "readOnly", "zone1")
 				readOnlySts := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-readOnly-zone1", Namespace: "default"},
+					types.NamespacedName{Name: hashReadOnly, Namespace: "default"},
 					readOnlySts); err != nil {
 					t.Errorf("ReadOnly pool StatefulSet should exist: %v", err)
 				} else if *readOnlySts.Spec.Replicas != 3 {
@@ -161,16 +167,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 
 				// Verify both headless services
+				hashReplicaHeadless := buildHashedPoolHeadlessServiceName(shard, "replica", "zone1")
 				replicaSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-replica-zone1-headless", Namespace: "default"},
+					types.NamespacedName{Name: hashReplicaHeadless, Namespace: "default"},
 					replicaSvc); err != nil {
 					t.Errorf("Replica pool headless Service should exist: %v", err)
 				}
 
+				hashReadOnlyHeadless := buildHashedPoolHeadlessServiceName(shard, "readOnly", "zone1")
 				readOnlySvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-pool-shard-pool-readOnly-zone1-headless", Namespace: "default"},
+					types.NamespacedName{Name: hashReadOnlyHeadless, Namespace: "default"},
 					readOnlySvc); err != nil {
 					t.Errorf("ReadOnly pool headless Service should exist: %v", err)
 				}
@@ -203,16 +211,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
 				// MultiOrch should be deployed to both zone1 and zone2
+				hashedMo1 := buildHashedMultiOrchName(shard, "zone1")
 				mo1 := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "inferred-cells-shard-multiorch-zone1", Namespace: "default"},
+					types.NamespacedName{Name: hashedMo1, Namespace: "default"},
 					mo1); err != nil {
 					t.Errorf("MultiOrch Deployment for zone1 should exist: %v", err)
 				}
 
+				hashedMo2 := buildHashedMultiOrchName(shard, "zone2")
 				mo2 := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "inferred-cells-shard-multiorch-zone2", Namespace: "default"},
+					types.NamespacedName{Name: hashedMo2, Namespace: "default"},
 					mo2); err != nil {
 					t.Errorf("MultiOrch Deployment for zone2 should exist: %v", err)
 				}
@@ -299,9 +309,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
 				// Verify StatefulSet for zone1
+				hashZone1 := buildHashedPoolName(shard, "primary", "zone1")
 				sts1 := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone1", Namespace: "default"},
+					types.NamespacedName{Name: hashZone1, Namespace: "default"},
 					sts1); err != nil {
 					t.Fatalf("StatefulSet for zone1 should exist: %v", err)
 				}
@@ -310,9 +321,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 
 				// Verify StatefulSet for zone2
+				hashZone2 := buildHashedPoolName(shard, "primary", "zone2")
 				sts2 := &appsv1.StatefulSet{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone2", Namespace: "default"},
+					types.NamespacedName{Name: hashZone2, Namespace: "default"},
 					sts2); err != nil {
 					t.Fatalf("StatefulSet for zone2 should exist: %v", err)
 				}
@@ -321,16 +333,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 
 				// Verify headless Services for both cells
+				hashSvc1 := buildHashedPoolHeadlessServiceName(shard, "primary", "zone1")
 				svc1 := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone1-headless", Namespace: "default"},
+					types.NamespacedName{Name: hashSvc1, Namespace: "default"},
 					svc1); err != nil {
 					t.Fatalf("Headless Service for zone1 should exist: %v", err)
 				}
 
+				hashSvc2 := buildHashedPoolHeadlessServiceName(shard, "primary", "zone2")
 				svc2 := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "multi-cell-shard-pool-primary-zone2-headless", Namespace: "default"},
+					types.NamespacedName{Name: hashSvc2, Namespace: "default"},
 					svc2); err != nil {
 					t.Fatalf("Headless Service for zone2 should exist: %v", err)
 				}
@@ -418,9 +432,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
+				hashPool := buildHashedPoolName(shard, "primary", "zone1")
 				poolSts := &appsv1.StatefulSet{}
 				err := c.Get(t.Context(), types.NamespacedName{
-					Name:      "existing-shard-pool-primary-zone1",
+					Name:      hashPool,
 					Namespace: "default",
 				}, poolSts)
 				if err != nil {
@@ -827,7 +842,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-shard-multiorch-zone1" {
+						strings.Contains(deploy.Name, "multiorch") && strings.Contains(deploy.Name, "zone1") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -873,7 +888,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-shard-multiorch-zone1" {
+						strings.Contains(deploy.Name, "multiorch") && strings.Contains(deploy.Name, "zone1") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -908,7 +923,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-multiorch-zone1" {
+					if strings.Contains(key.Name, "multiorch") && strings.Contains(key.Name, "zone1") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -943,7 +958,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-shard-multiorch-zone1" {
+						strings.Contains(svc.Name, "multiorch") && strings.Contains(svc.Name, "zone1") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -992,7 +1007,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-shard-multiorch-zone1" {
+						strings.Contains(svc.Name, "multiorch") && strings.Contains(svc.Name, "zone1") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1033,11 +1048,12 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnNamespacedKeyName(
-					"test-shard-svc-multiorch-zone1",
-					"default",
-					testutil.ErrNetworkTimeout,
-				),
+				OnGet: func(key client.ObjectKey) error {
+					if key.Namespace == "default" && strings.Contains(key.Name, "multiorch") && strings.Contains(key.Name, "zone1") {
+						return testutil.ErrNetworkTimeout
+					}
+					return nil
+				},
 			},
 			wantErr: true,
 		},
@@ -1068,7 +1084,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
-						sts.Name == "test-shard-pool-primary-zone1" {
+						strings.Contains(sts.Name, "pool") && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1127,7 +1143,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
-						sts.Name == "test-shard-pool-primary-zone1" {
+						strings.Contains(sts.Name, "pool") && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1175,7 +1191,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-pool-primary-zone1" {
+					if strings.Contains(key.Name, "pool") && strings.Contains(key.Name, "primary") && strings.Contains(key.Name, "zone1") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -1210,7 +1226,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-shard-pool-primary-zone1-headless" {
+						strings.Contains(svc.Name, "pool") && strings.Contains(svc.Name, "primary") &&
+						strings.Contains(svc.Name, "zone1") && strings.Contains(svc.Name, "headless") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1271,7 +1288,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-shard-pool-primary-zone1-headless" {
+						strings.Contains(svc.Name, "pool") && strings.Contains(svc.Name, "primary") &&
+						strings.Contains(svc.Name, "zone1") && strings.Contains(svc.Name, "headless") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1325,7 +1343,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-shard-pool-primary-zone1-headless" &&
+					if strings.Contains(key.Name, "pool") && strings.Contains(key.Name, "primary") &&
+						strings.Contains(key.Name, "zone1") && strings.Contains(key.Name, "headless") &&
 						key.Namespace == "default" {
 						return testutil.ErrNetworkTimeout
 					}
@@ -1665,7 +1684,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						pvc.Name == "backup-data-test-shard-pvc-pool-primary-zone1" {
+						strings.Contains(pvc.Name, "backup-data") && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1706,7 +1725,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						pvc.Name == "backup-data-test-shard-pvc-pool-primary-zone1" {
+						strings.Contains(pvc.Name, "backup-data") && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1739,7 +1758,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						pvc.Name == "backup-data-test-shard-pvc-label-err-pool-primary-zone1" {
+						strings.Contains(pvc.Name, "backup-data") && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1772,7 +1791,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "backup-data-test-shard-pvc-pool-primary-zone1" {
+					if strings.Contains(key.Name, "backup-data") && strings.Contains(key.Name, "pool") && strings.Contains(key.Name, "primary") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -1785,6 +1804,87 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			// Patch existing objects names to use hashed names
+			for i, obj := range tc.existingObjects {
+				name := obj.GetName()
+				replaced := false
+
+				// Check MultiOrch
+				for _, cell := range tc.shard.Spec.MultiOrch.Cells {
+					if strings.Contains(name, "multiorch") && strings.Contains(name, string(cell)) {
+						hashed := buildHashedMultiOrchName(tc.shard, string(cell))
+						obj.SetName(hashed)
+						// Update labels/selectors if applicable
+						if deploy, ok := obj.(*appsv1.Deployment); ok {
+							if deploy.Labels != nil {
+								deploy.Labels["app.kubernetes.io/instance"] = hashed
+							}
+							if deploy.Spec.Selector != nil {
+								deploy.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashed
+							}
+						}
+						// Service selector update? Service selector uses labels.
+						// We don't update Service contents here usually, just name.
+						replaced = true
+						break
+					}
+				}
+				if replaced {
+					tc.existingObjects[i] = obj
+					continue
+				}
+
+				// Check Pools
+				for poolName, poolSpec := range tc.shard.Spec.Pools {
+					for _, cell := range poolSpec.Cells {
+						if strings.Contains(name, "pool") && strings.Contains(name, poolName) && strings.Contains(name, string(cell)) {
+							// Determine if headless svc or backup pvc
+							if strings.Contains(name, "headless") {
+								hashed := buildHashedPoolHeadlessServiceName(tc.shard, poolName, string(cell))
+								obj.SetName(hashed)
+							} else if strings.Contains(name, "backup-data") {
+								hashed := buildHashedBackupPVCName(tc.shard, poolName, string(cell))
+								obj.SetName(hashed)
+							} else {
+								// StatefulSet or Service (if not headless - wait, pool service IS headless)
+								// Wait, is there a non-headless service for pool?
+								// pool_service.go creates headless. Use buildHashedPoolHeadlessServiceName.
+								// Check if obj kind is Service.
+								// But "multiorch" handled above. "pool" here.
+								// Pool creates StatefulSet and Headless Service.
+
+								// What if test creates a generic service?
+								// The tests create: "test-shard-pool-primary-zone1-headless".
+
+								// What about "pool-primary-zone1" (StatefulSet)?
+								hashed := buildHashedPoolName(tc.shard, poolName, string(cell))
+								if !strings.Contains(name, "headless") && !strings.Contains(name, "backup-data") {
+									obj.SetName(hashed)
+									if sts, ok := obj.(*appsv1.StatefulSet); ok {
+										if sts.Labels != nil {
+											sts.Labels["app.kubernetes.io/instance"] = hashed
+										}
+										if sts.Spec.Selector != nil {
+											sts.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashed
+										}
+										// ServiceName in STS must match Headless Service Name!
+										// We need to update sts.Spec.ServiceName to hashed headless name.
+										headlessName := buildHashedPoolHeadlessServiceName(tc.shard, poolName, string(cell))
+										sts.Spec.ServiceName = headlessName
+									}
+								}
+							}
+							replaced = true
+							break
+						}
+					}
+					if replaced {
+						break
+					}
+				}
+				tc.existingObjects[i] = obj
+			}
 
 			// Create base fake client
 			baseClient := fake.NewClientBuilder().
@@ -1799,7 +1899,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
 
-			reconciler := &shard.ShardReconciler{
+			reconciler := &ShardReconciler{
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -1860,7 +1960,7 @@ func TestShardReconciler_ReconcileNotFound(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := &shard.ShardReconciler{
+	reconciler := &ShardReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}

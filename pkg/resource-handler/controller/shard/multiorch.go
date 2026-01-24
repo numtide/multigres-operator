@@ -10,6 +10,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
 )
 
@@ -32,7 +33,7 @@ func BuildMultiOrchDeployment(
 		replicas = *shard.Spec.MultiOrch.Replicas
 	}
 
-	name := buildMultiOrchNameWithCell(shard.Name, cellName)
+	name := buildMultiOrchNameWithCell(shard, cellName)
 	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	deployment := &appsv1.Deployment{
@@ -74,7 +75,7 @@ func BuildMultiOrchService(
 	cellName string,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := buildMultiOrchNameWithCell(shard.Name, cellName)
+	name := buildMultiOrchNameWithCell(shard, cellName)
 	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	svc := &corev1.Service{
@@ -98,9 +99,20 @@ func BuildMultiOrchService(
 }
 
 // buildMultiOrchNameWithCell generates the name for MultiOrch resources in a specific cell.
-// Format: {shardName}-multiorch-{cellName}
-func buildMultiOrchNameWithCell(shardName, cellName string) string {
-	return fmt.Sprintf("%s-multiorch-%s", shardName, cellName)
+// Format: {cluster}-{db}-{tg}-{shard}-multiorch-{cellName}
+func buildMultiOrchNameWithCell(shard *multigresv1alpha1.Shard, cellName string) string {
+	// Logic: Use LOGICAL parts from Spec/Labels to avoid double hashing.
+	// shard.Name is already hashed (cluster-db-tg-shard-HASH).
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return names.JoinWithConstraints(
+		names.ServiceConstraints,
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"multiorch",
+		cellName,
+	)
 }
 
 // buildMultiOrchLabelsWithCell creates labels for MultiOrch resources in a specific cell.
@@ -108,7 +120,7 @@ func buildMultiOrchLabelsWithCell(
 	shard *multigresv1alpha1.Shard,
 	cellName string,
 ) map[string]string {
-	name := buildMultiOrchNameWithCell(shard.Name, cellName)
+	name := buildMultiOrchNameWithCell(shard, cellName)
 	labels := metadata.BuildStandardLabels(name, MultiOrchComponentName)
 	metadata.AddCellLabel(labels, cellName)
 	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
