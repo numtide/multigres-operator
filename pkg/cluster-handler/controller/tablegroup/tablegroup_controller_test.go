@@ -18,8 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func setupFixtures(
@@ -96,8 +96,8 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				// Expect hashed name: md5("test-cluster", "db1", "tg1", "shard-0") -> "0a..."
-				shardNameFull := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				shardNameFull := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					dbName,
 					tgLabelName,
@@ -118,8 +118,8 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: names.JoinWithConstraints(
-							names.DefaultConstraints,
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
 							clusterName,
 							dbName,
 							tgLabelName,
@@ -253,8 +253,8 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: names.JoinWithConstraints(
-							names.DefaultConstraints,
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
 							clusterName,
 							dbName,
 							tgLabelName,
@@ -272,8 +272,8 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			},
 			validate: func(t testing.TB, c client.Client) {
 				shard := &multigresv1alpha1.Shard{}
-				shardName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				shardName := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					dbName,
 					tgLabelName,
@@ -405,8 +405,8 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: testutil.FailOnObjectName(
-					names.JoinWithConstraints(
-						names.DefaultConstraints,
+					name.JoinWithConstraints(
+						name.DefaultConstraints,
 						clusterName,
 						dbName,
 						tgLabelName,
@@ -455,8 +455,8 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			existingObjects: []client.Object{
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: names.JoinWithConstraints(
-							names.DefaultConstraints,
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
 							clusterName,
 							dbName,
 							tgLabelName,
@@ -474,8 +474,8 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnDelete: testutil.FailOnObjectName(
-					names.JoinWithConstraints(
-						names.DefaultConstraints,
+					name.JoinWithConstraints(
+						name.DefaultConstraints,
 						clusterName,
 						dbName,
 						tgLabelName,

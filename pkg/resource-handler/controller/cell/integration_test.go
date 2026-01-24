@@ -17,9 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestSetupWithManager(t *testing.T) {
@@ -487,14 +487,14 @@ func TestCellReconciliation(t *testing.T) {
 				clusterName := tc.cell.Labels["multigres.com/cluster"]
 
 				// Replicate controller logic for naming
-				hashedDeployName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				hashedDeployName := nameutil.JoinWithConstraints(
+					nameutil.DefaultConstraints,
 					clusterName,
 					tc.cell.Spec.Name,
 					"multigateway",
 				)
-				hashedSvcName := names.JoinWithConstraints(
-					names.ServiceConstraints,
+				hashedSvcName := nameutil.JoinWithConstraints(
+					nameutil.ServiceConstraints,
 					clusterName,
 					tc.cell.Spec.Name,
 					"multigateway",

@@ -16,15 +16,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // buildHashedName helper to generate the expected hashed name for tests
 // mimicking BuildMultiGatewayName logic
 func buildHashedName(clusterName, cellName string) string {
-	return names.JoinWithConstraints(names.ServiceConstraints, clusterName, cellName, "multigateway")
+	return name.JoinWithConstraints(name.ServiceConstraints, clusterName, cellName, "multigateway")
 }
 
 // conditionAssertion defines expected condition state for testing
@@ -652,7 +652,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 
 			// Patch existing objects names
 			for i, obj := range tc.existingObjects {
-				if deploy, ok := obj.(*appsv1.Deployment); ok && titleContains(deploy.Name, "multigateway") {
+				if deploy, ok := obj.(*appsv1.Deployment); ok &&
+					titleContains(deploy.Name, "multigateway") {
 					t.Logf("Renaming deployment %s to %s", deploy.Name, hashedName)
 					deploy.Name = hashedName
 					// Also update selector/labels if needed to match
@@ -678,28 +679,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				Build()
 
 			// Wrap fake client with failures if needed
-			fakeClient := client.Client(baseClient)
-			if tc.failureConfig != nil {
-				// We need to patch the failure config keys too!
-				// This is getting complicated. FailureConfigs often match on Name.
-				// e.g. OnStatusUpdate: FailOnObjectName("test-cell", ...) -> this is fine (cell name)
-				// OnGet: FailOnKeyName("test-cell-multigateway", ...) -> NEEDS UPDATE.
-
-				// It is safer to NOT patch existingObjects generically, but Update the Test Cases to use a setup function?
-				// Too big diff.
-
-				// Let's assume FailureConfig keys match the OLD names and might need update?
-				// "test-cell-multigateway" -> hashedName.
-				// But FailureConfig is a struct with function fields. I can't inspect the function closures easily to patch the string inside.
-
-				// Re-evaluating:
-				// Maybe hardcoding the hashes IS better?
-				// `names.go` is deterministic.
-				// "test-cell" (cluster ""), "zone1" -> Hash?
-
-				// Let's run the utility I created to Print the hashes for all cases I need.
-			}
-			fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
+			fakeClient := testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 
 			reconciler := &cell.CellReconciler{
 				Client: fakeClient,

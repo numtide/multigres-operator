@@ -175,7 +175,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Replica pool headless Service should exist: %v", err)
 				}
 
-				hashReadOnlyHeadless := buildHashedPoolHeadlessServiceName(shard, "readOnly", "zone1")
+				hashReadOnlyHeadless := buildHashedPoolHeadlessServiceName(
+					shard,
+					"readOnly",
+					"zone1",
+				)
 				readOnlySvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
 					types.NamespacedName{Name: hashReadOnlyHeadless, Namespace: "default"},
@@ -842,7 +846,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						strings.Contains(deploy.Name, "multiorch") && strings.Contains(deploy.Name, "zone1") {
+						strings.Contains(
+							deploy.Name,
+							"multiorch",
+						) && strings.Contains(deploy.Name, "zone1") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -888,7 +895,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						strings.Contains(deploy.Name, "multiorch") && strings.Contains(deploy.Name, "zone1") {
+						strings.Contains(
+							deploy.Name,
+							"multiorch",
+						) && strings.Contains(deploy.Name, "zone1") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -923,7 +933,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "multiorch") && strings.Contains(key.Name, "zone1") {
+					if strings.Contains(key.Name, "multiorch") &&
+						strings.Contains(key.Name, "zone1") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -958,7 +969,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						strings.Contains(svc.Name, "multiorch") && strings.Contains(svc.Name, "zone1") {
+						strings.Contains(
+							svc.Name,
+							"multiorch",
+						) && strings.Contains(svc.Name, "zone1") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1007,7 +1021,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						strings.Contains(svc.Name, "multiorch") && strings.Contains(svc.Name, "zone1") {
+						strings.Contains(
+							svc.Name,
+							"multiorch",
+						) && strings.Contains(svc.Name, "zone1") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1049,7 +1066,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Namespace == "default" && strings.Contains(key.Name, "multiorch") && strings.Contains(key.Name, "zone1") {
+					if key.Namespace == "default" && strings.Contains(key.Name, "multiorch") &&
+						strings.Contains(key.Name, "zone1") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -1084,7 +1102,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
-						strings.Contains(sts.Name, "pool") && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
+						strings.Contains(
+							sts.Name,
+							"pool",
+						) && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1143,7 +1164,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
-						strings.Contains(sts.Name, "pool") && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
+						strings.Contains(
+							sts.Name,
+							"pool",
+						) && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1191,7 +1215,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "pool") && strings.Contains(key.Name, "primary") && strings.Contains(key.Name, "zone1") {
+					if strings.Contains(key.Name, "pool") &&
+						strings.Contains(key.Name, "primary") &&
+						strings.Contains(key.Name, "zone1") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -1226,8 +1252,14 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						strings.Contains(svc.Name, "pool") && strings.Contains(svc.Name, "primary") &&
-						strings.Contains(svc.Name, "zone1") && strings.Contains(svc.Name, "headless") {
+						strings.Contains(
+							svc.Name,
+							"pool",
+						) && strings.Contains(svc.Name, "primary") &&
+						strings.Contains(
+							svc.Name,
+							"zone1",
+						) && strings.Contains(svc.Name, "headless") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1288,8 +1320,14 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						strings.Contains(svc.Name, "pool") && strings.Contains(svc.Name, "primary") &&
-						strings.Contains(svc.Name, "zone1") && strings.Contains(svc.Name, "headless") {
+						strings.Contains(
+							svc.Name,
+							"pool",
+						) && strings.Contains(svc.Name, "primary") &&
+						strings.Contains(
+							svc.Name,
+							"zone1",
+						) && strings.Contains(svc.Name, "headless") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1343,8 +1381,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "pool") && strings.Contains(key.Name, "primary") &&
-						strings.Contains(key.Name, "zone1") && strings.Contains(key.Name, "headless") &&
+					if strings.Contains(key.Name, "pool") &&
+						strings.Contains(key.Name, "primary") &&
+						strings.Contains(key.Name, "zone1") &&
+						strings.Contains(key.Name, "headless") &&
 						key.Namespace == "default" {
 						return testutil.ErrNetworkTimeout
 					}
@@ -1684,7 +1724,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(pvc.Name, "backup-data") && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
+						strings.Contains(
+							pvc.Name,
+							"backup-data",
+						) && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1725,7 +1768,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(pvc.Name, "backup-data") && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
+						strings.Contains(
+							pvc.Name,
+							"backup-data",
+						) && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1758,7 +1804,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(pvc.Name, "backup-data") && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
+						strings.Contains(
+							pvc.Name,
+							"backup-data",
+						) && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -1791,7 +1840,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "backup-data") && strings.Contains(key.Name, "pool") && strings.Contains(key.Name, "primary") {
+					if strings.Contains(key.Name, "backup-data") &&
+						strings.Contains(key.Name, "pool") &&
+						strings.Contains(key.Name, "primary") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -1838,10 +1889,15 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Check Pools
 				for poolName, poolSpec := range tc.shard.Spec.Pools {
 					for _, cell := range poolSpec.Cells {
-						if strings.Contains(name, "pool") && strings.Contains(name, poolName) && strings.Contains(name, string(cell)) {
+						if strings.Contains(name, "pool") && strings.Contains(name, poolName) &&
+							strings.Contains(name, string(cell)) {
 							// Determine if headless svc or backup pvc
 							if strings.Contains(name, "headless") {
-								hashed := buildHashedPoolHeadlessServiceName(tc.shard, poolName, string(cell))
+								hashed := buildHashedPoolHeadlessServiceName(
+									tc.shard,
+									poolName,
+									string(cell),
+								)
 								obj.SetName(hashed)
 							} else if strings.Contains(name, "backup-data") {
 								hashed := buildHashedBackupPVCName(tc.shard, poolName, string(cell))

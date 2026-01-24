@@ -5,7 +5,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -393,8 +393,8 @@ func buildPgctldVolume() corev1.Volume {
 // For single-node clusters (kind), ReadWriteOnce works since all pods are on the same node.
 func buildBackupVolume(shard *multigresv1alpha1.Shard, poolName, cellName string) corev1.Volume {
 	clusterName := shard.Labels["multigres.com/cluster"]
-	claimName := names.JoinWithConstraints(
-		names.ServiceConstraints,
+	claimName := name.JoinWithConstraints(
+		name.ServiceConstraints,
 		"backup-data",
 		clusterName,
 		shard.Spec.DatabaseName,

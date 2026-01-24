@@ -12,8 +12,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/storage"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -42,8 +42,8 @@ func BuildPoolStatefulSet(
 	name := buildPoolNameWithCell(shard, poolName, cellName)
 	// Logic: Use LOGICAL parts from Spec/Labels to avoid chaining hashes.
 	clusterName := shard.Labels["multigres.com/cluster"]
-	headlessServiceName := names.JoinWithConstraints(
-		names.ServiceConstraints,
+	headlessServiceName := nameutil.JoinWithConstraints(
+		nameutil.ServiceConstraints,
 		clusterName,
 		shard.Spec.DatabaseName,
 		shard.Spec.TableGroupName,
@@ -153,8 +153,8 @@ func BuildBackupPVC(
 	scheme *runtime.Scheme,
 ) (*corev1.PersistentVolumeClaim, error) {
 	clusterName := shard.Labels["multigres.com/cluster"]
-	pvcName := names.JoinWithConstraints(
-		names.ServiceConstraints,
+	pvcName := nameutil.JoinWithConstraints(
+		nameutil.ServiceConstraints,
 		"backup-data",
 		clusterName,
 		shard.Spec.DatabaseName,

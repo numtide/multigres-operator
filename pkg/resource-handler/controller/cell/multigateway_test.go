@@ -13,7 +13,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestBuildMultiGatewayDeployment(t *testing.T) {
@@ -608,7 +608,12 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 	buildName := func(cell *multigresv1alpha1.Cell) string {
 		clusterName := cell.Labels["multigres.com/cluster"]
 		// Deployment uses DefaultConstraints
-		return names.JoinWithConstraints(names.DefaultConstraints, clusterName, cell.Spec.Name, "multigateway")
+		return name.JoinWithConstraints(
+			name.DefaultConstraints,
+			clusterName,
+			cell.Spec.Name,
+			"multigateway",
+		)
 	}
 
 	for name, tc := range tests {
@@ -623,8 +628,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				if tc.want.Spec.Selector != nil {
 					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 				}
-				if tc.want.Spec.Template.ObjectMeta.Labels != nil {
-					tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
+				if tc.want.Spec.Template.Labels != nil {
+					tc.want.Spec.Template.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 				}
 			}
 
@@ -808,7 +813,12 @@ func TestBuildMultiGatewayService(t *testing.T) {
 	// Calculate expected names dynamically to handle hashing
 	buildName := func(cell *multigresv1alpha1.Cell) string {
 		clusterName := cell.Labels["multigres.com/cluster"]
-		return names.JoinWithConstraints(names.ServiceConstraints, clusterName, cell.Spec.Name, "multigateway")
+		return name.JoinWithConstraints(
+			name.ServiceConstraints,
+			clusterName,
+			cell.Spec.Name,
+			"multigateway",
+		)
 	}
 
 	for name, tc := range tests {

@@ -1,6 +1,6 @@
 module github.com/numtide/multigres-operator
 
-go 1.25.0
+go 1.25.2
 
 require (
 	github.com/numtide/multigres-operator/api v0.0.0-20260122120956-3706cba9e0ed
@@ -13,6 +13,8 @@ require (
 	k8s.io/client-go v0.35.0
 	sigs.k8s.io/controller-runtime v0.22.4
 )
+
+replace github.com/numtide/multigres-operator/pkg/util => ./pkg/util
 
 require (
 	cel.dev/expr v0.24.0 // indirect

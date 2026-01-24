@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 
@@ -33,8 +33,8 @@ func TestReconcile_Databases(t *testing.T) {
 				ctx := t.Context()
 
 				// System catalog is always "postgres" db, "default" tablegroup
-				tgName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				tgName := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					"postgres",
 					"default",
@@ -74,8 +74,8 @@ func TestReconcile_Databases(t *testing.T) {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			validate: func(t testing.TB, c client.Client) {
 				tg := &multigresv1alpha1.TableGroup{}
-				tgName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				tgName := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					"db1",
 					"tg1",
@@ -120,8 +120,8 @@ func TestReconcile_Databases(t *testing.T) {
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				tg := &multigresv1alpha1.TableGroup{}
-				tgName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				tgName := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					"db1",
 					"tg1",
@@ -166,7 +166,7 @@ func TestReconcile_Databases(t *testing.T) {
 		"Error: Apply TableGroup Failed": {
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: testutil.FailOnObjectName(
-					names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1"),
+					name.JoinWithConstraints(name.DefaultConstraints, clusterName, "db1", "tg1"),
 					errSimulated,
 				),
 			},

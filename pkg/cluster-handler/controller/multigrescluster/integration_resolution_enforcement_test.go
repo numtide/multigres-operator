@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,8 +106,8 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 			}
 			return &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: names.JoinWithConstraints(
-						names.DefaultConstraints,
+					Name: nameutil.JoinWithConstraints(
+						nameutil.DefaultConstraints,
 						clusterName,
 						zone,
 					),
@@ -180,8 +180,8 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
 		wantCell := &multigresv1alpha1.Cell{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: names.JoinWithConstraints(
-					names.DefaultConstraints,
+				Name: nameutil.JoinWithConstraints(
+					nameutil.DefaultConstraints,
 					clusterName,
 					"zone-a",
 				),
@@ -278,8 +278,8 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 
 		wantTG := &multigresv1alpha1.TableGroup{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: names.JoinWithConstraints(
-					names.DefaultConstraints,
+				Name: nameutil.JoinWithConstraints(
+					nameutil.DefaultConstraints,
 					clusterName,
 					"postgres",
 					"default",
@@ -367,8 +367,8 @@ func TestMultigresCluster_EnforcementLogic(t *testing.T) {
 	// 1. Expected Cell state
 	wantCell := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: names.JoinWithConstraints(
-				names.DefaultConstraints,
+			Name: nameutil.JoinWithConstraints(
+				nameutil.DefaultConstraints,
 				clusterName,
 				"zone-a",
 			),

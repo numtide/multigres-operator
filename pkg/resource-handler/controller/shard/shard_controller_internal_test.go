@@ -15,16 +15,16 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // Helper functions moved from shard_controller_test_util_test.go
 
 func buildHashedPoolName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.StatefulSetConstraints,
+	return name.JoinWithConstraints(
+		name.StatefulSetConstraints,
 		clusterName,
 		shard.Spec.DatabaseName,
 		shard.Spec.TableGroupName,
@@ -35,10 +35,13 @@ func buildHashedPoolName(shard *multigresv1alpha1.Shard, poolName, cellName stri
 	)
 }
 
-func buildHashedPoolHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+func buildHashedPoolHeadlessServiceName(
+	shard *multigresv1alpha1.Shard,
+	poolName, cellName string,
+) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.ServiceConstraints,
+	return name.JoinWithConstraints(
+		name.ServiceConstraints,
 		clusterName,
 		shard.Spec.DatabaseName,
 		shard.Spec.TableGroupName,
@@ -52,8 +55,8 @@ func buildHashedPoolHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName
 
 func buildHashedBackupPVCName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.ServiceConstraints,
+	return name.JoinWithConstraints(
+		name.ServiceConstraints,
 		"backup-data",
 		clusterName,
 		shard.Spec.DatabaseName,
@@ -67,8 +70,8 @@ func buildHashedBackupPVCName(shard *multigresv1alpha1.Shard, poolName, cellName
 
 func buildHashedMultiOrchName(shard *multigresv1alpha1.Shard, cellName string) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.ServiceConstraints,
+	return name.JoinWithConstraints(
+		name.ServiceConstraints,
 		clusterName,
 		shard.Spec.DatabaseName,
 		shard.Spec.TableGroupName,
@@ -667,7 +670,10 @@ func TestUpdateStatus_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName(buildHashedPoolName(shard, "pool1", "cell1"), testutil.ErrNetworkTimeout),
+		OnGet: testutil.FailOnKeyName(
+			buildHashedPoolName(shard, "pool1", "cell1"),
+			testutil.ErrNetworkTimeout,
+		),
 	})
 
 	reconciler := &ShardReconciler{

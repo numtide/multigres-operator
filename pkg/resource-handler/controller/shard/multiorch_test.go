@@ -12,7 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestBuildMultiOrchDeployment(t *testing.T) {
@@ -337,7 +337,11 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			if tc.want != nil {
-				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName, names.DefaultConstraints)
+				hashedName := buildMultiOrchNameWithCell(
+					tc.shard,
+					tc.cellName,
+					nameutil.DefaultConstraints,
+				)
 				tc.want.Name = hashedName
 			}
 
@@ -532,7 +536,11 @@ func TestBuildMultiOrchService(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			if tc.want != nil {
-				hashedName := buildMultiOrchNameWithCell(tc.shard, tc.cellName, names.ServiceConstraints)
+				hashedName := buildMultiOrchNameWithCell(
+					tc.shard,
+					tc.cellName,
+					nameutil.ServiceConstraints,
+				)
 				tc.want.Name = hashedName
 			}
 

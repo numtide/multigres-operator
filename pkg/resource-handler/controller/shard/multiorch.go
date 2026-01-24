@@ -10,8 +10,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -34,7 +34,7 @@ func BuildMultiOrchDeployment(
 	}
 
 	// Use DefaultConstraints (253 chars) for Deployments => Long, Readable Names
-	name := buildMultiOrchNameWithCell(shard, cellName, names.DefaultConstraints)
+	name := buildMultiOrchNameWithCell(shard, cellName, nameutil.DefaultConstraints)
 	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	deployment := &appsv1.Deployment{
@@ -77,7 +77,7 @@ func BuildMultiOrchService(
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
 	// Use ServiceConstraints (63 chars) for Services => Truncated, Safe Names
-	name := buildMultiOrchNameWithCell(shard, cellName, names.ServiceConstraints)
+	name := buildMultiOrchNameWithCell(shard, cellName, nameutil.ServiceConstraints)
 	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
 	svc := &corev1.Service{
@@ -102,11 +102,15 @@ func BuildMultiOrchService(
 
 // buildMultiOrchNameWithCell generates the name for MultiOrch resources in a specific cell.
 // Format: {cluster}-{db}-{tg}-{shard}-multiorch-{cellName}
-func buildMultiOrchNameWithCell(shard *multigresv1alpha1.Shard, cellName string, constraints names.Constraints) string {
+func buildMultiOrchNameWithCell(
+	shard *multigresv1alpha1.Shard,
+	cellName string,
+	constraints nameutil.Constraints,
+) string {
 	// Logic: Use LOGICAL parts from Spec/Labels to avoid double hashing.
 	// shard.Name is already hashed (cluster-db-tg-shard-HASH).
 	clusterName := shard.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
+	return nameutil.JoinWithConstraints(
 		constraints,
 		clusterName,
 		shard.Spec.DatabaseName,

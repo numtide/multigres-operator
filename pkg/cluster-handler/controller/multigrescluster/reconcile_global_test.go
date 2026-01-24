@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -285,8 +285,8 @@ func TestReconcile_Global(t *testing.T) {
 				}
 				cell := &multigresv1alpha1.Cell{}
 				// Use hashed name for Cell
-				cellName := names.JoinWithConstraints(
-					names.DefaultConstraints,
+				cellName := name.JoinWithConstraints(
+					name.DefaultConstraints,
 					clusterName,
 					"zone-a",
 				)

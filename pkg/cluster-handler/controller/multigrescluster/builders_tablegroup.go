@@ -6,7 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // BuildTableGroup constructs the desired TableGroup resource.
@@ -18,8 +18,8 @@ func BuildTableGroup(
 	globalTopoRef multigresv1alpha1.GlobalTopoServerRef,
 	scheme *runtime.Scheme,
 ) (*multigresv1alpha1.TableGroup, error) {
-	tgNameFull := names.JoinWithConstraints(
-		names.DefaultConstraints,
+	tgNameFull := name.JoinWithConstraints(
+		name.DefaultConstraints,
 		cluster.Name,
 		dbName,
 		tgCfg.Name,

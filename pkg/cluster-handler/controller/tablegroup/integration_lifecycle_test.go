@@ -18,8 +18,8 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestTableGroup_Lifecycle(t *testing.T) {
@@ -101,7 +101,7 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 		// Wait for both shards
 		shard1 := &multigresv1alpha1.Shard{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1", "keep-me"),
+				Name:      nameutil.JoinWithConstraints(nameutil.DefaultConstraints, clusterName, "db1", "tg1", "keep-me"),
 				Namespace: "default",
 			},
 			Spec: multigresv1alpha1.ShardSpec{
@@ -115,7 +115,7 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 		}
 		shard2 := &multigresv1alpha1.Shard{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1", "delete-me"),
+				Name:      nameutil.JoinWithConstraints(nameutil.DefaultConstraints, clusterName, "db1", "tg1", "delete-me"),
 				Namespace: "default",
 			},
 			Spec: multigresv1alpha1.ShardSpec{
@@ -200,7 +200,7 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 		// 1. Wait for Shard (Initial Good State)
 		goodShard := &multigresv1alpha1.Shard{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      names.JoinWithConstraints(names.DefaultConstraints, clusterName, "db1", "tg1", "s1"),
+				Name:      nameutil.JoinWithConstraints(nameutil.DefaultConstraints, clusterName, "db1", "tg1", "s1"),
 				Namespace: "default",
 			},
 			Spec: multigresv1alpha1.ShardSpec{

@@ -18,8 +18,8 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestSetupWithManager(t *testing.T) {
@@ -271,8 +271,8 @@ func TestTableGroupReconciliation(t *testing.T) {
 			for _, obj := range tc.wantResources {
 				if shard, ok := obj.(*multigresv1alpha1.Shard); ok {
 					clusterName := tc.tableGroup.Labels["multigres.com/cluster"]
-					hashedName := names.JoinWithConstraints(
-						names.DefaultConstraints,
+					hashedName := nameutil.JoinWithConstraints(
+						nameutil.DefaultConstraints,
 						clusterName,
 						tc.tableGroup.Spec.DatabaseName,
 						tc.tableGroup.Spec.TableGroupName,

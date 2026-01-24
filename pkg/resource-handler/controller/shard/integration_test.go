@@ -18,9 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestSetupWithManager(t *testing.T) {
@@ -993,8 +993,8 @@ func TestShardReconciliation(t *testing.T) {
 
 				if component == "multiorch" {
 					// Deployment name uses DefaultConstraints
-					hashedDeployName := names.JoinWithConstraints(
-						names.DefaultConstraints,
+					hashedDeployName := nameutil.JoinWithConstraints(
+						nameutil.DefaultConstraints,
 						clusterName,
 						tc.shard.Spec.DatabaseName,
 						tc.shard.Spec.TableGroupName,
@@ -1003,8 +1003,8 @@ func TestShardReconciliation(t *testing.T) {
 						cellName,
 					)
 					// Service name uses ServiceConstraints
-					hashedSvcName := names.JoinWithConstraints(
-						names.ServiceConstraints,
+					hashedSvcName := nameutil.JoinWithConstraints(
+						nameutil.ServiceConstraints,
 						clusterName,
 						tc.shard.Spec.DatabaseName,
 						tc.shard.Spec.TableGroupName,
@@ -1027,8 +1027,8 @@ func TestShardReconciliation(t *testing.T) {
 					}
 				} else if component == "shard-pool" {
 					poolName := "primary" // Hardcoded as per tests
-					hashedSSName := names.JoinWithConstraints(
-						names.StatefulSetConstraints,
+					hashedSSName := nameutil.JoinWithConstraints(
+						nameutil.StatefulSetConstraints,
 						clusterName,
 						tc.shard.Spec.DatabaseName,
 						tc.shard.Spec.TableGroupName,
@@ -1037,8 +1037,8 @@ func TestShardReconciliation(t *testing.T) {
 						poolName,
 						cellName,
 					)
-					hashedSvcName := names.JoinWithConstraints(
-						names.ServiceConstraints,
+					hashedSvcName := nameutil.JoinWithConstraints(
+						nameutil.ServiceConstraints,
 						clusterName,
 						tc.shard.Spec.DatabaseName,
 						tc.shard.Spec.TableGroupName,
@@ -1060,8 +1060,8 @@ func TestShardReconciliation(t *testing.T) {
 						ss.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = clusterName
 
 						// Update Backup PVC ClaimName in Volumes
-						hashedPVCName := names.JoinWithConstraints(
-							names.ServiceConstraints,
+						hashedPVCName := nameutil.JoinWithConstraints(
+							nameutil.ServiceConstraints,
 							"backup-data",
 							clusterName,
 							tc.shard.Spec.DatabaseName,

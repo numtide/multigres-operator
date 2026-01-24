@@ -19,9 +19,9 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // ============================================================================
@@ -818,11 +818,11 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 			// Patch wantResources with hashed names
 			for _, obj := range tc.wantResources {
 				if cell, ok := obj.(*multigresv1alpha1.Cell); ok {
-					hashedName := names.JoinWithConstraints(names.DefaultConstraints, tc.cluster.Name, cell.Spec.Name)
+					hashedName := nameutil.JoinWithConstraints(nameutil.DefaultConstraints, tc.cluster.Name, cell.Spec.Name)
 					cell.Name = hashedName
 				}
 				if tg, ok := obj.(*multigresv1alpha1.TableGroup); ok {
-					hashedName := names.JoinWithConstraints(names.DefaultConstraints, tc.cluster.Name, tg.Spec.DatabaseName, tg.Spec.TableGroupName)
+					hashedName := nameutil.JoinWithConstraints(nameutil.DefaultConstraints, tc.cluster.Name, tg.Spec.DatabaseName, tg.Spec.TableGroupName)
 					tg.Name = hashedName
 				}
 			}

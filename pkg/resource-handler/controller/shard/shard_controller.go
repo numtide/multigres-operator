@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -501,7 +501,7 @@ func (r *ShardReconciler) updateMultiOrchStatus(
 		cellsSet[cell] = true
 
 		// Check MultiOrch Deployment status (deployments use long names)
-		deployName := buildMultiOrchNameWithCell(shard, cellName, names.DefaultConstraints)
+		deployName := buildMultiOrchNameWithCell(shard, cellName, name.DefaultConstraints)
 		deploy := &appsv1.Deployment{}
 		err := r.Get(
 			ctx,

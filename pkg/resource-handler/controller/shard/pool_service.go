@@ -9,7 +9,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -57,8 +57,8 @@ func buildPoolNameWithCell(shard *multigresv1alpha1.Shard, poolName, cellName st
 	// Logic: Use LOGICAL parts from Spec/Labels to avoid double hashing.
 	// shard.Name is already hashed (cluster-db-tg-shard-HASH).
 	clusterName := shard.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.StatefulSetConstraints,
+	return nameutil.JoinWithConstraints(
+		nameutil.StatefulSetConstraints,
 		clusterName,
 		shard.Spec.DatabaseName,
 		shard.Spec.TableGroupName,
@@ -70,10 +70,13 @@ func buildPoolNameWithCell(shard *multigresv1alpha1.Shard, poolName, cellName st
 }
 
 // buildPoolHeadlessServiceName generates the name for pool headless service in a specific cell.
-func buildPoolHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+func buildPoolHeadlessServiceName(
+	shard *multigresv1alpha1.Shard,
+	poolName, cellName string,
+) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.ServiceConstraints,
+	return nameutil.JoinWithConstraints(
+		nameutil.ServiceConstraints,
 		clusterName,
 		shard.Spec.DatabaseName,
 		shard.Spec.TableGroupName,

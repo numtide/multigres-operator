@@ -177,7 +177,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
-						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+						Labels: map[string]string{
+							"multigres.com/cluster": "test-cluster",
+						},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 				},
@@ -583,7 +585,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
-						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+						Labels: map[string]string{
+							"multigres.com/cluster": "test-cluster",
+						},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 				},

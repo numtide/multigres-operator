@@ -17,8 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resolver"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestMultigresCluster_Lifecycle(t *testing.T) {
@@ -54,8 +54,8 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 
 		// Verify the TableGroup DOES exist (hashed)
 		time.Sleep(2 * time.Second)
-		tgName := names.JoinWithConstraints(
-			names.DefaultConstraints,
+		tgName := nameutil.JoinWithConstraints(
+			nameutil.DefaultConstraints,
 			longClusterName,
 			"postgres",
 			longTGName,
@@ -193,8 +193,8 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// Wait for zone-a
 		zoneA := &multigresv1alpha1.Cell{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: names.JoinWithConstraints(
-					names.DefaultConstraints,
+				Name: nameutil.JoinWithConstraints(
+					nameutil.DefaultConstraints,
 					"zombie-test",
 					"zone-a",
 				),
@@ -241,8 +241,8 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		// Wait for zone-b creation
 		zoneB := &multigresv1alpha1.Cell{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: names.JoinWithConstraints(
-					names.DefaultConstraints,
+				Name: nameutil.JoinWithConstraints(
+					nameutil.DefaultConstraints,
 					"zombie-test",
 					"zone-b",
 				),

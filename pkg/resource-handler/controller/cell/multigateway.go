@@ -11,8 +11,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/names"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -39,8 +39,8 @@ const (
 // It uses DefaultConstraints (253 chars) to use readable long names.
 func BuildMultiGatewayDeploymentName(cell *multigresv1alpha1.Cell) string {
 	clusterName := cell.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.DefaultConstraints,
+	return name.JoinWithConstraints(
+		name.DefaultConstraints,
 		clusterName,
 		cell.Spec.Name,
 		"multigateway",
@@ -51,8 +51,8 @@ func BuildMultiGatewayDeploymentName(cell *multigresv1alpha1.Cell) string {
 // It uses ServiceConstraints (63 chars) for DNS safety.
 func BuildMultiGatewayServiceName(cell *multigresv1alpha1.Cell) string {
 	clusterName := cell.Labels["multigres.com/cluster"]
-	return names.JoinWithConstraints(
-		names.ServiceConstraints,
+	return name.JoinWithConstraints(
+		name.ServiceConstraints,
 		clusterName,
 		cell.Spec.Name,
 		"multigateway",

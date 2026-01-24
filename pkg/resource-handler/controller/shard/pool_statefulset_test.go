@@ -190,7 +190,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "test-shard",
 											Namespace: "default",
 											UID:       "test-uid",
-											Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+											Labels: map[string]string{
+												"multigres.com/cluster": "test-cluster",
+											},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -316,7 +318,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							InitContainers: []corev1.Container{
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
-										ObjectMeta: metav1.ObjectMeta{Name: "shard-001", Labels: map[string]string{"multigres.com/cluster": "prod-cluster"}},
+										ObjectMeta: metav1.ObjectMeta{
+											Name: "shard-001",
+											Labels: map[string]string{
+												"multigres.com/cluster": "prod-cluster",
+											},
+										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
 											TableGroupName: "default",
@@ -394,7 +401,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "shard-001",
 											Namespace: "prod",
 											UID:       "prod-uid",
-											Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
+											Labels: map[string]string{
+												"multigres.com/cluster": "prod-cluster",
+											},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -517,7 +526,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							InitContainers: []corev1.Container{
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
-										ObjectMeta: metav1.ObjectMeta{Name: "shard-002", Labels: map[string]string{"multigres.com/cluster": "test-cluster"}},
+										ObjectMeta: metav1.ObjectMeta{
+											Name: "shard-002",
+											Labels: map[string]string{
+												"multigres.com/cluster": "test-cluster",
+											},
+										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
 											TableGroupName: "default",
@@ -591,7 +605,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "shard-002",
 											Namespace: "default",
 											UID:       "uid-002",
-											Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+											Labels: map[string]string{
+												"multigres.com/cluster": "test-cluster",
+											},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -731,7 +747,12 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 							InitContainers: []corev1.Container{
 								buildMultiPoolerSidecar(
 									&multigresv1alpha1.Shard{
-										ObjectMeta: metav1.ObjectMeta{Name: "shard-affinity", Labels: map[string]string{"multigres.com/cluster": "test-cluster"}},
+										ObjectMeta: metav1.ObjectMeta{
+											Name: "shard-affinity",
+											Labels: map[string]string{
+												"multigres.com/cluster": "test-cluster",
+											},
+										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
 											TableGroupName: "default",
@@ -823,7 +844,9 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:      "shard-affinity",
 											Namespace: "default",
 											UID:       "affinity-uid",
-											Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+											Labels: map[string]string{
+												"multigres.com/cluster": "test-cluster",
+											},
 										},
 										Spec: multigresv1alpha1.ShardSpec{
 											DatabaseName:   "testdb",
@@ -905,15 +928,15 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 
 				tc.want.Name = hashedName
 				tc.want.Spec.ServiceName = hashedSvcName
-				if tc.want.Labels != nil {
-					// tc.want.Labels["app.kubernetes.io/instance"] = hashedName
-				}
-				if tc.want.Spec.Selector != nil {
-					// tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
-				}
-				if tc.want.Spec.Template.ObjectMeta.Labels != nil {
-					// tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
-				}
+				// if tc.want.Labels != nil {
+				// 	tc.want.Labels["app.kubernetes.io/instance"] = hashedName
+				// }
+				// if tc.want.Spec.Selector != nil {
+				// 	tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
+				// }
+				// if tc.want.Spec.Template.Labels != nil {
+				// 	tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
+				// }
 				for i, vol := range tc.want.Spec.Template.Spec.Volumes {
 					if vol.Name == "backup-data-vol" && vol.PersistentVolumeClaim != nil {
 						tc.want.Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = hashedBackupPVC
@@ -1184,9 +1207,9 @@ func TestBuildBackupPVC(t *testing.T) {
 			if tc.want != nil {
 				hashedPVCName := buildHashedBackupPVCName(shard, "primary", "zone1")
 				tc.want.Name = hashedPVCName
-				if tc.want.Labels != nil {
-					// tc.want.Labels["app.kubernetes.io/instance"] = hashedPoolName
-				}
+				// if tc.want.Labels != nil {
+				// 	tc.want.Labels["app.kubernetes.io/instance"] = hashedPoolName
+				// }
 			}
 
 			testScheme := scheme

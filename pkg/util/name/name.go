@@ -23,7 +23,7 @@ limitations under the License.
 //  2. For singleton or static resources (e.g., GlobalTopo, MultiAdmin) that are 1:1 with
 //     the cluster and have predictable short names, we use simple string concatenation
 //     without hashing for better readability and predictability.
-package names
+package name
 
 import (
 	"crypto/md5"
