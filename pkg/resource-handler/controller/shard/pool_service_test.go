@@ -32,6 +32,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					Name:      "test-shard",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -49,13 +50,14 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -72,13 +74,14 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-shard-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -110,6 +113,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					Name:      "shard-001",
 					Namespace: "prod",
 					UID:       "prod-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "prod-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -128,13 +132,14 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					Namespace: "prod",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-pool-ro-zone-east",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone-east",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "prod-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -151,13 +156,14 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-001-pool-ro-zone-east",
+						"app.kubernetes.io/instance":   "prod-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone-east",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "prod-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -189,6 +195,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					Name:      "shard-002",
 					Namespace: "default",
 					UID:       "uid-002",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -204,13 +211,14 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -227,13 +235,14 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "shard-002-pool-primary-zone1",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  PoolComponentName,
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
 						"multigres.com/database":       "testdb",
 						"multigres.com/tablegroup":     "default",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -282,6 +291,17 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			if tc.want != nil {
+				hashedSvcName := buildPoolHeadlessServiceName(tc.shard, tc.poolName, tc.cellName)
+				tc.want.Name = hashedSvcName
+				// if tc.want.Labels != nil {
+				// 	tc.want.Labels["app.kubernetes.io/instance"] = hashedName
+				// }
+				// if tc.want.Spec.Selector != nil {
+				// 	tc.want.Spec.Selector["app.kubernetes.io/instance"] = hashedName
+				// }
+			}
+
 			testScheme := scheme
 			if tc.scheme != nil {
 				testScheme = tc.scheme

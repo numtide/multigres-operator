@@ -2,6 +2,7 @@ package cell_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -17,7 +18,14 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
+
+// buildHashedName helper to generate the expected hashed name for tests
+// mimicking BuildMultiGatewayName logic
+func buildHashedName(clusterName, cellName string) string {
+	return name.JoinWithConstraints(name.ServiceConstraints, clusterName, cellName, "multigateway")
+}
 
 // conditionAssertion defines expected condition state for testing
 type conditionAssertion struct {
@@ -44,6 +52,10 @@ func assertConditions(t testing.TB, got []metav1.Condition, want ...conditionAss
 			t.Errorf("condition[%d].Reason = %q, want %q", i, g.Reason, w.Reason)
 		}
 	}
+}
+
+func titleContains(s, substrate string) bool {
+	return strings.Contains(s, substrate)
 }
 
 func TestCellReconciler_Reconcile(t *testing.T) {
@@ -77,10 +89,11 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
+				hashedName := buildHashedName(cell.Labels["multigres.com/cluster"], cell.Spec.Name)
 				// Verify MultiGateway Deployment was created
 				mgDeploy := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-cell-multigateway", Namespace: "default"},
+					types.NamespacedName{Name: hashedName, Namespace: "default"},
 					mgDeploy); err != nil {
 					t.Errorf("MultiGateway Deployment should exist: %v", err)
 				}
@@ -88,7 +101,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				// Verify MultiGateway Service was created
 				mgSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-cell-multigateway", Namespace: "default"},
+					types.NamespacedName{Name: hashedName, Namespace: "default"},
 					mgSvc); err != nil {
 					t.Errorf("MultiGateway Service should exist: %v", err)
 				}
@@ -151,9 +164,10 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
+				hashedName := buildHashedName(cell.Labels["multigres.com/cluster"], cell.Spec.Name)
 				mgDeploy := &appsv1.Deployment{}
 				err := c.Get(t.Context(), types.NamespacedName{
-					Name:      "existing-cell-multigateway",
+					Name:      hashedName,
 					Namespace: "default",
 				}, mgDeploy)
 				if err != nil {
@@ -167,6 +181,9 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					)
 				}
 
+				if len(mgDeploy.Spec.Template.Spec.Containers) == 0 {
+					t.Fatal("MultiGateway Deployment has no containers")
+				}
 				if mgDeploy.Spec.Template.Spec.Containers[0].Image != "custom/multigateway:v1.0.0" {
 					t.Errorf(
 						"MultiGateway image = %s, want custom/multigateway:v1.0.0",
@@ -407,7 +424,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-cell-multigateway" {
+						titleContains(deploy.Name, "multigateway") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -443,7 +460,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						deploy.Name == "test-cell-multigateway" {
+						titleContains(deploy.Name, "multigateway") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -465,7 +482,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-cell-multigateway" {
+					if titleContains(key.Name, "multigateway") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil
@@ -487,7 +504,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnCreate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-cell-multigateway" {
+						titleContains(svc.Name, "multigateway") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -523,7 +540,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnUpdate: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-cell-multigateway" {
+						titleContains(svc.Name, "multigateway") {
 						return testutil.ErrInjected
 					}
 					return nil
@@ -551,11 +568,12 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnNamespacedKeyName(
-					"test-cell-svc-multigateway",
-					"default",
-					testutil.ErrNetworkTimeout,
-				),
+				OnGet: func(key client.ObjectKey) error {
+					if titleContains(key.Name, "multigateway") {
+						return testutil.ErrNetworkTimeout
+					}
+					return nil
+				},
 			},
 			wantErr: true,
 		},
@@ -627,6 +645,32 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			// Calculate hashed name
+			clusterName := tc.cell.Labels["multigres.com/cluster"]
+			hashedName := buildHashedName(clusterName, tc.cell.Spec.Name)
+			t.Logf("Computed hashedName: %s", hashedName)
+
+			// Patch existing objects names
+			for i, obj := range tc.existingObjects {
+				if deploy, ok := obj.(*appsv1.Deployment); ok &&
+					titleContains(deploy.Name, "multigateway") {
+					t.Logf("Renaming deployment %s to %s", deploy.Name, hashedName)
+					deploy.Name = hashedName
+					// Also update selector/labels if needed to match
+					if deploy.Labels != nil {
+						deploy.Labels["app.kubernetes.io/instance"] = hashedName
+					}
+					// Update match labels
+					if deploy.Spec.Selector != nil {
+						deploy.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
+					}
+				}
+				if svc, ok := obj.(*corev1.Service); ok && titleContains(svc.Name, "multigateway") {
+					svc.Name = hashedName
+				}
+				tc.existingObjects[i] = obj
+			}
+
 			// Create base fake client
 			baseClient := fake.NewClientBuilder().
 				WithScheme(scheme).
@@ -634,11 +678,8 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				WithStatusSubresource(&multigresv1alpha1.Cell{}).
 				Build()
 
-			fakeClient := client.Client(baseClient)
-			// Wrap with failure injection if configured
-			if tc.failureConfig != nil {
-				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
-			}
+			// Wrap fake client with failures if needed
+			fakeClient := testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 
 			reconciler := &cell.CellReconciler{
 				Client: fakeClient,

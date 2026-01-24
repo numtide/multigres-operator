@@ -7,6 +7,8 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestBuildShard(t *testing.T) {
@@ -42,8 +44,16 @@ func TestBuildShard(t *testing.T) {
 			t.Fatalf("BuildShard() error = %v", err)
 		}
 
-		if got.Name != "my-tg-shard-0" {
-			t.Errorf("Name = %v, want %v", got.Name, "my-tg-shard-0")
+		// Calculate expected hash: md5("my-cluster", "my-db", "my-tg", "shard-0") -> "a068d59f"
+		expectedName := name.JoinWithConstraints(
+			name.DefaultConstraints,
+			"my-cluster",
+			"my-db",
+			"my-tg",
+			"shard-0",
+		)
+		if got.Name != expectedName {
+			t.Errorf("Name = %v, want %v", got.Name, expectedName)
 		}
 		if got.Namespace != "default" {
 			t.Errorf("Namespace = %v, want %v", got.Namespace, "default")

@@ -12,6 +12,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -34,6 +35,30 @@ const (
 	MultiGatewayPostgresPort int32 = 15432
 )
 
+// BuildMultiGatewayDeploymentName generates the Deployment name.
+// It uses DefaultConstraints (253 chars) to use readable long names.
+func BuildMultiGatewayDeploymentName(cell *multigresv1alpha1.Cell) string {
+	clusterName := cell.Labels["multigres.com/cluster"]
+	return name.JoinWithConstraints(
+		name.DefaultConstraints,
+		clusterName,
+		cell.Spec.Name,
+		"multigateway",
+	)
+}
+
+// BuildMultiGatewayServiceName generates the Service name.
+// It uses ServiceConstraints (63 chars) for DNS safety.
+func BuildMultiGatewayServiceName(cell *multigresv1alpha1.Cell) string {
+	clusterName := cell.Labels["multigres.com/cluster"]
+	return name.JoinWithConstraints(
+		name.ServiceConstraints,
+		clusterName,
+		cell.Spec.Name,
+		"multigateway",
+	)
+}
+
 // BuildMultiGatewayDeployment creates a Deployment for the MultiGateway component.
 func BuildMultiGatewayDeployment(
 	cell *multigresv1alpha1.Cell,
@@ -49,8 +74,9 @@ func BuildMultiGatewayDeployment(
 		image = cell.Spec.Images.MultiGateway
 	}
 
-	name := cell.Name + "-multigateway"
-	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
+	name := BuildMultiGatewayDeploymentName(cell)
+	clusterName := cell.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, MultiGatewayComponentName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -119,8 +145,9 @@ func BuildMultiGatewayService(
 	cell *multigresv1alpha1.Cell,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
-	name := cell.Name + "-multigateway"
-	labels := metadata.BuildStandardLabels(name, MultiGatewayComponentName)
+	name := BuildMultiGatewayServiceName(cell)
+	clusterName := cell.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, MultiGatewayComponentName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

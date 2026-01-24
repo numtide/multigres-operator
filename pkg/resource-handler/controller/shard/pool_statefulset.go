@@ -13,6 +13,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/storage"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -38,8 +39,20 @@ func BuildPoolStatefulSet(
 	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
-	name := buildPoolNameWithCell(shard.Name, poolName, cellName)
-	headlessServiceName := name + "-headless"
+	name := buildPoolNameWithCell(shard, poolName, cellName)
+	// Logic: Use LOGICAL parts from Spec/Labels to avoid chaining hashes.
+	clusterName := shard.Labels["multigres.com/cluster"]
+	headlessServiceName := nameutil.JoinWithConstraints(
+		nameutil.ServiceConstraints,
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+		"headless",
+	)
 	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
 
 	// Each StatefulSet in a cell has ReplicasPerCell replicas
@@ -85,7 +98,7 @@ func BuildPoolStatefulSet(
 					},
 					Volumes: []corev1.Volume{
 						// buildPgctldVolume(),
-						buildBackupVolume(name),
+						buildBackupVolume(shard, poolName, cellName),
 						buildSocketDirVolume(),
 						buildPgHbaVolume(),
 					},
@@ -139,8 +152,18 @@ func BuildBackupPVC(
 	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*corev1.PersistentVolumeClaim, error) {
-	name := buildPoolNameWithCell(shard.Name, poolName, cellName)
-	pvcName := "backup-data-" + name
+	clusterName := shard.Labels["multigres.com/cluster"]
+	pvcName := nameutil.JoinWithConstraints(
+		nameutil.ServiceConstraints,
+		"backup-data",
+		clusterName,
+		shard.Spec.DatabaseName,
+		shard.Spec.TableGroupName,
+		shard.Spec.ShardName,
+		"pool",
+		poolName,
+		cellName,
+	)
 	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
 
 	// Use BackupStorage if specified, otherwise inherit from Storage

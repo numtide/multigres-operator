@@ -29,6 +29,7 @@ func TestBuildHeadlessService(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -39,10 +40,11 @@ func TestBuildHeadlessService(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-toposerver",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "toposerver",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -59,10 +61,11 @@ func TestBuildHeadlessService(t *testing.T) {
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-toposerver",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "toposerver",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -120,6 +123,7 @@ func TestBuildClientService(t *testing.T) {
 					Name:      "test-toposerver",
 					Namespace: "default",
 					UID:       "test-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -130,10 +134,11 @@ func TestBuildClientService(t *testing.T) {
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-toposerver",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "toposerver",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -150,10 +155,11 @@ func TestBuildClientService(t *testing.T) {
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-toposerver",
+						"app.kubernetes.io/instance":   "test-cluster",
 						"app.kubernetes.io/component":  "toposerver",
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{

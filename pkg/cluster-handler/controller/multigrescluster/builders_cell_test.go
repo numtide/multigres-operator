@@ -8,6 +8,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
+
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestBuildCell(t *testing.T) {
@@ -56,8 +58,10 @@ func TestBuildCell(t *testing.T) {
 			t.Fatalf("BuildCell() error = %v", err)
 		}
 
-		if got.Name != "my-cluster-zone-a" {
-			t.Errorf("Name = %v, want %v", got.Name, "my-cluster-zone-a")
+		// Calculate expected hash: md5("my-cluster", "zone-a") -> "6b6f7386"
+		expectedName := name.JoinWithConstraints(name.DefaultConstraints, "my-cluster", "zone-a")
+		if got.Name != expectedName {
+			t.Errorf("Name = %v, want %v", got.Name, expectedName)
 		}
 		if got.Spec.Zone != "us-east-1a" {
 			t.Errorf("Zone = %v, want %v", got.Spec.Zone, "us-east-1a")

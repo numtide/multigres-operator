@@ -2,12 +2,14 @@ package cell
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -171,7 +173,12 @@ func TestReconcileMultiGatewayDeployment_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-cell-multigateway", testutil.ErrNetworkTimeout),
+		OnGet: func(key client.ObjectKey) error {
+			if strings.Contains(key.Name, "multigateway") {
+				return testutil.ErrNetworkTimeout
+			}
+			return nil
+		},
 	})
 
 	reconciler := &CellReconciler{
@@ -209,7 +216,12 @@ func TestReconcileMultiGatewayService_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-cell-multigateway", testutil.ErrNetworkTimeout),
+		OnGet: func(key client.ObjectKey) error {
+			if strings.Contains(key.Name, "multigateway") {
+				return testutil.ErrNetworkTimeout
+			}
+			return nil
+		},
 	})
 
 	reconciler := &CellReconciler{
@@ -246,7 +258,12 @@ func TestUpdateStatus_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-cell-multigateway", testutil.ErrNetworkTimeout),
+		OnGet: func(key client.ObjectKey) error {
+			if strings.Contains(key.Name, "multigateway") {
+				return testutil.ErrNetworkTimeout
+			}
+			return nil
+		},
 	})
 
 	reconciler := &CellReconciler{

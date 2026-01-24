@@ -1,13 +1,12 @@
 package multigrescluster
 
 import (
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // BuildCell constructs the desired Cell resource.
@@ -20,16 +19,13 @@ func BuildCell(
 	allCellNames []multigresv1alpha1.CellName,
 	scheme *runtime.Scheme,
 ) (*multigresv1alpha1.Cell, error) {
-	if len(cellCfg.Name) > 63 {
-		return nil, fmt.Errorf(
-			"cell name '%s' exceeds 63 characters; limit required for label validation",
-			cellCfg.Name,
-		)
-	}
-
 	cellCR := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-" + cellCfg.Name,
+			Name: name.JoinWithConstraints(
+				name.DefaultConstraints,
+				cluster.Name,
+				cellCfg.Name,
+			),
 			Namespace: cluster.Namespace,
 			Labels: map[string]string{
 				"multigres.com/cluster": cluster.Name,

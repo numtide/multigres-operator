@@ -68,6 +68,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{},
@@ -78,18 +79,18 @@ func TestTopoServerReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "test-toposerver",
 						Namespace:       "default",
-						Labels:          toposerverLabels(t, "test-toposerver"),
+						Labels:          toposerverLabels(t, "test-cluster"),
 						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    ptr.To(int32(3)),
 						ServiceName: "test-toposerver-headless",
 						Selector: &metav1.LabelSelector{
-							MatchLabels: toposerverLabels(t, "test-toposerver"),
+							MatchLabels: toposerverLabels(t, "test-cluster"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: toposerverLabels(t, "test-toposerver"),
+								Labels: toposerverLabels(t, "test-cluster"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -159,7 +160,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "test-toposerver",
 						Namespace:       "default",
-						Labels:          toposerverLabels(t, "test-toposerver"),
+						Labels:          toposerverLabels(t, "test-cluster"),
 						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -167,14 +168,14 @@ func TestTopoServerReconciliation(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "client", 2379),
 						},
-						Selector: toposerverLabels(t, "test-toposerver"),
+						Selector: toposerverLabels(t, "test-cluster"),
 					},
 				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "test-toposerver-headless",
 						Namespace:       "default",
-						Labels:          toposerverLabels(t, "test-toposerver"),
+						Labels:          toposerverLabels(t, "test-cluster"),
 						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -184,7 +185,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 							tcpServicePort(t, "client", 2379),
 							tcpServicePort(t, "peer", 2380),
 						},
-						Selector:                 toposerverLabels(t, "test-toposerver"),
+						Selector:                 toposerverLabels(t, "test-cluster"),
 						PublishNotReadyAddresses: true,
 					},
 				},
@@ -248,6 +249,7 @@ func toposerverLabels(t testing.TB, instanceName string) map[string]string {
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
+		"multigres.com/cluster":        instanceName,
 	}
 }
 
