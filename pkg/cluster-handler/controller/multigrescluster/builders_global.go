@@ -63,7 +63,6 @@ func BuildMultiAdminDeployment(
 	spec *multigresv1alpha1.StatelessSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.Deployment, error) {
-
 	standardLabels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiAdmin)
 	metadata.AddClusterLabel(standardLabels, cluster.Name)
 
