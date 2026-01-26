@@ -442,7 +442,7 @@ kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-lo
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
 .PHONY: kind-deploy-no-webhook
-kind-deploy-no-webhook: kind-up install-certmanager manifests kustomize kind-load ## Deploy controller to Kind without the webhook enabled.
+kind-deploy-no-webhook: kind-up manifests kustomize kind-load ## Deploy controller to Kind without the webhook enabled.
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator..."
