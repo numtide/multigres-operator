@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 // BuildGlobalTopoServer constructs the desired TopoServer for the global topology.
@@ -27,11 +28,14 @@ func BuildGlobalTopoServer(
 		return nil, nil
 	}
 
+	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentGlobalTopo)
+	metadata.AddClusterLabel(labels, cluster.Name)
+
 	ts := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-global-topo", cluster.Name),
 			Namespace: cluster.Namespace,
-			Labels:    map[string]string{"multigres.com/cluster": cluster.Name},
+			Labels:    labels,
 		},
 		Spec: multigresv1alpha1.TopoServerSpec{
 			Etcd: &multigresv1alpha1.EtcdSpec{
@@ -59,30 +63,23 @@ func BuildMultiAdminDeployment(
 	spec *multigresv1alpha1.StatelessSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.Deployment, error) {
-	podLabels := map[string]string{
-		"app":                   "multiadmin",
-		"multigres.com/cluster": cluster.Name,
-	}
-	for k, v := range spec.PodLabels {
-		podLabels[k] = v
-	}
+
+	standardLabels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiAdmin)
+	metadata.AddClusterLabel(standardLabels, cluster.Name)
+
+	// Merge with user provided pod labels, but standard labels take precedence
+	podLabels := metadata.MergeLabels(standardLabels, spec.PodLabels)
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-multiadmin", cluster.Name),
 			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				"multigres.com/cluster": cluster.Name,
-				"app":                   "multiadmin",
-			},
+			Labels:    standardLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: spec.Replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app":                   "multiadmin",
-					"multigres.com/cluster": cluster.Name,
-				},
+				MatchLabels: standardLabels,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

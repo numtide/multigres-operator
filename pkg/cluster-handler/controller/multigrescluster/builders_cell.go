@@ -6,6 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -19,6 +20,10 @@ func BuildCell(
 	allCellNames []multigresv1alpha1.CellName,
 	scheme *runtime.Scheme,
 ) (*multigresv1alpha1.Cell, error) {
+	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentCell)
+	metadata.AddClusterLabel(labels, cluster.Name)
+	metadata.AddCellLabel(labels, cellCfg.Name)
+
 	cellCR := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name.JoinWithConstraints(
@@ -27,10 +32,7 @@ func BuildCell(
 				cellCfg.Name,
 			),
 			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				"multigres.com/cluster": cluster.Name,
-				"multigres.com/cell":    cellCfg.Name,
-			},
+			Labels:    labels,
 		},
 		Spec: multigresv1alpha1.CellSpec{
 			Name:   cellCfg.Name,

@@ -6,6 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -25,15 +26,16 @@ func BuildTableGroup(
 		tgCfg.Name,
 	)
 
+	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentTableGroup)
+	metadata.AddClusterLabel(labels, cluster.Name)
+	metadata.AddDatabaseLabel(labels, dbName)
+	metadata.AddTableGroupLabel(labels, tgCfg.Name)
+
 	tgCR := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tgNameFull,
 			Namespace: cluster.Namespace,
-			Labels: map[string]string{
-				"multigres.com/cluster":    cluster.Name,
-				"multigres.com/database":   dbName,
-				"multigres.com/tablegroup": tgCfg.Name,
-			},
+			Labels:    labels,
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{
 			DatabaseName:   dbName,

@@ -19,6 +19,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -144,14 +145,9 @@ func TestTableGroupReconciliation(t *testing.T) {
 				// Shard 1
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tg-test-simple-s1",
-						Namespace: "default",
-						Labels: map[string]string{
-							"multigres.com/cluster":    "test-cluster",
-							"multigres.com/database":   "db1",
-							"multigres.com/tablegroup": "tg1",
-							"multigres.com/shard":      "s1",
-						},
+						Name:            "tg-test-simple-s1",
+						Namespace:       "default",
+						Labels:          shardLabels("test-cluster", "db1", "tg1", "s1"),
 						OwnerReferences: tgOwnerRefs(t, "tg-test-simple"),
 					},
 					Spec: multigresv1alpha1.ShardSpec{
@@ -184,14 +180,9 @@ func TestTableGroupReconciliation(t *testing.T) {
 				// Shard 2
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tg-test-simple-s2",
-						Namespace: "default",
-						Labels: map[string]string{
-							"multigres.com/cluster":    "test-cluster",
-							"multigres.com/database":   "db1",
-							"multigres.com/tablegroup": "tg1",
-							"multigres.com/shard":      "s2",
-						},
+						Name:            "tg-test-simple-s2",
+						Namespace:       "default",
+						Labels:          shardLabels("test-cluster", "db1", "tg1", "s2"),
 						OwnerReferences: tgOwnerRefs(t, "tg-test-simple"),
 					},
 					Spec: multigresv1alpha1.ShardSpec{
@@ -291,6 +282,15 @@ func TestTableGroupReconciliation(t *testing.T) {
 }
 
 // Helpers
+
+func shardLabels(clusterName, db, tg, shard string) map[string]string {
+	labels := metadata.BuildStandardLabels(clusterName, "shard")
+	metadata.AddClusterLabel(labels, clusterName)
+	metadata.AddDatabaseLabel(labels, db)
+	metadata.AddTableGroupLabel(labels, tg)
+	metadata.AddShardLabel(labels, shard)
+	return labels
+}
 
 func tgOwnerRefs(t testing.TB, tgName string) []metav1.OwnerReference {
 	t.Helper()

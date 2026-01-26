@@ -21,6 +21,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -116,18 +117,34 @@ func setupIntegration(t *testing.T) (client.Client, *testutil.ResourceWatcher) {
 	return k8sClient, watcher
 }
 
-func clusterLabels(t testing.TB, clusterName, app, cell string) map[string]string {
+func clusterLabels(t testing.TB, clusterName, oldApp, cell string) map[string]string {
 	t.Helper()
-	l := map[string]string{
-		"multigres.com/cluster": clusterName,
-	}
-	if app != "" {
-		l["app"] = app
-	}
+	var component string
 	if cell != "" {
-		l["multigres.com/cell"] = cell
+		component = metadata.ComponentCell
+	} else if oldApp == "multiadmin" {
+		component = metadata.ComponentMultiAdmin
+	} else if oldApp != "" {
+		component = oldApp
+	} else {
+		// Default to global-topo if app is empty
+		component = metadata.ComponentGlobalTopo
 	}
-	return l
+
+	labels := metadata.BuildStandardLabels(clusterName, component)
+	metadata.AddClusterLabel(labels, clusterName)
+	if cell != "" {
+		metadata.AddCellLabel(labels, cell)
+	}
+	return labels
+}
+
+func tableGroupLabels(clusterName, db, tg string) map[string]string {
+	labels := metadata.BuildStandardLabels(clusterName, metadata.ComponentTableGroup)
+	metadata.AddClusterLabel(labels, clusterName)
+	metadata.AddDatabaseLabel(labels, db)
+	metadata.AddTableGroupLabel(labels, tg)
+	return labels
 }
 
 func clusterOwnerRefs(t testing.TB, clusterName string) []metav1.OwnerReference {
@@ -342,13 +359,9 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 				// 4. TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterName + "-8b65dfba",
-						Namespace: testNamespace,
-						Labels: map[string]string{
-							"multigres.com/cluster":    clusterName,
-							"multigres.com/database":   "postgres",
-							"multigres.com/tablegroup": "default",
-						},
+						Name:            clusterName + "-8b65dfba",
+						Namespace:       testNamespace,
+						Labels:          tableGroupLabels(clusterName, "postgres", "default"),
 						OwnerReferences: clusterOwnerRefs(t, clusterName),
 					},
 					Spec: multigresv1alpha1.TableGroupSpec{
@@ -549,13 +562,9 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 				// 4. Injected TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "minimal-cluster-8b65dfba",
-						Namespace: testNamespace,
-						Labels: map[string]string{
-							"multigres.com/cluster":    "minimal-cluster",
-							"multigres.com/database":   "postgres",
-							"multigres.com/tablegroup": "default",
-						},
+						Name:            "minimal-cluster-8b65dfba",
+						Namespace:       testNamespace,
+						Labels:          tableGroupLabels("minimal-cluster", "postgres", "default"),
 						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
 					},
 					Spec: multigresv1alpha1.TableGroupSpec{
@@ -753,13 +762,9 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 				// 4. Injected TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "lazy-cluster-8b65dfba",
-						Namespace: testNamespace,
-						Labels: map[string]string{
-							"multigres.com/cluster":    "lazy-cluster",
-							"multigres.com/database":   "postgres",
-							"multigres.com/tablegroup": "default",
-						},
+						Name:            "lazy-cluster-8b65dfba",
+						Namespace:       testNamespace,
+						Labels:          tableGroupLabels("lazy-cluster", "postgres", "default"),
 						OwnerReferences: clusterOwnerRefs(t, "lazy-cluster"),
 					},
 					Spec: multigresv1alpha1.TableGroupSpec{
