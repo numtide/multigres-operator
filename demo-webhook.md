@@ -83,7 +83,7 @@ kubectl apply -f config/samples/minimal.yaml
 The Mutating Webhook intercepts the request and uses the Shared Resolver to populate the spec *before* it is persisted.
 
 ```bash
-kubectl get multigrescluster minimal-cluster -o yaml
+kubectl get multigrescluster minimal -o yaml
 ```
 
 **Output:**
@@ -226,7 +226,7 @@ kubectl apply -f config/samples/minimal.yaml
 ### 3. Inspect the Magic
 
 ```bash
-kubectl get multigrescluster minimal-cluster -o yaml
+kubectl get multigrescluster minimal -o yaml
 ```
 
 **Output:**
@@ -360,7 +360,7 @@ kubectl apply -f config/samples/minimal.yaml
 Because the webhook is bypassed, the object is stored "as-is" in `etcd`.
 
 ```bash
-kubectl get multigrescluster minimal-cluster -o yaml
+kubectl get multigrescluster minimal -o yaml
 ```
 
 **Output:**
@@ -379,17 +379,17 @@ spec:
 Despite the sparse spec, the **Controller** successfully creates the child resources using in-memory defaults.
 
 ```bash
-kubectl get cells,tablegroups -l multigres.com/cluster=minimal-cluster
+kubectl get cells,tablegroups -l multigres.com/cluster=minimal
 ```
 
 **Output:**
 
 ```text
 NAME                                        GATEWAY   READY
-cell.multigres.com/minimal-cluster-zone-a   0
+cell.multigres.com/minimal-zone-a   0
 
 NAME                                                        SHARDS
-tablegroup.multigres.com/minimal-cluster-postgres-default   0
+tablegroup.multigres.com/minimal-postgres-default   0
 ```
 
 ### 5. Test: Missing Protection
