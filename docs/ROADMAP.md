@@ -22,9 +22,8 @@ These items represent immediate gaps between the codebase and the design specifi
 ### 🔍 Quality & Observability
 
 * **ValidatingAdmissionPolicy Manifests:** The design document `admission-controller-and-defaults.md` specifies that `ValidatingAdmissionPolicy` (Level 3 validation) should be implemented as separate YAML files in `config/policies/`. These files are currently missing from the file list. Although the logic exists in the fallback webhook, shipping the policies is part of the design specification. This isn't critical at this point and could be omitted. The reason why it wasn't implemented yet is because `ValidatingAdmissionPolicy` is a relatively new feature in kubernetes and doesn't have extensive backwards compatibility, but it's worth looking into in the near future. For now the webhook does this as a fallback.
-* **Code Sweep:** Review the code and ensure not bugs and clean code everywhere.
+* **Code Sweep:** Review the code and ensure not bugs and clean code everywhere. This includes removing duplicated logic and centralizing it. For example the `metadata` package and some other defaults.
 * **Monitoring:** While `metrics_service.yaml` exists, explicit custom metrics (e.g., "shards_provisioned_total") are not yet instrumented in the controller code.
-* **Remove Duplicated Logic:** We have some duplicate logic in the `resource handler` right now that we need to remove and centralize. For example the `metadata` package and some other defaults.
 
 ---
 
