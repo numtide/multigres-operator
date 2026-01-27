@@ -27,7 +27,7 @@ spec:
         - name: "default" # MUST be named 'default' for Gateway routing
           default: true
           shards:
-            - name: "0"
+            - name: "0-inf"
               # Inherits 'standard-shard' template automatically via defaults
               overrides:
                 pools:

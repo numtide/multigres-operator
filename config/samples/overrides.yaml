@@ -35,13 +35,13 @@ spec:
         - name: "default"
           default: true
           shards:
-            - name: "0"
+            - name: "0-inf"
               overrides:
                 pools:
                   "main-app":
                     storage:
                       size: "200Gi" # Override: Increase from 100Gi (template) to 200Gi
-                    # Define a new pool not in template
+                    # Define a new pool not in template. This will produce a warning in case it's a typo.
                   "analytics":
                     type: "readOnly"
                     replicasPerCell: 1

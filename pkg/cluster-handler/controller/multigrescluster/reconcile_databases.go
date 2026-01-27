@@ -3,7 +3,6 @@ package multigrescluster
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -36,8 +35,15 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 
 			resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
 
+			// Extract all valid cell names for this cluster (Contextual Awareness)
+			var allCellNames []string
+			for _, c := range cluster.Spec.Cells {
+				allCellNames = append(allCellNames, c.Name)
+			}
+
 			for _, shard := range tg.Shards {
-				orch, pools, err := res.ResolveShard(ctx, &shard)
+				// Pass allCellNames to the resolver so it can perform "Empty means Everybody" defaulting
+				orch, pools, err := res.ResolveShard(ctx, &shard, allCellNames)
 				if err != nil {
 					r.Recorder.Eventf(
 						cluster,
@@ -54,21 +60,8 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 					)
 				}
 
-				if len(orch.Cells) == 0 {
-					uniqueCells := make(map[string]bool)
-					for _, pool := range pools {
-						for _, cell := range pool.Cells {
-							uniqueCells[string(cell)] = true
-						}
-					}
-					for c := range uniqueCells {
-						orch.Cells = append(orch.Cells, multigresv1alpha1.CellName(c))
-					}
-					sort.Slice(orch.Cells, func(i, j int) bool {
-						return string(orch.Cells[i]) < string(orch.Cells[j])
-					})
-				}
-
+				// The Resolver now handles the "Empty Cells = All Cells" logic authoritative.
+				// We no longer need to manually infer or sort here, just trust the resolver.
 				resolvedShards = append(resolvedShards, multigresv1alpha1.ShardResolvedSpec{
 					Name:      shard.Name,
 					MultiOrch: *orch,

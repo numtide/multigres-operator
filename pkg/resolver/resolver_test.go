@@ -82,11 +82,17 @@ func TestNewResolver(t *testing.T) {
 	}
 }
 
+// setupScheme creates a new scheme with all required types registered
+func setupScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	return scheme
+}
+
 // TestResolver_TemplateExists covers the helpers called by the Defaulter/Validator.
 func TestResolver_TemplateExists(t *testing.T) {
 	t.Parallel()
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	coreTpl, cellTpl, shardTpl, ns := setupFixtures(t)
 	objs := []client.Object{coreTpl, cellTpl, shardTpl}
@@ -162,8 +168,7 @@ func TestResolver_TemplateExists(t *testing.T) {
 // TestResolver_ValidateReference checks Validat*TemplateReference logic (including fallback).
 func TestResolver_ValidateReference(t *testing.T) {
 	t.Parallel()
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	// Fixtures have names like "default" (FallbackCoreTemplate)
 	coreTpl, cellTpl, shardTpl, ns := setupFixtures(t)

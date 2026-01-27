@@ -7,7 +7,6 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -17,9 +16,7 @@ import (
 )
 
 func TestReconcileCells_ErrorPaths(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	t.Run("Error: Get Global Topo Ref Failed", func(t *testing.T) {
 		// Use explicit invalid core template to force GetGlobalTopoRef to fail
@@ -219,9 +216,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 }
 
 func TestReconcileCells_HappyPath(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	t.Run("Happy Path: Create and Prune Cells", func(t *testing.T) {
 		cluster := &multigresv1alpha1.MultigresCluster{

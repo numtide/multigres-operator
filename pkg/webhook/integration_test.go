@@ -222,7 +222,9 @@ func TestWebhook_Mutation(t *testing.T) {
 				Name:      "mutation-test",
 				Namespace: testNamespace,
 			},
-			Spec: multigresv1alpha1.MultigresClusterSpec{},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
+			},
 		}
 
 		if err := k8sClient.Create(ctx, cluster); err != nil {
@@ -264,6 +266,7 @@ func TestWebhook_Validation(t *testing.T) {
 				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
 					CoreTemplate: "non-existent-template",
 				},
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
 			},
 		}
 
@@ -289,6 +292,7 @@ func TestWebhook_TemplateProtection(t *testing.T) {
 				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
 					CoreTemplate: "production-core",
 				},
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
 			},
 		}
 		if err := k8sClient.Create(ctx, cluster); err != nil {
@@ -348,6 +352,7 @@ func TestWebhook_OverridePrecedence(t *testing.T) {
 				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
 					Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
 				},
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
 			},
 		}
 		if err := k8sClient.Create(ctx, cluster); err != nil {
@@ -383,6 +388,7 @@ func TestWebhook_SpecificRefPrecedence(t *testing.T) {
 				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
 					TemplateRef: "specific-large",
 				},
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
 			},
 		}
 		if err := k8sClient.Create(ctx, cluster); err != nil {
@@ -408,6 +414,7 @@ func TestWebhook_SystemCatalogIdempotency(t *testing.T) {
 		cluster := &multigresv1alpha1.MultigresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "idempotency-test", Namespace: testNamespace},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
 				Databases: []multigresv1alpha1.DatabaseConfig{
 					{
 						Name:    "postgres",
@@ -453,6 +460,7 @@ func TestWebhook_DeepTemplateProtection(t *testing.T) {
 		cluster := &multigresv1alpha1.MultigresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "deep-ref-cluster", Namespace: testNamespace},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
 				Databases: []multigresv1alpha1.DatabaseConfig{
 					{
 						Name:    "postgres",

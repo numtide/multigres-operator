@@ -24,11 +24,12 @@ func TestResolver_ResolveShard(t *testing.T) {
 	_, _, shardTpl, ns := setupFixtures(t)
 
 	tests := map[string]struct {
-		config    *multigresv1alpha1.ShardConfig
-		objects   []client.Object
-		wantOrch  *multigresv1alpha1.MultiOrchSpec
-		wantPools map[string]multigresv1alpha1.PoolSpec
-		wantErr   bool
+		config       *multigresv1alpha1.ShardConfig
+		objects      []client.Object
+		wantOrch     *multigresv1alpha1.MultiOrchSpec
+		wantPools    map[string]multigresv1alpha1.PoolSpec
+		wantErr      bool
+		allCellNames []string
 	}{
 		"Template Found": {
 			config:  &multigresv1alpha1.ShardConfig{ShardTemplate: "default"},
@@ -90,6 +91,45 @@ func TestResolver_ResolveShard(t *testing.T) {
 				},
 			},
 		},
+		"Dynamic Cell Injection": {
+			config: &multigresv1alpha1.ShardConfig{
+				Spec: &multigresv1alpha1.ShardInlineSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						// Empty Cells, should inherit allCellNames
+						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+					},
+					Pools: map[string]multigresv1alpha1.PoolSpec{
+						"p1": {Type: "read"}, // Empty Cells
+					},
+				},
+			},
+			allCellNames: []string{"zone-a", "zone-b"},
+			wantOrch: &multigresv1alpha1.MultiOrchSpec{
+				StatelessSpec: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(1)),
+					Resources: DefaultResourcesOrch(),
+				},
+				// Expect injected cells
+				Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
+			},
+			wantPools: map[string]multigresv1alpha1.PoolSpec{
+				"p1": {
+					Type:            "read",
+					ReplicasPerCell: ptr.To(int32(1)),
+					// Expect injected cells
+					Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
+					Storage: multigresv1alpha1.StorageSpec{
+						Size: DefaultEtcdStorageSize,
+					},
+					Postgres: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPostgres(),
+					},
+					Multipooler: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPooler(),
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -98,7 +138,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
 			r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
 
-			orch, pools, err := r.ResolveShard(t.Context(), tc.config)
+			orch, pools, err := r.ResolveShard(t.Context(), tc.config, tc.allCellNames)
 			if tc.wantErr {
 				if err == nil {
 					t.Error("Expected error")
