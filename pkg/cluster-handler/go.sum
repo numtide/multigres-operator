@@ -94,8 +94,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/numtide/multigres-operator/api v0.0.0-20260124211221-3ac48f516626 h1:W+G750qypViEo4vwbsVRkFY5Yo1/QqfGalDlTqFqHow=
 github.com/numtide/multigres-operator/api v0.0.0-20260124211221-3ac48f516626/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
-github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260120201135-e72eb4b1bd4a h1:cNaaVd2lF2HcRdKNQoYhBSiElSkQmokOv/yCJNfI8lg=
-github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260120201135-e72eb4b1bd4a/go.mod h1:8urAPFN6zF8V6KmQWWU31DL6WtZ6seLkm6UrwBVGArU=
+github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260127175705-1069c321caf5 h1:t3firrnXDIVPwEyyr8DUI2HzsdAyTkHXpwcN+Fh0wLY=
+github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260127175705-1069c321caf5/go.mod h1:2i/63Oh2C6D4yho1+YGqfRsdtGgK92MTMuzvYwBZFB0=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e h1:HGtBToLG0qS5exOHD8Fqy3aAAJ6LPW2Az5il1fnnbPM=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260126133025-9deb64ff99df h1:wqunngBbPhS6pPtfmff48aRd9JZ213p2/Mt5jjLy5g8=
