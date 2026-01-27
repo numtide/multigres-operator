@@ -150,7 +150,10 @@ func (v *MultigresClusterValidator) validateLogic(
 					tpl, err := res.ResolveShardTemplate(ctx, shard.ShardTemplate)
 					if err != nil {
 						// This should have been caught by validateTemplatesExist, but handling it safe.
-						return nil, fmt.Errorf("failed to resolve template for orphan check: %w", err)
+						return nil, fmt.Errorf(
+							"failed to resolve template for orphan check: %w",
+							err,
+						)
 					}
 
 					if tpl != nil {
@@ -158,7 +161,9 @@ func (v *MultigresClusterValidator) validateLogic(
 							if _, exists := tpl.Spec.Pools[poolName]; !exists {
 								warnings = append(warnings, fmt.Sprintf(
 									"Pool '%s' defined in overrides for shard '%s' does not exist in template '%s'. A new pool will be created.",
-									poolName, shard.Name, tpl.Name,
+									poolName,
+									shard.Name,
+									tpl.Name,
 								))
 							}
 						}
@@ -172,26 +177,41 @@ func (v *MultigresClusterValidator) validateLogic(
 				// We pass allCellNames just like the Reconciler would, to simulate the final state
 				orch, pools, err := res.ResolveShard(ctx, &shard, allCellNames)
 				if err != nil {
-					return nil, fmt.Errorf("validation failed: cannot resolve shard '%s': %w", shard.Name, err)
+					return nil, fmt.Errorf(
+						"validation failed: cannot resolve shard '%s': %w",
+						shard.Name,
+						err,
+					)
 				}
 
 				// Check 1: Empty Cells (Orphaned Shard)
 				// If after resolution (and defaulting), cells are STILL empty, it's a broken config.
 				if len(orch.Cells) == 0 {
-					return nil, fmt.Errorf("shard '%s' matches NO cells (check your cell names or template configuration)", shard.Name)
+					return nil, fmt.Errorf(
+						"shard '%s' matches NO cells (check your cell names or template configuration)",
+						shard.Name,
+					)
 				}
 
 				for poolName, pool := range pools {
 					// Check 1b: Empty Pool cells
 					if len(pool.Cells) == 0 {
-						return nil, fmt.Errorf("pool '%s' in shard '%s' matches NO cells", poolName, shard.Name)
+						return nil, fmt.Errorf(
+							"pool '%s' in shard '%s' matches NO cells",
+							poolName,
+							shard.Name,
+						)
 					}
 				}
 
 				// Check 2: Invalid Cells (Reference Validity)
 				for _, c := range orch.Cells {
 					if !validCells[string(c)] {
-						return nil, fmt.Errorf("shard '%s' is assigned to non-existent cell '%s'", shard.Name, c)
+						return nil, fmt.Errorf(
+							"shard '%s' is assigned to non-existent cell '%s'",
+							shard.Name,
+							c,
+						)
 					}
 				}
 
@@ -199,7 +219,12 @@ func (v *MultigresClusterValidator) validateLogic(
 					// Check 2b: Invalid Pool cells
 					for _, c := range pool.Cells {
 						if !validCells[string(c)] {
-							return nil, fmt.Errorf("pool '%s' in shard '%s' is assigned to non-existent cell '%s'", poolName, shard.Name, c)
+							return nil, fmt.Errorf(
+								"pool '%s' in shard '%s' is assigned to non-existent cell '%s'",
+								poolName,
+								shard.Name,
+								c,
+							)
 						}
 					}
 				}

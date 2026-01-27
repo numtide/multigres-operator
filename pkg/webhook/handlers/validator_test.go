@@ -284,14 +284,18 @@ func TestMultigresClusterValidator(t *testing.T) {
 				}}
 				return c
 			}(),
-			operation:    "Create",
-			wantAllowed:  true,
-			wantWarnings: []string{"Pool 'typo-pool' defined in overrides for shard 's0' does not exist in template 'prod-shard'"},
+			operation:   "Create",
+			wantAllowed: true,
+			wantWarnings: []string{
+				"Pool 'typo-pool' defined in overrides for shard 's0' does not exist in template 'prod-shard'",
+			},
 		},
 		"Denied: Shard Assigned to Non-Existent Cell": {
 			object: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
-				c.Spec.Cells = []multigresv1alpha1.CellConfig{{Name: "zone-valid", CellTemplate: "prod-cell"}}
+				c.Spec.Cells = []multigresv1alpha1.CellConfig{
+					{Name: "zone-valid", CellTemplate: "prod-cell"},
+				}
 				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
 					TableGroups: []multigresv1alpha1.TableGroupConfig{{
 						Shards: []multigresv1alpha1.ShardConfig{{
@@ -301,7 +305,10 @@ func TestMultigresClusterValidator(t *testing.T) {
 									Cells: []multigresv1alpha1.CellName{"zone-invalid"}, // Invalid!
 								},
 								Pools: map[string]multigresv1alpha1.PoolSpec{
-									"p1": {Type: "read", Cells: []multigresv1alpha1.CellName{"zone-invalid"}},
+									"p1": {
+										Type:  "read",
+										Cells: []multigresv1alpha1.CellName{"zone-invalid"},
+									},
 								},
 							},
 						}},
@@ -355,7 +362,10 @@ func TestMultigresClusterValidator(t *testing.T) {
 					}},
 				}}
 				// Add a valid cell so Shard passes Check 1
-				c.Spec.Cells = append(c.Spec.Cells, multigresv1alpha1.CellConfig{Name: "c1", CellTemplate: "prod-cell"})
+				c.Spec.Cells = append(
+					c.Spec.Cells,
+					multigresv1alpha1.CellConfig{Name: "c1", CellTemplate: "prod-cell"},
+				)
 				return c
 			}(),
 			operation:   "Create",
@@ -437,7 +447,9 @@ func TestMultigresClusterValidator(t *testing.T) {
 				c := baseCluster.DeepCopy()
 				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
 					TableGroups: []multigresv1alpha1.TableGroupConfig{{
-						Shards: []multigresv1alpha1.ShardConfig{{Name: "s0", ShardTemplate: "prod-shard"}},
+						Shards: []multigresv1alpha1.ShardConfig{
+							{Name: "s0", ShardTemplate: "prod-shard"},
+						},
 					}},
 				}}
 				return c
