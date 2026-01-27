@@ -10,7 +10,6 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,9 +22,7 @@ import (
 )
 
 func TestReconcileGlobal_ErrorPaths(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	t.Run("Error: Resolve Global Topo Failed", func(t *testing.T) {
 		cluster := &multigresv1alpha1.MultigresCluster{

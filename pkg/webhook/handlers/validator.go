@@ -67,6 +67,13 @@ func (v *MultigresClusterValidator) validate(
 		return nil, err
 	}
 
+	// 2. Deep Logic Validation (Safety Checks)
+	if warnings, err := v.validateLogic(ctx, cluster); err != nil {
+		return warnings, err
+	} else if len(warnings) > 0 {
+		return warnings, nil
+	}
+
 	return nil, nil
 }
 
@@ -113,6 +120,94 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 	}
 
 	return nil
+}
+
+func (v *MultigresClusterValidator) validateLogic(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) (admission.Warnings, error) {
+	res := resolver.NewResolver(v.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
+	var warnings admission.Warnings
+
+	// Extract all valid cell names for this cluster
+	var allCellNames []string
+	validCells := make(map[string]bool)
+	for _, c := range cluster.Spec.Cells {
+		allCellNames = append(allCellNames, c.Name)
+		validCells[c.Name] = true
+	}
+
+	// Iterate through every Shard and "Simulate" Resolution
+	for _, db := range cluster.Spec.Databases {
+		for _, tg := range db.TableGroups {
+			for _, shard := range tg.Shards {
+				// ------------------------------------------------------------------
+				// 1. Orphan Override Check
+				// ------------------------------------------------------------------
+				if shard.Overrides != nil && len(shard.Overrides.Pools) > 0 {
+					// We must resolve the template to know what pools *should* exist.
+					// Pass empty string if ShardTemplate is empty to resolve default/implicit.
+					tpl, err := res.ResolveShardTemplate(ctx, shard.ShardTemplate)
+					if err != nil {
+						// This should have been caught by validateTemplatesExist, but handling it safe.
+						return nil, fmt.Errorf("failed to resolve template for orphan check: %w", err)
+					}
+
+					if tpl != nil {
+						for poolName := range shard.Overrides.Pools {
+							if _, exists := tpl.Spec.Pools[poolName]; !exists {
+								warnings = append(warnings, fmt.Sprintf(
+									"Pool '%s' defined in overrides for shard '%s' does not exist in template '%s'. A new pool will be created.",
+									poolName, shard.Name, tpl.Name,
+								))
+							}
+						}
+					}
+				}
+
+				// ------------------------------------------------------------------
+				// 2. Logic Resolution
+				// ------------------------------------------------------------------
+				// Dry-Run Resolution
+				// We pass allCellNames just like the Reconciler would, to simulate the final state
+				orch, pools, err := res.ResolveShard(ctx, &shard, allCellNames)
+				if err != nil {
+					return nil, fmt.Errorf("validation failed: cannot resolve shard '%s': %w", shard.Name, err)
+				}
+
+				// Check 1: Empty Cells (Orphaned Shard)
+				// If after resolution (and defaulting), cells are STILL empty, it's a broken config.
+				if len(orch.Cells) == 0 {
+					return nil, fmt.Errorf("shard '%s' matches NO cells (check your cell names or template configuration)", shard.Name)
+				}
+
+				for poolName, pool := range pools {
+					// Check 1b: Empty Pool cells
+					if len(pool.Cells) == 0 {
+						return nil, fmt.Errorf("pool '%s' in shard '%s' matches NO cells", poolName, shard.Name)
+					}
+				}
+
+				// Check 2: Invalid Cells (Reference Validity)
+				for _, c := range orch.Cells {
+					if !validCells[string(c)] {
+						return nil, fmt.Errorf("shard '%s' is assigned to non-existent cell '%s'", shard.Name, c)
+					}
+				}
+
+				for poolName, pool := range pools {
+					// Check 2b: Invalid Pool cells
+					for _, c := range pool.Cells {
+						if !validCells[string(c)] {
+							return nil, fmt.Errorf("pool '%s' in shard '%s' is assigned to non-existent cell '%s'", poolName, shard.Name, c)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return warnings, nil
 }
 
 // ============================================================================

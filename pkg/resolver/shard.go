@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,6 +16,7 @@ import (
 func (r *Resolver) ResolveShard(
 	ctx context.Context,
 	shardSpec *multigresv1alpha1.ShardConfig,
+	allCellNames []string,
 ) (*multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec, error) {
 	// 1. Fetch Template
 	templateName := shardSpec.ShardTemplate
@@ -29,6 +31,19 @@ func (r *Resolver) ResolveShard(
 	// 3. Apply Deep Defaults (Level 4)
 	defaultStatelessSpec(&multiOrch.StatelessSpec, DefaultResourcesOrch(), 1)
 
+	// Contextual Defaulting: Lazy Cell Injection
+	// If the resolved configuration has no cells defined, it means "run everywhere".
+	// We inject the full list of cluster cells here.
+	if len(multiOrch.Cells) == 0 && len(allCellNames) > 0 {
+		for _, c := range allCellNames {
+			multiOrch.Cells = append(multiOrch.Cells, multigresv1alpha1.CellName(c))
+		}
+		// Sort for deterministic output
+		sort.Slice(multiOrch.Cells, func(i, j int) bool {
+			return multiOrch.Cells[i] < multiOrch.Cells[j]
+		})
+	}
+
 	if len(pools) == 0 {
 		pools["default"] = multigresv1alpha1.PoolSpec{
 			Type:  "readWrite",
@@ -39,6 +54,18 @@ func (r *Resolver) ResolveShard(
 	for name := range pools {
 		p := pools[name]
 		defaultPoolSpec(&p)
+
+		// Contextual Defaulting for Pools
+		if len(p.Cells) == 0 && len(allCellNames) > 0 {
+			for _, c := range allCellNames {
+				p.Cells = append(p.Cells, multigresv1alpha1.CellName(c))
+			}
+			// Sort for deterministic output
+			sort.Slice(p.Cells, func(i, j int) bool {
+				return p.Cells[i] < p.Cells[j]
+			})
+		}
+
 		pools[name] = p
 	}
 

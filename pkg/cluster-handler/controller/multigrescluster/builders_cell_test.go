@@ -13,8 +13,7 @@ import (
 )
 
 func TestBuildCell(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	cluster := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{

@@ -18,11 +18,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+// setupScheme creates a new scheme with all required types registered
+func setupScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	return scheme
+}
+
 func TestMultigresClusterValidator(t *testing.T) {
 	t.Parallel()
 
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	baseMeta := metav1.ObjectMeta{Name: "cluster-1", Namespace: "default"}
 	baseSpec := multigresv1alpha1.MultigresClusterSpec{
@@ -41,6 +47,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 		failureConfig *testutil.FailureConfig
 		wantAllowed   bool
 		wantMessage   string
+		wantWarnings  []string
 	}{
 		"Allowed: All templates exist (Create)": {
 			object:      baseCluster.DeepCopy(),
@@ -252,6 +259,211 @@ func TestMultigresClusterValidator(t *testing.T) {
 			operation:   "Create",
 			wantAllowed: true,
 		},
+		"Allowed: Orphan Override Warning": {
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Cells = []multigresv1alpha1.CellConfig{
+					{Name: "c1", CellTemplate: "prod-cell"},
+				}
+				// This cluster uses "prod-shard" which likely has "default" pool.
+				// We override "typo-pool" which doesn't exist.
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Shards: []multigresv1alpha1.ShardConfig{
+							{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+								Overrides: &multigresv1alpha1.ShardOverrides{
+									Pools: map[string]multigresv1alpha1.PoolSpec{
+										"typo-pool": {ReplicasPerCell: ptr.To(int32(3))},
+									},
+								},
+							},
+						},
+					}},
+				}}
+				return c
+			}(),
+			operation:    "Create",
+			wantAllowed:  true,
+			wantWarnings: []string{"Pool 'typo-pool' defined in overrides for shard 's0' does not exist in template 'prod-shard'"},
+		},
+		"Denied: Shard Assigned to Non-Existent Cell": {
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Cells = []multigresv1alpha1.CellConfig{{Name: "zone-valid", CellTemplate: "prod-cell"}}
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Shards: []multigresv1alpha1.ShardConfig{{
+							Name: "s0",
+							Spec: &multigresv1alpha1.ShardInlineSpec{
+								MultiOrch: multigresv1alpha1.MultiOrchSpec{
+									Cells: []multigresv1alpha1.CellName{"zone-invalid"}, // Invalid!
+								},
+								Pools: map[string]multigresv1alpha1.PoolSpec{
+									"p1": {Type: "read", Cells: []multigresv1alpha1.CellName{"zone-invalid"}},
+								},
+							},
+						}},
+					}},
+				}}
+				return c
+			}(),
+			operation:   "Create",
+			wantAllowed: false,
+			wantMessage: "assigned to non-existent cell 'zone-invalid'",
+		},
+		"Denied: Shard Matches NO Cells": {
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Cells = []multigresv1alpha1.CellConfig{} // Empty Cells to prevent defaulting
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Shards: []multigresv1alpha1.ShardConfig{{
+							Name: "s0",
+							Spec: &multigresv1alpha1.ShardInlineSpec{
+								MultiOrch: multigresv1alpha1.MultiOrchSpec{
+									Cells: []multigresv1alpha1.CellName{}, // Empty!
+								},
+								Pools: map[string]multigresv1alpha1.PoolSpec{
+									"p1": {Type: "read"}, // Empty!
+								},
+							},
+						}},
+					}},
+				}}
+				return c
+			}(),
+			operation:   "Create",
+			wantAllowed: false,
+			wantMessage: "matches NO cells",
+		},
+		"Denied: Pool Assigned to Non-Existent Cell": {
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Shards: []multigresv1alpha1.ShardConfig{{
+							Name:          "s0",
+							ShardTemplate: "prod-shard",
+							Overrides: &multigresv1alpha1.ShardOverrides{
+								Pools: map[string]multigresv1alpha1.PoolSpec{
+									"default": {Cells: []multigresv1alpha1.CellName{"invalid"}},
+								},
+							},
+						}},
+					}},
+				}}
+				// Add a valid cell so Shard passes Check 1
+				c.Spec.Cells = append(c.Spec.Cells, multigresv1alpha1.CellConfig{Name: "c1", CellTemplate: "prod-cell"})
+				return c
+			}(),
+			operation:   "Create",
+			wantAllowed: false,
+			wantMessage: "pool 'default' in shard 's0' is assigned to non-existent cell 'invalid'",
+		},
+		"Error: Transient Failure (Resolve Shard Template)": {
+			// This tests the case where Validation passes (1st & 2nd Get), but orphan check fails (3rd Get)
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				// We use an override to trigger the lookup in validateLogic
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Shards: []multigresv1alpha1.ShardConfig{
+							{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+								Overrides: &multigresv1alpha1.ShardOverrides{
+									Pools: map[string]multigresv1alpha1.PoolSpec{"p": {}},
+								},
+							},
+						},
+					}},
+				}}
+				return c
+			}(),
+			operation: "Create",
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func() func(key client.ObjectKey) error {
+					count := 0
+					return func(key client.ObjectKey) error {
+						if key.Name == "prod-shard" {
+							count++
+							if count > 2 {
+								// Fail on 3rd attempt (Orphan Check)
+								return testutil.ErrInjected
+							}
+						}
+						return nil
+					}
+				}(),
+			},
+			wantAllowed: false,
+			wantMessage: "failed to resolve template for orphan check: failed to get ShardTemplate: injected test error",
+		},
+		"Denied: Empty Pool Cells (Orphaned Pool)": {
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Cells = []multigresv1alpha1.CellConfig{} // No Cells
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Shards: []multigresv1alpha1.ShardConfig{{
+							Name:          "s0",
+							ShardTemplate: "prod-shard",
+							Spec: &multigresv1alpha1.ShardInlineSpec{
+								MultiOrch: multigresv1alpha1.MultiOrchSpec{
+									// Pass Check 1
+									Cells: []multigresv1alpha1.CellName{"ghost-cell"},
+								},
+								Pools: map[string]multigresv1alpha1.PoolSpec{
+									"default": {
+										Type:  "readWrite",
+										Cells: []multigresv1alpha1.CellName{}, // Empty! Check 1b
+									},
+								},
+							},
+						}},
+					}},
+				}}
+				return c
+			}(),
+			operation:   "Create",
+			wantAllowed: false,
+			wantMessage: "matches NO cells",
+		},
+		"Error: Resolve Shard Failure": {
+			// Trigger a resolution error.
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Shards: []multigresv1alpha1.ShardConfig{{Name: "s0", ShardTemplate: "prod-shard"}},
+					}},
+				}}
+				return c
+			}(),
+			operation: "Create",
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func() func(key client.ObjectKey) error {
+					count := 0
+					return func(key client.ObjectKey) error {
+						if key.Name == "prod-shard" {
+							count++
+							// 1. TemplateDefaults validation
+							// 2. ShardTemplate validation
+							// 3. Orphan Check (Skipped)
+							// 4. ResolveShard -> ResolveShardTemplate
+							if count > 2 {
+								return testutil.ErrInjected
+							}
+						}
+						return nil
+					}
+				}(),
+			},
+			wantAllowed: false,
+			wantMessage: "validation failed: cannot resolve shard 's0': failed to get ShardTemplate: injected test error",
+		},
 	}
 
 	for name, tc := range tests {
@@ -270,6 +482,11 @@ func TestMultigresClusterValidator(t *testing.T) {
 					},
 					&multigresv1alpha1.ShardTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "prod-shard", Namespace: "default"},
+						Spec: multigresv1alpha1.ShardTemplateSpec{
+							Pools: map[string]multigresv1alpha1.PoolSpec{
+								"default": {Type: "readWrite"}, // Only "default" pool exists
+							},
+						},
 					},
 				}
 			}
@@ -281,14 +498,15 @@ func TestMultigresClusterValidator(t *testing.T) {
 			}
 			validator := NewMultigresClusterValidator(fakeClient)
 
+			var warnings admission.Warnings
 			var err error
 			switch tc.operation {
 			case "Create":
-				_, err = validator.ValidateCreate(t.Context(), tc.object)
+				warnings, err = validator.ValidateCreate(t.Context(), tc.object)
 			case "Update":
-				_, err = validator.ValidateUpdate(t.Context(), tc.object, tc.object)
+				warnings, err = validator.ValidateUpdate(t.Context(), tc.object, tc.object)
 			case "Delete":
-				_, err = validator.ValidateDelete(t.Context(), tc.object)
+				warnings, err = validator.ValidateDelete(t.Context(), tc.object)
 			}
 
 			if tc.wantAllowed && err != nil {
@@ -304,6 +522,26 @@ func TestMultigresClusterValidator(t *testing.T) {
 						tc.wantMessage,
 						err,
 					)
+				}
+			}
+
+			// Check Warnings
+			if len(tc.wantWarnings) > 0 {
+				if len(warnings) == 0 {
+					t.Errorf("Expected warnings containing %v, got none", tc.wantWarnings)
+				} else {
+					for _, want := range tc.wantWarnings {
+						found := false
+						for _, got := range warnings {
+							if strings.Contains(got, want) {
+								found = true
+								break
+							}
+						}
+						if !found {
+							t.Errorf("Expected warning containing '%s', got warnings: %v", want, warnings)
+						}
+					}
 				}
 			}
 		})
@@ -333,8 +571,7 @@ func TestMultigresClusterValidator_WrongType(t *testing.T) {
 func TestTemplateValidator(t *testing.T) {
 	t.Parallel()
 
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	// Fixtures
 	configUsingCore := &multigresv1alpha1.MultigresCluster{

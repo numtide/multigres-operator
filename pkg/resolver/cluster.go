@@ -92,7 +92,9 @@ func (r *Resolver) PopulateClusterDefaults(
 				if len(defaultCells) > 0 {
 					shardCfg.Spec = &multigresv1alpha1.ShardInlineSpec{
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
-							Cells: defaultCells,
+							// Clean Spec: Do not inject default cells statically.
+							// This allows dynamic contextual resolution later.
+							// Cells: defaultCells,
 						},
 						Pools: make(map[string]multigresv1alpha1.PoolSpec),
 					}
@@ -100,8 +102,9 @@ func (r *Resolver) PopulateClusterDefaults(
 					// Apply the decision made above
 					if shouldInjectDefaults {
 						shardCfg.Spec.Pools["default"] = multigresv1alpha1.PoolSpec{
-							Type:  "readWrite",
-							Cells: defaultCells,
+							Type: "readWrite",
+							// Clean Spec: Do not inject default cells.
+							// Cells: defaultCells,
 						}
 					}
 				}

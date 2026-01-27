@@ -117,14 +117,14 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 														Replicas:  ptr.To(int32(1)),
 														Resources: resolver.DefaultResourcesOrch(),
 													},
-													Cells: []multigresv1alpha1.CellName{"c1"},
+													// Cells should be nil to avoid sticky defaults
+													Cells: nil,
 												},
 												Pools: map[string]multigresv1alpha1.PoolSpec{
 													"default": {
 														Type: "readWrite",
-														Cells: []multigresv1alpha1.CellName{
-															"c1",
-														},
+														// Cells should be nil to avoid sticky defaults
+														Cells:           nil,
 														ReplicasPerCell: ptr.To(int32(1)),
 														Storage: multigresv1alpha1.StorageSpec{
 															Size: "1Gi",

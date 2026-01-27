@@ -45,10 +45,7 @@ type reconcileTestCase struct {
 func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 	t.Helper()
 
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+	scheme := setupScheme()
 
 	coreTpl, cellTpl, shardTpl, baseCluster, _, _, _ := setupFixtures(t)
 
@@ -173,6 +170,15 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 			}
 		})
 	}
+}
+
+// setupScheme creates a new scheme with all required types registered
+func setupScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	return scheme
 }
 
 // setupFixtures provides fresh test data
