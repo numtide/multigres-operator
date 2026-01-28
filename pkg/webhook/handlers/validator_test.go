@@ -658,6 +658,21 @@ func TestTemplateValidator(t *testing.T) {
 			existing:    []client.Object{configUsingCoreAdmin},
 			wantAllowed: false,
 		},
+		"Denied: Delete In-Use CoreTemplate (GlobalTopoServer)": {
+			kind:       "CoreTemplate",
+			targetName: "prod-core",
+			existing: []client.Object{
+				&multigresv1alpha1.MultigresCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "c-topo", Namespace: "default"},
+					Spec: multigresv1alpha1.MultigresClusterSpec{
+						GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+							TemplateRef: "prod-core",
+						},
+					},
+				},
+			},
+			wantAllowed: false,
+		},
 		"Denied: Delete In-Use CellTemplate (Inline)": {
 			kind:        "CellTemplate",
 			targetName:  "prod-cell",

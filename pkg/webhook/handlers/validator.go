@@ -315,6 +315,10 @@ func (v *TemplateValidator) isTemplateInUse(
 		if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef == name {
 			return true
 		}
+		if cluster.Spec.GlobalTopoServer != nil &&
+			cluster.Spec.GlobalTopoServer.TemplateRef == name {
+			return true
+		}
 	case "CellTemplate":
 		if cluster.Spec.TemplateDefaults.CellTemplate == name {
 			return true
