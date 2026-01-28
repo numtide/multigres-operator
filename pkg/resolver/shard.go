@@ -88,18 +88,27 @@ func (r *Resolver) ResolveShardTemplate(
 		isImplicitFallback = true
 	}
 
+	// Check cache first
+	if cached, found := r.shardTemplateCache[resolvedName]; found {
+		return cached.DeepCopy(), nil
+	}
+
 	tpl := &multigresv1alpha1.ShardTemplate{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: resolvedName, Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
+				// Don't cache fallback empty templates
 				return &multigresv1alpha1.ShardTemplate{}, nil
 			}
 			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found: %w", resolvedName, err)
 		}
 		return nil, fmt.Errorf("failed to get ShardTemplate: %w", err)
 	}
-	return tpl, nil
+
+	// Store in cache
+	r.shardTemplateCache[resolvedName] = tpl
+	return tpl.DeepCopy(), nil
 }
 
 // mergeShardConfig merges a template spec with overrides and an inline spec.

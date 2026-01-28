@@ -53,18 +53,27 @@ func (r *Resolver) ResolveCellTemplate(
 		isImplicitFallback = true
 	}
 
+	// Check cache first
+	if cached, found := r.cellTemplateCache[resolvedName]; found {
+		return cached.DeepCopy(), nil
+	}
+
 	tpl := &multigresv1alpha1.CellTemplate{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: resolvedName, Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
+				// Don't cache fallback empty templates
 				return &multigresv1alpha1.CellTemplate{}, nil
 			}
 			return nil, fmt.Errorf("referenced CellTemplate '%s' not found: %w", resolvedName, err)
 		}
 		return nil, fmt.Errorf("failed to get CellTemplate: %w", err)
 	}
-	return tpl, nil
+
+	// Store in cache
+	r.cellTemplateCache[resolvedName] = tpl
+	return tpl.DeepCopy(), nil
 }
 
 // mergeCellConfig merges a template spec with overrides and an inline spec.

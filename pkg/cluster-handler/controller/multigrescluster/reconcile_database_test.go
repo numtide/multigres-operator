@@ -189,44 +189,6 @@ func TestReconcile_Databases(t *testing.T) {
 			},
 			wantErrMsg: "failed to delete orphaned tablegroup",
 		},
-		"Error: Global Topo Resolution Failed (During Database Reconcile)": {
-			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				c.Spec.TemplateDefaults.CoreTemplate = ""
-				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
-					TemplateRef: "topo-fail-db",
-				}
-				c.Spec.MultiAdmin = nil
-			},
-			existingObjects: []client.Object{
-				cellTpl, shardTpl,
-				&multigresv1alpha1.CoreTemplate{
-					ObjectMeta: metav1.ObjectMeta{Name: "topo-fail-db", Namespace: namespace},
-					Spec:       multigresv1alpha1.CoreTemplateSpec{},
-				},
-				&multigresv1alpha1.CoreTemplate{
-					ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
-					Spec:       multigresv1alpha1.CoreTemplateSpec{},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func() func(client.ObjectKey) error {
-					count := 0
-					return func(key client.ObjectKey) error {
-						if key.Name == "topo-fail-db" {
-							count++
-							// Call 1: reconcileGlobalComponents (Succeeds)
-							// Call 2: reconcileCells (Succeeds)
-							// Call 3: reconcileDatabases -> getGlobalTopoRef (Fails)
-							if count == 3 {
-								return errSimulated
-							}
-						}
-						return nil
-					}
-				}(),
-			},
-			wantErrMsg: "failed to get global topo ref",
-		},
 		"Create: Long Names (Truncation Check)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				longName := strings.Repeat("a", 50)
@@ -344,5 +306,62 @@ func TestReconcileDatabases_BuildError_SchemeMismatch(t *testing.T) {
 		t.Errorf("Expected 'failed to build tablegroup' error, got: %v", err)
 	} else {
 		t.Logf("Got expected error: %v", err)
+	}
+}
+
+// TestReconcileDatabases_Direct_Error_GlobalTopoRef tests the error path in reconcileDatabases
+// that is normally unreachable in the full Reconcile loop due to caching.
+// By calling reconcileDatabases directly, we simulate a scenario where the previous
+// steps might have been skipped or reordered, ensuring defensive programming is covered.
+func TestReconcileDatabases_Direct_Error_GlobalTopoRef(t *testing.T) {
+	scheme := setupScheme()
+	_, cellTpl, shardTpl, _, namespace, _, _ := setupFixtures(t)
+	errSimulated := errors.New("simulated error for testing")
+
+	// Setup Cluster to use a failing template
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: namespace},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+				TemplateRef: "topo-fail-db",
+			},
+			Databases: []multigresv1alpha1.DatabaseConfig{},
+		},
+	}
+
+	// Setup objects without the failing template
+	objs := []client.Object{cellTpl, shardTpl}
+
+	// Setup Client with failure
+	clientBuilder := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...)
+	baseClient := clientBuilder.Build()
+
+	failureConfig := &testutil.FailureConfig{
+		OnGet: testutil.FailOnKeyName("topo-fail-db", errSimulated),
+	}
+	finalClient := testutil.NewFakeClientWithFailures(baseClient, failureConfig)
+
+	// Setup Reconciler
+	reconciler := &MultigresClusterReconciler{
+		Client:   finalClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	// Setup Resolver
+	res := resolver.NewResolver(finalClient, namespace, multigresv1alpha1.TemplateDefaults{})
+
+	// Execute reconcileDatabases DIRECTLY
+	// This is key: we skip reconcileGlobalComponents, so the cache is empty.
+	err := reconciler.reconcileDatabases(t.Context(), cluster, res)
+
+	// Verify
+	if err == nil {
+		t.Error("Expected error from reconcileDatabases, got nil")
+	} else {
+		expectedMsg := "failed to get global topo ref"
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Errorf("Expected error containing %q, got %q", expectedMsg, err.Error())
+		}
 	}
 }

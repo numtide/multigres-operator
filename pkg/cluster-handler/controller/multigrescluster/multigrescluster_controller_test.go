@@ -453,25 +453,14 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			wantErrMsg: "failed to update cluster status",
 		},
 		"Error: getGlobalTopoRef Failed (Cells)": {
-			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			// Note: With caching, we can't rely on counting Get calls.
+			// Instead, we omit the template from existingObjects and inject
+			// error on the first (and only) Get attempt.
+			existingObjects: []client.Object{cellTpl, shardTpl}, // coreTpl intentionally missing
 			failureConfig: &testutil.FailureConfig{
-				OnGet: func() func(client.ObjectKey) error {
-					count := 0
-					return func(key client.ObjectKey) error {
-						if key.Name == "default-core" {
-							count++
-							// Call 1: reconcileGlobalComponents -> reconcileGlobalTopoServer
-							// Call 2: reconcileGlobalComponents -> reconcileMultiAdmin
-							// Call 3: reconcileCells -> getGlobalTopoRef (Fails)
-							if count == 3 {
-								return errSimulated
-							}
-						}
-						return nil
-					}
-				}(),
+				OnGet: testutil.FailOnKeyName("default-core", errSimulated),
 			},
-			wantErrMsg: "failed to get global topo ref",
+			wantErrMsg: "failed to resolve global topo",
 		},
 		"Success: External Global Topo Resolution": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {

@@ -288,6 +288,193 @@ func TestResolver_ValidateReference(t *testing.T) {
 	})
 }
 
+// TestResolver_Caching verifies that the resolver caches templates to prevent N+1 API calls.
+func TestResolver_Caching(t *testing.T) {
+	t.Parallel()
+	scheme := setupScheme()
+
+	coreTpl, cellTpl, shardTpl, ns := setupFixtures(t)
+	objs := []client.Object{coreTpl, cellTpl, shardTpl}
+
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+
+	t.Run("CoreTemplate", func(t *testing.T) {
+		// Use a counter to track Get calls
+		var getCalls int
+		clientWithCounter := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnGet: func(_ client.ObjectKey) error {
+				getCalls++
+				return nil
+			},
+		})
+
+		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+
+		// First call - should hit the API
+		tpl1, err := r.ResolveCoreTemplate(t.Context(), "default")
+		if err != nil {
+			t.Fatalf("First ResolveCoreTemplate failed: %v", err)
+		}
+		if tpl1 == nil {
+			t.Fatal("Expected non-nil template")
+		}
+		if getCalls != 1 {
+			t.Errorf("Expected 1 Get call after first resolve, got %d", getCalls)
+		}
+
+		// Second call - should use cache
+		tpl2, err := r.ResolveCoreTemplate(t.Context(), "default")
+		if err != nil {
+			t.Fatalf("Second ResolveCoreTemplate failed: %v", err)
+		}
+		if tpl2 == nil {
+			t.Fatal("Expected non-nil template")
+		}
+		if getCalls != 1 {
+			t.Errorf("Expected 1 Get call after second resolve (cached), got %d", getCalls)
+		}
+
+		// Verify DeepCopy - modifying one shouldn't affect the other
+		if tpl1.Spec.GlobalTopoServer != nil && tpl1.Spec.GlobalTopoServer.Etcd != nil {
+			tpl1.Spec.GlobalTopoServer.Etcd.Image = "modified"
+			if tpl2.Spec.GlobalTopoServer.Etcd.Image == "modified" {
+				t.Error("DeepCopy failed - modifications leaked between cached copies")
+			}
+		}
+	})
+
+	t.Run("CellTemplate", func(t *testing.T) {
+		var getCalls int
+		clientWithCounter := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnGet: func(_ client.ObjectKey) error {
+				getCalls++
+				return nil
+			},
+		})
+
+		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+
+		// First call
+		tpl1, err := r.ResolveCellTemplate(t.Context(), "default")
+		if err != nil {
+			t.Fatalf("First ResolveCellTemplate failed: %v", err)
+		}
+		if tpl1 == nil {
+			t.Fatal("Expected non-nil template")
+		}
+		if getCalls != 1 {
+			t.Errorf("Expected 1 Get call after first resolve, got %d", getCalls)
+		}
+
+		// Second call - should use cache
+		tpl2, err := r.ResolveCellTemplate(t.Context(), "default")
+		if err != nil {
+			t.Fatalf("Second ResolveCellTemplate failed: %v", err)
+		}
+		if tpl2 == nil {
+			t.Fatal("Expected non-nil template")
+		}
+		if getCalls != 1 {
+			t.Errorf("Expected 1 Get call after second resolve (cached), got %d", getCalls)
+		}
+
+		// Verify DeepCopy
+		if tpl1.Spec.MultiGateway != nil {
+			originalReplicas := tpl1.Spec.MultiGateway.Replicas
+			tpl1.Spec.MultiGateway.Replicas = ptr.To(int32(999))
+			if tpl2.Spec.MultiGateway.Replicas != nil && *tpl2.Spec.MultiGateway.Replicas == 999 {
+				t.Error("DeepCopy failed - modifications leaked between cached copies")
+			}
+			tpl1.Spec.MultiGateway.Replicas = originalReplicas
+		}
+	})
+
+	t.Run("ShardTemplate", func(t *testing.T) {
+		var getCalls int
+		clientWithCounter := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnGet: func(_ client.ObjectKey) error {
+				getCalls++
+				return nil
+			},
+		})
+
+		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+
+		// First call
+		tpl1, err := r.ResolveShardTemplate(t.Context(), "default")
+		if err != nil {
+			t.Fatalf("First ResolveShardTemplate failed: %v", err)
+		}
+		if tpl1 == nil {
+			t.Fatal("Expected non-nil template")
+		}
+		if getCalls != 1 {
+			t.Errorf("Expected 1 Get call after first resolve, got %d", getCalls)
+		}
+
+		// Second call - should use cache
+		tpl2, err := r.ResolveShardTemplate(t.Context(), "default")
+		if err != nil {
+			t.Fatalf("Second ResolveShardTemplate failed: %v", err)
+		}
+		if tpl2 == nil {
+			t.Fatal("Expected non-nil template")
+		}
+		if getCalls != 1 {
+			t.Errorf("Expected 1 Get call after second resolve (cached), got %d", getCalls)
+		}
+
+		// Verify DeepCopy
+		if tpl1.Spec.MultiOrch != nil {
+			originalReplicas := tpl1.Spec.MultiOrch.Replicas
+			tpl1.Spec.MultiOrch.Replicas = ptr.To(int32(999))
+			if tpl2.Spec.MultiOrch.Replicas != nil && *tpl2.Spec.MultiOrch.Replicas == 999 {
+				t.Error("DeepCopy failed - modifications leaked between cached copies")
+			}
+			tpl1.Spec.MultiOrch.Replicas = originalReplicas
+		}
+	})
+
+	t.Run("FallbackNotCached", func(t *testing.T) {
+		// Verify that fallback empty templates are NOT cached
+		var getCalls int
+		emptyClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+		clientWithCounter := testutil.NewFakeClientWithFailures(
+			emptyClient,
+			&testutil.FailureConfig{
+				OnGet: func(_ client.ObjectKey) error {
+					getCalls++
+					return nil
+				},
+			},
+		)
+
+		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+
+		// Call with empty name (triggers fallback)
+		_, err := r.ResolveShardTemplate(t.Context(), "")
+		if err != nil {
+			t.Fatalf("Fallback resolve failed: %v", err)
+		}
+
+		// Should have attempted Get once and got NotFound
+		if getCalls != 1 {
+			t.Errorf("Expected 1 Get call for fallback, got %d", getCalls)
+		}
+
+		// Second call - fallback should NOT be cached, so another Get attempt
+		_, err = r.ResolveShardTemplate(t.Context(), "")
+		if err != nil {
+			t.Fatalf("Second fallback resolve failed: %v", err)
+		}
+
+		// Since fallback is not cached, we expect another Get call
+		if getCalls != 2 {
+			t.Errorf("Expected 2 Get calls (fallback not cached), got %d", getCalls)
+		}
+	})
+}
+
 func TestSharedHelpers(t *testing.T) {
 	t.Parallel()
 

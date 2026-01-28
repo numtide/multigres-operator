@@ -217,18 +217,27 @@ func (r *Resolver) ResolveCoreTemplate(
 		isImplicitFallback = true
 	}
 
+	// Check cache first
+	if cached, found := r.coreTemplateCache[resolvedName]; found {
+		return cached.DeepCopy(), nil
+	}
+
 	tpl := &multigresv1alpha1.CoreTemplate{}
 	err := r.Client.Get(ctx, types.NamespacedName{Name: resolvedName, Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
+				// Don't cache fallback empty templates
 				return &multigresv1alpha1.CoreTemplate{}, nil
 			}
 			return nil, fmt.Errorf("referenced CoreTemplate '%s' not found: %w", resolvedName, err)
 		}
 		return nil, fmt.Errorf("failed to get CoreTemplate: %w", err)
 	}
-	return tpl, nil
+
+	// Store in cache
+	r.coreTemplateCache[resolvedName] = tpl
+	return tpl.DeepCopy(), nil
 }
 
 func mergeEtcdSpec(base *multigresv1alpha1.EtcdSpec, override *multigresv1alpha1.EtcdSpec) {
