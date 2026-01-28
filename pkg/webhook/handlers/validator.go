@@ -135,10 +135,10 @@ func (v *MultigresClusterValidator) validateLogic(
 	var warnings admission.Warnings
 
 	// Extract all valid cell names for this cluster
-	var allCellNames []string
-	validCells := make(map[string]bool)
+	var cellNames []multigresv1alpha1.CellName
+	validCells := make(map[multigresv1alpha1.CellName]bool)
 	for _, c := range cluster.Spec.Cells {
-		allCellNames = append(allCellNames, c.Name)
+		cellNames = append(cellNames, c.Name)
 		validCells[c.Name] = true
 	}
 
@@ -152,6 +152,7 @@ func (v *MultigresClusterValidator) validateLogic(
 				if shard.Overrides != nil && len(shard.Overrides.Pools) > 0 {
 					// We must resolve the template to know what pools *should* exist.
 					// Pass empty string if ShardTemplate is empty to resolve default/implicit.
+
 					tpl, err := res.ResolveShardTemplate(ctx, shard.ShardTemplate)
 					if err != nil {
 						// This should have been caught by validateTemplatesExist, but handling it safe.
@@ -180,7 +181,7 @@ func (v *MultigresClusterValidator) validateLogic(
 				// ------------------------------------------------------------------
 				// Dry-Run Resolution
 				// We pass allCellNames just like the Reconciler would, to simulate the final state
-				orch, pools, err := res.ResolveShard(ctx, &shard, allCellNames)
+				orch, pools, err := res.ResolveShard(ctx, &shard, cellNames)
 				if err != nil {
 					return nil, fmt.Errorf(
 						"validation failed: cannot resolve shard '%s': %w",
@@ -211,7 +212,7 @@ func (v *MultigresClusterValidator) validateLogic(
 
 				// Check 2: Invalid Cells (Reference Validity)
 				for _, c := range orch.Cells {
-					if !validCells[string(c)] {
+					if !validCells[multigresv1alpha1.CellName(c)] {
 						return nil, fmt.Errorf(
 							"shard '%s' is assigned to non-existent cell '%s'",
 							shard.Name,
@@ -223,7 +224,7 @@ func (v *MultigresClusterValidator) validateLogic(
 				for poolName, pool := range pools {
 					// Check 2b: Invalid Pool cells
 					for _, c := range pool.Cells {
-						if !validCells[string(c)] {
+						if !validCells[multigresv1alpha1.CellName(c)] {
 							return nil, fmt.Errorf(
 								"pool '%s' in shard '%s' is assigned to non-existent cell '%s'",
 								poolName,
@@ -307,35 +308,36 @@ func (v *TemplateValidator) isTemplateInUse(
 	cluster *multigresv1alpha1.MultigresCluster,
 	name string,
 ) bool {
+	refName := multigresv1alpha1.TemplateRef(name)
 	switch v.Kind {
 	case "CoreTemplate":
-		if cluster.Spec.TemplateDefaults.CoreTemplate == name {
+		if cluster.Spec.TemplateDefaults.CoreTemplate == refName {
 			return true
 		}
-		if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef == name {
+		if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef == refName {
 			return true
 		}
 		if cluster.Spec.GlobalTopoServer != nil &&
-			cluster.Spec.GlobalTopoServer.TemplateRef == name {
+			cluster.Spec.GlobalTopoServer.TemplateRef == refName {
 			return true
 		}
 	case "CellTemplate":
-		if cluster.Spec.TemplateDefaults.CellTemplate == name {
+		if cluster.Spec.TemplateDefaults.CellTemplate == refName {
 			return true
 		}
 		for _, cell := range cluster.Spec.Cells {
-			if cell.CellTemplate == name {
+			if cell.CellTemplate == refName {
 				return true
 			}
 		}
 	case "ShardTemplate":
-		if cluster.Spec.TemplateDefaults.ShardTemplate == name {
+		if cluster.Spec.TemplateDefaults.ShardTemplate == refName {
 			return true
 		}
 		for _, db := range cluster.Spec.Databases {
 			for _, tg := range db.TableGroups {
 				for _, shard := range tg.Shards {
-					if shard.ShardTemplate == name {
+					if shard.ShardTemplate == refName {
 						return true
 					}
 				}

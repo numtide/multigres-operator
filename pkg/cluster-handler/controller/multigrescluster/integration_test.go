@@ -134,7 +134,7 @@ func clusterLabels(t testing.TB, clusterName, oldApp, cell string) map[string]st
 	labels := metadata.BuildStandardLabels(clusterName, component)
 	metadata.AddClusterLabel(labels, clusterName)
 	if cell != "" {
-		metadata.AddCellLabel(labels, cell)
+		metadata.AddCellLabel(labels, multigresv1alpha1.CellName(cell))
 	}
 	return labels
 }
@@ -142,8 +142,8 @@ func clusterLabels(t testing.TB, clusterName, oldApp, cell string) map[string]st
 func tableGroupLabels(clusterName, db, tg string) map[string]string {
 	labels := metadata.BuildStandardLabels(clusterName, metadata.ComponentTableGroup)
 	metadata.AddClusterLabel(labels, clusterName)
-	metadata.AddDatabaseLabel(labels, db)
-	metadata.AddTableGroupLabel(labels, tg)
+	metadata.AddDatabaseLabel(labels, multigresv1alpha1.DatabaseName(db))
+	metadata.AddTableGroupLabel(labels, multigresv1alpha1.TableGroupName(tg))
 	return labels
 }
 
@@ -210,7 +210,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										Name: "s1",
 										Spec: &multigresv1alpha1.ShardInlineSpec{
 											MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-											Pools: map[string]multigresv1alpha1.PoolSpec{
+											Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 												"primary": {
 													ReplicasPerCell: ptr.To(int32(1)),
 													Type:            "readWrite",
@@ -390,7 +390,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										Resources: resolver.DefaultResourcesOrch(), // FIX: Expect defaults
 									},
 								},
-								Pools: map[string]multigresv1alpha1.PoolSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"primary": {
 										ReplicasPerCell: ptr.To(int32(1)),
 										Type:            "readWrite",
@@ -593,7 +593,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									},
 								},
 								// FIX: Expect the injected default pool
-								Pools: map[string]multigresv1alpha1.PoolSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"default": {
 										Type:            "readWrite",
 										Cells:           []multigresv1alpha1.CellName{"zone-a"},
@@ -793,7 +793,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									},
 								},
 								// FIX: Expect the injected default pool
-								Pools: map[string]multigresv1alpha1.PoolSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"default": {
 										Type:            "readWrite",
 										Cells:           []multigresv1alpha1.CellName{"zone-a"},
@@ -823,11 +823,11 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 			// Patch wantResources with hashed names
 			for _, obj := range tc.wantResources {
 				if cell, ok := obj.(*multigresv1alpha1.Cell); ok {
-					hashedName := nameutil.JoinWithConstraints(nameutil.DefaultConstraints, tc.cluster.Name, cell.Spec.Name)
+					hashedName := nameutil.JoinWithConstraints(nameutil.DefaultConstraints, tc.cluster.Name, string(cell.Spec.Name))
 					cell.Name = hashedName
 				}
 				if tg, ok := obj.(*multigresv1alpha1.TableGroup); ok {
-					hashedName := nameutil.JoinWithConstraints(nameutil.DefaultConstraints, tc.cluster.Name, tg.Spec.DatabaseName, tg.Spec.TableGroupName)
+					hashedName := nameutil.JoinWithConstraints(nameutil.DefaultConstraints, tc.cluster.Name, string(tg.Spec.DatabaseName), string(tg.Spec.TableGroupName))
 					tg.Name = hashedName
 				}
 			}

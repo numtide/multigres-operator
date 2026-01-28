@@ -120,7 +120,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 													// Cells should be nil to avoid sticky defaults
 													Cells: nil,
 												},
-												Pools: map[string]multigresv1alpha1.PoolSpec{
+												Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 													"default": {
 														Type: "readWrite",
 														// Cells should be nil to avoid sticky defaults

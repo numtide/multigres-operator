@@ -40,7 +40,7 @@ func (r *Resolver) ResolveCell(
 // ResolveCellTemplate fetches and resolves a CellTemplate by name.
 func (r *Resolver) ResolveCellTemplate(
 	ctx context.Context,
-	name string,
+	name multigresv1alpha1.TemplateRef,
 ) (*multigresv1alpha1.CellTemplate, error) {
 	resolvedName := name
 	isImplicitFallback := false
@@ -54,12 +54,12 @@ func (r *Resolver) ResolveCellTemplate(
 	}
 
 	// Check cache first
-	if cached, found := r.cellTemplateCache[resolvedName]; found {
+	if cached, found := r.cellTemplateCache[string(resolvedName)]; found {
 		return cached.DeepCopy(), nil
 	}
 
 	tpl := &multigresv1alpha1.CellTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: resolvedName, Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
@@ -72,7 +72,7 @@ func (r *Resolver) ResolveCellTemplate(
 	}
 
 	// Store in cache
-	r.cellTemplateCache[resolvedName] = tpl
+	r.cellTemplateCache[string(resolvedName)] = tpl
 	return tpl.DeepCopy(), nil
 }
 

@@ -1,6 +1,10 @@
 package metadata
 
-import "maps"
+import (
+	"maps"
+
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+)
 
 // Standard Kubernetes label keys following kubernetes.io conventions.
 //
@@ -99,8 +103,8 @@ func BuildStandardLabels(clusterName, component string) map[string]string {
 }
 
 // AddCellLabel adds the cell label to the provided labels map.
-func AddCellLabel(labels map[string]string, cellName string) map[string]string {
-	labels[LabelMultigresCell] = cellName
+func AddCellLabel(labels map[string]string, cellName multigresv1alpha1.CellName) map[string]string {
+	labels[LabelMultigresCell] = string(cellName)
 	return labels
 }
 
@@ -111,20 +115,20 @@ func AddClusterLabel(labels map[string]string, clusterName string) map[string]st
 }
 
 // AddShardLabel adds the shard label to the provided labels map.
-func AddShardLabel(labels map[string]string, shardName string) map[string]string {
-	labels[LabelMultigresShard] = shardName
+func AddShardLabel(labels map[string]string, shardName multigresv1alpha1.ShardName) map[string]string {
+	labels[LabelMultigresShard] = string(shardName)
 	return labels
 }
 
 // AddDatabaseLabel adds the database label to the provided labels map.
-func AddDatabaseLabel(labels map[string]string, databaseName string) map[string]string {
-	labels[LabelMultigresDatabase] = databaseName
+func AddDatabaseLabel(labels map[string]string, databaseName multigresv1alpha1.DatabaseName) map[string]string {
+	labels[LabelMultigresDatabase] = string(databaseName)
 	return labels
 }
 
 // AddTableGroupLabel adds the table group label to the provided labels map.
-func AddTableGroupLabel(labels map[string]string, tableGroupName string) map[string]string {
-	labels[LabelMultigresTableGroup] = tableGroupName
+func AddTableGroupLabel(labels map[string]string, tableGroupName multigresv1alpha1.TableGroupName) map[string]string {
+	labels[LabelMultigresTableGroup] = string(tableGroupName)
 	return labels
 }
 

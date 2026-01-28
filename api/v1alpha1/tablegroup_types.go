@@ -43,12 +43,10 @@ import (
 // TableGroupSpec defines the desired state of TableGroup.
 type TableGroupSpec struct {
 	// DatabaseName is the name of the logical database.
-	// +kubebuilder:validation:MaxLength=63
-	DatabaseName string `json:"databaseName"`
+	DatabaseName DatabaseName `json:"databaseName"`
 
 	// TableGroupName is the name of this table group.
-	// +kubebuilder:validation:MaxLength=63
-	TableGroupName string `json:"tableGroupName"`
+	TableGroupName TableGroupName `json:"tableGroupName"`
 
 	// IsDefault indicates if this is the default/unsharded group for the database.
 	// +optional
@@ -78,7 +76,7 @@ type ShardResolvedSpec struct {
 	// Pools is the map of fully resolved data pool configurations.
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
-	Pools map[string]PoolSpec `json:"pools"`
+	Pools map[PoolName]PoolSpec `json:"pools"`
 }
 
 // ============================================================================

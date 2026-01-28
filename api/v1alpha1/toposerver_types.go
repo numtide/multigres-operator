@@ -84,9 +84,7 @@ type TopoServerStatus struct {
 type EtcdSpec struct {
 	// Image is the Etcd container image.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=512
-	Image string `json:"image,omitempty"`
+	Image ImageRef `json:"image,omitempty"`
 
 	// Replicas is the desired number of etcd members.
 	// +kubebuilder:validation:Minimum=1
@@ -122,9 +120,7 @@ type GlobalTopoServerSpec struct {
 
 	// TemplateRef refers to a CoreTemplate to load configuration from.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	TemplateRef string `json:"templateRef,omitempty"`
+	TemplateRef TemplateRef `json:"templateRef,omitempty"`
 }
 
 // ExternalTopoServerSpec defines connection details for an external system.

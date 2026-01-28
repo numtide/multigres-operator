@@ -118,7 +118,7 @@ func buildPostgresContainer(
 ) corev1.Container {
 	image := DefaultPostgresImage
 	if shard.Spec.Images.Postgres != "" {
-		image = shard.Spec.Images.Postgres
+		image = string(shard.Spec.Images.Postgres)
 	}
 
 	return corev1.Container{
@@ -191,7 +191,7 @@ func buildPgctldContainer(
 ) corev1.Container {
 	image := DefaultPgctldImage
 	if shard.Spec.Images.Postgres != "" {
-		image = shard.Spec.Images.Postgres
+		image = string(shard.Spec.Images.Postgres)
 	}
 
 	return corev1.Container{
@@ -256,7 +256,7 @@ func buildMultiPoolerSidecar(
 ) corev1.Container {
 	image := DefaultMultigresImage
 	if shard.Spec.Images.MultiPooler != "" {
-		image = shard.Spec.Images.MultiPooler
+		image = string(shard.Spec.Images.MultiPooler)
 	}
 
 	// TODO: Add remaining command line arguments:
@@ -273,9 +273,9 @@ func buildMultiPoolerSidecar(
 		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
 		"--cell", cellName,
-		"--database", shard.Spec.DatabaseName,
-		"--table-group", shard.Spec.TableGroupName,
-		"--shard", shard.Spec.ShardName,
+		"--database", string(shard.Spec.DatabaseName),
+		"--table-group", string(shard.Spec.TableGroupName),
+		"--shard", string(shard.Spec.ShardName),
 		"--service-id", "$(POD_NAME)", // Use pod name as unique service ID
 		"--pgctld-addr", "localhost:15470",
 		"--pg-port", "5432",
@@ -344,7 +344,7 @@ func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) corev1.Container {
 	image := DefaultMultigresImage
 	if shard.Spec.Images.MultiOrch != "" {
-		image = shard.Spec.Images.MultiOrch
+		image = string(shard.Spec.Images.MultiOrch)
 	}
 
 	// TODO: Add remaining command line arguments:
@@ -397,9 +397,9 @@ func buildBackupVolume(shard *multigresv1alpha1.Shard, poolName, cellName string
 		name.ServiceConstraints,
 		"backup-data",
 		clusterName,
-		shard.Spec.DatabaseName,
-		shard.Spec.TableGroupName,
-		shard.Spec.ShardName,
+		string(shard.Spec.DatabaseName),
+		string(shard.Spec.TableGroupName),
+		string(shard.Spec.ShardName),
 		"pool",
 		poolName,
 		cellName,

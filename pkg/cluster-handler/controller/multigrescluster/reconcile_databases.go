@@ -29,14 +29,14 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 
 	for _, db := range cluster.Spec.Databases {
 		for _, tg := range db.TableGroups {
-			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, db.Name, tg.Name)
+			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, string(db.Name), string(tg.Name))
 			// ACTIVE MAP REGISTRATION MOVED DOWN: We must use the desired.Name (which might be hashed)
 			// instead of the logical tgNameFull.
 
 			resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
 
 			// Extract all valid cell names for this cluster (Contextual Awareness)
-			var allCellNames []string
+			var allCellNames []multigresv1alpha1.CellName
 			for _, c := range cluster.Spec.Cells {
 				allCellNames = append(allCellNames, c.Name)
 			}
@@ -63,7 +63,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				// The Resolver now handles the "Empty Cells = All Cells" logic authoritative.
 				// We no longer need to manually infer or sort here, just trust the resolver.
 				resolvedShards = append(resolvedShards, multigresv1alpha1.ShardResolvedSpec{
-					Name:      shard.Name,
+					Name:      string(shard.Name),
 					MultiOrch: *orch,
 					Pools:     pools,
 				})

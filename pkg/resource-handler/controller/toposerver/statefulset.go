@@ -47,7 +47,7 @@ func BuildStatefulSet(
 
 	image := DefaultImage
 	if toposerver.Spec.Etcd != nil && toposerver.Spec.Etcd.Image != "" {
-		image = toposerver.Spec.Etcd.Image
+		image = string(toposerver.Spec.Etcd.Image)
 	}
 
 	headlessServiceName := toposerver.Name + "-headless"

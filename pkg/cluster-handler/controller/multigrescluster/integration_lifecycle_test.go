@@ -44,7 +44,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 							// Must provide the mandatory default one to pass "system catalog" validation
 							{Name: "default", Default: true},
 							// And the one that triggers length limit (Default: false to avoid "must be named default" rule)
-							{Name: longTGName, Default: false},
+							{Name: multigresv1alpha1.TableGroupName(longTGName), Default: false},
 						},
 					},
 				},

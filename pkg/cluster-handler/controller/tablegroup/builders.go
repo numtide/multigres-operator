@@ -23,8 +23,8 @@ func BuildShard(
 	shardNameFull := name.JoinWithConstraints(
 		name.DefaultConstraints,
 		clusterName,
-		tg.Spec.DatabaseName,
-		tg.Spec.TableGroupName,
+		string(tg.Spec.DatabaseName),
+		string(tg.Spec.TableGroupName),
 		shardSpec.Name,
 	)
 
@@ -32,7 +32,7 @@ func BuildShard(
 	metadata.AddClusterLabel(labels, clusterName)
 	metadata.AddDatabaseLabel(labels, tg.Spec.DatabaseName)
 	metadata.AddTableGroupLabel(labels, tg.Spec.TableGroupName)
-	metadata.AddShardLabel(labels, shardSpec.Name)
+	metadata.AddShardLabel(labels, multigresv1alpha1.ShardName(shardSpec.Name))
 
 	shardCR := &multigresv1alpha1.Shard{
 		ObjectMeta: metav1.ObjectMeta{
@@ -43,7 +43,7 @@ func BuildShard(
 		Spec: multigresv1alpha1.ShardSpec{
 			DatabaseName:     tg.Spec.DatabaseName,
 			TableGroupName:   tg.Spec.TableGroupName,
-			ShardName:        shardSpec.Name,
+			ShardName:        multigresv1alpha1.ShardName(shardSpec.Name),
 			Images:           tg.Spec.Images,
 			GlobalTopoServer: tg.Spec.GlobalTopoServer,
 			MultiOrch:        shardSpec.MultiOrch,

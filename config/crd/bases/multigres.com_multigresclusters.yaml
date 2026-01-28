@@ -1098,7 +1098,7 @@ spec:
                     region:
                       description: Region indicates the physical region (mutually
                         exclusive with zone typically, but allowed here).
-                      maxLength: 30
+                      maxLength: 63
                       minLength: 1
                       type: string
                     spec:
@@ -2284,7 +2284,7 @@ spec:
                       type: object
                     zone:
                       description: Zone indicates the physical availability zone.
-                      maxLength: 30
+                      maxLength: 63
                       minLength: 1
                       type: string
                   required:
@@ -3329,10 +3329,7 @@ spec:
                                             Cells defines the list of cells where this MultiOrch should be deployed.
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
-                                            description: CellName is a string restricted
-                                              to 63 characters for strict validation
-                                              budgeting.
-                                            maxLength: 63
+                                            maxLength: 30
                                             minLength: 1
                                             type: string
                                           maxItems: 50
@@ -4453,10 +4450,7 @@ spec:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
                                             items:
-                                              description: CellName is a string restricted
-                                                to 63 characters for strict validation
-                                                budgeting.
-                                              maxLength: 63
+                                              maxLength: 30
                                               minLength: 1
                                               type: string
                                             maxItems: 50
@@ -4622,11 +4616,15 @@ spec:
                                                 type: string
                                             type: object
                                           type:
+                                            allOf:
+                                            - enum:
+                                              - readWrite
+                                              - readOnly
+                                            - enum:
+                                              - readWrite
+                                              - readOnly
                                             description: Type of the pool (e.g., "readWrite",
                                               "readOnly").
-                                            enum:
-                                            - readWrite
-                                            - readOnly
                                             type: string
                                         type: object
                                       description: Pools overrides. Keyed by pool
@@ -5629,10 +5627,7 @@ spec:
                                             Cells defines the list of cells where this MultiOrch should be deployed.
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
-                                            description: CellName is a string restricted
-                                              to 63 characters for strict validation
-                                              budgeting.
-                                            maxLength: 63
+                                            maxLength: 30
                                             minLength: 1
                                             type: string
                                           maxItems: 50
@@ -6753,10 +6748,7 @@ spec:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
                                             items:
-                                              description: CellName is a string restricted
-                                                to 63 characters for strict validation
-                                                budgeting.
-                                              maxLength: 63
+                                              maxLength: 30
                                               minLength: 1
                                               type: string
                                             maxItems: 50
@@ -6922,11 +6914,15 @@ spec:
                                                 type: string
                                             type: object
                                           type:
+                                            allOf:
+                                            - enum:
+                                              - readWrite
+                                              - readOnly
+                                            - enum:
+                                              - readWrite
+                                              - readOnly
                                             description: Type of the pool (e.g., "readWrite",
                                               "readOnly").
-                                            enum:
-                                            - readWrite
-                                            - readOnly
                                             type: string
                                         type: object
                                       description: Pools configuration. Keyed by pool
@@ -8254,9 +8250,6 @@ spec:
                 description: Cells status summary.
                 maxProperties: 50
                 type: object
-                x-kubernetes-validations:
-                - message: cell names must be <= 30 chars
-                  rule: self.all(key, size(key) <= 30)
               conditions:
                 description: Conditions represent the latest available observations.
                 items:
@@ -8332,9 +8325,6 @@ spec:
                 description: Databases status summary.
                 maxProperties: 50
                 type: object
-                x-kubernetes-validations:
-                - message: database names must be <= 30 chars
-                  rule: self.all(key, size(key) <= 30)
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64

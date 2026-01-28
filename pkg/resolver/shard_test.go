@@ -27,9 +27,9 @@ func TestResolver_ResolveShard(t *testing.T) {
 		config       *multigresv1alpha1.ShardConfig
 		objects      []client.Object
 		wantOrch     *multigresv1alpha1.MultiOrchSpec
-		wantPools    map[string]multigresv1alpha1.PoolSpec
+		wantPools    map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec
 		wantErr      bool
-		allCellNames []string
+		allCellNames []multigresv1alpha1.CellName
 	}{
 		"Template Found": {
 			config:  &multigresv1alpha1.ShardConfig{ShardTemplate: "default"},
@@ -40,7 +40,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 					Resources: DefaultResourcesOrch(),
 				},
 			},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"default": {
 					Type:            "readWrite",
 					ReplicasPerCell: ptr.To(int32(1)),
@@ -66,7 +66,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(5))},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{"p": {}},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{"p": {}},
 				},
 			},
 			wantOrch: &multigresv1alpha1.MultiOrchSpec{
@@ -76,7 +76,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 				},
 			},
 			// FIX: Updated to expect fully hydrated defaults for pool "p"
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p": {
 					ReplicasPerCell: ptr.To(int32(1)),
 					Storage: multigresv1alpha1.StorageSpec{
@@ -98,12 +98,12 @@ func TestResolver_ResolveShard(t *testing.T) {
 						// Empty Cells, should inherit allCellNames
 						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"p1": {Type: "read"}, // Empty Cells
 					},
 				},
 			},
-			allCellNames: []string{"zone-a", "zone-b"},
+			allCellNames: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
 			wantOrch: &multigresv1alpha1.MultiOrchSpec{
 				StatelessSpec: multigresv1alpha1.StatelessSpec{
 					Replicas:  ptr.To(int32(1)),
@@ -112,7 +112,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 				// Expect injected cells
 				Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
 			},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p1": {
 					Type:            "read",
 					ReplicasPerCell: ptr.To(int32(1)),
@@ -172,7 +172,7 @@ func TestResolver_ResolveShardTemplate(t *testing.T) {
 	tests := map[string]struct {
 		existingObjects []client.Object
 		defaults        multigresv1alpha1.TemplateDefaults
-		reqName         string
+		reqName         multigresv1alpha1.TemplateRef
 		wantErr         bool
 		errContains     string
 		wantFound       bool
@@ -259,7 +259,7 @@ func TestMergeShardConfig(t *testing.T) {
 		overrides *multigresv1alpha1.ShardOverrides
 		inline    *multigresv1alpha1.ShardInlineSpec
 		wantOrch  multigresv1alpha1.MultiOrchSpec
-		wantPools map[string]multigresv1alpha1.PoolSpec
+		wantPools map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec
 	}{
 		"Full Merge with MultiOrch Overrides": {
 			tpl: &multigresv1alpha1.ShardTemplate{
@@ -275,7 +275,7 @@ func TestMergeShardConfig(t *testing.T) {
 						},
 						Cells: []multigresv1alpha1.CellName{"a"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"p1": {Type: "read"},
 					},
 				},
@@ -292,7 +292,7 @@ func TestMergeShardConfig(t *testing.T) {
 					},
 					Cells: []multigresv1alpha1.CellName{"b"},
 				},
-				Pools: map[string]multigresv1alpha1.PoolSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 					"p1": {Type: "write"},
 					"p2": {Type: "internal"},
 				},
@@ -309,7 +309,7 @@ func TestMergeShardConfig(t *testing.T) {
 				},
 				Cells: []multigresv1alpha1.CellName{"b"},
 			},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p1": {Type: "write"},
 				"p2": {Type: "internal"},
 			},
@@ -326,18 +326,18 @@ func TestMergeShardConfig(t *testing.T) {
 			wantOrch: multigresv1alpha1.MultiOrchSpec{
 				StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 			},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 		},
 		"Pool Deep Merge": {
 			tpl: &multigresv1alpha1.ShardTemplate{
 				Spec: multigresv1alpha1.ShardTemplateSpec{
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"p1": {Type: "read"},
 					},
 				},
 			},
 			overrides: &multigresv1alpha1.ShardOverrides{
-				Pools: map[string]multigresv1alpha1.PoolSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 					"p1": {
 						Type:            "write",
 						Cells:           []multigresv1alpha1.CellName{"zone-a"},
@@ -358,7 +358,7 @@ func TestMergeShardConfig(t *testing.T) {
 				},
 			},
 			wantOrch: multigresv1alpha1.MultiOrchSpec{},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p1": {
 					Type:            "write",
 					Cells:           []multigresv1alpha1.CellName{"zone-a"},
@@ -381,18 +381,18 @@ func TestMergeShardConfig(t *testing.T) {
 		"Preserve Base Pool (Empty Override)": {
 			tpl: &multigresv1alpha1.ShardTemplate{
 				Spec: multigresv1alpha1.ShardTemplateSpec{
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"p1": {Type: "read", ReplicasPerCell: ptr.To(int32(1))},
 					},
 				},
 			},
 			overrides: &multigresv1alpha1.ShardOverrides{
-				Pools: map[string]multigresv1alpha1.PoolSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 					"p1": {},
 				},
 			},
 			wantOrch: multigresv1alpha1.MultiOrchSpec{},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p1": {Type: "read", ReplicasPerCell: ptr.To(int32(1))},
 			},
 		},
@@ -408,32 +408,32 @@ func TestMergeShardConfig(t *testing.T) {
 				MultiOrch: multigresv1alpha1.MultiOrchSpec{
 					Cells: []multigresv1alpha1.CellName{"inline"},
 				},
-				Pools: map[string]multigresv1alpha1.PoolSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 					"inline-pool": {Type: "read"},
 				},
 			},
 			wantOrch: multigresv1alpha1.MultiOrchSpec{
 				Cells: []multigresv1alpha1.CellName{"inline"},
 			},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"inline-pool": {Type: "read"},
 			},
 		},
 		"Inline Spec Overrides Existing Pool": {
 			tpl: &multigresv1alpha1.ShardTemplate{
 				Spec: multigresv1alpha1.ShardTemplateSpec{
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"existing": {Type: "read"},
 					},
 				},
 			},
 			inline: &multigresv1alpha1.ShardInlineSpec{
-				Pools: map[string]multigresv1alpha1.PoolSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 					"existing": {Type: "write"},
 				},
 			},
 			wantOrch: multigresv1alpha1.MultiOrchSpec{},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"existing": {Type: "write"},
 			},
 		},
@@ -445,7 +445,7 @@ func TestMergeShardConfig(t *testing.T) {
 				},
 			},
 			wantOrch:  multigresv1alpha1.MultiOrchSpec{Cells: []multigresv1alpha1.CellName{"b"}},
-			wantPools: map[string]multigresv1alpha1.PoolSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 		},
 	}
 

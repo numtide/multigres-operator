@@ -114,8 +114,8 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 					Namespace: testNamespace,
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name: zone,
-					Zone: "us-east-1" + zone[len(zone)-1:], // construct zone from name (e.g. zone-a -> us-east-1a)
+					Name: multigresv1alpha1.CellName(zone),
+					Zone: multigresv1alpha1.Zone("us-east-1" + zone[len(zone)-1:]), // construct zone from name (e.g. zone-a -> us-east-1a)
 					Images: multigresv1alpha1.CellImages{
 						MultiGateway:    resolver.DefaultMultiGatewayImage,
 						ImagePullPolicy: resolver.DefaultImagePullPolicy,
@@ -252,7 +252,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 								Shards: []multigresv1alpha1.ShardConfig{
 									{
 										Name:          "0",
-										ShardTemplate: tplName,
+										ShardTemplate: multigresv1alpha1.TemplateRef(tplName),
 										Overrides: &multigresv1alpha1.ShardOverrides{
 											MultiOrch: &multigresv1alpha1.MultiOrchSpec{
 												// Should REPLACE, not append
@@ -312,7 +312,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 								Resources: resolver.DefaultResourcesOrch(), // FIX: Expect defaults
 							},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 							"default": {
 								Type:            "readWrite",
 								Cells:           []multigresv1alpha1.CellName{"zone-c"},

@@ -286,7 +286,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 								Name:          "s0",
 								ShardTemplate: "prod-shard",
 								Overrides: &multigresv1alpha1.ShardOverrides{
-									Pools: map[string]multigresv1alpha1.PoolSpec{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 										"typo-pool": {ReplicasPerCell: ptr.To(int32(3))},
 									},
 								},
@@ -316,7 +316,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 								MultiOrch: multigresv1alpha1.MultiOrchSpec{
 									Cells: []multigresv1alpha1.CellName{"zone-invalid"}, // Invalid!
 								},
-								Pools: map[string]multigresv1alpha1.PoolSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"p1": {
 										Type:  "read",
 										Cells: []multigresv1alpha1.CellName{"zone-invalid"},
@@ -344,7 +344,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 								MultiOrch: multigresv1alpha1.MultiOrchSpec{
 									Cells: []multigresv1alpha1.CellName{}, // Empty!
 								},
-								Pools: map[string]multigresv1alpha1.PoolSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"p1": {Type: "read"}, // Empty!
 								},
 							},
@@ -366,7 +366,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 							Name:          "s0",
 							ShardTemplate: "prod-shard",
 							Overrides: &multigresv1alpha1.ShardOverrides{
-								Pools: map[string]multigresv1alpha1.PoolSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"default": {Cells: []multigresv1alpha1.CellName{"invalid"}},
 								},
 							},
@@ -396,7 +396,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 								Name:          "s0",
 								ShardTemplate: "prod-shard",
 								Overrides: &multigresv1alpha1.ShardOverrides{
-									Pools: map[string]multigresv1alpha1.PoolSpec{"p": {}},
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{"p": {}},
 								},
 							},
 						},
@@ -437,7 +437,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 									// Pass Check 1
 									Cells: []multigresv1alpha1.CellName{"ghost-cell"},
 								},
-								Pools: map[string]multigresv1alpha1.PoolSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"default": {
 										Type:  "readWrite",
 										Cells: []multigresv1alpha1.CellName{}, // Empty! Check 1b
@@ -507,7 +507,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 					&multigresv1alpha1.ShardTemplate{
 						ObjectMeta: metav1.ObjectMeta{Name: "prod-shard", Namespace: "default"},
 						Spec: multigresv1alpha1.ShardTemplateSpec{
-							Pools: map[string]multigresv1alpha1.PoolSpec{
+							Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 								"default": {Type: "readWrite"}, // Only "default" pool exists
 							},
 						},
@@ -859,7 +859,7 @@ func TestChildResourceValidator(t *testing.T) {
 			obj := &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
 				Spec: multigresv1alpha1.ShardSpec{
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"default": {
 							ReplicasPerCell: ptr.To(int32(1)),
 						},

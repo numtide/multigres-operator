@@ -51,9 +51,7 @@ spec:
               allCells:
                 description: AllCells list for discovery.
                 items:
-                  description: CellName is a string restricted to 63 characters for
-                    strict validation budgeting.
-                  maxLength: 63
+                  maxLength: 30
                   minLength: 1
                   type: string
                 maxItems: 50
@@ -116,6 +114,7 @@ spec:
                   multigateway:
                     description: MultiGateway is the image used for the gateway.
                     maxLength: 512
+                    minLength: 1
                     type: string
                 required:
                 - multigateway
@@ -1127,11 +1126,13 @@ spec:
                 type: object
               name:
                 description: Name is the logical name of the cell.
-                maxLength: 63
+                maxLength: 30
+                minLength: 1
                 type: string
               region:
                 description: Region indicates the physical region.
                 maxLength: 63
+                minLength: 1
                 type: string
               topoServer:
                 description: TopoServer defines the local topology config.
@@ -1295,6 +1296,7 @@ spec:
               zone:
                 description: Zone indicates the physical availability zone.
                 maxLength: 63
+                minLength: 1
                 type: string
             required:
             - globalTopoServer

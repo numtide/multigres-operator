@@ -720,14 +720,14 @@ func (in *MultigresClusterStatus) DeepCopyInto(out *MultigresClusterStatus) {
 	}
 	if in.Cells != nil {
 		in, out := &in.Cells, &out.Cells
-		*out = make(map[string]CellStatusSummary, len(*in))
+		*out = make(map[CellName]CellStatusSummary, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
 	}
 	if in.Databases != nil {
 		in, out := &in.Databases, &out.Databases
-		*out = make(map[string]DatabaseStatusSummary, len(*in))
+		*out = make(map[DatabaseName]DatabaseStatusSummary, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
@@ -856,7 +856,7 @@ func (in *ShardInlineSpec) DeepCopyInto(out *ShardInlineSpec) {
 	in.MultiOrch.DeepCopyInto(&out.MultiOrch)
 	if in.Pools != nil {
 		in, out := &in.Pools, &out.Pools
-		*out = make(map[string]PoolSpec, len(*in))
+		*out = make(map[PoolName]PoolSpec, len(*in))
 		for key, val := range *in {
 			(*out)[key] = *val.DeepCopy()
 		}
@@ -915,7 +915,7 @@ func (in *ShardOverrides) DeepCopyInto(out *ShardOverrides) {
 	}
 	if in.Pools != nil {
 		in, out := &in.Pools, &out.Pools
-		*out = make(map[string]PoolSpec, len(*in))
+		*out = make(map[PoolName]PoolSpec, len(*in))
 		for key, val := range *in {
 			(*out)[key] = *val.DeepCopy()
 		}
@@ -938,7 +938,7 @@ func (in *ShardResolvedSpec) DeepCopyInto(out *ShardResolvedSpec) {
 	in.MultiOrch.DeepCopyInto(&out.MultiOrch)
 	if in.Pools != nil {
 		in, out := &in.Pools, &out.Pools
-		*out = make(map[string]PoolSpec, len(*in))
+		*out = make(map[PoolName]PoolSpec, len(*in))
 		for key, val := range *in {
 			(*out)[key] = *val.DeepCopy()
 		}
@@ -963,7 +963,7 @@ func (in *ShardSpec) DeepCopyInto(out *ShardSpec) {
 	in.MultiOrch.DeepCopyInto(&out.MultiOrch)
 	if in.Pools != nil {
 		in, out := &in.Pools, &out.Pools
-		*out = make(map[string]PoolSpec, len(*in))
+		*out = make(map[PoolName]PoolSpec, len(*in))
 		for key, val := range *in {
 			(*out)[key] = *val.DeepCopy()
 		}
@@ -1075,7 +1075,7 @@ func (in *ShardTemplateSpec) DeepCopyInto(out *ShardTemplateSpec) {
 	}
 	if in.Pools != nil {
 		in, out := &in.Pools, &out.Pools
-		*out = make(map[string]PoolSpec, len(*in))
+		*out = make(map[PoolName]PoolSpec, len(*in))
 		for key, val := range *in {
 			(*out)[key] = *val.DeepCopy()
 		}

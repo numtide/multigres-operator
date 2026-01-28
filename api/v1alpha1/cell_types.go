@@ -42,24 +42,16 @@ import (
 //
 // Cell is a child CR managed by MultigresCluster.
 
-// CellName is a string restricted to 63 characters for strict validation budgeting.
-// +kubebuilder:validation:MinLength=1
-// +kubebuilder:validation:MaxLength=63
-type CellName string
-
 // CellSpec defines the desired state of Cell.
 // +kubebuilder:validation:XValidation:rule="has(self.zone) != has(self.region)",message="must specify either 'zone' or 'region', but not both"
 type CellSpec struct {
 	// Name is the logical name of the cell.
-	// +kubebuilder:validation:MaxLength=63
-	Name string `json:"name"`
+	Name CellName `json:"name"`
 	// Zone indicates the physical availability zone.
-	// +kubebuilder:validation:MaxLength=63
-	Zone string `json:"zone,omitempty"`
+	Zone Zone `json:"zone,omitempty"`
 	// Region indicates the physical region.
 	// +optional
-	// +kubebuilder:validation:MaxLength=63
-	Region string `json:"region,omitempty"`
+	Region Region `json:"region,omitempty"`
 
 	// Images defines the container images used in this cell.
 	Images CellImages `json:"images"`
@@ -96,8 +88,7 @@ type CellImages struct {
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// MultiGateway is the image used for the gateway.
-	// +kubebuilder:validation:MaxLength=512
-	MultiGateway string `json:"multigateway"`
+	MultiGateway ImageRef `json:"multigateway"`
 }
 
 // TopologyReconciliation defines flags for the cell controller.

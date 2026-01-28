@@ -83,7 +83,7 @@ func TestShardReconciliation(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone-a"},
 							Type:            "readWrite",
@@ -436,7 +436,7 @@ func TestShardReconciliation(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1", "zone2"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
 							Type:            "readWrite",
@@ -996,9 +996,9 @@ func TestShardReconciliation(t *testing.T) {
 					hashedDeployName := nameutil.JoinWithConstraints(
 						nameutil.DefaultConstraints,
 						clusterName,
-						tc.shard.Spec.DatabaseName,
-						tc.shard.Spec.TableGroupName,
-						tc.shard.Spec.ShardName,
+						string(tc.shard.Spec.DatabaseName),
+						string(tc.shard.Spec.TableGroupName),
+						string(tc.shard.Spec.ShardName),
 						"multiorch",
 						cellName,
 					)
@@ -1006,9 +1006,9 @@ func TestShardReconciliation(t *testing.T) {
 					hashedSvcName := nameutil.JoinWithConstraints(
 						nameutil.ServiceConstraints,
 						clusterName,
-						tc.shard.Spec.DatabaseName,
-						tc.shard.Spec.TableGroupName,
-						tc.shard.Spec.ShardName,
+						string(tc.shard.Spec.DatabaseName),
+						string(tc.shard.Spec.TableGroupName),
+						string(tc.shard.Spec.ShardName),
 						"multiorch",
 						cellName,
 					)
@@ -1030,9 +1030,9 @@ func TestShardReconciliation(t *testing.T) {
 					hashedSSName := nameutil.JoinWithConstraints(
 						nameutil.StatefulSetConstraints,
 						clusterName,
-						tc.shard.Spec.DatabaseName,
-						tc.shard.Spec.TableGroupName,
-						tc.shard.Spec.ShardName,
+						string(tc.shard.Spec.DatabaseName),
+						string(tc.shard.Spec.TableGroupName),
+						string(tc.shard.Spec.ShardName),
 						"pool",
 						poolName,
 						cellName,
@@ -1040,9 +1040,9 @@ func TestShardReconciliation(t *testing.T) {
 					hashedSvcName := nameutil.JoinWithConstraints(
 						nameutil.ServiceConstraints,
 						clusterName,
-						tc.shard.Spec.DatabaseName,
-						tc.shard.Spec.TableGroupName,
-						tc.shard.Spec.ShardName,
+						string(tc.shard.Spec.DatabaseName),
+						string(tc.shard.Spec.TableGroupName),
+						string(tc.shard.Spec.ShardName),
 						"pool",
 						poolName,
 						cellName,
@@ -1064,9 +1064,9 @@ func TestShardReconciliation(t *testing.T) {
 							nameutil.ServiceConstraints,
 							"backup-data",
 							clusterName,
-							tc.shard.Spec.DatabaseName,
-							tc.shard.Spec.TableGroupName,
-							tc.shard.Spec.ShardName,
+							string(tc.shard.Spec.DatabaseName),
+							string(tc.shard.Spec.TableGroupName),
+							string(tc.shard.Spec.ShardName),
 							"pool",
 							poolName,
 							cellName,

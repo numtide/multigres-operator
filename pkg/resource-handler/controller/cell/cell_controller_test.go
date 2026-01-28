@@ -89,7 +89,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
-				hashedName := buildHashedName(cell.Labels["multigres.com/cluster"], cell.Spec.Name)
+				hashedName := buildHashedName(cell.Labels["multigres.com/cluster"], string(cell.Spec.Name))
 				// Verify MultiGateway Deployment was created
 				mgDeploy := &appsv1.Deployment{}
 				if err := c.Get(t.Context(),
@@ -164,7 +164,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
-				hashedName := buildHashedName(cell.Labels["multigres.com/cluster"], cell.Spec.Name)
+				hashedName := buildHashedName(cell.Labels["multigres.com/cluster"], string(cell.Spec.Name))
 				mgDeploy := &appsv1.Deployment{}
 				err := c.Get(t.Context(), types.NamespacedName{
 					Name:      hashedName,
@@ -647,7 +647,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 
 			// Calculate hashed name
 			clusterName := tc.cell.Labels["multigres.com/cluster"]
-			hashedName := buildHashedName(clusterName, tc.cell.Spec.Name)
+			hashedName := buildHashedName(clusterName, string(tc.cell.Spec.Name))
 			t.Logf("Computed hashedName: %s", hashedName)
 
 			// Patch existing objects names

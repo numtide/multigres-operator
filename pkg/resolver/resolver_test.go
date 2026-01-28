@@ -77,7 +77,7 @@ func TestNewResolver(t *testing.T) {
 	if got, want := r.Namespace, "ns"; got != want {
 		t.Errorf("Namespace mismatch: got %q, want %q", got, want)
 	}
-	if got, want := r.TemplateDefaults.CoreTemplate, "foo"; got != want {
+	if got, want := r.TemplateDefaults.CoreTemplate, multigresv1alpha1.TemplateRef("foo"); got != want {
 		t.Errorf("Defaults mismatch: got %q, want %q", got, want)
 	}
 }

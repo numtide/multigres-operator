@@ -16,8 +16,8 @@ import (
 func (r *Resolver) ResolveShard(
 	ctx context.Context,
 	shardSpec *multigresv1alpha1.ShardConfig,
-	allCellNames []string,
-) (*multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec, error) {
+	allCellNames []multigresv1alpha1.CellName,
+) (*multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, error) {
 	// 1. Fetch Template
 	templateName := shardSpec.ShardTemplate
 	tpl, err := r.ResolveShardTemplate(ctx, templateName)
@@ -75,7 +75,7 @@ func (r *Resolver) ResolveShard(
 // ResolveShardTemplate fetches and resolves a ShardTemplate by name.
 func (r *Resolver) ResolveShardTemplate(
 	ctx context.Context,
-	name string,
+	name multigresv1alpha1.TemplateRef,
 ) (*multigresv1alpha1.ShardTemplate, error) {
 	resolvedName := name
 	isImplicitFallback := false
@@ -89,12 +89,12 @@ func (r *Resolver) ResolveShardTemplate(
 	}
 
 	// Check cache first
-	if cached, found := r.shardTemplateCache[resolvedName]; found {
+	if cached, found := r.shardTemplateCache[string(resolvedName)]; found {
 		return cached.DeepCopy(), nil
 	}
 
 	tpl := &multigresv1alpha1.ShardTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: resolvedName, Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
@@ -107,7 +107,7 @@ func (r *Resolver) ResolveShardTemplate(
 	}
 
 	// Store in cache
-	r.shardTemplateCache[resolvedName] = tpl
+	r.shardTemplateCache[string(resolvedName)] = tpl
 	return tpl.DeepCopy(), nil
 }
 
@@ -116,10 +116,10 @@ func mergeShardConfig(
 	template *multigresv1alpha1.ShardTemplate,
 	overrides *multigresv1alpha1.ShardOverrides,
 	inline *multigresv1alpha1.ShardInlineSpec,
-) (multigresv1alpha1.MultiOrchSpec, map[string]multigresv1alpha1.PoolSpec) {
+) (multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec) {
 	// 1. Start with Template (Base)
 	var multiOrch multigresv1alpha1.MultiOrchSpec
-	pools := make(map[string]multigresv1alpha1.PoolSpec)
+	pools := make(map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec)
 
 	if template != nil {
 		if template.Spec.MultiOrch != nil {

@@ -116,7 +116,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 								StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 								Cells:         []multigresv1alpha1.CellName{"zone-a"},
 							},
-							Pools: map[string]multigresv1alpha1.PoolSpec{
+							Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 								"primary": {
 									Type:            "readWrite",
 									ReplicasPerCell: ptr.To(int32(1)),
@@ -130,7 +130,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 								StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 								Cells:         []multigresv1alpha1.CellName{"zone-b"},
 							},
-							Pools: map[string]multigresv1alpha1.PoolSpec{
+							Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 								"primary": {
 									Type:            "readWrite",
 									ReplicasPerCell: ptr.To(int32(1)),
@@ -168,7 +168,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 							StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 							Cells:         []multigresv1alpha1.CellName{"zone-a"},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 							"primary": {
 								Type:            "readWrite",
 								ReplicasPerCell: ptr.To(int32(1)),
@@ -203,7 +203,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 							StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 							Cells:         []multigresv1alpha1.CellName{"zone-b"},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 							"primary": {
 								Type:            "readWrite",
 								ReplicasPerCell: ptr.To(int32(1)),
@@ -262,14 +262,14 @@ func TestTableGroupReconciliation(t *testing.T) {
 			for _, obj := range tc.wantResources {
 				if shard, ok := obj.(*multigresv1alpha1.Shard); ok {
 					clusterName := tc.tableGroup.Labels["multigres.com/cluster"]
-					hashedName := nameutil.JoinWithConstraints(
+					expectedName := nameutil.JoinWithConstraints(
 						nameutil.DefaultConstraints,
 						clusterName,
-						tc.tableGroup.Spec.DatabaseName,
-						tc.tableGroup.Spec.TableGroupName,
-						shard.Spec.ShardName,
+						string(tc.tableGroup.Spec.DatabaseName),
+						string(tc.tableGroup.Spec.TableGroupName),
+						string(shard.Spec.ShardName),
 					)
-					shard.Name = hashedName
+					shard.Name = expectedName
 				}
 			}
 
@@ -286,9 +286,9 @@ func TestTableGroupReconciliation(t *testing.T) {
 func shardLabels(clusterName, db, tg, shard string) map[string]string {
 	labels := metadata.BuildStandardLabels(clusterName, "shard")
 	metadata.AddClusterLabel(labels, clusterName)
-	metadata.AddDatabaseLabel(labels, db)
-	metadata.AddTableGroupLabel(labels, tg)
-	metadata.AddShardLabel(labels, shard)
+	metadata.AddDatabaseLabel(labels, multigresv1alpha1.DatabaseName(db))
+	metadata.AddTableGroupLabel(labels, multigresv1alpha1.TableGroupName(tg))
+	metadata.AddShardLabel(labels, multigresv1alpha1.ShardName(shard))
 	return labels
 }
 

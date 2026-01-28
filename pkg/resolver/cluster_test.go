@@ -165,7 +165,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 											Name: "0-inf",
 											Spec: &multigresv1alpha1.ShardInlineSpec{
 												MultiOrch: multigresv1alpha1.MultiOrchSpec{},
-												Pools: map[string]multigresv1alpha1.PoolSpec{
+												Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 													"default": {
 														Type: "readWrite",
 													},
@@ -227,7 +227,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 											Spec: &multigresv1alpha1.ShardInlineSpec{
 												MultiOrch: multigresv1alpha1.MultiOrchSpec{},
 												// KEY: Pools is empty because implicit template takes over
-												Pools: map[string]multigresv1alpha1.PoolSpec{},
+												Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 											},
 										},
 									},

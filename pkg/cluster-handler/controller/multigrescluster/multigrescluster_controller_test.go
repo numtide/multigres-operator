@@ -230,7 +230,7 @@ func setupFixtures(tb testing.TB) (
 					Replicas: ptr.To(int32(3)),
 				},
 			},
-			Pools: map[string]multigresv1alpha1.PoolSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"primary": {
 					ReplicasPerCell: ptr.To(int32(2)),
 					Type:            "readWrite",
@@ -309,7 +309,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: cellName, Namespace: namespace}, cell); err != nil {
 					t.Fatalf("Expected Cell %s to exist: %v", cellName, err)
 				}
-				if got, want := cell.Spec.Images.MultiGateway, "gateway:latest"; got != want {
+				if got, want := cell.Spec.Images.MultiGateway, multigresv1alpha1.ImageRef("gateway:latest"); got != want {
 					t.Errorf("Cell image mismatch got %q, want %q", got, want)
 				}
 			},

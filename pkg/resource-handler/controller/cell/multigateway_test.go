@@ -611,7 +611,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 		return name.JoinWithConstraints(
 			name.DefaultConstraints,
 			clusterName,
-			cell.Spec.Name,
+			string(cell.Spec.Name),
 			"multigateway",
 		)
 	}
@@ -816,7 +816,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 		return name.JoinWithConstraints(
 			name.ServiceConstraints,
 			clusterName,
-			cell.Spec.Name,
+			string(cell.Spec.Name),
 			"multigateway",
 		)
 	}
