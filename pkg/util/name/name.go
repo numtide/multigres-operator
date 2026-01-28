@@ -26,9 +26,9 @@ limitations under the License.
 package name
 
 import (
-	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"unicode"
 )
@@ -93,7 +93,7 @@ var (
 
 // Hash computes a hash suffix for the given name parts.
 func Hash(parts []string) string {
-	h := md5.New()
+	h := fnv.New32a()
 	for _, part := range parts {
 		h.Write([]byte(part))
 		// It doesn't matter if the parts have nulls in them somehow.
@@ -103,12 +103,12 @@ func Hash(parts []string) string {
 		h.Write([]byte{0})
 	}
 	sum := h.Sum(nil)
-	// We don't need the whole sum; just take the first 32 bits.
+	// FNV-1a 32-bit produces exactly 4 bytes, which hex-encodes to 8 characters.
 	// We only care about avoiding collisions in the case when
 	// the concatenated parts without the hash match exactly.
 	// That leaves almost no degrees of freedom even if you're
 	// trying to collide on purpose.
-	return hex.EncodeToString(sum[:hashBytes])
+	return hex.EncodeToString(sum)
 }
 
 // JoinWithConstraints builds a name by concatenating a number of parts with '-' as
