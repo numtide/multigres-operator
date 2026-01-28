@@ -26,9 +26,9 @@ func buildHashedPoolName(shard *multigresv1alpha1.Shard, poolName, cellName stri
 	return name.JoinWithConstraints(
 		name.StatefulSetConstraints,
 		clusterName,
-		shard.Spec.DatabaseName,
-		shard.Spec.TableGroupName,
-		shard.Spec.ShardName,
+		string(shard.Spec.DatabaseName),
+		string(shard.Spec.TableGroupName),
+		string(shard.Spec.ShardName),
 		"pool",
 		poolName,
 		cellName,
@@ -43,9 +43,9 @@ func buildHashedPoolHeadlessServiceName(
 	return name.JoinWithConstraints(
 		name.ServiceConstraints,
 		clusterName,
-		shard.Spec.DatabaseName,
-		shard.Spec.TableGroupName,
-		shard.Spec.ShardName,
+		string(shard.Spec.DatabaseName),
+		string(shard.Spec.TableGroupName),
+		string(shard.Spec.ShardName),
 		"pool",
 		poolName,
 		cellName,
@@ -59,9 +59,9 @@ func buildHashedBackupPVCName(shard *multigresv1alpha1.Shard, poolName, cellName
 		name.ServiceConstraints,
 		"backup-data",
 		clusterName,
-		shard.Spec.DatabaseName,
-		shard.Spec.TableGroupName,
-		shard.Spec.ShardName,
+		string(shard.Spec.DatabaseName),
+		string(shard.Spec.TableGroupName),
+		string(shard.Spec.ShardName),
 		"pool",
 		poolName,
 		cellName,
@@ -73,9 +73,9 @@ func buildHashedMultiOrchName(shard *multigresv1alpha1.Shard, cellName string) s
 	return name.JoinWithConstraints(
 		name.ServiceConstraints,
 		clusterName,
-		shard.Spec.DatabaseName,
-		shard.Spec.TableGroupName,
-		shard.Spec.ShardName,
+		string(shard.Spec.DatabaseName),
+		string(shard.Spec.TableGroupName),
+		string(shard.Spec.ShardName),
 		"multiorch",
 		cellName,
 	)
@@ -165,7 +165,7 @@ func TestBuildMultiOrchContainer_WithImage(t *testing.T) {
 				Implementation: "etcd2",
 			},
 			Images: multigresv1alpha1.ShardImages{
-				MultiOrch: customImage,
+				MultiOrch: multigresv1alpha1.ImageRef(customImage),
 			},
 		},
 	}
@@ -305,7 +305,7 @@ func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			Pools: map[string]multigresv1alpha1.PoolSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"pool1": {
 					Cells: []multigresv1alpha1.CellName{"cell1"},
 				},
@@ -570,7 +570,7 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{}, // Empty
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{}, // Empty
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{}, // Empty
 				},
 			},
 		},
@@ -594,7 +594,7 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{},
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 					},
 				}
 			}
@@ -655,7 +655,7 @@ func TestUpdateStatus_GetError(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			Pools: map[string]multigresv1alpha1.PoolSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"pool1": {
 					Cells: []multigresv1alpha1.CellName{"cell1"},
 				},

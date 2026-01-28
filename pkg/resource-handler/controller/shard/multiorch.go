@@ -113,9 +113,9 @@ func buildMultiOrchNameWithCell(
 	return nameutil.JoinWithConstraints(
 		constraints,
 		clusterName,
-		shard.Spec.DatabaseName,
-		shard.Spec.TableGroupName,
-		shard.Spec.ShardName,
+		string(shard.Spec.DatabaseName),
+		string(shard.Spec.TableGroupName),
+		string(shard.Spec.ShardName),
 		"multiorch",
 		cellName,
 	)
@@ -129,8 +129,8 @@ func buildMultiOrchLabelsWithCell(
 	clusterName := shard.Labels["multigres.com/cluster"]
 	labels := metadata.BuildStandardLabels(clusterName, MultiOrchComponentName)
 	metadata.AddCellLabel(labels, cellName)
-	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
-	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
+	metadata.AddDatabaseLabel(labels, string(shard.Spec.DatabaseName))
+	metadata.AddTableGroupLabel(labels, string(shard.Spec.TableGroupName))
 	labels = metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 	return labels
 }

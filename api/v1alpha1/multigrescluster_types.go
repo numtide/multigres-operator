@@ -95,25 +95,16 @@ type ClusterImages struct {
 
 	// Component Images
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=512
-	MultiGateway string `json:"multigateway,omitempty"`
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=512
-	MultiOrch string `json:"multiorch,omitempty"`
+	MultiGateway ImageRef `json:"multigateway,omitempty"`
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=512
-	MultiPooler string `json:"multipooler,omitempty"`
+	MultiOrch ImageRef `json:"multiorch,omitempty"`
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=512
-	MultiAdmin string `json:"multiadmin,omitempty"`
+	MultiPooler ImageRef `json:"multipooler,omitempty"`
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=512
-	Postgres string `json:"postgres,omitempty"`
+	MultiAdmin ImageRef `json:"multiadmin,omitempty"`
+	// +optional
+	Postgres ImageRef `json:"postgres,omitempty"`
 }
 
 // ============================================================================
@@ -124,19 +115,13 @@ type ClusterImages struct {
 type TemplateDefaults struct {
 	// CoreTemplate is the default template for global components.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	CoreTemplate string `json:"coreTemplate,omitempty"`
+	CoreTemplate TemplateRef `json:"coreTemplate,omitempty"`
 	// CellTemplate is the default template for cells.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	CellTemplate string `json:"cellTemplate,omitempty"`
+	CellTemplate TemplateRef `json:"cellTemplate,omitempty"`
 	// ShardTemplate is the default template for shards.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	ShardTemplate string `json:"shardTemplate,omitempty"`
+	ShardTemplate TemplateRef `json:"shardTemplate,omitempty"`
 }
 
 // ============================================================================
@@ -154,9 +139,7 @@ type MultiAdminConfig struct {
 
 	// TemplateRef refers to a CoreTemplate to load configuration from.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	TemplateRef string `json:"templateRef,omitempty"`
+	TemplateRef TemplateRef `json:"templateRef,omitempty"`
 }
 
 // ============================================================================
@@ -169,26 +152,18 @@ type MultiAdminConfig struct {
 // +kubebuilder:validation:XValidation:rule="has(self.zone) != has(self.region)",message="must specify either 'zone' or 'region', but not both"
 type CellConfig struct {
 	// Name is the logical name of the cell.
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=30
-	Name string `json:"name"`
+	Name CellName `json:"name"`
 
 	// Zone indicates the physical availability zone.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=30
-	Zone string `json:"zone,omitempty"`
+	Zone Zone `json:"zone,omitempty"`
 	// Region indicates the physical region (mutually exclusive with zone typically, but allowed here).
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=30
-	Region string `json:"region,omitempty"`
+	Region Region `json:"region,omitempty"`
 
 	// CellTemplate refers to a CellTemplate CR.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	CellTemplate string `json:"cellTemplate,omitempty"`
+	CellTemplate TemplateRef `json:"cellTemplate,omitempty"`
 
 	// Overrides are applied on top of the template.
 	// +optional
@@ -224,9 +199,7 @@ type CellInlineSpec struct {
 // DatabaseConfig defines a logical database.
 type DatabaseConfig struct {
 	// Name is the logical name of the database.
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=30
-	Name string `json:"name"`
+	Name DatabaseName `json:"name"`
 
 	// Default indicates if this is the system default database.
 	// +optional
@@ -245,9 +218,7 @@ type DatabaseConfig struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.default) || !self.default || self.name == 'default'",message="the default tablegroup must be named 'default'"
 type TableGroupConfig struct {
 	// Name is the logical name of the table group.
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=25
-	Name string `json:"name"`
+	Name TableGroupName `json:"name"`
 
 	// Default indicates if this is the default/unsharded group.
 	// +optional
@@ -266,15 +237,11 @@ type TableGroupConfig struct {
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.overrides))",message="cannot specify both 'spec' and 'overrides'"
 type ShardConfig struct {
 	// Name is the identifier of the shard (e.g., "0", "1").
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=25
-	Name string `json:"name"`
+	Name ShardName `json:"name"`
 
 	// ShardTemplate refers to a ShardTemplate CR.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
-	ShardTemplate string `json:"shardTemplate,omitempty"`
+	ShardTemplate TemplateRef `json:"shardTemplate,omitempty"`
 
 	// Overrides are applied on top of the template.
 	// +optional
@@ -295,7 +262,7 @@ type ShardOverrides struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 25)",message="pool names must be <= 25 chars"
-	Pools map[string]PoolSpec `json:"pools,omitempty"`
+	Pools map[PoolName]PoolSpec `json:"pools,omitempty"`
 }
 
 // ShardInlineSpec defines the inline configuration for a Shard.
@@ -308,7 +275,7 @@ type ShardInlineSpec struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 25)",message="pool names must be <= 25 chars"
-	Pools map[string]PoolSpec `json:"pools,omitempty"`
+	Pools map[PoolName]PoolSpec `json:"pools,omitempty"`
 }
 
 // ============================================================================
@@ -327,14 +294,12 @@ type MultigresClusterStatus struct {
 	// Cells status summary.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=50
-	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 30)",message="cell names must be <= 30 chars"
-	Cells map[string]CellStatusSummary `json:"cells,omitempty"`
+	Cells map[CellName]CellStatusSummary `json:"cells,omitempty"`
 
 	// Databases status summary.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=50
-	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 30)",message="database names must be <= 30 chars"
-	Databases map[string]DatabaseStatusSummary `json:"databases,omitempty"`
+	Databases map[DatabaseName]DatabaseStatusSummary `json:"databases,omitempty"`
 }
 
 // CellStatusSummary provides a high-level status of a cell.

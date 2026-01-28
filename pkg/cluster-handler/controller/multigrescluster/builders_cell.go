@@ -27,10 +27,7 @@ func BuildCell(
 	cellCR := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name.JoinWithConstraints(
-				name.DefaultConstraints,
-				cluster.Name,
-				cellCfg.Name,
-			),
+				name.DefaultConstraints, cluster.Name, string(cellCfg.Name)),
 			Namespace: cluster.Namespace,
 			Labels:    labels,
 		},

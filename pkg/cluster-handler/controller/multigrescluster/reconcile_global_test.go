@@ -227,7 +227,7 @@ func TestReconcile_Global(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
 					t.Fatal(err)
 				}
-				if got, want := ts.Spec.Etcd.Image, "etcd:topo"; got != want {
+				if got, want := ts.Spec.Etcd.Image, multigresv1alpha1.ImageRef("etcd:topo"); got != want {
 					t.Errorf("TopoServer image mismatch got %q, want %q", got, want)
 				}
 

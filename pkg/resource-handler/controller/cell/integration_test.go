@@ -490,13 +490,13 @@ func TestCellReconciliation(t *testing.T) {
 				hashedDeployName := nameutil.JoinWithConstraints(
 					nameutil.DefaultConstraints,
 					clusterName,
-					tc.cell.Spec.Name,
+					string(tc.cell.Spec.Name),
 					"multigateway",
 				)
 				hashedSvcName := nameutil.JoinWithConstraints(
 					nameutil.ServiceConstraints,
 					clusterName,
-					tc.cell.Spec.Name,
+					string(tc.cell.Spec.Name),
 					"multigateway",
 				)
 

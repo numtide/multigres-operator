@@ -82,3 +82,46 @@ type ContainerConfig struct {
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
+
+// ============================================================================
+// Domain Specific Types (Strong Typing)
+// ============================================================================
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=30
+type DatabaseName string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=25
+type TableGroupName string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=25
+type ShardName string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=25
+type PoolName string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=30
+type CellName string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=63
+type Zone string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=63
+type Region string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=63
+type TemplateRef string
+
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=512
+type ImageRef string
+
+// +kubebuilder:validation:Enum=readWrite;readOnly
+type PoolType string

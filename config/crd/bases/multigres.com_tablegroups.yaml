@@ -47,7 +47,8 @@ spec:
             properties:
               databaseName:
                 description: DatabaseName is the name of the logical database.
-                maxLength: 63
+                maxLength: 30
+                minLength: 1
                 type: string
               default:
                 description: IsDefault indicates if this is the default/unsharded
@@ -113,15 +114,18 @@ spec:
                   multiorch:
                     description: MultiOrch is the image for the shard orchestrator.
                     maxLength: 512
+                    minLength: 1
                     type: string
                   multipooler:
                     description: MultiPooler is the image for the connection pooler
                       sidecar.
                     maxLength: 512
+                    minLength: 1
                     type: string
                   postgres:
                     description: Postgres is the image for the postgres database.
                     maxLength: 512
+                    minLength: 1
                     type: string
                 required:
                 - multiorch
@@ -1068,9 +1072,7 @@ spec:
                             Cells defines the list of cells where this MultiOrch should be deployed.
                             If empty, it defaults to all cells where pools are defined.
                           items:
-                            description: CellName is a string restricted to 63 characters
-                              for strict validation budgeting.
-                            maxLength: 63
+                            maxLength: 30
                             minLength: 1
                             type: string
                           maxItems: 50
@@ -2126,9 +2128,7 @@ spec:
                             description: Cells defines the list of cells where this
                               Pool should be deployed.
                             items:
-                              description: CellName is a string restricted to 63 characters
-                                for strict validation budgeting.
-                              maxLength: 63
+                              maxLength: 30
                               minLength: 1
                               type: string
                             maxItems: 50
@@ -2292,10 +2292,14 @@ spec:
                                 type: string
                             type: object
                           type:
+                            allOf:
+                            - enum:
+                              - readWrite
+                              - readOnly
+                            - enum:
+                              - readWrite
+                              - readOnly
                             description: Type of the pool (e.g., "readWrite", "readOnly").
-                            enum:
-                            - readWrite
-                            - readOnly
                             type: string
                         type: object
                       description: Pools is the map of fully resolved data pool configurations.
@@ -2313,7 +2317,8 @@ spec:
                 type: array
               tableGroupName:
                 description: TableGroupName is the name of this table group.
-                maxLength: 63
+                maxLength: 25
+                minLength: 1
                 type: string
             required:
             - databaseName

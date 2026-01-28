@@ -13,17 +13,17 @@ import (
 // BuildTableGroup constructs the desired TableGroup resource.
 func BuildTableGroup(
 	cluster *multigresv1alpha1.MultigresCluster,
-	dbName string,
+	dbName multigresv1alpha1.DatabaseName,
 	tgCfg *multigresv1alpha1.TableGroupConfig,
 	resolvedShards []multigresv1alpha1.ShardResolvedSpec,
 	globalTopoRef multigresv1alpha1.GlobalTopoServerRef,
 	scheme *runtime.Scheme,
 ) (*multigresv1alpha1.TableGroup, error) {
-	tgNameFull := name.JoinWithConstraints(
+	tgNameHash := name.JoinWithConstraints(
 		name.DefaultConstraints,
 		cluster.Name,
-		dbName,
-		tgCfg.Name,
+		string(dbName),
+		string(tgCfg.Name),
 	)
 
 	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentTableGroup)
@@ -33,7 +33,7 @@ func BuildTableGroup(
 
 	tgCR := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tgNameFull,
+			Name:      tgNameHash,
 			Namespace: cluster.Namespace,
 			Labels:    labels,
 		},

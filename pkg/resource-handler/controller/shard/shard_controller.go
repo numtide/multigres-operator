@@ -91,7 +91,7 @@ func (r *ShardReconciler) Reconcile(
 
 	// Reconcile each pool
 	for poolName, pool := range shard.Spec.Pools {
-		if err := r.reconcilePool(ctx, shard, poolName, pool); err != nil {
+		if err := r.reconcilePool(ctx, shard, string(poolName), pool); err != nil {
 			logger.Error(err, "Failed to reconcile pool", "poolName", poolName)
 			return ctrl.Result{}, err
 		}
@@ -460,7 +460,7 @@ func (r *ShardReconciler) updatePoolsStatus(
 			cellName := string(cell)
 			cellsSet[cell] = true
 
-			stsName := buildPoolNameWithCell(shard, poolName, cellName)
+			stsName := buildPoolNameWithCell(shard, string(poolName), cellName)
 			sts := &appsv1.StatefulSet{}
 			err := r.Get(
 				ctx,

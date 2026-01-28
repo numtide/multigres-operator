@@ -33,7 +33,7 @@ func TestBuildShard(t *testing.T) {
 
 	shardSpec := &multigresv1alpha1.ShardResolvedSpec{
 		Name: "shard-0",
-		Pools: map[string]multigresv1alpha1.PoolSpec{
+		Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 			"default": {Type: "transaction"},
 		},
 	}

@@ -45,8 +45,8 @@ func setupFixtures(
 			// Finalizers removed
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{
-			DatabaseName:   dbName,
-			TableGroupName: tgLabelName,
+			DatabaseName:   multigresv1alpha1.DatabaseName(dbName),
+			TableGroupName: multigresv1alpha1.TableGroupName(tgLabelName),
 			Images: multigresv1alpha1.ShardImages{
 				MultiOrch:   "orch:v1",
 				MultiPooler: "pooler:v1",
@@ -63,7 +63,7 @@ func setupFixtures(
 							Replicas: ptr.To(int32(1)),
 						},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"data": {ReplicasPerCell: ptr.To(int32(2))},
 					},
 				},
@@ -107,7 +107,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				if err := c.Get(ctx, types.NamespacedName{Name: shardNameFull, Namespace: namespace}, shard); err != nil {
 					t.Fatalf("Shard %s not created: %v", shardNameFull, err)
 				}
-				if got, want := shard.Spec.DatabaseName, dbName; got != want {
+				if got, want := shard.Spec.DatabaseName, multigresv1alpha1.DatabaseName(dbName); got != want {
 					t.Errorf("Shard DB name mismatch got %q, want %q", got, want)
 				}
 			},

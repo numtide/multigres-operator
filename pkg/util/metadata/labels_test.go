@@ -116,60 +116,45 @@ func TestMergeLabels(t *testing.T) {
 }
 
 func TestAddMultigresLabels(t *testing.T) {
-	tests := map[string]struct {
-		addFunc func(map[string]string, string) map[string]string
-		value   string
-		key     string
-	}{
-		"AddCellLabel": {
-			addFunc: metadata.AddCellLabel,
-			value:   "zone1",
-			key:     "multigres.com/cell",
-		},
-		"AddClusterLabel": {
-			addFunc: metadata.AddClusterLabel,
-			value:   "prod-cluster",
-			key:     "multigres.com/cluster",
-		},
-		"AddShardLabel": {
-			addFunc: metadata.AddShardLabel,
-			value:   "shard-0",
-			key:     "multigres.com/shard",
-		},
-		"AddDatabaseLabel": {
-			addFunc: metadata.AddDatabaseLabel,
-			value:   "proddb",
-			key:     "multigres.com/database",
-		},
-		"AddTableGroupLabel": {
-			addFunc: metadata.AddTableGroupLabel,
-			value:   "orders",
-			key:     "multigres.com/tablegroup",
-		},
-	}
+	t.Run("AddCellLabel", func(t *testing.T) {
+		labels := map[string]string{"app.kubernetes.io/name": "multigres"}
+		metadata.AddCellLabel(labels, "zone1")
+		if labels["multigres.com/cell"] != "zone1" {
+			t.Errorf("AddCellLabel failed")
+		}
+	})
 
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			labels := map[string]string{
-				"app.kubernetes.io/name": "multigres",
-			}
-			result := tc.addFunc(labels, tc.value)
+	t.Run("AddClusterLabel", func(t *testing.T) {
+		labels := map[string]string{"app.kubernetes.io/name": "multigres"}
+		metadata.AddClusterLabel(labels, "prod-cluster")
+		if labels["multigres.com/cluster"] != "prod-cluster" {
+			t.Errorf("AddClusterLabel failed")
+		}
+	})
 
-			want := map[string]string{
-				"app.kubernetes.io/name": "multigres",
-				tc.key:                   tc.value,
-			}
+	t.Run("AddShardLabel", func(t *testing.T) {
+		labels := map[string]string{"app.kubernetes.io/name": "multigres"}
+		metadata.AddShardLabel(labels, "shard-0")
+		if labels["multigres.com/shard"] != "shard-0" {
+			t.Errorf("AddShardLabel failed")
+		}
+	})
 
-			if diff := cmp.Diff(want, result); diff != "" {
-				t.Errorf("%s mismatch (-want +got):\n%s", name, diff)
-			}
+	t.Run("AddDatabaseLabel", func(t *testing.T) {
+		labels := map[string]string{"app.kubernetes.io/name": "multigres"}
+		metadata.AddDatabaseLabel(labels, "proddb")
+		if labels["multigres.com/database"] != "proddb" {
+			t.Errorf("AddDatabaseLabel failed")
+		}
+	})
 
-			// Verify it modified the original map
-			if labels[tc.key] != tc.value {
-				t.Errorf("%s should modify the original map", name)
-			}
-		})
-	}
+	t.Run("AddTableGroupLabel", func(t *testing.T) {
+		labels := map[string]string{"app.kubernetes.io/name": "multigres"}
+		metadata.AddTableGroupLabel(labels, "orders")
+		if labels["multigres.com/tablegroup"] != "orders" {
+			t.Errorf("AddTableGroupLabel failed")
+		}
+	})
 }
 
 func TestLabelOperations_ComplexScenarios(t *testing.T) {

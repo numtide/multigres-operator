@@ -16,8 +16,8 @@ func (r *MultigresClusterReconciler) updateStatus(
 	cluster *multigresv1alpha1.MultigresCluster,
 ) error {
 	cluster.Status.ObservedGeneration = cluster.Generation
-	cluster.Status.Cells = make(map[string]multigresv1alpha1.CellStatusSummary)
-	cluster.Status.Databases = make(map[string]multigresv1alpha1.DatabaseStatusSummary)
+	cluster.Status.Cells = make(map[multigresv1alpha1.CellName]multigresv1alpha1.CellStatusSummary)
+	cluster.Status.Databases = make(map[multigresv1alpha1.DatabaseName]multigresv1alpha1.DatabaseStatusSummary)
 
 	cells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
@@ -32,7 +32,7 @@ func (r *MultigresClusterReconciler) updateStatus(
 				break
 			}
 		}
-		cluster.Status.Cells[c.Spec.Name] = multigresv1alpha1.CellStatusSummary{
+		cluster.Status.Cells[multigresv1alpha1.CellName(c.Spec.Name)] = multigresv1alpha1.CellStatusSummary{
 			Ready:           ready,
 			GatewayReplicas: c.Status.GatewayReplicas,
 		}
@@ -43,16 +43,17 @@ func (r *MultigresClusterReconciler) updateStatus(
 		return fmt.Errorf("failed to list tablegroups for status: %w", err)
 	}
 
-	dbShards := make(map[string]struct {
+	dbShards := make(map[multigresv1alpha1.DatabaseName]struct {
 		Ready int32
 		Total int32
 	})
 
 	for _, tg := range tgs.Items {
-		stat := dbShards[tg.Spec.DatabaseName]
+		stat := dbShards[multigresv1alpha1.DatabaseName(tg.Spec.DatabaseName)]
 		stat.Ready += tg.Status.ReadyShards
 		stat.Total += tg.Status.TotalShards
-		dbShards[tg.Spec.DatabaseName] = stat
+		dbShards[multigresv1alpha1.DatabaseName(tg.Spec.DatabaseName)] = stat
+
 	}
 
 	for dbName, stat := range dbShards {

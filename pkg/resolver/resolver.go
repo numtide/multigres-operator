@@ -51,7 +51,7 @@ func NewResolver(
 // 2. The name matches the FallbackCoreTemplate (assumed to be a system default or implicitly allowed).
 // 3. The referenced CoreTemplate exists in the Resolver's namespace.
 // Otherwise, it returns an error.
-func (r *Resolver) ValidateCoreTemplateReference(ctx context.Context, name string) error {
+func (r *Resolver) ValidateCoreTemplateReference(ctx context.Context, name multigresv1alpha1.TemplateRef) error {
 	if name == "" {
 		return nil
 	}
@@ -74,12 +74,12 @@ func (r *Resolver) ValidateCoreTemplateReference(ctx context.Context, name strin
 }
 
 // CoreTemplateExists checks if a CoreTemplate with the given name exists in the current namespace.
-func (r *Resolver) CoreTemplateExists(ctx context.Context, name string) (bool, error) {
+func (r *Resolver) CoreTemplateExists(ctx context.Context, name multigresv1alpha1.TemplateRef) (bool, error) {
 	if name == "" {
 		return false, nil
 	}
 	tpl := &multigresv1alpha1.CoreTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: string(name), Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
@@ -91,7 +91,7 @@ func (r *Resolver) CoreTemplateExists(ctx context.Context, name string) (bool, e
 
 // ValidateCellTemplateReference checks if a CellTemplate reference is valid.
 // See ValidateCoreTemplateReference for logic details.
-func (r *Resolver) ValidateCellTemplateReference(ctx context.Context, name string) error {
+func (r *Resolver) ValidateCellTemplateReference(ctx context.Context, name multigresv1alpha1.TemplateRef) error {
 	if name == "" {
 		return nil
 	}
@@ -114,12 +114,12 @@ func (r *Resolver) ValidateCellTemplateReference(ctx context.Context, name strin
 }
 
 // CellTemplateExists checks if a CellTemplate with the given name exists in the current namespace.
-func (r *Resolver) CellTemplateExists(ctx context.Context, name string) (bool, error) {
+func (r *Resolver) CellTemplateExists(ctx context.Context, name multigresv1alpha1.TemplateRef) (bool, error) {
 	if name == "" {
 		return false, nil
 	}
 	tpl := &multigresv1alpha1.CellTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: string(name), Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
@@ -131,7 +131,7 @@ func (r *Resolver) CellTemplateExists(ctx context.Context, name string) (bool, e
 
 // ValidateShardTemplateReference checks if a ShardTemplate reference is valid.
 // See ValidateCoreTemplateReference for logic details.
-func (r *Resolver) ValidateShardTemplateReference(ctx context.Context, name string) error {
+func (r *Resolver) ValidateShardTemplateReference(ctx context.Context, name multigresv1alpha1.TemplateRef) error {
 	if name == "" {
 		return nil
 	}
@@ -154,12 +154,12 @@ func (r *Resolver) ValidateShardTemplateReference(ctx context.Context, name stri
 }
 
 // ShardTemplateExists checks if a ShardTemplate with the given name exists in the current namespace.
-func (r *Resolver) ShardTemplateExists(ctx context.Context, name string) (bool, error) {
+func (r *Resolver) ShardTemplateExists(ctx context.Context, name multigresv1alpha1.TemplateRef) (bool, error) {
 	if name == "" {
 		return false, nil
 	}
 	tpl := &multigresv1alpha1.ShardTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: string(name), Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil

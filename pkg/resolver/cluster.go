@@ -45,7 +45,7 @@ func (r *Resolver) PopulateClusterDefaults(
 
 	var defaultCells []multigresv1alpha1.CellName
 	for _, c := range cluster.Spec.Cells {
-		defaultCells = append(defaultCells, multigresv1alpha1.CellName(c.Name))
+		defaultCells = append(defaultCells, c.Name)
 	}
 
 	// Logic: Should we inject the "default" pool inline?
@@ -96,7 +96,7 @@ func (r *Resolver) PopulateClusterDefaults(
 							// This allows dynamic contextual resolution later.
 							// Cells: defaultCells,
 						},
-						Pools: make(map[string]multigresv1alpha1.PoolSpec),
+						Pools: make(map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec),
 					}
 
 					// Apply the decision made above
@@ -125,7 +125,7 @@ func (r *Resolver) ResolveGlobalTopo(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (*multigresv1alpha1.GlobalTopoServerSpec, error) {
-	var templateName string
+	var templateName multigresv1alpha1.TemplateRef
 	var spec *multigresv1alpha1.GlobalTopoServerSpec
 
 	if cluster.Spec.GlobalTopoServer != nil {
@@ -174,7 +174,7 @@ func (r *Resolver) ResolveMultiAdmin(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (*multigresv1alpha1.StatelessSpec, error) {
-	var templateName string
+	var templateName multigresv1alpha1.TemplateRef
 	var spec *multigresv1alpha1.MultiAdminConfig
 
 	if cluster.Spec.MultiAdmin != nil {
@@ -204,7 +204,7 @@ func (r *Resolver) ResolveMultiAdmin(
 
 func (r *Resolver) ResolveCoreTemplate(
 	ctx context.Context,
-	name string,
+	name multigresv1alpha1.TemplateRef,
 ) (*multigresv1alpha1.CoreTemplate, error) {
 	resolvedName := name
 	isImplicitFallback := false
@@ -218,12 +218,12 @@ func (r *Resolver) ResolveCoreTemplate(
 	}
 
 	// Check cache first
-	if cached, found := r.coreTemplateCache[resolvedName]; found {
+	if cached, found := r.coreTemplateCache[string(resolvedName)]; found {
 		return cached.DeepCopy(), nil
 	}
 
 	tpl := &multigresv1alpha1.CoreTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: resolvedName, Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace}, tpl)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
@@ -236,7 +236,7 @@ func (r *Resolver) ResolveCoreTemplate(
 	}
 
 	// Store in cache
-	r.coreTemplateCache[resolvedName] = tpl
+	r.coreTemplateCache[string(resolvedName)] = tpl
 	return tpl.DeepCopy(), nil
 }
 

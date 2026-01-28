@@ -109,7 +109,7 @@ func TestReconcile_Databases(t *testing.T) {
 								Replicas: ptr.To(int32(3)),
 							},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 							"primary": {
 								Cells: []multigresv1alpha1.CellName{"zone-b", "zone-a"},
 							},
@@ -191,9 +191,10 @@ func TestReconcile_Databases(t *testing.T) {
 		},
 		"Create: Long Names (Truncation Check)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
-				longName := strings.Repeat("a", 50)
+				longName := multigresv1alpha1.DatabaseName(strings.Repeat("a", 255))
+				longTableName := multigresv1alpha1.TableGroupName(strings.Repeat("b", 255))
 				c.Spec.Databases[0].Name = longName
-				c.Spec.Databases[0].TableGroups[0].Name = longName
+				c.Spec.Databases[0].TableGroups[0].Name = longTableName
 			},
 			wantErrMsg: "",
 		},
@@ -207,7 +208,7 @@ func TestReconcile_Databases(t *testing.T) {
 				c.Spec.MultiAdmin = nil
 				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{
 					{
-						Name: strings.Repeat("a", 64),
+						Name: multigresv1alpha1.DatabaseName(strings.Repeat("a", 64)),
 						TableGroups: []multigresv1alpha1.TableGroupConfig{
 							{
 								Name: "tg1",
@@ -281,8 +282,8 @@ func TestReconcileDatabases_BuildError_SchemeMismatch(t *testing.T) {
 				StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 				Cells:         []multigresv1alpha1.CellName{"a"},
 			},
-			Pools: map[string]multigresv1alpha1.PoolSpec{
-				"p": {Type: "readWrite", Cells: []multigresv1alpha1.CellName{"a"}},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"default": {Type: "readWrite", Cells: []multigresv1alpha1.CellName{"a"}},
 			},
 		},
 	}

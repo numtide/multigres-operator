@@ -90,7 +90,7 @@ func BuildMultiAdminDeployment(
 					Containers: []corev1.Container{
 						{
 							Name:  "multiadmin",
-							Image: cluster.Spec.Images.MultiAdmin,
+							Image: string(cluster.Spec.Images.MultiAdmin),
 							Command: []string{
 								"/multigres/bin/multiadmin",
 							},

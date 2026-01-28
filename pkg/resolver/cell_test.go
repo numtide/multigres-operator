@@ -129,7 +129,7 @@ func TestResolver_ResolveCellTemplate(t *testing.T) {
 	tests := map[string]struct {
 		existingObjects []client.Object
 		defaults        multigresv1alpha1.TemplateDefaults
-		reqName         string
+		reqName         multigresv1alpha1.TemplateRef
 		wantErr         bool
 		errContains     string
 		wantFound       bool

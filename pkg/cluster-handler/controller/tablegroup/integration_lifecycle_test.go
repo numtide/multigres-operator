@@ -78,16 +78,21 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 			Spec: multigresv1alpha1.TableGroupSpec{
 				DatabaseName: "db1", TableGroupName: "tg1",
 				GlobalTopoServer: globalTopo,
+				Images: multigresv1alpha1.ShardImages{
+					MultiOrch:   "orch:latest",
+					MultiPooler: "pooler:latest",
+					Postgres:    "postgres:15",
+				},
 				Shards: []multigresv1alpha1.ShardResolvedSpec{
 					{
 						Name:      "keep-me",
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-						Pools:     map[string]multigresv1alpha1.PoolSpec{},
+						Pools:     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 					},
 					{
 						Name:      "delete-me",
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-						Pools:     map[string]multigresv1alpha1.PoolSpec{},
+						Pools:     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 					},
 				},
 			},
@@ -109,8 +114,13 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				TableGroupName:   "tg1",
 				ShardName:        "keep-me",
 				GlobalTopoServer: globalTopo,
-				MultiOrch:        multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-				Pools:            map[string]multigresv1alpha1.PoolSpec{},
+				Images: multigresv1alpha1.ShardImages{
+					MultiOrch:   "orch:latest",
+					MultiPooler: "pooler:latest",
+					Postgres:    "postgres:15",
+				},
+				MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
+				Pools:     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 			},
 		}
 		shard2 := &multigresv1alpha1.Shard{
@@ -123,8 +133,13 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				TableGroupName:   "tg1",
 				ShardName:        "delete-me",
 				GlobalTopoServer: globalTopo,
-				MultiOrch:        multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-				Pools:            map[string]multigresv1alpha1.PoolSpec{},
+				Images: multigresv1alpha1.ShardImages{
+					MultiOrch:   "orch:latest",
+					MultiPooler: "pooler:latest",
+					Postgres:    "postgres:15",
+				},
+				MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
+				Pools:     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 			},
 		}
 
@@ -146,7 +161,7 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				{
 					Name:      "keep-me",
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
-					Pools:     map[string]multigresv1alpha1.PoolSpec{},
+					Pools:     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 				},
 			}
 			return k8sClient.Update(ctx, tg)
@@ -178,13 +193,18 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				DatabaseName:     "db1",
 				TableGroupName:   "tg1",
 				GlobalTopoServer: globalTopo,
+				Images: multigresv1alpha1.ShardImages{
+					MultiOrch:   "orch:latest",
+					MultiPooler: "pooler:latest",
+					Postgres:    "postgres:15",
+				},
 				Shards: []multigresv1alpha1.ShardResolvedSpec{
 					{
 						Name: "s1",
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{},
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 					},
 				},
 			},
@@ -208,10 +228,15 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				TableGroupName:   "tg1",
 				ShardName:        "s1",
 				GlobalTopoServer: globalTopo,
+				Images: multigresv1alpha1.ShardImages{
+					MultiOrch:   "orch:latest",
+					MultiPooler: "pooler:latest",
+					Postgres:    "postgres:15",
+				},
 				MultiOrch: multigresv1alpha1.MultiOrchSpec{
 					StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 				},
-				Pools: map[string]multigresv1alpha1.PoolSpec{},
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 			},
 		}
 		if err := watcher.WaitForMatch(goodShard); err != nil {

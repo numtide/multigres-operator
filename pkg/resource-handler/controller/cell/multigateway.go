@@ -42,7 +42,7 @@ func BuildMultiGatewayDeploymentName(cell *multigresv1alpha1.Cell) string {
 	return name.JoinWithConstraints(
 		name.DefaultConstraints,
 		clusterName,
-		cell.Spec.Name,
+		string(cell.Spec.Name),
 		"multigateway",
 	)
 }
@@ -54,7 +54,7 @@ func BuildMultiGatewayServiceName(cell *multigresv1alpha1.Cell) string {
 	return name.JoinWithConstraints(
 		name.ServiceConstraints,
 		clusterName,
-		cell.Spec.Name,
+		string(cell.Spec.Name),
 		"multigateway",
 	)
 }
@@ -71,7 +71,7 @@ func BuildMultiGatewayDeployment(
 
 	image := DefaultMultiGatewayImage
 	if cell.Spec.Images.MultiGateway != "" {
-		image = cell.Spec.Images.MultiGateway
+		image = string(cell.Spec.Images.MultiGateway)
 	}
 
 	name := BuildMultiGatewayDeploymentName(cell)
@@ -105,7 +105,7 @@ func BuildMultiGatewayDeployment(
 								"--pg-port", fmt.Sprintf("%d", MultiGatewayPostgresPort),
 								"--topo-global-server-addresses", cell.Spec.GlobalTopoServer.Address,
 								"--topo-global-root", cell.Spec.GlobalTopoServer.RootPath,
-								"--cell", cell.Spec.Name,
+								"--cell", string(cell.Spec.Name),
 							},
 							Resources: cell.Spec.MultiGateway.Resources,
 							Ports: []corev1.ContainerPort{

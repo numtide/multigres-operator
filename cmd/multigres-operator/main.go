@@ -289,9 +289,9 @@ func main() {
 		mgr.GetClient(),
 		webhookServiceNamespace,
 		multigresv1alpha1.TemplateDefaults{
-			CoreTemplate:  defaultCoreTemplate,
-			CellTemplate:  defaultCellTemplate,
-			ShardTemplate: defaultShardTemplate,
+			CoreTemplate:  multigresv1alpha1.TemplateRef(defaultCoreTemplate),
+			CellTemplate:  multigresv1alpha1.TemplateRef(defaultCellTemplate),
+			ShardTemplate: multigresv1alpha1.TemplateRef(defaultShardTemplate),
 		},
 	)
 

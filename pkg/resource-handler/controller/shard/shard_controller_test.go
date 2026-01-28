@@ -51,7 +51,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
 							Type:            "replica",
@@ -122,7 +122,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"replica": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
 							Type:            "replica",
@@ -200,7 +200,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{}, // Empty - will infer from pools
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
 							Type:            "replica",
@@ -244,7 +244,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{}, // Empty
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{}, // Also empty - should error
 							Type:            "replica",
@@ -271,7 +271,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{}, // Empty cells - should error
 							Type:            "replica",
@@ -298,7 +298,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1", "zone2"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
 							Type:            "replica",
@@ -371,7 +371,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						MultiPooler: "custom/multipooler:v1.0.0",
 						Postgres:    "postgres:16",
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
 							Type:            "replica",
@@ -465,7 +465,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -488,7 +488,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 							"primary": {
 								Cells: []multigresv1alpha1.CellName{"zone1"},
 								Type:  "replica",
@@ -526,7 +526,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
 							Type:            "replica",
@@ -616,7 +616,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
 							Type:            "replica",
@@ -706,7 +706,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"replica": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
 							Type:            "replica",
@@ -802,7 +802,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -831,7 +831,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -870,7 +870,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -919,7 +919,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -954,7 +954,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -993,7 +993,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1045,7 +1045,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1087,7 +1087,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1126,7 +1126,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
 							Type:            "replica",
@@ -1188,7 +1188,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1237,7 +1237,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1280,7 +1280,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1348,7 +1348,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1405,7 +1405,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1436,7 +1436,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1459,7 +1459,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 						},
-						Pools: map[string]multigresv1alpha1.PoolSpec{
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 							"primary": {
 								Cells: []multigresv1alpha1.CellName{"zone1"},
 								Type:  "replica",
@@ -1488,7 +1488,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1518,7 +1518,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Type:  "replica",
@@ -1628,7 +1628,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Storage: multigresv1alpha1.StorageSpec{
@@ -1710,7 +1710,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Storage: multigresv1alpha1.StorageSpec{
@@ -1747,7 +1747,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Storage: multigresv1alpha1.StorageSpec{
@@ -1786,7 +1786,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 						},
@@ -1827,7 +1827,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
-					Pools: map[string]multigresv1alpha1.PoolSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 							Storage: multigresv1alpha1.StorageSpec{
@@ -1889,18 +1889,18 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Check Pools
 				for poolName, poolSpec := range tc.shard.Spec.Pools {
 					for _, cell := range poolSpec.Cells {
-						if strings.Contains(name, "pool") && strings.Contains(name, poolName) &&
+						if strings.Contains(name, "pool") && strings.Contains(name, string(poolName)) &&
 							strings.Contains(name, string(cell)) {
 							// Determine if headless svc or backup pvc
 							if strings.Contains(name, "headless") {
 								hashed := buildHashedPoolHeadlessServiceName(
 									tc.shard,
-									poolName,
+									string(poolName),
 									string(cell),
 								)
 								obj.SetName(hashed)
 							} else if strings.Contains(name, "backup-data") {
-								hashed := buildHashedBackupPVCName(tc.shard, poolName, string(cell))
+								hashed := buildHashedBackupPVCName(tc.shard, string(poolName), string(cell))
 								obj.SetName(hashed)
 							} else {
 								// StatefulSet or Service (if not headless - wait, pool service IS headless)
@@ -1914,7 +1914,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 								// The tests create: "test-shard-pool-primary-zone1-headless".
 
 								// What about "pool-primary-zone1" (StatefulSet)?
-								hashed := buildHashedPoolName(tc.shard, poolName, string(cell))
+								hashed := buildHashedPoolName(tc.shard, string(poolName), string(cell))
 								if !strings.Contains(name, "headless") && !strings.Contains(name, "backup-data") {
 									obj.SetName(hashed)
 									if sts, ok := obj.(*appsv1.StatefulSet); ok {
@@ -1926,7 +1926,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 										}
 										// ServiceName in STS must match Headless Service Name!
 										// We need to update sts.Spec.ServiceName to hashed headless name.
-										headlessName := buildHashedPoolHeadlessServiceName(tc.shard, poolName, string(cell))
+										headlessName := buildHashedPoolHeadlessServiceName(tc.shard, string(poolName), string(cell))
 										sts.Spec.ServiceName = headlessName
 									}
 								}

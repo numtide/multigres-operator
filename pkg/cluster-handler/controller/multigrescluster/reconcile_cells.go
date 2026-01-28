@@ -25,11 +25,11 @@ func (r *MultigresClusterReconciler) reconcileCells(
 		return fmt.Errorf("failed to get global topo ref: %w", err)
 	}
 
-	activeCellNames := make(map[string]bool, len(cluster.Spec.Cells))
+	activeCellNames := make(map[multigresv1alpha1.CellName]bool, len(cluster.Spec.Cells))
 
 	allCellNames := []multigresv1alpha1.CellName{}
 	for _, cellCfg := range cluster.Spec.Cells {
-		allCellNames = append(allCellNames, multigresv1alpha1.CellName(cellCfg.Name))
+		allCellNames = append(allCellNames, cellCfg.Name)
 	}
 
 	for _, cellCfg := range cluster.Spec.Cells {

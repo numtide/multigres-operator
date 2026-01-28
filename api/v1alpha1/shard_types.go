@@ -62,7 +62,7 @@ type PoolSpec struct {
 	// Type of the pool (e.g., "readWrite", "readOnly").
 	// +kubebuilder:validation:Enum=readWrite;readOnly
 	// +optional
-	Type string `json:"type,omitempty"`
+	Type PoolType `json:"type,omitempty"`
 
 	// Cells defines the list of cells where this Pool should be deployed.
 	// +optional
@@ -106,16 +106,13 @@ type PoolSpec struct {
 // ShardSpec defines the desired state of Shard.
 type ShardSpec struct {
 	// DatabaseName is the name of the logical database this shard belongs to.
-	// +kubebuilder:validation:MaxLength=63
-	DatabaseName string `json:"databaseName"`
+	DatabaseName DatabaseName `json:"databaseName"`
 
 	// TableGroupName is the name of the table group this shard belongs to.
-	// +kubebuilder:validation:MaxLength=63
-	TableGroupName string `json:"tableGroupName"`
+	TableGroupName TableGroupName `json:"tableGroupName"`
 
 	// ShardName is the specific identifier for this shard (e.g. "0").
-	// +kubebuilder:validation:MaxLength=63
-	ShardName string `json:"shardName"`
+	ShardName ShardName `json:"shardName"`
 
 	// Images defines the container images to be used by this shard (defined globally at MultigresCluster).
 	Images ShardImages `json:"images"`
@@ -129,7 +126,7 @@ type ShardSpec struct {
 	// Pools is the map of fully resolved data pool configurations.
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
-	Pools map[string]PoolSpec `json:"pools"`
+	Pools map[PoolName]PoolSpec `json:"pools"`
 }
 
 // ShardImages defines the images required for a Shard.
@@ -144,16 +141,13 @@ type ShardImages struct {
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// MultiOrch is the image for the shard orchestrator.
-	// +kubebuilder:validation:MaxLength=512
-	MultiOrch string `json:"multiorch"`
+	MultiOrch ImageRef `json:"multiorch"`
 
 	// MultiPooler is the image for the connection pooler sidecar.
-	// +kubebuilder:validation:MaxLength=512
-	MultiPooler string `json:"multipooler"`
+	MultiPooler ImageRef `json:"multipooler"`
 
 	// Postgres is the image for the postgres database.
-	// +kubebuilder:validation:MaxLength=512
-	Postgres string `json:"postgres"`
+	Postgres ImageRef `json:"postgres"`
 }
 
 // ============================================================================

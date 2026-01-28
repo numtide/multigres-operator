@@ -86,8 +86,8 @@ func (r *TableGroupReconciler) Reconcile(
 	existingShards := &multigresv1alpha1.ShardList{}
 	if err := r.List(ctx, existingShards, client.InNamespace(tg.Namespace), client.MatchingLabels{
 		"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
-		"multigres.com/database":   tg.Spec.DatabaseName,
-		"multigres.com/tablegroup": tg.Spec.TableGroupName,
+		"multigres.com/database":   string(tg.Spec.DatabaseName),
+		"multigres.com/tablegroup": string(tg.Spec.TableGroupName),
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list shards for pruning: %w", err)
 	}
@@ -112,8 +112,8 @@ func (r *TableGroupReconciler) Reconcile(
 	// Re-list to check status
 	if err := r.List(ctx, existingShards, client.InNamespace(tg.Namespace), client.MatchingLabels{
 		"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
-		"multigres.com/database":   tg.Spec.DatabaseName,
-		"multigres.com/tablegroup": tg.Spec.TableGroupName,
+		"multigres.com/database":   string(tg.Spec.DatabaseName),
+		"multigres.com/tablegroup": string(tg.Spec.TableGroupName),
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list shards for status: %w", err)
 	}
