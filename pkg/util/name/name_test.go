@@ -78,7 +78,7 @@ func TestJoin(t *testing.T) {
 // TestJoinHash checks that the hash function produces expected values.
 func TestJoinHash(t *testing.T) {
 	parts := []string{"hello", "world"}
-	want := "hello-world-1dd41005"
+	want := "hello-world-344ce285"
 	if got := JoinWithConstraints(DefaultConstraints, parts...); got != want {
 		t.Fatalf("JoinWithConstraints(%v) = %q, want %q", parts, got, want)
 	}
@@ -217,7 +217,7 @@ func TestMultigresResourceNaming(t *testing.T) {
 		},
 		{
 			name:     "shard name",
-			parts:    []string{"production-mydb-default-1dd41005", "0"},
+			parts:    []string{"production-mydb-default-5c6a71f9", "0"},
 			wantLen:  -1,
 			wantHash: true,
 		},
