@@ -94,6 +94,11 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 			return err
 		}
 	}
+	if cluster.Spec.GlobalTopoServer != nil && cluster.Spec.GlobalTopoServer.TemplateRef != "" {
+		if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.GlobalTopoServer.TemplateRef); err != nil {
+			return err
+		}
+	}
 
 	// 2. Validate Cell Templates
 	if err := res.ValidateCellTemplateReference(ctx, cluster.Spec.TemplateDefaults.CellTemplate); err != nil {

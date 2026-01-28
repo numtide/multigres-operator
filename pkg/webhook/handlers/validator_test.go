@@ -94,6 +94,18 @@ func TestMultigresClusterValidator(t *testing.T) {
 			wantAllowed: false,
 			wantMessage: "referenced ShardTemplate 'missing-shard' not found",
 		},
+		"Denied: Missing GlobalTopoServer Template": {
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					TemplateRef: "missing-topo",
+				}
+				return c
+			}(),
+			operation:   "Create",
+			wantAllowed: false,
+			wantMessage: "referenced CoreTemplate 'missing-topo' not found",
+		},
 		"Error: Client Error (CoreTemplate)": {
 			object:    baseCluster.DeepCopy(),
 			operation: "Create",
