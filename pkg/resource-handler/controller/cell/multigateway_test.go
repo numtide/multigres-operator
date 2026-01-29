@@ -70,11 +70,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Replicas: ptr.To(DefaultMultiGatewayReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "multigateway",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -173,11 +170,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Replicas: ptr.To(int32(5)),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "multigateway",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -276,11 +270,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Replicas: ptr.To(DefaultMultiGatewayReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "multigateway",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -395,11 +386,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Replicas: ptr.To(DefaultMultiGatewayReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "multigateway",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -524,11 +512,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Replicas: ptr.To(DefaultMultiGatewayReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "multigateway",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -637,13 +622,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Replicas: ptr.To(DefaultMultiGatewayReplicas),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "multigateway",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/zone":           "us-east-1a",
-							"multigres.com/region":         "us-east-1",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -812,11 +792,8 @@ func TestBuildMultiGatewayService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  "multigateway",
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
+						"app.kubernetes.io/instance":  "test-cluster",
+						"app.kubernetes.io/component": "multigateway",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -879,11 +856,8 @@ func TestBuildMultiGatewayService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "prod-cluster",
-						"app.kubernetes.io/component":  "multigateway",
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
+						"app.kubernetes.io/instance":  "prod-cluster",
+						"app.kubernetes.io/component": "multigateway",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -950,13 +924,8 @@ func TestBuildMultiGatewayService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  "multigateway",
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/zone":           "us-east-1a",
-						"multigres.com/region":         "us-east-1",
+						"app.kubernetes.io/instance":  "test-cluster",
+						"app.kubernetes.io/component": "multigateway",
 					},
 					Ports: []corev1.ServicePort{
 						{

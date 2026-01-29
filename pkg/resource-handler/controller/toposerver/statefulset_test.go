@@ -63,12 +63,9 @@ func TestBuildStatefulSet(t *testing.T) {
 					Replicas:    ptr.To(int32(3)),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "toposerver",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cluster":        "test-cluster",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "toposerver",
+							"multigres.com/cluster":       "test-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -175,12 +172,9 @@ func TestBuildStatefulSet(t *testing.T) {
 					Replicas:    ptr.To(int32(5)),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "custom-cluster",
-							"app.kubernetes.io/component":  "toposerver",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cluster":        "custom-cluster",
+							"app.kubernetes.io/instance":  "custom-cluster",
+							"app.kubernetes.io/component": "toposerver",
+							"multigres.com/cluster":       "custom-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -289,12 +283,9 @@ func TestBuildStatefulSet(t *testing.T) {
 					Replicas:    ptr.To(int32(3)),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  "toposerver",
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cluster":        "test-cluster",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "toposerver",
+							"multigres.com/cluster":       "test-cluster",
 						},
 					},
 					PodManagementPolicy: appsv1.ParallelPodManagement,

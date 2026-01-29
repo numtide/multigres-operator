@@ -9,6 +9,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -40,7 +41,7 @@ func BuildPoolHeadlessService(
 		},
 		Spec: corev1.ServiceSpec{
 			ClusterIP:                corev1.ClusterIPNone,
-			Selector:                 labels,
+			Selector:                 metadata.GetSelectorLabels(labels),
 			Ports:                    buildPoolHeadlessServicePorts(),
 			PublishNotReadyAddresses: true,
 		},

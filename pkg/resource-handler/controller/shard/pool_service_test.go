@@ -73,15 +73,12 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  PoolComponentName,
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
-						"multigres.com/database":       "testdb",
-						"multigres.com/tablegroup":     "default",
-						"multigres.com/cluster":        "test-cluster",
+						"app.kubernetes.io/instance":  "test-cluster",
+						"app.kubernetes.io/component": PoolComponentName,
+						"multigres.com/cell":          "zone1",
+						"multigres.com/database":      "testdb",
+						"multigres.com/tablegroup":    "default",
+						"multigres.com/cluster":       "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -155,15 +152,12 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "prod-cluster",
-						"app.kubernetes.io/component":  PoolComponentName,
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone-east",
-						"multigres.com/database":       "testdb",
-						"multigres.com/tablegroup":     "default",
-						"multigres.com/cluster":        "prod-cluster",
+						"app.kubernetes.io/instance":  "prod-cluster",
+						"app.kubernetes.io/component": PoolComponentName,
+						"multigres.com/cell":          "zone-east",
+						"multigres.com/database":      "testdb",
+						"multigres.com/tablegroup":    "default",
+						"multigres.com/cluster":       "prod-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -234,15 +228,12 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  PoolComponentName,
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
-						"multigres.com/database":       "testdb",
-						"multigres.com/tablegroup":     "default",
-						"multigres.com/cluster":        "test-cluster",
+						"app.kubernetes.io/instance":  "test-cluster",
+						"app.kubernetes.io/component": PoolComponentName,
+						"multigres.com/cell":          "zone1",
+						"multigres.com/database":      "testdb",
+						"multigres.com/tablegroup":    "default",
+						"multigres.com/cluster":       "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{

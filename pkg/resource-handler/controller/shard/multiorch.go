@@ -46,7 +46,7 @@ func BuildMultiOrchDeployment(
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: metadata.GetSelectorLabels(labels),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -88,7 +88,7 @@ func BuildMultiOrchService(
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
-			Selector: labels,
+			Selector: metadata.GetSelectorLabels(labels),
 			Ports:    buildMultiOrchServicePorts(),
 		},
 	}

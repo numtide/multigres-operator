@@ -32,7 +32,7 @@ func BuildHeadlessService(
 		},
 		Spec: corev1.ServiceSpec{
 			ClusterIP:                corev1.ClusterIPNone,
-			Selector:                 labels,
+			Selector:                 metadata.GetSelectorLabels(labels),
 			Ports:                    buildHeadlessServicePorts(toposerver),
 			PublishNotReadyAddresses: true,
 		},
@@ -65,7 +65,7 @@ func BuildClientService(
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
-			Selector: labels,
+			Selector: metadata.GetSelectorLabels(labels),
 			Ports:    buildClientServicePorts(toposerver),
 		},
 	}

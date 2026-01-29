@@ -13,6 +13,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/storage"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -71,7 +72,7 @@ func BuildPoolStatefulSet(
 			ServiceName: headlessServiceName,
 			Replicas:    &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: metadata.GetSelectorLabels(labels),
 			},
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
