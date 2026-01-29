@@ -60,12 +60,9 @@ func TestBuildHeadlessService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					ClusterIP: corev1.ClusterIPNone,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  "toposerver",
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cluster":        "test-cluster",
+						"app.kubernetes.io/instance":  "test-cluster",
+						"app.kubernetes.io/component": "toposerver",
+						"multigres.com/cluster":       "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -154,12 +151,9 @@ func TestBuildClientService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  "toposerver",
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cluster":        "test-cluster",
+						"app.kubernetes.io/instance":  "test-cluster",
+						"app.kubernetes.io/component": "toposerver",
+						"multigres.com/cluster":       "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
 						{

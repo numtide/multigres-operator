@@ -20,6 +20,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -107,7 +108,7 @@ func TestShardReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -154,7 +155,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						Selector: shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
+						Selector: metadata.GetSelectorLabels(shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a")),
 					},
 				},
 				// MultiOrch Deployment for zone-b
@@ -168,7 +169,7 @@ func TestShardReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -215,7 +216,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						Selector: shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
+						Selector: metadata.GetSelectorLabels(shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b")),
 					},
 				},
 				&appsv1.StatefulSet{
@@ -229,7 +230,7 @@ func TestShardReconciliation(t *testing.T) {
 						ServiceName: "test-shard-pool-primary-zone-a-headless",
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a")),
 						},
 						PodManagementPolicy: appsv1.ParallelPodManagement,
 						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -406,7 +407,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15270),
 							tcpServicePort(t, "postgres", 5432),
 						},
-						Selector:                 shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
+						Selector:                 metadata.GetSelectorLabels(shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a")),
 						PublishNotReadyAddresses: true,
 					},
 				},
@@ -460,7 +461,7 @@ func TestShardReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -507,7 +508,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						Selector: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+						Selector: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1")),
 					},
 				},
 				// MultiOrch Deployment for zone2
@@ -521,7 +522,7 @@ func TestShardReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(1)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -568,7 +569,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "http", 15300),
 							tcpServicePort(t, "grpc", 15370),
 						},
-						Selector: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+						Selector: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2")),
 					},
 				},
 				// StatefulSet for zone1
@@ -583,7 +584,7 @@ func TestShardReconciliation(t *testing.T) {
 						ServiceName: "multi-cell-shard-pool-primary-zone1-headless",
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -752,7 +753,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15270),
 							tcpServicePort(t, "postgres", 5432),
 						},
-						Selector:                 shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
+						Selector:                 metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1")),
 						PublishNotReadyAddresses: true,
 					},
 				},
@@ -768,7 +769,7 @@ func TestShardReconciliation(t *testing.T) {
 						ServiceName: "multi-cell-shard-pool-primary-zone2-headless",
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -937,7 +938,7 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15270),
 							tcpServicePort(t, "postgres", 5432),
 						},
-						Selector:                 shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
+						Selector:                 metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2")),
 						PublishNotReadyAddresses: true,
 					},
 				},

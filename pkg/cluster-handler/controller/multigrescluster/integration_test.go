@@ -254,7 +254,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(resolver.DefaultAdminReplicas), // Matches default in test input
 						Selector: &metav1.LabelSelector{
-							MatchLabels: clusterLabels(t, clusterName, "multiadmin", ""),
+							MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, clusterName, "multiadmin", "")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -459,7 +459,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(resolver.DefaultAdminReplicas),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: clusterLabels(t, "minimal-cluster", "multiadmin", ""),
+							MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, "minimal-cluster", "multiadmin", "")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -659,7 +659,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(resolver.DefaultAdminReplicas),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: clusterLabels(t, "lazy-cluster", "multiadmin", ""),
+							MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, "lazy-cluster", "multiadmin", "")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{

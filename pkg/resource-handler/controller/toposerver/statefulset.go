@@ -72,7 +72,7 @@ func BuildStatefulSet(
 			ServiceName: headlessServiceName,
 			Replicas:    &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: metadata.GetSelectorLabels(labels),
 			},
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{

@@ -129,6 +129,18 @@ func TestBuildMultiAdminDeployment(t *testing.T) {
 			}
 		}
 
+		// Verify Selector does NOT contain mutable labels
+		selector := got.Spec.Selector.MatchLabels
+		if _, ok := selector["app.kubernetes.io/name"]; ok {
+			t.Error("Selector should not contain app.kubernetes.io/name")
+		}
+		if _, ok := selector["app.kubernetes.io/managed-by"]; ok {
+			t.Error("Selector should not contain app.kubernetes.io/managed-by")
+		}
+		if _, ok := selector["app.kubernetes.io/component"]; !ok {
+			t.Error("Selector MUST contain app.kubernetes.io/component")
+		}
+
 		// Verify OwnerReference
 		if len(got.OwnerReferences) != 1 {
 			t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))

@@ -18,6 +18,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -105,7 +106,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 			Spec: appsv1.DeploymentSpec{
 				Replicas: ptr.To(resolver.DefaultAdminReplicas),
 				Selector: &metav1.LabelSelector{
-					MatchLabels: clusterLabels(t, "short-annot-bomb", "multiadmin", ""),
+					MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, "short-annot-bomb", "multiadmin", "")),
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
@@ -320,7 +321,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 			Spec: appsv1.DeploymentSpec{
 				Replicas: ptr.To(resolver.DefaultAdminReplicas),
 				Selector: &metav1.LabelSelector{
-					MatchLabels: clusterLabels(t, "mut-test", "multiadmin", ""),
+					MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, "mut-test", "multiadmin", "")),
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
@@ -411,7 +412,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 			Spec: appsv1.DeploymentSpec{
 				Replicas: ptr.To(resolver.DefaultAdminReplicas),
 				Selector: &metav1.LabelSelector{
-					MatchLabels: clusterLabels(t, "mut-test", "multiadmin", ""),
+					MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, "mut-test", "multiadmin", "")),
 				},
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{

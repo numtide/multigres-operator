@@ -20,6 +20,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 func TestSetupWithManager(t *testing.T) {
@@ -86,7 +87,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 						Replicas:    ptr.To(int32(3)),
 						ServiceName: "test-toposerver-headless",
 						Selector: &metav1.LabelSelector{
-							MatchLabels: toposerverLabels(t, "test-cluster"),
+							MatchLabels: metadata.GetSelectorLabels(toposerverLabels(t, "test-cluster")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -168,7 +169,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "client", 2379),
 						},
-						Selector: toposerverLabels(t, "test-cluster"),
+						Selector: metadata.GetSelectorLabels(toposerverLabels(t, "test-cluster")),
 					},
 				},
 				&corev1.Service{
@@ -185,7 +186,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 							tcpServicePort(t, "client", 2379),
 							tcpServicePort(t, "peer", 2380),
 						},
-						Selector:                 toposerverLabels(t, "test-cluster"),
+						Selector:                 metadata.GetSelectorLabels(toposerverLabels(t, "test-cluster")),
 						PublishNotReadyAddresses: true,
 					},
 				},

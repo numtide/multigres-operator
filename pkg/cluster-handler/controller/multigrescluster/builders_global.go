@@ -78,7 +78,7 @@ func BuildMultiAdminDeployment(
 		Spec: appsv1.DeploymentSpec{
 			Replicas: spec.Replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: standardLabels,
+				MatchLabels: metadata.GetSelectorLabels(standardLabels),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

@@ -177,6 +177,35 @@ func AddRegionLabel(
 	return labels
 }
 
+// selectorLabelsAllowList contains the keys that are allowed in label selectors.
+// These must be stable identity labels, not mutable metadata.
+var selectorLabelsAllowList = map[string]bool{
+	LabelAppComponent:        true,
+	LabelAppInstance:         true,
+	LabelMultigresCluster:    true,
+	LabelMultigresDatabase:   true,
+	LabelMultigresTableGroup: true,
+	LabelMultigresShard:      true,
+	LabelMultigresPool:       true,
+	LabelMultigresCell:       true,
+}
+
+// GetSelectorLabels filters the provided labels map to return only those keys
+// allowed in resource selectors (Identity Labels).
+//
+// This separates stable identity labels from mutable metadata labels like
+// versions or location tags, ensuring that changes to mutable metadata do not
+// trigger unnecessary recreation of immutable resources (like StatefulSets).
+func GetSelectorLabels(labels map[string]string) map[string]string {
+	selectorLabels := make(map[string]string)
+	for k, v := range labels {
+		if selectorLabelsAllowList[k] {
+			selectorLabels[k] = v
+		}
+	}
+	return selectorLabels
+}
+
 // MergeLabels merges custom labels with standard labels.
 //
 // Note that standard labels take precedence over custom labels to prevent users

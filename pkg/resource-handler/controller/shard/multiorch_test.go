@@ -79,15 +79,12 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Replicas: ptr.To(int32(1)), // Replicas = len(cells)
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "test-cluster",
-							"app.kubernetes.io/component":  MultiOrchComponentName,
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cluster":        "test-cluster",
-							"multigres.com/cell":           "zone-a",
-							"multigres.com/database":       "testdb",
-							"multigres.com/tablegroup":     "default",
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": MultiOrchComponentName,
+							"multigres.com/cluster":       "test-cluster",
+							"multigres.com/cell":          "zone-a",
+							"multigres.com/database":      "testdb",
+							"multigres.com/tablegroup":    "default",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -177,15 +174,12 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Replicas: ptr.To(int32(1)), // 1 replica per cell
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "prod-cluster",
-							"app.kubernetes.io/component":  MultiOrchComponentName,
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cluster":        "prod-cluster",
-							"multigres.com/cell":           "zone1",
-							"multigres.com/database":       "proddb",
-							"multigres.com/tablegroup":     "prod-tg",
+							"app.kubernetes.io/instance":  "prod-cluster",
+							"app.kubernetes.io/component": MultiOrchComponentName,
+							"multigres.com/cluster":       "prod-cluster",
+							"multigres.com/cell":          "zone1",
+							"multigres.com/database":      "proddb",
+							"multigres.com/tablegroup":    "prod-tg",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -275,15 +269,12 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					Replicas: ptr.To(int32(3)),
 					Selector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							"app.kubernetes.io/name":       "multigres",
-							"app.kubernetes.io/instance":   "repl-cluster",
-							"app.kubernetes.io/component":  MultiOrchComponentName,
-							"app.kubernetes.io/part-of":    "multigres",
-							"app.kubernetes.io/managed-by": "multigres-operator",
-							"multigres.com/cluster":        "repl-cluster",
-							"multigres.com/cell":           "zone1",
-							"multigres.com/database":       "testdb",
-							"multigres.com/tablegroup":     "default",
+							"app.kubernetes.io/instance":  "repl-cluster",
+							"app.kubernetes.io/component": MultiOrchComponentName,
+							"multigres.com/cluster":       "repl-cluster",
+							"multigres.com/cell":          "zone1",
+							"multigres.com/database":      "testdb",
+							"multigres.com/tablegroup":    "default",
 						},
 					},
 					Template: corev1.PodTemplateSpec{
@@ -418,15 +409,12 @@ func TestBuildMultiOrchService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  MultiOrchComponentName,
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cluster":        "test-cluster",
-						"multigres.com/cell":           "zone-a",
-						"multigres.com/database":       "testdb",
-						"multigres.com/tablegroup":     "default",
+						"app.kubernetes.io/instance":  "test-cluster",
+						"app.kubernetes.io/component": MultiOrchComponentName,
+						"multigres.com/cluster":       "test-cluster",
+						"multigres.com/cell":          "zone-a",
+						"multigres.com/database":      "testdb",
+						"multigres.com/tablegroup":    "default",
 					},
 					Ports: []corev1.ServicePort{
 						{
@@ -489,15 +477,12 @@ func TestBuildMultiOrchService(t *testing.T) {
 				Spec: corev1.ServiceSpec{
 					Type: corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "prod-cluster",
-						"app.kubernetes.io/component":  MultiOrchComponentName,
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cluster":        "prod-cluster",
-						"multigres.com/cell":           "zone2",
-						"multigres.com/database":       "proddb",
-						"multigres.com/tablegroup":     "prod-tg",
+						"app.kubernetes.io/instance":  "prod-cluster",
+						"app.kubernetes.io/component": MultiOrchComponentName,
+						"multigres.com/cluster":       "prod-cluster",
+						"multigres.com/cell":          "zone2",
+						"multigres.com/database":      "proddb",
+						"multigres.com/tablegroup":    "prod-tg",
 					},
 					Ports: []corev1.ServicePort{
 						{

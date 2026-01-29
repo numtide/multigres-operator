@@ -19,6 +19,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -98,7 +99,7 @@ func TestCellReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
+							MatchLabels: metadata.GetSelectorLabels(cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -143,7 +144,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
+						Selector: metadata.GetSelectorLabels(cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a")),
 					},
 				},
 			},
@@ -185,7 +186,7 @@ func TestCellReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(3)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
+							MatchLabels: metadata.GetSelectorLabels(cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -230,7 +231,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
+						Selector: metadata.GetSelectorLabels(cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b")),
 					},
 				},
 			},
@@ -272,7 +273,7 @@ func TestCellReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
+							MatchLabels: metadata.GetSelectorLabels(cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -317,7 +318,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
+						Selector: metadata.GetSelectorLabels(cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c")),
 					},
 				},
 			},
@@ -376,7 +377,7 @@ func TestCellReconciliation(t *testing.T) {
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
+							MatchLabels: metadata.GetSelectorLabels(cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d")),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -438,7 +439,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
+						Selector: metadata.GetSelectorLabels(cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d")),
 					},
 				},
 			},
