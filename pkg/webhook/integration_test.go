@@ -347,7 +347,7 @@ func TestWebhook_OverridePrecedence(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "override-test", Namespace: testNamespace},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
 				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
-					CoreTemplate: tplName,
+					CoreTemplate: multigresv1alpha1.TemplateRef(tplName),
 				},
 				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
 					Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
@@ -472,7 +472,7 @@ func TestWebhook_DeepTemplateProtection(t *testing.T) {
 								Shards: []multigresv1alpha1.ShardConfig{
 									{
 										Name:          "0",
-										ShardTemplate: stName,
+										ShardTemplate: multigresv1alpha1.TemplateRef(stName),
 									},
 								},
 							},

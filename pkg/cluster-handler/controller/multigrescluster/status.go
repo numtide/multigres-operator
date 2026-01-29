@@ -17,7 +17,9 @@ func (r *MultigresClusterReconciler) updateStatus(
 ) error {
 	cluster.Status.ObservedGeneration = cluster.Generation
 	cluster.Status.Cells = make(map[multigresv1alpha1.CellName]multigresv1alpha1.CellStatusSummary)
-	cluster.Status.Databases = make(map[multigresv1alpha1.DatabaseName]multigresv1alpha1.DatabaseStatusSummary)
+	cluster.Status.Databases = make(
+		map[multigresv1alpha1.DatabaseName]multigresv1alpha1.DatabaseStatusSummary,
+	)
 
 	cells := &multigresv1alpha1.CellList{}
 	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {

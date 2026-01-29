@@ -96,10 +96,14 @@ github.com/numtide/multigres-operator/api v0.0.0-20260128231350-81bd244ba98f h1:
 github.com/numtide/multigres-operator/api v0.0.0-20260128231350-81bd244ba98f/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/api v0.0.0-20260128231915-ebf402c37a7c h1:seNlQDeFtXMCTXG8QUs9t6FwGadGm+rjKL8WfGoMMLE=
 github.com/numtide/multigres-operator/api v0.0.0-20260128231915-ebf402c37a7c/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
+github.com/numtide/multigres-operator/api v0.0.0-20260128234841-9fce786feeae h1:eGGq65b1YzQLaosGWnjnwSTyoscRI4wLaS3jqTrb6aI=
+github.com/numtide/multigres-operator/api v0.0.0-20260128234841-9fce786feeae/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e h1:HGtBToLG0qS5exOHD8Fqy3aAAJ6LPW2Az5il1fnnbPM=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260128231915-ebf402c37a7c h1:8wQFmSLEHSy4ozfbNamgnfZIZdmdV5ncT7f2UHb0bSk=
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260128231915-ebf402c37a7c/go.mod h1:rPHvcvSCd/y+lPe89o6rC2JQ+tZZdjWfLvTA7KYNhW8=
+github.com/numtide/multigres-operator/pkg/util v0.0.0-20260128234841-9fce786feeae h1:jnIn9WtD7KI9NBqbqITXVuyZw1YYkq6H4IlY5pFk8b0=
+github.com/numtide/multigres-operator/pkg/util v0.0.0-20260128234841-9fce786feeae/go.mod h1:LhjcO/bWXBqQIyoWQanudEP27NUYCWIS/D2pm5msAUQ=
 github.com/onsi/ginkgo/v2 v2.25.3 h1:Ty8+Yi/ayDAGtk4XxmmfUy4GabvM+MegeB4cDLRi6nw=
 github.com/onsi/ginkgo/v2 v2.25.3/go.mod h1:43uiyQC4Ed2tkOzLsEYm7hnrb7UJTWHYNsuy3bG/snE=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=
