@@ -73,6 +73,15 @@ const (
 	// LabelMultigresTableGroup identifies which table group a resource belongs to.
 	LabelMultigresTableGroup = "multigres.com/tablegroup"
 
+	// LabelMultigresPool identifies which pool a resource belongs to.
+	LabelMultigresPool = "multigres.com/pool"
+
+	// LabelMultigresZone identifies which zone a resource belongs to.
+	LabelMultigresZone = "multigres.com/zone"
+
+	// LabelMultigresRegion identifies which region a resource belongs to.
+	LabelMultigresRegion = "multigres.com/region"
+
 	// DefaultCellName is the default cell name when none is specified.
 	DefaultCellName = "multigres-global-topo"
 )
@@ -138,6 +147,33 @@ func AddTableGroupLabel(
 	tableGroupName multigresv1alpha1.TableGroupName,
 ) map[string]string {
 	labels[LabelMultigresTableGroup] = string(tableGroupName)
+	return labels
+}
+
+// AddPoolLabel adds the pool label to the provided labels map.
+func AddPoolLabel(
+	labels map[string]string,
+	poolName multigresv1alpha1.PoolName,
+) map[string]string {
+	labels[LabelMultigresPool] = string(poolName)
+	return labels
+}
+
+// AddZoneLabel adds the zone label to the provided labels map.
+func AddZoneLabel(
+	labels map[string]string,
+	zoneName multigresv1alpha1.Zone,
+) map[string]string {
+	labels[LabelMultigresZone] = string(zoneName)
+	return labels
+}
+
+// AddRegionLabel adds the region label to the provided labels map.
+func AddRegionLabel(
+	labels map[string]string,
+	regionName multigresv1alpha1.Region,
+) map[string]string {
+	labels[LabelMultigresRegion] = string(regionName)
 	return labels
 }
 

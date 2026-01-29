@@ -77,6 +77,13 @@ func BuildMultiGatewayDeployment(
 	name := BuildMultiGatewayDeploymentName(cell)
 	clusterName := cell.Labels["multigres.com/cluster"]
 	labels := metadata.BuildStandardLabels(clusterName, MultiGatewayComponentName)
+	metadata.AddCellLabel(labels, cell.Spec.Name)
+	if cell.Spec.Zone != "" {
+		metadata.AddZoneLabel(labels, cell.Spec.Zone)
+	}
+	if cell.Spec.Region != "" {
+		metadata.AddRegionLabel(labels, cell.Spec.Region)
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -148,6 +155,13 @@ func BuildMultiGatewayService(
 	name := BuildMultiGatewayServiceName(cell)
 	clusterName := cell.Labels["multigres.com/cluster"]
 	labels := metadata.BuildStandardLabels(clusterName, MultiGatewayComponentName)
+	metadata.AddCellLabel(labels, cell.Spec.Name)
+	if cell.Spec.Zone != "" {
+		metadata.AddZoneLabel(labels, cell.Spec.Zone)
+	}
+	if cell.Spec.Region != "" {
+		metadata.AddRegionLabel(labels, cell.Spec.Region)
+	}
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

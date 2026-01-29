@@ -1104,7 +1104,7 @@ func TestShardReconciliation(t *testing.T) {
 // shardLabels returns standard labels for shard resources
 func shardLabels(t testing.TB, instanceName, component, cell string) map[string]string {
 	t.Helper()
-	return map[string]string{
+	labels := map[string]string{
 		"app.kubernetes.io/component": component,
 		// In new logic, instance is cluster name.
 		// Tests calling this MUST now pass the correct name (hashed name or cluster name depending on what we want to test).
@@ -1122,6 +1122,12 @@ func shardLabels(t testing.TB, instanceName, component, cell string) map[string]
 		"multigres.com/database":       "testdb",
 		"multigres.com/tablegroup":     "default",
 	}
+
+	if component == "shard-pool" {
+		labels["multigres.com/pool"] = "primary"
+	}
+
+	return labels
 }
 
 // shardOwnerRefs returns owner references for a Shard resource

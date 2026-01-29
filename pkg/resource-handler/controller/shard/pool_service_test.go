@@ -294,12 +294,12 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 			if tc.want != nil {
 				hashedSvcName := buildPoolHeadlessServiceName(tc.shard, tc.poolName, tc.cellName)
 				tc.want.Name = hashedSvcName
-				// if tc.want.Labels != nil {
-				// 	tc.want.Labels["app.kubernetes.io/instance"] = hashedName
-				// }
-				// if tc.want.Spec.Selector != nil {
-				// 	tc.want.Spec.Selector["app.kubernetes.io/instance"] = hashedName
-				// }
+				if tc.want.Labels != nil {
+					tc.want.Labels["multigres.com/pool"] = tc.poolName
+				}
+				if tc.want.Spec.Selector != nil {
+					tc.want.Spec.Selector["multigres.com/pool"] = tc.poolName
+				}
 			}
 
 			testScheme := scheme
