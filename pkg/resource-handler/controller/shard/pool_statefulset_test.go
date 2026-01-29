@@ -928,15 +928,17 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 
 				tc.want.Name = hashedName
 				tc.want.Spec.ServiceName = hashedSvcName
-				// if tc.want.Labels != nil {
-				// 	tc.want.Labels["app.kubernetes.io/instance"] = hashedName
-				// }
-				// if tc.want.Spec.Selector != nil {
-				// 	tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = hashedName
-				// }
-				// if tc.want.Spec.Template.Labels != nil {
-				// 	tc.want.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = hashedName
-				// }
+
+				if tc.want.Labels != nil {
+					tc.want.Labels["multigres.com/pool"] = tc.poolName
+				}
+				if tc.want.Spec.Selector != nil && tc.want.Spec.Selector.MatchLabels != nil {
+					tc.want.Spec.Selector.MatchLabels["multigres.com/pool"] = tc.poolName
+				}
+				if tc.want.Spec.Template.Labels != nil {
+					tc.want.Spec.Template.Labels["multigres.com/pool"] = tc.poolName
+				}
+
 				for i, vol := range tc.want.Spec.Template.Spec.Volumes {
 					if vol.Name == "backup-data-vol" && vol.PersistentVolumeClaim != nil {
 						tc.want.Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = hashedBackupPVC
@@ -1207,9 +1209,9 @@ func TestBuildBackupPVC(t *testing.T) {
 			if tc.want != nil {
 				hashedPVCName := buildHashedBackupPVCName(shard, "primary", "zone1")
 				tc.want.Name = hashedPVCName
-				// if tc.want.Labels != nil {
-				// 	tc.want.Labels["app.kubernetes.io/instance"] = hashedPoolName
-				// }
+				if tc.want.Labels != nil {
+					tc.want.Labels["multigres.com/pool"] = "primary"
+				}
 			}
 
 			testScheme := scheme

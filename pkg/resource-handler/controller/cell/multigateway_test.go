@@ -589,6 +589,114 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				},
 			},
 		},
+		"with topology labels": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-topology",
+					Namespace: "default",
+					UID:       "topo-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name:   "zone-topo",
+					Zone:   "us-east-1a",
+					Region: "us-east-1",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
+				},
+			},
+			scheme: scheme,
+			want: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-topology-multigateway",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-cluster",
+						"app.kubernetes.io/component":  "multigateway",
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/zone":           "us-east-1a",
+						"multigres.com/region":         "us-east-1",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Cell",
+							Name:               "cell-topology",
+							UID:                "topo-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To(DefaultMultiGatewayReplicas),
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/name":       "multigres",
+							"app.kubernetes.io/instance":   "test-cluster",
+							"app.kubernetes.io/component":  "multigateway",
+							"app.kubernetes.io/part-of":    "multigres",
+							"app.kubernetes.io/managed-by": "multigres-operator",
+							"multigres.com/zone":           "us-east-1a",
+							"multigres.com/region":         "us-east-1",
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app.kubernetes.io/name":       "multigres",
+								"app.kubernetes.io/instance":   "test-cluster",
+								"app.kubernetes.io/component":  "multigateway",
+								"app.kubernetes.io/part-of":    "multigres",
+								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/zone":           "us-east-1a",
+								"multigres.com/region":         "us-east-1",
+							},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "multigateway",
+									Image: DefaultMultiGatewayImage,
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--cell", "zone-topo",
+									},
+									Resources: corev1.ResourceRequirements{},
+									Ports: []corev1.ContainerPort{
+										{
+											Name:          "http",
+											ContainerPort: MultiGatewayHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiGatewayGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres",
+											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		"invalid scheme - should error": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
@@ -624,12 +732,15 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				tc.want.Name = expectedName
 				if tc.want.Labels != nil {
 					tc.want.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
+					tc.want.Labels["multigres.com/cell"] = string(tc.cell.Spec.Name)
 				}
 				if tc.want.Spec.Selector != nil {
 					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
+					tc.want.Spec.Selector.MatchLabels["multigres.com/cell"] = string(tc.cell.Spec.Name)
 				}
 				if tc.want.Spec.Template.Labels != nil {
 					tc.want.Spec.Template.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
+					tc.want.Spec.Template.Labels["multigres.com/cell"] = string(tc.cell.Spec.Name)
 				}
 			}
 
@@ -795,6 +906,79 @@ func TestBuildMultiGatewayService(t *testing.T) {
 				},
 			},
 		},
+		"with topology labels": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-topology",
+					Namespace: "default",
+					UID:       "topo-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name:   "zone-topo",
+					Zone:   "us-east-1a",
+					Region: "us-east-1",
+				},
+			},
+			scheme: scheme,
+			want: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-topology-multigateway",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-cluster",
+						"app.kubernetes.io/component":  "multigateway",
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/zone":           "us-east-1a",
+						"multigres.com/region":         "us-east-1",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Cell",
+							Name:               "cell-topology",
+							UID:                "topo-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeClusterIP,
+					Selector: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-cluster",
+						"app.kubernetes.io/component":  "multigateway",
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/zone":           "us-east-1a",
+						"multigres.com/region":         "us-east-1",
+					},
+					Ports: []corev1.ServicePort{
+						{
+							Name:       "http",
+							Port:       MultiGatewayHTTPPort,
+							TargetPort: intstr.FromString("http"),
+							Protocol:   corev1.ProtocolTCP,
+						},
+						{
+							Name:       "grpc",
+							Port:       MultiGatewayGRPCPort,
+							TargetPort: intstr.FromString("grpc"),
+							Protocol:   corev1.ProtocolTCP,
+						},
+						{
+							Name:       "postgres",
+							Port:       MultiGatewayPostgresPort,
+							TargetPort: intstr.FromString("postgres"),
+							Protocol:   corev1.ProtocolTCP,
+						},
+					},
+				},
+			},
+		},
 		"invalid scheme - should error": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
@@ -829,9 +1013,11 @@ func TestBuildMultiGatewayService(t *testing.T) {
 				tc.want.Name = expectedName
 				if tc.want.Labels != nil {
 					tc.want.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
+					tc.want.Labels["multigres.com/cell"] = string(tc.cell.Spec.Name)
 				}
 				if tc.want.Spec.Selector != nil {
 					tc.want.Spec.Selector["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
+					tc.want.Spec.Selector["multigres.com/cell"] = string(tc.cell.Spec.Name)
 				}
 			}
 

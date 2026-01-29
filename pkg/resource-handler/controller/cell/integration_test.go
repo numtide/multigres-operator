@@ -92,17 +92,17 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "test-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "test-cell-multigateway", "multigateway", "zone1"),
+						Labels:          cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
 						OwnerReferences: cellOwnerRefs(t, "test-cell"),
 					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1"),
+							MatchLabels: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1"),
+								Labels: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -133,7 +133,7 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "test-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "test-cell-multigateway", "multigateway", "zone1"),
+						Labels:          cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
 						OwnerReferences: cellOwnerRefs(t, "test-cell"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -143,7 +143,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1"),
+						Selector: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
 					},
 				},
 			},
@@ -179,17 +179,17 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "custom-replicas-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2"),
+						Labels:          cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
 						OwnerReferences: cellOwnerRefs(t, "custom-replicas-cell"),
 					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(3)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2"),
+							MatchLabels: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2"),
+								Labels: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -220,7 +220,7 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "custom-replicas-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2"),
+						Labels:          cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
 						OwnerReferences: cellOwnerRefs(t, "custom-replicas-cell"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -230,7 +230,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2"),
+						Selector: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
 					},
 				},
 			},
@@ -266,17 +266,17 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "custom-images-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3"),
+						Labels:          cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
 						OwnerReferences: cellOwnerRefs(t, "custom-images-cell"),
 					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3"),
+							MatchLabels: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3"),
+								Labels: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -307,7 +307,7 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "custom-images-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3"),
+						Labels:          cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
 						OwnerReferences: cellOwnerRefs(t, "custom-images-cell"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -317,7 +317,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3"),
+						Selector: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
 					},
 				},
 			},
@@ -370,17 +370,17 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "affinity-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4"),
+						Labels:          cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
 						OwnerReferences: cellOwnerRefs(t, "affinity-cell"),
 					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
-							MatchLabels: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4"),
+							MatchLabels: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4"),
+								Labels: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -428,7 +428,7 @@ func TestCellReconciliation(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "affinity-cell-multigateway",
 						Namespace:       "default",
-						Labels:          cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4"),
+						Labels:          cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
 						OwnerReferences: cellOwnerRefs(t, "affinity-cell"),
 					},
 					Spec: corev1.ServiceSpec{
@@ -438,7 +438,7 @@ func TestCellReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15170),
 							tcpServicePort(t, "postgres", 15432),
 						},
-						Selector: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4"),
+						Selector: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
 					},
 				},
 			},
@@ -536,7 +536,7 @@ func TestCellReconciliation(t *testing.T) {
 // Test helpers
 
 // cellLabels returns standard labels for cell resources in tests
-func cellLabels(t testing.TB, instanceName, component, cellName string) map[string]string {
+func cellLabels(t testing.TB, instanceName, component, cellName, zone string) map[string]string {
 	t.Helper()
 	return map[string]string{
 		"app.kubernetes.io/component":  component,
@@ -544,6 +544,8 @@ func cellLabels(t testing.TB, instanceName, component, cellName string) map[stri
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"app.kubernetes.io/name":       "multigres",
 		"app.kubernetes.io/part-of":    "multigres",
+		"multigres.com/cell":           cellName,
+		"multigres.com/zone":           zone,
 	}
 }
 
