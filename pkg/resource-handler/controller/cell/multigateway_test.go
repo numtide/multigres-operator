@@ -736,7 +736,9 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				}
 				if tc.want.Spec.Selector != nil {
 					tc.want.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
-					tc.want.Spec.Selector.MatchLabels["multigres.com/cell"] = string(tc.cell.Spec.Name)
+					tc.want.Spec.Selector.MatchLabels["multigres.com/cell"] = string(
+						tc.cell.Spec.Name,
+					)
 				}
 				if tc.want.Spec.Template.Labels != nil {
 					tc.want.Spec.Template.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]

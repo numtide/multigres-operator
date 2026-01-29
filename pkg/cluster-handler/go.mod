@@ -6,7 +6,7 @@ require (
 	github.com/numtide/multigres-operator/api v0.0.0-20260128234841-9fce786feeae
 	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260128234841-9fce786feeae
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260115201516-44b30bf5dd8e
-	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260128234841-9fce786feeae
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260129102750-b5045720e2e5
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.3
