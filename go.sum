@@ -128,6 +128,8 @@ github.com/numtide/multigres-operator/pkg/util v0.0.0-20260128234841-9fce786feea
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260128234841-9fce786feeae/go.mod h1:LhjcO/bWXBqQIyoWQanudEP27NUYCWIS/D2pm5msAUQ=
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260129102750-b5045720e2e5 h1:AXo8DGaiH1WwdoChX2FSadupneFqq/O8A2y/HCL2ZLQ=
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260129102750-b5045720e2e5/go.mod h1:PCO6R/dtylYCrz64QxURaUsmDTd2nmraLQJ+slM6fI8=
+github.com/numtide/multigres-operator/pkg/util v0.0.0-20260129104206-2aa0197a6552 h1:zxqE8GpAcS1KwU0Iog1bqTMfkbUJDPKoSdSvJbkM5t8=
+github.com/numtide/multigres-operator/pkg/util v0.0.0-20260129104206-2aa0197a6552/go.mod h1:PCO6R/dtylYCrz64QxURaUsmDTd2nmraLQJ+slM6fI8=
 github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260128234841-9fce786feeae h1:YKT1YX0UfZH7smNFaX+Wb2lqjEggWB+pg+CfVIJEGpU=
 github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260128234841-9fce786feeae/go.mod h1:7vgz/VBRLkvazF8x4rhK4gNIhsZ2mMBM4AyqClhX2IU=
 github.com/onsi/ginkgo/v2 v2.27.2 h1:LzwLj0b89qtIy6SSASkzlNvX6WktqurSHwkk2ipF/Ns=
