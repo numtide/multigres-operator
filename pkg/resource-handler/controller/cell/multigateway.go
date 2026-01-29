@@ -11,7 +11,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 

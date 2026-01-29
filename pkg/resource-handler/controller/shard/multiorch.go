@@ -10,7 +10,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -128,9 +128,9 @@ func buildMultiOrchLabelsWithCell(
 ) map[string]string {
 	clusterName := shard.Labels["multigres.com/cluster"]
 	labels := metadata.BuildStandardLabels(clusterName, MultiOrchComponentName)
-	metadata.AddCellLabel(labels, cellName)
-	metadata.AddDatabaseLabel(labels, string(shard.Spec.DatabaseName))
-	metadata.AddTableGroupLabel(labels, string(shard.Spec.TableGroupName))
+	metadata.AddCellLabel(labels, multigresv1alpha1.CellName(cellName))
+	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
+	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
 	labels = metadata.MergeLabels(labels, shard.GetObjectMeta().GetLabels())
 	return labels
 }
