@@ -396,7 +396,9 @@ func TestMultigresClusterValidator(t *testing.T) {
 								Name:          "s0",
 								ShardTemplate: "prod-shard",
 								Overrides: &multigresv1alpha1.ShardOverrides{
-									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{"p": {}},
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"p": {},
+									},
 								},
 							},
 						},

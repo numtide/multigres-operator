@@ -223,7 +223,11 @@ func (r *Resolver) ResolveCoreTemplate(
 	}
 
 	tpl := &multigresv1alpha1.CoreTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(
+		ctx,
+		types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace},
+		tpl,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {

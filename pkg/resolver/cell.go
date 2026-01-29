@@ -59,7 +59,11 @@ func (r *Resolver) ResolveCellTemplate(
 	}
 
 	tpl := &multigresv1alpha1.CellTemplate{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace}, tpl)
+	err := r.Client.Get(
+		ctx,
+		types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace},
+		tpl,
+	)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {

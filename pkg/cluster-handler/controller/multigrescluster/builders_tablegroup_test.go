@@ -61,7 +61,9 @@ func TestBuildTableGroup(t *testing.T) {
 
 	t.Run("Name Truncation", func(t *testing.T) {
 		longName := strings.Repeat("a", 250) // Very long name
-		tgCfg := &multigresv1alpha1.TableGroupConfig{Name: multigresv1alpha1.TableGroupName(longName)}
+		tgCfg := &multigresv1alpha1.TableGroupConfig{
+			Name: multigresv1alpha1.TableGroupName(longName),
+		}
 		resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
 
 		got, err := BuildTableGroup(cluster, dbName, tgCfg, resolvedShards, globalTopoRef, scheme)

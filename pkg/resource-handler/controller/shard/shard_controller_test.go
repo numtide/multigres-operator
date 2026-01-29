@@ -1889,7 +1889,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Check Pools
 				for poolName, poolSpec := range tc.shard.Spec.Pools {
 					for _, cell := range poolSpec.Cells {
-						if strings.Contains(name, "pool") && strings.Contains(name, string(poolName)) &&
+						if strings.Contains(name, "pool") &&
+							strings.Contains(name, string(poolName)) &&
 							strings.Contains(name, string(cell)) {
 							// Determine if headless svc or backup pvc
 							if strings.Contains(name, "headless") {
