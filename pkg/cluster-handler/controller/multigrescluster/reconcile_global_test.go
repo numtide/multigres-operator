@@ -379,11 +379,11 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 			cluster,
 			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
 		)
-		if err == nil || err.Error() != "failed to apply multiadmin-web service: service patch error" {
+		if err == nil ||
+			err.Error() != "failed to apply multiadmin-web service: service patch error" {
 			t.Errorf("Expected 'service patch error', got %v", err)
 		}
 	})
-
 }
 
 func TestReconcile_Global(t *testing.T) {
