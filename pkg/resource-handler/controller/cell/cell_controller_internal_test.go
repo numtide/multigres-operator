@@ -149,8 +149,8 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 	}
 }
 
-// TestReconcileMultiGatewayDeployment_GetError tests error path on Get MultiGateway Deployment (not NotFound).
-func TestReconcileMultiGatewayDeployment_GetError(t *testing.T) {
+// TestReconcileMultiGatewayDeployment_PatchError tests error path on Patch MultiGateway Deployment.
+func TestReconcileMultiGatewayDeployment_PatchError(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -173,8 +173,8 @@ func TestReconcileMultiGatewayDeployment_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: func(key client.ObjectKey) error {
-			if strings.Contains(key.Name, "multigateway") {
+		OnPatch: func(obj client.Object) error {
+			if strings.Contains(obj.GetName(), "multigateway") {
 				return testutil.ErrNetworkTimeout
 			}
 			return nil
@@ -188,12 +188,12 @@ func TestReconcileMultiGatewayDeployment_GetError(t *testing.T) {
 
 	err := reconciler.reconcileMultiGatewayDeployment(context.Background(), cell)
 	if err == nil {
-		t.Error("reconcileMultiGatewayDeployment() should error on Get failure")
+		t.Error("reconcileMultiGatewayDeployment() should error on Patch failure")
 	}
 }
 
-// TestReconcileMultiGatewayService_GetError tests error path on Get MultiGateway Service (not NotFound).
-func TestReconcileMultiGatewayService_GetError(t *testing.T) {
+// TestReconcileMultiGatewayService_PatchError tests error path on Patch MultiGateway Service.
+func TestReconcileMultiGatewayService_PatchError(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -216,8 +216,8 @@ func TestReconcileMultiGatewayService_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: func(key client.ObjectKey) error {
-			if strings.Contains(key.Name, "multigateway") {
+		OnPatch: func(obj client.Object) error {
+			if strings.Contains(obj.GetName(), "multigateway") {
 				return testutil.ErrNetworkTimeout
 			}
 			return nil
@@ -231,7 +231,7 @@ func TestReconcileMultiGatewayService_GetError(t *testing.T) {
 
 	err := reconciler.reconcileMultiGatewayService(context.Background(), cell)
 	if err == nil {
-		t.Error("reconcileMultiGatewayService() should error on Get failure")
+		t.Error("reconcileMultiGatewayService() should error on Patch failure")
 	}
 }
 

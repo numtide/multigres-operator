@@ -411,12 +411,14 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				// Fail MultiGateway Deployment Get in updateStatus (after reconcile calls)
-				OnGet: testutil.FailKeyAfterNCalls(2, testutil.ErrNetworkTimeout),
+				// Fail MultiGateway Deployment Get in updateStatus.
+				// Since we switched to SSA, there are no Gets in reconcile loop.
+				// The only Get is in updateStatus.
+				OnGet: testutil.FailKeyAfterNCalls(0, testutil.ErrNetworkTimeout),
 			},
 			wantErr: true,
 		},
-		"error on MultiGateway Deployment create": {
+		"error on MultiGateway Deployment patch": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cell",
@@ -428,7 +430,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
 						titleContains(deploy.Name, "multigateway") {
 						return testutil.ErrPermissionError
@@ -438,65 +440,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on MultiGateway Deployment Update": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-					MultiGateway: multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(5)),
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						titleContains(deploy.Name, "multigateway") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get MultiGateway Deployment (network error)": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if titleContains(key.Name, "multigateway") {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on MultiGateway Service create": {
+		"error on MultiGateway Service patch": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cell",
@@ -508,75 +452,10 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
 						titleContains(svc.Name, "multigateway") {
 						return testutil.ErrPermissionError
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on MultiGateway Service Update": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-multigateway",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok &&
-						titleContains(svc.Name, "multigateway") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get MultiGateway Service (network error)": {
-			cell: &multigresv1alpha1.Cell{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell-svc",
-					Namespace:  "default",
-					Finalizers: []string{"cell.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.CellSpec{
-					Name: "zone1",
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-cell-svc-multigateway",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if titleContains(key.Name, "multigateway") {
-						return testutil.ErrNetworkTimeout
 					}
 					return nil
 				},

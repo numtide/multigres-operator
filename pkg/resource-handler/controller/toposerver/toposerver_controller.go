@@ -97,28 +97,16 @@ func (r *TopoServerReconciler) reconcileStatefulSet(
 		return fmt.Errorf("failed to build StatefulSet: %w", err)
 	}
 
-	existing := &appsv1.StatefulSet{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("StatefulSet"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new StatefulSet
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create StatefulSet: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get StatefulSet: %w", err)
-	}
-
-	// Update existing StatefulSet
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update StatefulSet: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply StatefulSet: %w", err)
 	}
 
 	return nil
@@ -134,29 +122,16 @@ func (r *TopoServerReconciler) reconcileHeadlessService(
 		return fmt.Errorf("failed to build headless Service: %w", err)
 	}
 
-	existing := &corev1.Service{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name + "-headless"},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Service
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create headless Service: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get headless Service: %w", err)
-	}
-
-	// Update existing Service
-	existing.Spec.Ports = desired.Spec.Ports
-	existing.Spec.Selector = desired.Spec.Selector
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update headless Service: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply headless Service: %w", err)
 	}
 
 	return nil
@@ -172,29 +147,16 @@ func (r *TopoServerReconciler) reconcileClientService(
 		return fmt.Errorf("failed to build client Service: %w", err)
 	}
 
-	existing := &corev1.Service{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Service
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create client Service: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get client Service: %w", err)
-	}
-
-	// Update existing Service
-	existing.Spec.Ports = desired.Spec.Ports
-	existing.Spec.Selector = desired.Spec.Selector
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update client Service: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply client Service: %w", err)
 	}
 
 	return nil

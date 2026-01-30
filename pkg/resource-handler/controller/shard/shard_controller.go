@@ -141,28 +141,16 @@ func (r *ShardReconciler) reconcileMultiOrchDeployment(
 		return fmt.Errorf("failed to build MultiOrch Deployment: %w", err)
 	}
 
-	existing := &appsv1.Deployment{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Deployment
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create MultiOrch Deployment: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get MultiOrch Deployment: %w", err)
-	}
-
-	// Update existing Deployment
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update MultiOrch Deployment: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply MultiOrch Deployment: %w", err)
 	}
 
 	return nil
@@ -179,28 +167,16 @@ func (r *ShardReconciler) reconcilePgHbaConfigMap(
 		return fmt.Errorf("failed to build pg_hba ConfigMap: %w", err)
 	}
 
-	existing := &corev1.ConfigMap{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMap"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new ConfigMap
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create pg_hba ConfigMap: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get pg_hba ConfigMap: %w", err)
-	}
-
-	// Update existing ConfigMap
-	existing.Data = desired.Data
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update pg_hba ConfigMap: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply pg_hba ConfigMap: %w", err)
 	}
 
 	return nil
@@ -217,29 +193,16 @@ func (r *ShardReconciler) reconcileMultiOrchService(
 		return fmt.Errorf("failed to build MultiOrch Service: %w", err)
 	}
 
-	existing := &corev1.Service{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Service
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create MultiOrch Service: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get MultiOrch Service: %w", err)
-	}
-
-	// Update existing Service
-	existing.Spec.Ports = desired.Spec.Ports
-	existing.Spec.Selector = desired.Spec.Selector
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update MultiOrch Service: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply MultiOrch Service: %w", err)
 	}
 
 	return nil
@@ -302,28 +265,16 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 		return fmt.Errorf("failed to build pool StatefulSet: %w", err)
 	}
 
-	existing := &appsv1.StatefulSet{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("StatefulSet"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new StatefulSet
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create pool StatefulSet: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get pool StatefulSet: %w", err)
-	}
-
-	// Update existing StatefulSet
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update pool StatefulSet: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply pool StatefulSet: %w", err)
 	}
 
 	return nil
@@ -342,29 +293,16 @@ func (r *ShardReconciler) reconcilePoolBackupPVC(
 		return fmt.Errorf("failed to build backup PVC: %w", err)
 	}
 
-	existing := &corev1.PersistentVolumeClaim{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new PVC
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create backup PVC: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get backup PVC: %w", err)
-	}
-
-	// PVCs are immutable after creation, only update labels/annotations if needed
-	if desired.Labels != nil {
-		existing.Labels = desired.Labels
-		if err := r.Update(ctx, existing); err != nil {
-			return fmt.Errorf("failed to update backup PVC labels: %w", err)
-		}
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply backup PVC: %w", err)
 	}
 
 	return nil
@@ -383,29 +321,16 @@ func (r *ShardReconciler) reconcilePoolHeadlessService(
 		return fmt.Errorf("failed to build pool headless Service: %w", err)
 	}
 
-	existing := &corev1.Service{}
-	err = r.Get(
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
 		ctx,
-		client.ObjectKey{Namespace: shard.Namespace, Name: desired.Name},
-		existing,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Service
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create pool headless Service: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get pool headless Service: %w", err)
-	}
-
-	// Update existing Service
-	existing.Spec.Ports = desired.Spec.Ports
-	existing.Spec.Selector = desired.Spec.Selector
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update pool headless Service: %w", err)
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply pool headless Service: %w", err)
 	}
 
 	return nil

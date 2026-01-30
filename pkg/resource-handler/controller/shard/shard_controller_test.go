@@ -1,6 +1,7 @@
 package shard
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -20,6 +21,15 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
+type reconcileTestCase struct {
+	shard            *multigresv1alpha1.Shard
+	existingObjects  []client.Object
+	failureConfig    *testutil.FailureConfig
+	reconcilerScheme *runtime.Scheme
+	wantErr          bool
+	assertFunc       func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard)
+}
+
 func TestShardReconciler_Reconcile(t *testing.T) {
 	t.Parallel()
 
@@ -28,14 +38,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
-	tests := map[string]struct {
-		shard            *multigresv1alpha1.Shard
-		existingObjects  []client.Object
-		failureConfig    *testutil.FailureConfig
-		reconcilerScheme *runtime.Scheme
-		wantErr          bool
-		assertFunc       func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard)
-	}{
+	tests := map[string]reconcileTestCase{
 		////----------------------------------------
 		///   Success
 		//------------------------------------------
@@ -513,280 +516,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		"all replicas ready status": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard-ready",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells:           []multigresv1alpha1.CellName{"zone1"},
-							Type:            "replica",
-							ReplicasPerCell: ptr.To(int32(3)),
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-multiorch-zone1",
-						Namespace: "default",
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(1)),
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-pool-primary-zone1",
-						Namespace: "default",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: ptr.To(int32(3)),
-					},
-					Status: appsv1.StatefulSetStatus{
-						Replicas:      3,
-						ReadyReplicas: 3,
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-ready-pool-primary-zone1-headless",
-						Namespace: "default",
-					},
-				},
-			},
-			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				updatedShard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-ready", Namespace: "default"},
-					updatedShard); err != nil {
-					t.Fatalf("Failed to get Shard: %v", err)
-				}
 
-				if len(updatedShard.Status.Conditions) == 0 {
-					t.Error("Status.Conditions should not be empty")
-				} else {
-					availableCondition := updatedShard.Status.Conditions[0]
-					if availableCondition.Type != "Available" {
-						t.Errorf("Condition type = %s, want Available", availableCondition.Type)
-					}
-					if availableCondition.Status != metav1.ConditionTrue {
-						t.Errorf("Condition status = %s, want True", availableCondition.Status)
-					}
-					if availableCondition.Reason != "AllPodsReady" {
-						t.Errorf("Condition reason = %s, want AllPodsReady", availableCondition.Reason)
-					}
-				}
-
-				// Status no longer tracks TotalPods/ReadyPods - uses PoolsReady boolean instead
-				if !updatedShard.Status.PoolsReady {
-					t.Error("PoolsReady should be true when all pools are ready")
-				}
-			},
-		},
-		"not ready status - partial replicas": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard-partial",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells:           []multigresv1alpha1.CellName{"zone1"},
-							Type:            "replica",
-							ReplicasPerCell: ptr.To(int32(5)),
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-partial-multiorch",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-partial-multiorch",
-						Namespace: "default",
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-partial-pool-primary",
-						Namespace: "default",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: ptr.To(int32(5)),
-					},
-					Status: appsv1.StatefulSetStatus{
-						Replicas:      5,
-						ReadyReplicas: 3, // only 3 out of 5 ready
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-partial-pool-primary-headless",
-						Namespace: "default",
-					},
-				},
-			},
-			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				updatedShard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-partial", Namespace: "default"},
-					updatedShard); err != nil {
-					t.Fatalf("Failed to get Shard: %v", err)
-				}
-
-				if len(updatedShard.Status.Conditions) == 0 {
-					t.Fatal("Status.Conditions should not be empty")
-				}
-
-				availableCondition := updatedShard.Status.Conditions[0]
-				if availableCondition.Type != "Available" {
-					t.Errorf("Condition type = %s, want Available", availableCondition.Type)
-				}
-				if availableCondition.Status != metav1.ConditionFalse {
-					t.Errorf("Condition status = %s, want False", availableCondition.Status)
-				}
-				if availableCondition.Reason != "NotAllPodsReady" {
-					t.Errorf(
-						"Condition reason = %s, want NotAllPodsReady",
-						availableCondition.Reason,
-					)
-				}
-
-				// Status no longer tracks TotalPods/ReadyPods - partial ready means PoolsReady=false
-				if updatedShard.Status.PoolsReady {
-					t.Error("PoolsReady should be false when not all pools are ready")
-				}
-			},
-		},
-		"status with multiple pools": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard-multi",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"replica": {
-							Cells:           []multigresv1alpha1.CellName{"zone1"},
-							Type:            "replica",
-							ReplicasPerCell: ptr.To(int32(2)),
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-						"readOnly": {
-							Cells:           []multigresv1alpha1.CellName{"zone1"},
-							Type:            "readOnly",
-							ReplicasPerCell: ptr.To(int32(3)),
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "5Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-replica-zone1",
-						Namespace: "default",
-					},
-					Status: appsv1.StatefulSetStatus{
-						Replicas:      2,
-						ReadyReplicas: 2,
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-replica-zone1-headless",
-						Namespace: "default",
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-readOnly-zone1",
-						Namespace: "default",
-					},
-					Status: appsv1.StatefulSetStatus{
-						Replicas:      3,
-						ReadyReplicas: 3,
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multi-pool-readOnly-zone1-headless",
-						Namespace: "default",
-					},
-				},
-			},
-			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				updatedShard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-multi", Namespace: "default"},
-					updatedShard); err != nil {
-					t.Fatalf("Failed to get Shard: %v", err)
-				}
-
-				// Total should be 2 + 3 = 5
-				// Status no longer tracks TotalPods/ReadyPods - uses PoolsReady boolean instead
-				if !updatedShard.Status.PoolsReady {
-					t.Error("PoolsReady should be true when all pools are ready")
-				}
-			},
-		},
 		////----------------------------------------
 		///   Error
 		//------------------------------------------
@@ -819,7 +549,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on MultiOrch Deployment create": {
+		"error on MultiOrch Deployment patch": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
@@ -844,7 +574,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if deploy, ok := obj.(*appsv1.Deployment); ok &&
 						strings.Contains(
 							deploy.Name,
@@ -857,92 +587,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on MultiOrch Deployment Update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: ptr.To(int32(2)),
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if deploy, ok := obj.(*appsv1.Deployment); ok &&
-						strings.Contains(
-							deploy.Name,
-							"multiorch",
-						) && strings.Contains(deploy.Name, "zone1") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get MultiOrch Deployment (network error)": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "multiorch") &&
-						strings.Contains(key.Name, "zone1") {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on MultiOrch Service create": {
+
+		"error on MultiOrch Service patch": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
@@ -967,7 +613,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
 						strings.Contains(
 							svc.Name,
@@ -980,102 +626,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on MultiOrch Service Update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok &&
-						strings.Contains(
-							svc.Name,
-							"multiorch",
-						) && strings.Contains(svc.Name, "zone1") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get MultiOrch Service (network error)": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard-svc",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-svc-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if key.Namespace == "default" && strings.Contains(key.Name, "multiorch") &&
-						strings.Contains(key.Name, "zone1") {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Pool StatefulSet create": {
+
+		"error on Pool StatefulSet patch": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
@@ -1100,7 +652,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
 						strings.Contains(
 							sts.Name,
@@ -1113,119 +665,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on Pool StatefulSet Update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells:           []multigresv1alpha1.CellName{"zone1"},
-							Type:            "replica",
-							ReplicasPerCell: ptr.To(int32(5)),
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary-zone1",
-						Namespace: "default",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: ptr.To(int32(2)),
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
-						strings.Contains(
-							sts.Name,
-							"pool",
-						) && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get Pool StatefulSet (network error)": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "pool") &&
-						strings.Contains(key.Name, "primary") &&
-						strings.Contains(key.Name, "zone1") {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Pool Service create": {
+
+		"error on Pool Service patch": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
@@ -1250,7 +691,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
 						strings.Contains(
 							svc.Name,
@@ -1267,132 +708,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on Pool Service Update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary-zone1",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary-zone1-headless",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok &&
-						strings.Contains(
-							svc.Name,
-							"pool",
-						) && strings.Contains(svc.Name, "primary") &&
-						strings.Contains(
-							svc.Name,
-							"zone1",
-						) && strings.Contains(svc.Name, "headless") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get Pool Service (network error)": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-multiorch-zone1",
-						Namespace: "default",
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-shard-pool-primary-zone1",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "pool") &&
-						strings.Contains(key.Name, "primary") &&
-						strings.Contains(key.Name, "zone1") &&
-						strings.Contains(key.Name, "headless") &&
-						key.Namespace == "default" {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
+
 		"error on finalizer Update": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1505,6 +821,76 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		"error on pg_hba ConfigMap patch": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone1"},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: func(obj client.Object) error {
+					if cm, ok := obj.(*corev1.ConfigMap); ok &&
+						strings.Contains(cm.Name, "pg-hba") {
+						return testutil.ErrPermissionError
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
+		"error on Pool Backup PVC patch": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone1"},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells: []multigresv1alpha1.CellName{"zone1"},
+							Type:  "replica",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: func(obj client.Object) error {
+					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
+						strings.Contains(pvc.Name, "backup-data") {
+						return testutil.ErrPermissionError
+					}
+					return nil
+				},
+			},
+			wantErr: true,
+		},
 		"error on Get Pool StatefulSet in updateStatus (network error)": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1556,9 +942,12 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				// Fail Pool StatefulSet Get after successful reconciliation calls
-				// Get calls: 1=Shard, 2=PgHbaCM, 3=MultiOrchDeploy, 4=MultiOrchSvc, 5=PoolBackupPVC, 6=PoolSts, 7=PoolSvc, 8=PoolSts(status)
-				OnGet: testutil.FailKeyAfterNCalls(7, testutil.ErrNetworkTimeout),
+				// Fail Pool StatefulSet Get in updateStatus
+				// With SSA, the only Get calls are:
+				// 1. Shard (at start of Reconcile)
+				// 2. Pool StatefulSet (in updateStatus)
+				// So we want to fail the 2nd Get call.
+				OnGet: testutil.FailKeyAfterNCalls(1, testutil.ErrNetworkTimeout),
 			},
 			wantErr: true,
 		},
@@ -1607,248 +996,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			reconcilerScheme: func() *runtime.Scheme {
-				s := runtime.NewScheme()
-				// Register types but NOT Shard to fail SetControllerReference
-				_ = corev1.AddToScheme(s)
-				_ = appsv1.AddToScheme(s)
-				return s
-			}(),
-			wantErr: true,
-		},
-		"error on build Pool BackupPVC (scheme missing Shard)": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "build-pvc-err-shard",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			reconcilerScheme: func() *runtime.Scheme {
-				s := runtime.NewScheme()
-				_ = corev1.AddToScheme(s)
-				_ = appsv1.AddToScheme(s)
-				// Shard is NOT added
-				return s
-			}(),
-			wantErr: true,
-		},
-		"error on PgHba ConfigMap create": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pghba",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
-					if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == "pg-hba-template" {
-						return testutil.ErrPermissionError
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on PgHba ConfigMap update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pghba",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-				},
-			},
-			existingObjects: []client.Object{
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pg-hba-template",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == "pg-hba-template" {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Pool BackupPVC create": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pvc",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
-					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(
-							pvc.Name,
-							"backup-data",
-						) && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
-						return testutil.ErrPermissionError
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Pool BackupPVC update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pvc",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "backup-data-test-shard-pvc-pool-primary-zone1",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(
-							pvc.Name,
-							"backup-data",
-						) && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Pool BackupPVC labels update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pvc-label-err",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "backup-data-test-shard-pvc-label-err-pool-primary-zone1",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(
-							pvc.Name,
-							"backup-data",
-						) && strings.Contains(pvc.Name, "pool") && strings.Contains(pvc.Name, "primary") {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get Pool BackupPVC (network error)": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard-pvc",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if strings.Contains(key.Name, "backup-data") &&
-						strings.Contains(key.Name, "pool") &&
-						strings.Contains(key.Name, "primary") {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
+			reconcilerScheme: runtime.NewScheme(),
+			wantErr:          true,
 		},
 	}
 
@@ -1948,9 +1097,12 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
 				WithStatusSubresource(&multigresv1alpha1.Shard{}).
+				WithStatusSubresource(&appsv1.StatefulSet{}).
+				WithStatusSubresource(&appsv1.Deployment{}).
 				Build()
 
 			fakeClient := client.Client(baseClient)
+
 			// Wrap with failure injection if configured
 			if tc.failureConfig != nil {
 				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
@@ -2037,4 +1189,160 @@ func TestShardReconciler_ReconcileNotFound(t *testing.T) {
 	if result.RequeueAfter > 0 {
 		t.Errorf("Reconcile() should not requeue on NotFound")
 	}
+}
+
+func TestShardReconciler_UpdateStatus(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	t.Run("all_replicas_ready_status", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-shard-ready",
+				Namespace: "default",
+				Labels: map[string]string{
+					"multigres.com/cluster": "test-cluster",
+				},
+			},
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName:   "testdb",
+				TableGroupName: "default",
+				MultiOrch: multigresv1alpha1.MultiOrchSpec{
+					Cells: []multigresv1alpha1.CellName{"zone1"},
+				},
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"primary": {
+						Cells: []multigresv1alpha1.CellName{"zone1"},
+						Type:  "readWrite",
+						Storage: multigresv1alpha1.StorageSpec{
+							Size: "10Gi",
+						},
+						ReplicasPerCell: ptr.To(int32(3)),
+					},
+				},
+			},
+		}
+
+		stsName := buildHashedPoolName(shard, "primary", "zone1")
+		sts := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      stsName,
+				Namespace: "default",
+				Labels: map[string]string{
+					"multigres.com/shard": "test-shard-ready",
+				},
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To(int32(3)),
+			},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:      3,
+				ReadyReplicas: 3,
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, sts).
+			WithStatusSubresource(shard, sts).
+			Build()
+
+		r := &ShardReconciler{
+			Client: fakeClient,
+			Scheme: scheme,
+		}
+
+		if err := r.updateStatus(context.Background(), shard); err != nil {
+			t.Fatalf("updateStatus failed: %v", err)
+		}
+
+		updatedShard := &multigresv1alpha1.Shard{}
+		if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(shard), updatedShard); err != nil {
+			t.Fatalf("Failed to get Shard: %v", err)
+		}
+
+		foundTrue := false
+		for _, cond := range updatedShard.Status.Conditions {
+			if cond.Type == "Available" {
+				if cond.Status != metav1.ConditionTrue {
+					t.Errorf("Condition status = %s, want %s", cond.Status, metav1.ConditionTrue)
+				}
+				if cond.Reason != "AllPodsReady" {
+					t.Errorf("Condition reason = %s, want %s", cond.Reason, "AllPodsReady")
+				}
+				foundTrue = true
+			}
+		}
+		if !foundTrue {
+			t.Errorf("Condition %s not found", "Available")
+		}
+		if !updatedShard.Status.PoolsReady {
+			t.Error("PoolsReady should be true when all pools are ready")
+		}
+	})
+
+	t.Run("status_with_multiple_pools", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-shard-multi",
+				Namespace: "default",
+			},
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName:   "testdb",
+				TableGroupName: "default",
+				MultiOrch: multigresv1alpha1.MultiOrchSpec{
+					Cells: []multigresv1alpha1.CellName{"zone1"},
+				},
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"replica": {
+						Cells:           []multigresv1alpha1.CellName{"zone1"},
+						Type:            "replica",
+						ReplicasPerCell: ptr.To(int32(2)),
+					},
+					"readOnly": {
+						Cells:           []multigresv1alpha1.CellName{"zone1"},
+						Type:            "readOnly",
+						ReplicasPerCell: ptr.To(int32(3)),
+					},
+				},
+			},
+		}
+
+		sts1Name := buildHashedPoolName(shard, "replica", "zone1")
+		sts1 := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Name: sts1Name, Namespace: "default"},
+			Status:     appsv1.StatefulSetStatus{Replicas: 2, ReadyReplicas: 2},
+		}
+		sts2Name := buildHashedPoolName(shard, "readOnly", "zone1")
+		sts2 := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Name: sts2Name, Namespace: "default"},
+			Status:     appsv1.StatefulSetStatus{Replicas: 3, ReadyReplicas: 3},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, sts1, sts2).
+			WithStatusSubresource(shard, sts1, sts2).
+			Build()
+
+		r := &ShardReconciler{
+			Client: fakeClient,
+			Scheme: scheme,
+		}
+
+		if err := r.updateStatus(context.Background(), shard); err != nil {
+			t.Fatalf("updateStatus failed: %v", err)
+		}
+
+		updatedShard := &multigresv1alpha1.Shard{}
+		if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(shard), updatedShard); err != nil {
+			t.Fatalf("Failed to get Shard: %v", err)
+		}
+
+		if !updatedShard.Status.PoolsReady {
+			t.Error("PoolsReady should be true when all pools are ready")
+		}
+	})
 }

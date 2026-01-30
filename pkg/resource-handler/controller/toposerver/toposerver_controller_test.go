@@ -1,4 +1,4 @@
-package toposerver_test
+package toposerver
 
 import (
 	"slices"
@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -197,64 +196,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		"all replicas ready status": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver-ready",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{
-					Etcd: &multigresv1alpha1.EtcdSpec{
-						Replicas: ptr.To(int32(3)),
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver-ready",
-						Namespace: "default",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: ptr.To(int32(3)),
-					},
-					Status: appsv1.StatefulSetStatus{
-						Replicas:      3,
-						ReadyReplicas: 3,
-					},
-				},
-			},
-			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
-				updatedTopoServer := &multigresv1alpha1.TopoServer{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-toposerver-ready", Namespace: "default"},
-					updatedTopoServer); err != nil {
-					t.Fatalf("Failed to get TopoServer: %v", err)
-				}
 
-				// Status no longer tracks Replicas/ReadyReplicas directly
-				if len(updatedTopoServer.Status.Conditions) == 0 {
-					t.Error("Status.Conditions should not be empty")
-				} else {
-					readyCondition := updatedTopoServer.Status.Conditions[0]
-					if readyCondition.Type != "Ready" {
-						t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
-					}
-					if readyCondition.Status != metav1.ConditionTrue {
-						t.Errorf("Condition status = %s, want True", readyCondition.Status)
-					}
-				}
-
-				if !slices.Contains(
-					updatedTopoServer.Finalizers,
-					"toposerver.multigres.com/finalizer",
-				) {
-					t.Errorf("Finalizer should be present")
-				}
-			},
-		},
 		////----------------------------------------
 		///   Error
 		//------------------------------------------
@@ -292,14 +234,13 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				// Fail StatefulSet Get after first successful call
-				// First Get succeeds (in reconcileStatefulSet)
-				// Second Get fails (in updateStatus)
-				OnGet: testutil.FailKeyAfterNCalls(1, testutil.ErrNetworkTimeout),
+				// Fail StatefulSet Get in updateStatus.
+				// No Gets in reconcile loop with SSA.
+				OnGet: testutil.FailKeyAfterNCalls(0, testutil.ErrNetworkTimeout),
 			},
 			wantErr: true,
 		},
-		"error on client Service create": {
+		"error on client Service patch": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
@@ -310,7 +251,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-toposerver" {
 						return testutil.ErrPermissionError
 					}
@@ -319,80 +260,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on client Service Update": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver-headless",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok && svc.Name == "test-toposerver" {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get client Service (network error)": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver-svc",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver-svc",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver-svc-headless",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnNamespacedKeyName(
-					"test-toposerver-svc",
-					"default",
-					testutil.ErrNetworkTimeout,
-				),
-			},
-			wantErr: true,
-		},
-		"error on headless Service create": {
+		"error on headless Service patch": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
@@ -403,7 +271,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if svc, ok := obj.(*corev1.Service); ok &&
 						svc.Name == "test-toposerver-headless" {
 						return testutil.ErrPermissionError
@@ -413,70 +281,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on headless Service Update": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver",
-						Namespace: "default",
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver-headless",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if svc, ok := obj.(*corev1.Service); ok &&
-						svc.Name == "test-toposerver-headless" {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get headless Service (network error)": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver",
-						Namespace: "default",
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-toposerver-headless" {
-						return testutil.ErrNetworkTimeout
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on StatefulSet create": {
+		"error on StatefulSet patch": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-toposerver",
@@ -487,65 +292,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnCreate: func(obj client.Object) error {
+				OnPatch: func(obj client.Object) error {
 					if _, ok := obj.(*appsv1.StatefulSet); ok {
 						return testutil.ErrPermissionError
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on StatefulSet Update": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{
-					Etcd: &multigresv1alpha1.EtcdSpec{
-						Replicas: ptr.To(int32(5)),
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-toposerver",
-						Namespace: "default",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: ptr.To(int32(3)),
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: func(obj client.Object) error {
-					if _, ok := obj.(*appsv1.StatefulSet); ok {
-						return testutil.ErrInjected
-					}
-					return nil
-				},
-			},
-			wantErr: true,
-		},
-		"error on Get StatefulSet (network error)": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "test-toposerver" {
-						return testutil.ErrNetworkTimeout
 					}
 					return nil
 				},
@@ -623,6 +372,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
 				WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
+				WithStatusSubresource(&appsv1.StatefulSet{}).
 				Build()
 
 			fakeClient := client.Client(baseClient)
@@ -631,7 +381,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				fakeClient = testutil.NewFakeClientWithFailures(baseClient, tc.failureConfig)
 			}
 
-			reconciler := &toposerver.TopoServerReconciler{
+			reconciler := &TopoServerReconciler{
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -694,7 +444,7 @@ func TestTopoServerReconciler_ReconcileNotFound(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := &toposerver.TopoServerReconciler{
+	reconciler := &TopoServerReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
@@ -714,4 +464,74 @@ func TestTopoServerReconciler_ReconcileNotFound(t *testing.T) {
 	if result.RequeueAfter > 0 {
 		t.Errorf("Reconcile() should not requeue on NotFound")
 	}
+}
+
+func TestTopoServerReconciler_UpdateStatus(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	t.Run("all_replicas_ready_status", func(t *testing.T) {
+		toposerver := &multigresv1alpha1.TopoServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-toposerver-ready",
+				Namespace:  "default",
+				Finalizers: []string{"toposerver.multigres.com/finalizer"},
+				Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
+			},
+			Spec: multigresv1alpha1.TopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Replicas: ptr.To(int32(3)),
+				},
+			},
+		}
+
+		sts := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-toposerver-ready",
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To(int32(3)),
+			},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:      3,
+				ReadyReplicas: 3,
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(toposerver, sts).
+			WithStatusSubresource(toposerver, sts).
+			Build()
+
+		r := &TopoServerReconciler{
+			Client: fakeClient,
+			Scheme: scheme,
+		}
+
+		if err := r.updateStatus(t.Context(), toposerver); err != nil {
+			t.Fatalf("updateStatus failed: %v", err)
+		}
+
+		updatedTopoServer := &multigresv1alpha1.TopoServer{}
+		if err := fakeClient.Get(t.Context(), client.ObjectKeyFromObject(toposerver), updatedTopoServer); err != nil {
+			t.Fatalf("Failed to get TopoServer: %v", err)
+		}
+
+		if len(updatedTopoServer.Status.Conditions) == 0 {
+			t.Error("Status.Conditions should not be empty")
+		} else {
+			readyCondition := updatedTopoServer.Status.Conditions[0]
+			if readyCondition.Type != "Ready" {
+				t.Errorf("Condition type = %s, want Ready", readyCondition.Type)
+			}
+			if readyCondition.Status != metav1.ConditionTrue {
+				t.Errorf("Condition status = %s, want True", readyCondition.Status)
+			}
+		}
+	})
 }

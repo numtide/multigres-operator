@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -163,8 +164,8 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 	}
 }
 
-// TestReconcileClientService_GetError tests error path on Get client Service (not NotFound).
-func TestReconcileClientService_GetError(t *testing.T) {
+// TestReconcileClientService_PatchError tests error path on Patch client Service.
+func TestReconcileClientService_PatchError(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -185,7 +186,12 @@ func TestReconcileClientService_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName("test-toposerver", testutil.ErrNetworkTimeout),
+		OnPatch: func(obj client.Object) error {
+			if obj.GetName() == "test-toposerver" {
+				return testutil.ErrNetworkTimeout
+			}
+			return nil
+		},
 	})
 
 	reconciler := &TopoServerReconciler{
@@ -195,7 +201,7 @@ func TestReconcileClientService_GetError(t *testing.T) {
 
 	err := reconciler.reconcileClientService(context.Background(), toposerver)
 	if err == nil {
-		t.Error("reconcileClientService() should error on Get failure")
+		t.Error("reconcileClientService() should error on Patch failure")
 	}
 }
 

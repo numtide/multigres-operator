@@ -113,25 +113,16 @@ func (r *CellReconciler) reconcileMultiGatewayDeployment(
 		return fmt.Errorf("failed to build MultiGateway Deployment: %w", err)
 	}
 
-	existing := &appsv1.Deployment{}
-	name := BuildMultiGatewayDeploymentName(cell)
-	err = r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: name}, existing)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Deployment
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create MultiGateway Deployment: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get MultiGateway Deployment: %w", err)
-	}
-
-	// Update existing Deployment
-	existing.Spec = desired.Spec
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update MultiGateway Deployment: %w", err)
+	// Server Side Apply
+	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
+	if err := r.Patch(
+		ctx,
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply MultiGateway Deployment: %w", err)
 	}
 
 	return nil
@@ -147,26 +138,16 @@ func (r *CellReconciler) reconcileMultiGatewayService(
 		return fmt.Errorf("failed to build MultiGateway Service: %w", err)
 	}
 
-	existing := &corev1.Service{}
-	name := BuildMultiGatewayServiceName(cell)
-	err = r.Get(ctx, client.ObjectKey{Namespace: cell.Namespace, Name: name}, existing)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Create new Service
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("failed to create MultiGateway Service: %w", err)
-			}
-			return nil
-		}
-		return fmt.Errorf("failed to get MultiGateway Service: %w", err)
-	}
-
-	// Update existing Service
-	existing.Spec.Ports = desired.Spec.Ports
-	existing.Spec.Selector = desired.Spec.Selector
-	existing.Labels = desired.Labels
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update MultiGateway Service: %w", err)
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
+		ctx,
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply MultiGateway Service: %w", err)
 	}
 
 	return nil

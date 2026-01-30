@@ -11,6 +11,12 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -363,11 +369,11 @@ func TestHandleDeletion_NoFinalizer(t *testing.T) {
 	}
 }
 
-// TestReconcile_GetError tests error path on Get operations (not NotFound, but network errors).
-func TestReconcile_GetError(t *testing.T) {
+// TestReconcile_PatchError tests error path on Patch operations.
+func TestReconcile_PatchError(t *testing.T) {
 	tests := map[string]struct {
 		setupShard    func() *multigresv1alpha1.Shard
-		getFailKey    func(*multigresv1alpha1.Shard) string
+		getFailObj    func(*multigresv1alpha1.Shard) string
 		reconcileFunc func(*ShardReconciler, context.Context, *multigresv1alpha1.Shard) error
 	}{
 		"MultiOrchDeployment": {
@@ -386,7 +392,7 @@ func TestReconcile_GetError(t *testing.T) {
 					},
 				}
 			},
-			getFailKey: func(s *multigresv1alpha1.Shard) string {
+			getFailObj: func(s *multigresv1alpha1.Shard) string {
 				return buildHashedMultiOrchName(s, "cell1")
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
@@ -406,7 +412,7 @@ func TestReconcile_GetError(t *testing.T) {
 					},
 				}
 			},
-			getFailKey: func(s *multigresv1alpha1.Shard) string {
+			getFailObj: func(s *multigresv1alpha1.Shard) string {
 				return buildHashedMultiOrchName(s, "cell1")
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
@@ -426,7 +432,7 @@ func TestReconcile_GetError(t *testing.T) {
 					},
 				}
 			},
-			getFailKey: func(s *multigresv1alpha1.Shard) string {
+			getFailObj: func(s *multigresv1alpha1.Shard) string {
 				return buildHashedPoolName(s, "pool1", "cell1")
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
@@ -449,8 +455,8 @@ func TestReconcile_GetError(t *testing.T) {
 					},
 				}
 			},
-			getFailKey: func(s *multigresv1alpha1.Shard) string {
-				return buildPoolHeadlessServiceName(s, "pool1", "cell1")
+			getFailObj: func(s *multigresv1alpha1.Shard) string {
+				return buildHashedPoolHeadlessServiceName(s, "pool1", "cell1")
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
 				poolSpec := multigresv1alpha1.PoolSpec{
@@ -469,7 +475,7 @@ func TestReconcile_GetError(t *testing.T) {
 			_ = corev1.AddToScheme(scheme)
 
 			shard := tc.setupShard()
-			failKey := tc.getFailKey(shard)
+			failObj := tc.getFailObj(shard)
 
 			// Create client with failure injection
 			baseClient := fake.NewClientBuilder().
@@ -478,7 +484,12 @@ func TestReconcile_GetError(t *testing.T) {
 				Build()
 
 			fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName(failKey, testutil.ErrNetworkTimeout),
+				OnPatch: func(obj client.Object) error {
+					if obj.GetName() == failObj {
+						return testutil.ErrNetworkTimeout
+					}
+					return nil
+				},
 			})
 
 			reconciler := &ShardReconciler{
@@ -488,7 +499,7 @@ func TestReconcile_GetError(t *testing.T) {
 
 			err := tc.reconcileFunc(reconciler, context.Background(), shard)
 			if err == nil {
-				t.Errorf("reconcile function should error on Get failure")
+				t.Errorf("reconcile function should error on Patch failure")
 			}
 		})
 	}
@@ -685,4 +696,45 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	if err == nil {
 		t.Error("updateStatus() should error on Get failure")
 	}
+}
+
+// TestSetupWithManager tests the manager setup function.
+func TestSetupWithManager(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	// dummy config
+	cfg := &rest.Config{Host: "http://localhost:8080"}
+
+	createMgr := func() ctrl.Manager {
+		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+			Scheme:  scheme,
+			Metrics: metricsserver.Options{BindAddress: "0"},
+		})
+		if err != nil {
+			t.Fatalf("Failed to create manager: %v", err)
+		}
+		return mgr
+	}
+
+	t.Run("default options", func(t *testing.T) {
+		mgr := createMgr()
+		r := &ShardReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		if err := r.SetupWithManager(mgr); err != nil {
+			t.Errorf("SetupWithManager() error = %v", err)
+		}
+	})
+
+	t.Run("with options", func(t *testing.T) {
+		mgr := createMgr()
+		r := &ShardReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		if err := r.SetupWithManager(mgr, controller.Options{
+			MaxConcurrentReconciles: 1,
+			SkipNameValidation:      ptr.To(true),
+		}); err != nil {
+			t.Errorf("SetupWithManager() with opts error = %v", err)
+		}
+	})
 }
