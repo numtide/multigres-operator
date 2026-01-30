@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -266,6 +267,44 @@ func TestBuildMultiAdminWebService(t *testing.T) {
 	t.Run("ControllerRefError", func(t *testing.T) {
 		emptyScheme := runtime.NewScheme()
 		_, err := BuildMultiAdminWebService(cluster, emptyScheme)
+		if err == nil {
+			t.Error("Expected error due to missing scheme types, got nil")
+		}
+	})
+}
+
+func TestBuildMultiAdminService(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+			UID:       "cluster-uid",
+		},
+	}
+
+	t.Run("Success", func(t *testing.T) {
+		got, err := BuildMultiAdminService(cluster, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiAdminService() error = %v", err)
+		}
+
+		if got.Name != "my-cluster-multiadmin" {
+			t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin")
+		}
+
+		// Verify OwnerReference
+		if len(got.OwnerReferences) != 1 {
+			t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))
+		}
+	})
+
+	t.Run("ControllerRefError", func(t *testing.T) {
+		emptyScheme := runtime.NewScheme()
+		_, err := BuildMultiAdminService(cluster, emptyScheme)
 		if err == nil {
 			t.Error("Expected error due to missing scheme types, got nil")
 		}

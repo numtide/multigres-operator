@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -57,16 +58,29 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		}
 
 		// Verify the TableGroup DOES exist (hashed)
-		time.Sleep(2 * time.Second)
 		tgName := nameutil.JoinWithConstraints(
 			nameutil.DefaultConstraints,
 			longClusterName,
 			"postgres",
 			longTGName,
 		)
-		err := k8sClient.Get(t.Context(), client.ObjectKey{Name: tgName, Namespace: testNamespace}, &multigresv1alpha1.TableGroup{})
-		if err != nil {
-			t.Errorf("Expected TableGroup %s to be created using hashing, but got error: %v", tgName, err)
+
+		expectedTG := &multigresv1alpha1.TableGroup{}
+		// We just want to wait for it to exist
+		found := false
+		for i := 0; i < 20; i++ {
+			err := k8sClient.Get(t.Context(), client.ObjectKey{Name: tgName, Namespace: testNamespace}, expectedTG)
+			if err == nil {
+				found = true
+				break
+			} else if !apierrors.IsNotFound(err) {
+				t.Fatalf("Unexpected error getting TableGroup: %v", err)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+
+		if !found {
+			t.Errorf("Expected TableGroup %s to be created using hashing, but it was not found after timeout", tgName)
 		}
 
 		// Ensure Cluster exists
@@ -233,12 +247,14 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 			t.Fatalf("Failed to wait for initial cell: %v", err)
 		}
 
-		// Rename Cell
-		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), cluster); err != nil {
-			t.Fatal(err)
-		}
-		cluster.Spec.Cells = []multigresv1alpha1.CellConfig{{Name: "zone-b", Zone: "us-east-1b"}}
-		if err := k8sClient.Update(t.Context(), cluster); err != nil {
+		// Rename Cell (Retry on conflict)
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), cluster); err != nil {
+				return err
+			}
+			cluster.Spec.Cells = []multigresv1alpha1.CellConfig{{Name: "zone-b", Zone: "us-east-1b"}}
+			return k8sClient.Update(t.Context(), cluster)
+		}); err != nil {
 			t.Fatalf("Failed to update cluster: %v", err)
 		}
 
