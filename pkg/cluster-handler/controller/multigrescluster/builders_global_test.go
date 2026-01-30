@@ -180,31 +180,31 @@ func TestBuildMultiAdminWebDeployment(t *testing.T) {
 	}
 
 	t.Run("Success", func(t *testing.T) {
-got, err := BuildMultiAdminWebDeployment(cluster, spec, scheme)
-if err != nil {
-t.Fatalf("BuildMultiAdminWebDeployment() error = %v", err)
-}
+		got, err := BuildMultiAdminWebDeployment(cluster, spec, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiAdminWebDeployment() error = %v", err)
+		}
 
-if got.Name != "my-cluster-multiadmin-web" {
-t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin-web")
-}
-if *got.Spec.Replicas != 2 {
-t.Errorf("Replicas = %v, want 2", *got.Spec.Replicas)
-}
-if got.Spec.Template.Labels["custom"] != "label" {
-t.Errorf("PodLabels missing custom label")
-}
-if got.Spec.Template.Annotations["anno"] != "tation" {
-t.Errorf("PodAnnotations missing annotation")
-}
+		if got.Name != "my-cluster-multiadmin-web" {
+			t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin-web")
+		}
+		if *got.Spec.Replicas != 2 {
+			t.Errorf("Replicas = %v, want 2", *got.Spec.Replicas)
+		}
+		if got.Spec.Template.Labels["custom"] != "label" {
+			t.Errorf("PodLabels missing custom label")
+		}
+		if got.Spec.Template.Annotations["anno"] != "tation" {
+			t.Errorf("PodAnnotations missing annotation")
+		}
 
-// Verify container image from cluster spec
-if len(got.Spec.Template.Spec.Containers) > 0 {
+		// Verify container image from cluster spec
+		if len(got.Spec.Template.Spec.Containers) > 0 {
 			if got.Spec.Template.Spec.Containers[0].Image != "multiadmin-web:latest" {
 				t.Errorf(
-"Container Image = %v, want multiadmin-web:latest",
-got.Spec.Template.Spec.Containers[0].Image,
-)
+					"Container Image = %v, want multiadmin-web:latest",
+					got.Spec.Template.Spec.Containers[0].Image,
+				)
 			}
 		}
 
@@ -227,7 +227,7 @@ got.Spec.Template.Spec.Containers[0].Image,
 	})
 
 	t.Run("ControllerRefError", func(t *testing.T) {
-emptyScheme := runtime.NewScheme()
+		emptyScheme := runtime.NewScheme()
 		_, err := BuildMultiAdminWebDeployment(cluster, spec, emptyScheme)
 		if err == nil {
 			t.Error("Expected error due to missing scheme types, got nil")
@@ -248,23 +248,23 @@ func TestBuildMultiAdminWebService(t *testing.T) {
 	}
 
 	t.Run("Success", func(t *testing.T) {
-got, err := BuildMultiAdminWebService(cluster, scheme)
-if err != nil {
-t.Fatalf("BuildMultiAdminWebService() error = %v", err)
-}
+		got, err := BuildMultiAdminWebService(cluster, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiAdminWebService() error = %v", err)
+		}
 
-if got.Name != "my-cluster-multiadmin-web" {
-t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin-web")
-}
+		if got.Name != "my-cluster-multiadmin-web" {
+			t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin-web")
+		}
 
-// Verify OwnerReference
-if len(got.OwnerReferences) != 1 {
-t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))
-}
-})
+		// Verify OwnerReference
+		if len(got.OwnerReferences) != 1 {
+			t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))
+		}
+	})
 
 	t.Run("ControllerRefError", func(t *testing.T) {
-emptyScheme := runtime.NewScheme()
+		emptyScheme := runtime.NewScheme()
 		_, err := BuildMultiAdminWebService(cluster, emptyScheme)
 		if err == nil {
 			t.Error("Expected error due to missing scheme types, got nil")

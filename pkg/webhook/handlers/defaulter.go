@@ -136,7 +136,8 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 
 	// B2. Resolve MultiAdminWeb
 	{
-		hasInline := cluster.Spec.MultiAdminWeb != nil && cluster.Spec.MultiAdminWeb.TemplateRef != ""
+		hasInline := cluster.Spec.MultiAdminWeb != nil &&
+			cluster.Spec.MultiAdminWeb.TemplateRef != ""
 		isUsingTemplate := hasInline || hasGlobalCore || hasImplicitCore
 
 		if !isUsingTemplate {
