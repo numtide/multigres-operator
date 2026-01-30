@@ -92,10 +92,10 @@ github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFd
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/numtide/multigres-operator/api v0.0.0-20260130131133-a3200f0146d5 h1:3U+HxKxKii8+EofY5M719MD+UCJ/FQG60vggGeeQB58=
-github.com/numtide/multigres-operator/api v0.0.0-20260130131133-a3200f0146d5/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
-github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260130131133-a3200f0146d5 h1:j6nIMBVLTK53SmbXNtOEJjtj67QlS4SkIMIyvVnLY7E=
-github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260130131133-a3200f0146d5/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
+github.com/numtide/multigres-operator/api v0.0.0-20260130152921-ee5e4f7c3549 h1:sfgeEu779TNO9KruQH5aLNCQ3t/lq0xOQqBgU4+Q2kw=
+github.com/numtide/multigres-operator/api v0.0.0-20260130152921-ee5e4f7c3549/go.mod h1:A1bBmTxHr+362dGZ5G6u2S4xsP6enbgdUS/UJUOmKbc=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260130152921-ee5e4f7c3549 h1:4liykxO1voAzz59PKiUqj4hcRbIwCPsb0Z13hem6IgY=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260130152921-ee5e4f7c3549/go.mod h1:+NQa7dSvQqxhBOE9XcE9RWXLvOvNaw0keCc29Y7pjyQ=
 github.com/onsi/ginkgo/v2 v2.25.3 h1:Ty8+Yi/ayDAGtk4XxmmfUy4GabvM+MegeB4cDLRi6nw=
 github.com/onsi/ginkgo/v2 v2.25.3/go.mod h1:43uiyQC4Ed2tkOzLsEYm7hnrb7UJTWHYNsuy3bG/snE=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=
