@@ -324,6 +324,77 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
+				// 3. MultiAdminWeb Deployment
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            clusterName + "-multiadmin-web",
+						Namespace:       testNamespace,
+						Labels:          clusterLabels(t, clusterName, "multiadmin-web", ""),
+						OwnerReferences: clusterOwnerRefs(t, clusterName),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(resolver.DefaultMultiAdminWebReplicas), // Defaults
+						Selector: &metav1.LabelSelector{
+							MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, clusterName, "multiadmin-web", "")),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: clusterLabels(t, clusterName, "multiadmin-web", ""),
+							},
+							Spec: corev1.PodSpec{
+								ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull-secret"}},
+								Containers: []corev1.Container{
+									{
+										Name:  "multiadmin-web",
+										Image: resolver.DefaultMultiAdminWebImage, // Default
+										Ports: []corev1.ContainerPort{
+											{
+												Name:          "http",
+												ContainerPort: 18100,
+												Protocol:      corev1.ProtocolTCP,
+											},
+										},
+										Resources: resolver.DefaultResourcesAdminWeb(),
+										Env: []corev1.EnvVar{
+											{Name: "POSTGRES_HOST", Value: "multigateway"},
+											{Name: "POSTGRES_PORT", Value: "15432"},
+											{Name: "POSTGRES_DATABASE", Value: "postgres"},
+											{Name: "POSTGRES_USER", Value: "postgres"},
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 10,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       10,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 5,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       5,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 				// 3. Cell
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
@@ -528,6 +599,76 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
+				// 2b. MultiAdminWeb Deployment
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "minimal-cluster-multiadmin-web",
+						Namespace:       testNamespace,
+						Labels:          clusterLabels(t, "minimal-cluster", "multiadmin-web", ""),
+						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(resolver.DefaultMultiAdminWebReplicas),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, "minimal-cluster", "multiadmin-web", "")),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: clusterLabels(t, "minimal-cluster", "multiadmin-web", ""),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "multiadmin-web",
+										Image: resolver.DefaultMultiAdminWebImage,
+										Ports: []corev1.ContainerPort{
+											{
+												Name:          "http",
+												ContainerPort: 18100,
+												Protocol:      corev1.ProtocolTCP,
+											},
+										},
+										Resources: resolver.DefaultResourcesAdminWeb(),
+										Env: []corev1.EnvVar{
+											{Name: "POSTGRES_HOST", Value: "multigateway"},
+											{Name: "POSTGRES_PORT", Value: "15432"},
+											{Name: "POSTGRES_DATABASE", Value: "postgres"},
+											{Name: "POSTGRES_USER", Value: "postgres"},
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 10,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       10,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 5,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       5,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 				// 3. Cell
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
@@ -713,6 +854,76 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 												HTTPGet: &corev1.HTTPGetAction{
 													Path:   "/ready",
 													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 5,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       5,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				// 2b. MultiAdminWeb Deployment
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "lazy-cluster-multiadmin-web",
+						Namespace:       testNamespace,
+						Labels:          clusterLabels(t, "lazy-cluster", "multiadmin-web", ""),
+						OwnerReferences: clusterOwnerRefs(t, "lazy-cluster"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(resolver.DefaultMultiAdminWebReplicas),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: metadata.GetSelectorLabels(clusterLabels(t, "lazy-cluster", "multiadmin-web", "")),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: clusterLabels(t, "lazy-cluster", "multiadmin-web", ""),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "multiadmin-web",
+										Image: resolver.DefaultMultiAdminWebImage,
+										Ports: []corev1.ContainerPort{
+											{
+												Name:          "http",
+												ContainerPort: 18100,
+												Protocol:      corev1.ProtocolTCP,
+											},
+										},
+										Resources: resolver.DefaultResourcesAdminWeb(),
+										Env: []corev1.EnvVar{
+											{Name: "POSTGRES_HOST", Value: "multigateway"},
+											{Name: "POSTGRES_PORT", Value: "15432"},
+											{Name: "POSTGRES_DATABASE", Value: "postgres"},
+											{Name: "POSTGRES_USER", Value: "postgres"},
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											InitialDelaySeconds: 10,
+											TimeoutSeconds:      1,
+											PeriodSeconds:       10,
+											SuccessThreshold:    1,
+											FailureThreshold:    3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},

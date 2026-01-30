@@ -46,6 +46,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
 						MultiAdmin:      DefaultMultiAdminImage,
+						MultiAdminWeb:   DefaultMultiAdminWebImage,
 						MultiOrch:       DefaultMultiOrchImage,
 						MultiPooler:     DefaultMultiPoolerImage,
 						MultiGateway:    DefaultMultiGatewayImage,
@@ -89,6 +90,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
 						MultiAdmin:      DefaultMultiAdminImage,
+						MultiAdminWeb:   DefaultMultiAdminWebImage,
 						MultiOrch:       DefaultMultiOrchImage,
 						MultiPooler:     DefaultMultiPoolerImage,
 						MultiGateway:    DefaultMultiGatewayImage,
@@ -140,6 +142,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
 						MultiAdmin:      DefaultMultiAdminImage,
+						MultiAdminWeb:   DefaultMultiAdminWebImage,
 						MultiOrch:       DefaultMultiOrchImage,
 						MultiPooler:     DefaultMultiPoolerImage,
 						MultiGateway:    DefaultMultiGatewayImage,
@@ -204,6 +207,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
 						MultiAdmin:      DefaultMultiAdminImage,
+						MultiAdminWeb:   DefaultMultiAdminWebImage,
 						MultiOrch:       DefaultMultiOrchImage,
 						MultiPooler:     DefaultMultiPoolerImage,
 						MultiGateway:    DefaultMultiGatewayImage,
@@ -263,6 +267,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        DefaultPostgresImage,
 						MultiAdmin:      DefaultMultiAdminImage,
+						MultiAdminWeb:   DefaultMultiAdminWebImage,
 						MultiOrch:       DefaultMultiOrchImage,
 						MultiPooler:     DefaultMultiPoolerImage,
 						MultiGateway:    DefaultMultiGatewayImage,
@@ -296,6 +301,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        "custom/postgres:16",
 						MultiAdmin:      "custom/admin:1",
+						MultiAdminWeb:   "custom/web:1",
 						MultiOrch:       "custom/orch:1",
 						MultiPooler:     "custom/pooler:1",
 						MultiGateway:    "custom/gateway:1",
@@ -327,6 +333,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					Images: multigresv1alpha1.ClusterImages{
 						Postgres:        "custom/postgres:16",
 						MultiAdmin:      "custom/admin:1",
+						MultiAdminWeb:   "custom/web:1",
 						MultiOrch:       "custom/orch:1",
 						MultiPooler:     "custom/pooler:1",
 						MultiGateway:    "custom/gateway:1",
@@ -765,5 +772,91 @@ func TestResolver_ClientErrors_Core(t *testing.T) {
 	_, err := r.ResolveCoreTemplate(t.Context(), "any")
 	if err == nil || !errors.Is(err, errSim) {
 		t.Errorf("Error mismatch: got %v, want %v", err, errSim)
+	}
+}
+
+func TestResolver_ResolveMultiAdminWeb(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	coreTpl, _, _, ns := setupFixtures(t)
+
+	tests := map[string]struct {
+		cluster *multigresv1alpha1.MultigresCluster
+		objects []client.Object
+		want    *multigresv1alpha1.StatelessSpec
+		wantErr bool
+	}{
+		"Inline": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(10))},
+					},
+				},
+			},
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(10)),
+				Resources: DefaultResourcesAdminWeb(),
+			},
+		},
+		"Template": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+						TemplateRef: "default",
+					},
+				},
+			},
+			objects: []client.Object{coreTpl},
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(DefaultMultiAdminWebReplicas),
+				Resources: DefaultResourcesAdminWeb(),
+			},
+		},
+		"Fallback (No Spec, No Template) -> Defaults": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{},
+				},
+			},
+			objects: nil,
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(DefaultMultiAdminWebReplicas),
+				Resources: DefaultResourcesAdminWeb(),
+			},
+		},
+		"Explicit Missing Template -> Error": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+						TemplateRef: "missing",
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
+			r := NewResolver(c, ns, tc.cluster.Spec.TemplateDefaults)
+
+			got, err := r.ResolveMultiAdminWeb(t.Context(), tc.cluster)
+			if tc.wantErr {
+				if err == nil {
+					t.Error("Expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Diff (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

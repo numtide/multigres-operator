@@ -36,6 +36,12 @@ const (
 	// DefaultMultiAdminImage is the default container image used for the MultiAdmin component.
 	DefaultMultiAdminImage = "ghcr.io/multigres/multigres:main"
 
+	// DefaultMultiAdminWebImage is the default container image used for the MultiAdminWeb component.
+	DefaultMultiAdminWebImage = "docker.io/multigres/multiadmin-web:latest"
+
+	// DefaultMultiAdminWebReplicas is the default number of replicas for the MultiAdminWeb deployment if not specified.
+	DefaultMultiAdminWebReplicas int32 = 1
+
 	// DefaultMultiOrchImage is the default container image used for the MultiOrch component.
 	DefaultMultiOrchImage = "ghcr.io/multigres/multigres:main"
 
@@ -128,6 +134,20 @@ func DefaultResourcesPooler() corev1.ResourceRequirements {
 		},
 		Limits: corev1.ResourceList{
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		},
+	}
+}
+
+// DefaultResourcesAdminWeb returns the default resource requests and limits for the MultiAdminWeb deployment.
+// It requests 50m CPU and 64Mi memory, with a limit of 128Mi memory.
+func DefaultResourcesAdminWeb() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("50m"),
+			corev1.ResourceMemory: resource.MustParse("64Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("128Mi"),
 		},
 	}
 }

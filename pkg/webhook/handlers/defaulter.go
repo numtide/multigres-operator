@@ -134,6 +134,25 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 		}
 	}
 
+	// B2. Resolve MultiAdminWeb
+	{
+		hasInline := cluster.Spec.MultiAdminWeb != nil && cluster.Spec.MultiAdminWeb.TemplateRef != ""
+		isUsingTemplate := hasInline || hasGlobalCore || hasImplicitCore
+
+		if !isUsingTemplate {
+			multiAdminWeb, err := scopedResolver.ResolveMultiAdminWeb(ctx, cluster)
+			if err != nil {
+				return fmt.Errorf("failed to resolve multiadmin-web: %w", err)
+			}
+			if cluster.Spec.MultiAdminWeb == nil {
+				cluster.Spec.MultiAdminWeb = &multigresv1alpha1.MultiAdminWebConfig{}
+			}
+			if multiAdminWeb != nil {
+				cluster.Spec.MultiAdminWeb.Spec = multiAdminWeb
+			}
+		}
+	}
+
 	// C. Resolve Cells
 	hasGlobalCell := cluster.Spec.TemplateDefaults.CellTemplate != ""
 	hasImplicitCell, _ := scopedResolver.CellTemplateExists(ctx, resolver.FallbackCellTemplate)

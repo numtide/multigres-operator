@@ -73,6 +73,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 						MultiOrch:       resolver.DefaultMultiOrchImage,
 						MultiPooler:     resolver.DefaultMultiPoolerImage,
 						MultiGateway:    resolver.DefaultMultiGatewayImage,
+						MultiAdminWeb:   resolver.DefaultMultiAdminWebImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 					},
 					Cells: []multigresv1alpha1.CellConfig{
@@ -90,6 +91,12 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 						Spec: &multigresv1alpha1.StatelessSpec{
 							Replicas:  ptr.To(int32(1)),
 							Resources: resolver.DefaultResourcesAdmin(),
+						},
+					},
+					MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{
+							Replicas:  ptr.To(int32(1)),
+							Resources: resolver.DefaultResourcesAdminWeb(),
 						},
 					},
 					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
@@ -200,6 +207,38 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 				OnGet: testutil.FailKeyAfterNCalls(2, testutil.ErrInjected),
 			},
 			expectError: "failed to resolve multiadmin",
+		},
+		"Error: ResolveMultiAdminWeb failure": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					// Explicit ShardTemplate avoids PopulateDefaults check for "default"
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						ShardTemplate: "exists-shard",
+					},
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						TemplateRef: "exists-core",
+					},
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+						TemplateRef: "exists-core",
+					},
+					// MultiAdminWeb empty -> triggers ResolveMultiAdminWeb using "default"
+				},
+			},
+			existingObjects: []client.Object{},
+			// Calls:
+			// 1. ResolveCoreTemplate("exists-core") (GlobalTopo)
+			// 2. ResolveCoreTemplate("exists-core") (MultiAdmin) -> CACHE HIT
+			// 3. ResolveCoreTemplate("default") (MultiAdminWeb) -> FAIL
+			failureConfig: &testutil.FailureConfig{
+				OnGet: func(key client.ObjectKey) error {
+					if key.Name == "default" {
+						return testutil.ErrInjected
+					}
+					return nil
+				},
+			},
+			expectError: "failed to resolve multiadmin-web",
 		},
 		"Error: ResolveGlobalTopo failure": {
 			input: &multigresv1alpha1.MultigresCluster{

@@ -153,3 +153,174 @@ func BuildMultiAdminDeployment(
 
 	return deploy, nil
 }
+
+// BuildMultiAdminService constructs the desired Service for MultiAdmin.
+func BuildMultiAdminService(
+	cluster *multigresv1alpha1.MultigresCluster,
+	scheme *runtime.Scheme,
+) (*corev1.Service, error) {
+	standardLabels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiAdmin)
+	metadata.AddClusterLabel(standardLabels, cluster.Name)
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-multiadmin", cluster.Name),
+			Namespace: cluster.Namespace,
+			Labels:    standardLabels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: metadata.GetSelectorLabels(standardLabels),
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Port:       18000,
+					TargetPort: intstr.FromInt(18000),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "grpc",
+					Port:       18070,
+					TargetPort: intstr.FromInt(18070),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, svc, scheme); err != nil {
+		return nil, err
+	}
+
+	return svc, nil
+}
+
+// BuildMultiAdminWebDeployment constructs the desired MultiAdminWeb Deployment.
+func BuildMultiAdminWebDeployment(
+	cluster *multigresv1alpha1.MultigresCluster,
+	spec *multigresv1alpha1.StatelessSpec,
+	scheme *runtime.Scheme,
+) (*appsv1.Deployment, error) {
+	standardLabels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiAdminWeb)
+	metadata.AddClusterLabel(standardLabels, cluster.Name)
+
+	// Merge with user provided pod labels, but standard labels take precedence
+	podLabels := metadata.MergeLabels(standardLabels, spec.PodLabels)
+
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-multiadmin-web", cluster.Name),
+			Namespace: cluster.Namespace,
+			Labels:    standardLabels,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: spec.Replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: metadata.GetSelectorLabels(standardLabels),
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      podLabels,
+					Annotations: spec.PodAnnotations,
+				},
+				Spec: corev1.PodSpec{
+					ImagePullSecrets: cluster.Spec.Images.ImagePullSecrets,
+					Containers: []corev1.Container{
+						{
+							Name:  "multiadmin-web",
+							Image: string(cluster.Spec.Images.MultiAdminWeb),
+							Env: []corev1.EnvVar{
+								{
+									Name:  "POSTGRES_HOST",
+									Value: "multigateway",
+								},
+								{
+									Name:  "POSTGRES_PORT",
+									Value: "15432",
+								},
+								{
+									Name:  "POSTGRES_DATABASE",
+									Value: "postgres",
+								},
+								{
+									Name:  "POSTGRES_USER",
+									Value: "postgres",
+								},
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 18100,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							Resources: spec.Resources,
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/",
+										Port: intstr.FromInt(18100),
+									},
+								},
+								InitialDelaySeconds: 10,
+								PeriodSeconds:       10,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/",
+										Port: intstr.FromInt(18100),
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       5,
+							},
+						},
+					},
+					Affinity: spec.Affinity,
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, deploy, scheme); err != nil {
+		return nil, err
+	}
+
+	return deploy, nil
+}
+
+// BuildMultiAdminWebService constructs the desired Service for MultiAdminWeb.
+func BuildMultiAdminWebService(
+	cluster *multigresv1alpha1.MultigresCluster,
+	scheme *runtime.Scheme,
+) (*corev1.Service, error) {
+	standardLabels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiAdminWeb)
+	metadata.AddClusterLabel(standardLabels, cluster.Name)
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-multiadmin-web", cluster.Name),
+			Namespace: cluster.Namespace,
+			Labels:    standardLabels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: metadata.GetSelectorLabels(standardLabels),
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Port:       18100,
+					TargetPort: intstr.FromInt(18100),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, svc, scheme); err != nil {
+		return nil, err
+	}
+
+	return svc, nil
+}

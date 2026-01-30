@@ -155,3 +155,119 @@ func TestBuildMultiAdminDeployment(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildMultiAdminWebDeployment(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+			UID:       "cluster-uid",
+		},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			Images: multigresv1alpha1.ClusterImages{
+				MultiAdminWeb: "multiadmin-web:latest",
+			},
+		},
+	}
+
+	spec := &multigresv1alpha1.StatelessSpec{
+		Replicas:       ptr.To(int32(2)),
+		PodLabels:      map[string]string{"custom": "label"},
+		PodAnnotations: map[string]string{"anno": "tation"},
+	}
+
+	t.Run("Success", func(t *testing.T) {
+got, err := BuildMultiAdminWebDeployment(cluster, spec, scheme)
+if err != nil {
+t.Fatalf("BuildMultiAdminWebDeployment() error = %v", err)
+}
+
+if got.Name != "my-cluster-multiadmin-web" {
+t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin-web")
+}
+if *got.Spec.Replicas != 2 {
+t.Errorf("Replicas = %v, want 2", *got.Spec.Replicas)
+}
+if got.Spec.Template.Labels["custom"] != "label" {
+t.Errorf("PodLabels missing custom label")
+}
+if got.Spec.Template.Annotations["anno"] != "tation" {
+t.Errorf("PodAnnotations missing annotation")
+}
+
+// Verify container image from cluster spec
+if len(got.Spec.Template.Spec.Containers) > 0 {
+			if got.Spec.Template.Spec.Containers[0].Image != "multiadmin-web:latest" {
+				t.Errorf(
+"Container Image = %v, want multiadmin-web:latest",
+got.Spec.Template.Spec.Containers[0].Image,
+)
+			}
+		}
+
+		// Verify Selector does NOT contain mutable labels
+		selector := got.Spec.Selector.MatchLabels
+		if _, ok := selector["app.kubernetes.io/name"]; ok {
+			t.Error("Selector should not contain app.kubernetes.io/name")
+		}
+		if _, ok := selector["app.kubernetes.io/managed-by"]; ok {
+			t.Error("Selector should not contain app.kubernetes.io/managed-by")
+		}
+		if _, ok := selector["app.kubernetes.io/component"]; !ok {
+			t.Error("Selector MUST contain app.kubernetes.io/component")
+		}
+
+		// Verify OwnerReference
+		if len(got.OwnerReferences) != 1 {
+			t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))
+		}
+	})
+
+	t.Run("ControllerRefError", func(t *testing.T) {
+emptyScheme := runtime.NewScheme()
+		_, err := BuildMultiAdminWebDeployment(cluster, spec, emptyScheme)
+		if err == nil {
+			t.Error("Expected error due to missing scheme types, got nil")
+		}
+	})
+}
+
+func TestBuildMultiAdminWebService(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+			UID:       "cluster-uid",
+		},
+	}
+
+	t.Run("Success", func(t *testing.T) {
+got, err := BuildMultiAdminWebService(cluster, scheme)
+if err != nil {
+t.Fatalf("BuildMultiAdminWebService() error = %v", err)
+}
+
+if got.Name != "my-cluster-multiadmin-web" {
+t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin-web")
+}
+
+// Verify OwnerReference
+if len(got.OwnerReferences) != 1 {
+t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))
+}
+})
+
+	t.Run("ControllerRefError", func(t *testing.T) {
+emptyScheme := runtime.NewScheme()
+		_, err := BuildMultiAdminWebService(cluster, emptyScheme)
+		if err == nil {
+			t.Error("Expected error due to missing scheme types, got nil")
+		}
+	})
+}
