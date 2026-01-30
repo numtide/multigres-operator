@@ -34,6 +34,10 @@ type CoreTemplateSpec struct {
 	// MultiAdmin configuration.
 	// +optional
 	MultiAdmin *StatelessSpec `json:"multiadmin,omitempty"`
+
+	// MultiAdminWeb configuration.
+	// +optional
+	MultiAdminWeb *StatelessSpec `json:"multiadminWeb,omitempty"`
 }
 
 // ============================================================================

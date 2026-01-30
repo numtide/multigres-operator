@@ -106,6 +106,18 @@ func TestMultigresClusterValidator(t *testing.T) {
 			wantAllowed: false,
 			wantMessage: "referenced CoreTemplate 'missing-topo' not found",
 		},
+		"Denied: Missing MultiAdminWeb Template": {
+			object: func() *multigresv1alpha1.MultigresCluster {
+				c := baseCluster.DeepCopy()
+				c.Spec.MultiAdminWeb = &multigresv1alpha1.MultiAdminWebConfig{
+					TemplateRef: "missing-web",
+				}
+				return c
+			}(),
+			operation:   "Create",
+			wantAllowed: false,
+			wantMessage: "referenced CoreTemplate 'missing-web' not found",
+		},
 		"Error: Client Error (CoreTemplate)": {
 			object:    baseCluster.DeepCopy(),
 			operation: "Create",
@@ -612,6 +624,12 @@ func TestTemplateValidator(t *testing.T) {
 			MultiAdmin: &multigresv1alpha1.MultiAdminConfig{TemplateRef: "prod-core"},
 		},
 	}
+	configUsingCoreAdminWeb := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "c-admin-web", Namespace: "default"},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{TemplateRef: "prod-core"},
+		},
+	}
 	configUsingCell := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "c-cell", Namespace: "default"},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
@@ -658,6 +676,12 @@ func TestTemplateValidator(t *testing.T) {
 			kind:        "CoreTemplate",
 			targetName:  "prod-core",
 			existing:    []client.Object{configUsingCoreAdmin},
+			wantAllowed: false,
+		},
+		"Denied: Delete In-Use CoreTemplate (MultiAdminWeb)": {
+			kind:        "CoreTemplate",
+			targetName:  "prod-core",
+			existing:    []client.Object{configUsingCoreAdminWeb},
 			wantAllowed: false,
 		},
 		"Denied: Delete In-Use CoreTemplate (GlobalTopoServer)": {

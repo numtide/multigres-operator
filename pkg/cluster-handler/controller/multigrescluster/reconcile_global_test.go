@@ -10,6 +10,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -78,6 +79,33 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		}
 	})
 
+	t.Run("Error: Resolve MultiAdminWeb Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+					TemplateRef: "non-existent-core",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdminWeb(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to missing multi admin web spec, got nil")
+		}
+	})
+
 	t.Run("Error: Patch Global Topo Failed", func(t *testing.T) {
 		cluster := &multigresv1alpha1.MultigresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
@@ -134,58 +162,228 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		if err == nil || err.Error() != "failed to apply multiadmin deployment: patch error" {
 			t.Errorf("Expected 'patch error', got %v", err)
 		}
-		t.Run("Error: Build Global Topo Failed", func(t *testing.T) {
-			cluster := &multigresv1alpha1.MultigresCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: multigresv1alpha1.MultigresClusterSpec{
-					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
-						Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd"},
-					},
-				},
-			}
-
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
-			// Use empty scheme for Reconciler
-			r := &MultigresClusterReconciler{
-				Client:   c,
-				Scheme:   runtime.NewScheme(),
-				Recorder: record.NewFakeRecorder(10),
-			}
-
-			err := r.reconcileGlobalTopoServer(
-				context.Background(),
-				cluster,
-				resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
-			)
-			if err == nil {
-				t.Error("Expected error due to build failure, got nil")
-			}
-		})
-
-		t.Run("Error: Build MultiAdmin Failed", func(t *testing.T) {
-			cluster := &multigresv1alpha1.MultigresCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				// MultiAdmin default enabled
-			}
-
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
-			// Use empty scheme for Reconciler
-			r := &MultigresClusterReconciler{
-				Client:   c,
-				Scheme:   runtime.NewScheme(),
-				Recorder: record.NewFakeRecorder(10),
-			}
-
-			err := r.reconcileMultiAdmin(
-				context.Background(),
-				cluster,
-				resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
-			)
-			if err == nil {
-				t.Error("Expected error due to build failure, got nil")
-			}
-		})
 	})
+
+	t.Run("Error: Patch MultiAdminWeb Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			// MultiAdminWeb also defaults to enabled if image is present (which defaults handles)
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(ctx context.Context, cli client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				return errors.New("patch error")
+			},
+		}).WithObjects(cluster).Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+		err := r.reconcileMultiAdminWeb(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil || err.Error() != "failed to apply multiadmin-web deployment: patch error" {
+			t.Errorf("Expected 'patch error', got %v", err)
+		}
+	})
+
+	t.Run("Error: Build Global Topo Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd"},
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		// Use empty scheme for Reconciler
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   runtime.NewScheme(),
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileGlobalTopoServer(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to build failure, got nil")
+		}
+	})
+
+	t.Run("Error: Build MultiAdmin Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			// MultiAdmin default enabled
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		// Use empty scheme for Reconciler
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   runtime.NewScheme(),
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdmin(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to build failure, got nil")
+		}
+	})
+
+	t.Run("Error: Build MultiAdminWeb Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			// MultiAdminWeb default enabled
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+		// Use empty scheme for Reconciler
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   runtime.NewScheme(),
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdminWeb(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to build failure, got nil")
+		}
+	})
+
+	t.Run("Error: Build MultiAdmin Service Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		}
+
+		s := runtime.NewScheme()
+		_ = appsv1.AddToScheme(s)
+		_ = multigresv1alpha1.AddToScheme(s) // Required for SetControllerReference
+
+		// Use limited scheme for Client so Patch fails or Build fails if it uses client scheme?
+		// Build uses r.Scheme.
+		// Patch uses r.Client which uses client scheme.
+		// If we want Patch to fail due to missing kind, client scheme must miss it.
+		c := fake.NewClientBuilder().WithScheme(s).WithObjects(cluster).Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   s,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdmin(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to build failure, got nil")
+		}
+	})
+
+	t.Run("Error: Patch MultiAdmin Service Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(ctx context.Context, cli client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				if _, ok := obj.(*corev1.Service); ok {
+					return errors.New("service patch error")
+				}
+				return cli.Patch(ctx, obj, patch, opts...)
+			},
+		}).WithObjects(cluster).Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdmin(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil || err.Error() != "failed to apply multiadmin service: service patch error" {
+			t.Errorf("Expected 'service patch error', got %v", err)
+		}
+	})
+
+	t.Run("Error: Build MultiAdminWeb Service Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		}
+
+		s := runtime.NewScheme()
+		_ = appsv1.AddToScheme(s)
+		_ = multigresv1alpha1.AddToScheme(s)
+
+		c := fake.NewClientBuilder().WithScheme(s).WithObjects(cluster).Build()
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   s,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdminWeb(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil {
+			t.Error("Expected error due to build failure, got nil")
+		}
+	})
+
+	t.Run("Error: Patch MultiAdminWeb Service Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(ctx context.Context, cli client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				if _, ok := obj.(*corev1.Service); ok {
+					return errors.New("service patch error")
+				}
+				return cli.Patch(ctx, obj, patch, opts...)
+			},
+		}).WithObjects(cluster).Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdminWeb(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+		)
+		if err == nil || err.Error() != "failed to apply multiadmin-web service: service patch error" {
+			t.Errorf("Expected 'service patch error', got %v", err)
+		}
+	})
+
 }
 
 func TestReconcile_Global(t *testing.T) {
@@ -237,6 +435,15 @@ func TestReconcile_Global(t *testing.T) {
 				}
 				if got, want := *deploy.Spec.Replicas, int32(5); got != want {
 					t.Errorf("MultiAdmin replicas mismatch got %d, want %d", got, want)
+				}
+
+				webDeploy := &appsv1.Deployment{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin-web", Namespace: namespace}, webDeploy); err != nil {
+					t.Fatal(err)
+				}
+				// Default replicas is 1
+				if got, want := *webDeploy.Spec.Replicas, int32(1); got != want {
+					t.Errorf("MultiAdminWeb replicas mismatch got %d, want %d", got, want)
 				}
 			},
 		},
@@ -353,6 +560,9 @@ func TestReconcile_Global(t *testing.T) {
 				c.Spec.MultiAdmin = &multigresv1alpha1.MultiAdminConfig{
 					Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(3))},
 				}
+				c.Spec.MultiAdminWeb = &multigresv1alpha1.MultiAdminWebConfig{
+					Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(2))},
+				}
 			},
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
@@ -391,6 +601,14 @@ func TestReconcile_Global(t *testing.T) {
 				}
 				if *deploy.Spec.Replicas != 3 {
 					t.Errorf("MultiAdmin not updated")
+				}
+
+				webDeploy := &appsv1.Deployment{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-multiadmin-web", Namespace: namespace}, webDeploy); err != nil {
+					t.Fatal(err)
+				}
+				if *webDeploy.Spec.Replicas != 2 {
+					t.Errorf("MultiAdminWeb not updated")
 				}
 			},
 		},

@@ -35,6 +35,9 @@ func setupFixtures(t testing.TB) (
 			MultiAdmin: &multigresv1alpha1.StatelessSpec{
 				// Image is not in StatelessSpec, it is global
 			},
+			MultiAdminWeb: &multigresv1alpha1.StatelessSpec{
+				Replicas: ptr.To(int32(1)),
+			},
 		},
 	}
 

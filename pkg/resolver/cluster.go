@@ -22,6 +22,9 @@ func (r *Resolver) PopulateClusterDefaults(
 	if cluster.Spec.Images.MultiAdmin == "" {
 		cluster.Spec.Images.MultiAdmin = DefaultMultiAdminImage
 	}
+	if cluster.Spec.Images.MultiAdminWeb == "" {
+		cluster.Spec.Images.MultiAdminWeb = DefaultMultiAdminWebImage
+	}
 	if cluster.Spec.Images.MultiOrch == "" {
 		cluster.Spec.Images.MultiOrch = DefaultMultiOrchImage
 	}
@@ -198,6 +201,39 @@ func (r *Resolver) ResolveMultiAdmin(
 	}
 
 	defaultStatelessSpec(finalSpec, DefaultResourcesAdmin(), DefaultAdminReplicas)
+
+	return finalSpec, nil
+}
+
+// ResolveMultiAdminWeb determines the final MultiAdminWeb configuration.
+func (r *Resolver) ResolveMultiAdminWeb(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) (*multigresv1alpha1.StatelessSpec, error) {
+	var templateName multigresv1alpha1.TemplateRef
+	var spec *multigresv1alpha1.MultiAdminWebConfig
+
+	if cluster.Spec.MultiAdminWeb != nil {
+		templateName = cluster.Spec.MultiAdminWeb.TemplateRef
+		spec = cluster.Spec.MultiAdminWeb
+	}
+
+	coreTemplate, err := r.ResolveCoreTemplate(ctx, templateName)
+	if err != nil {
+		return nil, err
+	}
+
+	finalSpec := &multigresv1alpha1.StatelessSpec{}
+
+	if coreTemplate != nil && coreTemplate.Spec.MultiAdminWeb != nil {
+		finalSpec = coreTemplate.Spec.MultiAdminWeb.DeepCopy()
+	}
+
+	if spec != nil && spec.Spec != nil {
+		mergeStatelessSpec(finalSpec, spec.Spec)
+	}
+
+	defaultStatelessSpec(finalSpec, DefaultResourcesAdminWeb(), DefaultMultiAdminWebReplicas)
 
 	return finalSpec, nil
 }

@@ -62,6 +62,10 @@ type MultigresClusterSpec struct {
 	// +optional
 	MultiAdmin *MultiAdminConfig `json:"multiadmin,omitempty"`
 
+	// MultiAdminWeb defines the configuration for the MultiAdminWeb component.
+	// +optional
+	MultiAdminWeb *MultiAdminWebConfig `json:"multiadminWeb,omitempty"`
+
 	// Cells defines the list of cells (failure domains) in the cluster.
 	// +optional
 	// +listType=map
@@ -95,7 +99,6 @@ type ClusterImages struct {
 
 	// Component Images
 	// +optional
-	// +optional
 	MultiGateway ImageRef `json:"multigateway,omitempty"`
 	// +optional
 	MultiOrch ImageRef `json:"multiorch,omitempty"`
@@ -103,6 +106,8 @@ type ClusterImages struct {
 	MultiPooler ImageRef `json:"multipooler,omitempty"`
 	// +optional
 	MultiAdmin ImageRef `json:"multiadmin,omitempty"`
+	// +optional
+	MultiAdminWeb ImageRef `json:"multiadminWeb,omitempty"`
 	// +optional
 	Postgres ImageRef `json:"postgres,omitempty"`
 }
@@ -133,6 +138,20 @@ type TemplateDefaults struct {
 // +kubebuilder:validation:XValidation:rule="has(self.spec) || has(self.templateRef)",message="must specify either 'spec' or 'templateRef'"
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.templateRef))",message="cannot specify both 'spec' and 'templateRef'"
 type MultiAdminConfig struct {
+	// Spec defines the inline configuration.
+	// +optional
+	Spec *StatelessSpec `json:"spec,omitempty"`
+
+	// TemplateRef refers to a CoreTemplate to load configuration from.
+	// +optional
+	TemplateRef TemplateRef `json:"templateRef,omitempty"`
+}
+
+// MultiAdminWebConfig defines the configuration for MultiAdminWeb in the Cluster.
+// It allows either an inline spec OR a reference to a CoreTemplate.
+// +kubebuilder:validation:XValidation:rule="has(self.spec) || has(self.templateRef)",message="must specify either 'spec' or 'templateRef'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.templateRef))",message="cannot specify both 'spec' and 'templateRef'"
+type MultiAdminWebConfig struct {
 	// Spec defines the inline configuration.
 	// +optional
 	Spec *StatelessSpec `json:"spec,omitempty"`

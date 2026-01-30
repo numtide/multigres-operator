@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -20,6 +21,9 @@ func (r *MultigresClusterReconciler) reconcileGlobalComponents(
 		return err
 	}
 	if err := r.reconcileMultiAdmin(ctx, cluster, res); err != nil {
+		return err
+	}
+	if err := r.reconcileMultiAdminWeb(ctx, cluster, res); err != nil {
 		return err
 	}
 	return nil
@@ -107,6 +111,23 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 		desired.Name,
 	)
 
+	// Reconcile Service
+	desiredSvc, err := BuildMultiAdminService(cluster, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build multiadmin service: %w", err)
+	}
+
+	desiredSvc.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
+		ctx,
+		desiredSvc,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply multiadmin service: %w", err)
+	}
+
 	return nil
 }
 
@@ -142,4 +163,61 @@ func (r *MultigresClusterReconciler) getGlobalTopoRef(
 		RootPath:       rootPath,
 		Implementation: "etcd2",
 	}, nil
+}
+
+// reconcileMultiAdminWeb reconciles the MultiAdminWeb Deployment and Service.
+func (r *MultigresClusterReconciler) reconcileMultiAdminWeb(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+	res *resolver.Resolver,
+) error {
+	spec, err := res.ResolveMultiAdminWeb(ctx, cluster)
+	if err != nil {
+		r.Recorder.Event(cluster, "Warning", "TemplateMissing", err.Error())
+		return fmt.Errorf("failed to resolve multiadmin-web: %w", err)
+	}
+
+	// 1. Reconcile Deployment
+	desiredDeploy, err := BuildMultiAdminWebDeployment(cluster, spec, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build multiadmin-web deployment: %w", err)
+	}
+
+	desiredDeploy.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
+	if err := r.Patch(
+		ctx,
+		desiredDeploy,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply multiadmin-web deployment: %w", err)
+	}
+
+	r.Recorder.Eventf(
+		cluster,
+		"Normal",
+		"Applied",
+		"Applied MultiAdminWeb Deployment %s",
+		desiredDeploy.Name,
+	)
+
+	// 2. Reconcile Service
+	desiredSvc, err := BuildMultiAdminWebService(cluster, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build multiadmin-web service: %w", err)
+	}
+
+	desiredSvc.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
+		ctx,
+		desiredSvc,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply multiadmin-web service: %w", err)
+	}
+
+	return nil
 }

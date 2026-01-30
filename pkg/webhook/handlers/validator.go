@@ -99,6 +99,11 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 			return err
 		}
 	}
+	if cluster.Spec.MultiAdminWeb != nil && cluster.Spec.MultiAdminWeb.TemplateRef != "" {
+		if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.MultiAdminWeb.TemplateRef); err != nil {
+			return err
+		}
+	}
 
 	// 2. Validate Cell Templates
 	if err := res.ValidateCellTemplateReference(ctx, cluster.Spec.TemplateDefaults.CellTemplate); err != nil {
@@ -319,6 +324,10 @@ func (v *TemplateValidator) isTemplateInUse(
 		}
 		if cluster.Spec.GlobalTopoServer != nil &&
 			cluster.Spec.GlobalTopoServer.TemplateRef == refName {
+			return true
+		}
+		if cluster.Spec.MultiAdminWeb != nil &&
+			cluster.Spec.MultiAdminWeb.TemplateRef == refName {
 			return true
 		}
 	case "CellTemplate":
