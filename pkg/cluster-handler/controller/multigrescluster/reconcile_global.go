@@ -12,6 +12,13 @@ import (
 	"github.com/numtide/multigres-operator/pkg/resolver"
 )
 
+// Builder function variables to allow mocking in tests
+var (
+	buildMultiAdminService       = BuildMultiAdminService
+	buildMultiAdminWebDeployment = BuildMultiAdminWebDeployment
+	buildMultiAdminWebService    = BuildMultiAdminWebService
+)
+
 func (r *MultigresClusterReconciler) reconcileGlobalComponents(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
@@ -112,7 +119,7 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 	)
 
 	// Reconcile Service
-	desiredSvc, err := BuildMultiAdminService(cluster, r.Scheme)
+	desiredSvc, err := buildMultiAdminService(cluster, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build multiadmin service: %w", err)
 	}
@@ -178,7 +185,7 @@ func (r *MultigresClusterReconciler) reconcileMultiAdminWeb(
 	}
 
 	// 1. Reconcile Deployment
-	desiredDeploy, err := BuildMultiAdminWebDeployment(cluster, spec, r.Scheme)
+	desiredDeploy, err := buildMultiAdminWebDeployment(cluster, spec, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build multiadmin-web deployment: %w", err)
 	}
@@ -203,7 +210,7 @@ func (r *MultigresClusterReconciler) reconcileMultiAdminWeb(
 	)
 
 	// 2. Reconcile Service
-	desiredSvc, err := BuildMultiAdminWebService(cluster, r.Scheme)
+	desiredSvc, err := buildMultiAdminWebService(cluster, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build multiadmin-web service: %w", err)
 	}

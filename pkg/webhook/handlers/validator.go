@@ -82,168 +82,18 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 	cluster *multigresv1alpha1.MultigresCluster,
 ) error {
 	// Create an ephemeral resolver for validation
-	// This ensures we use the exact same logic ("Shared Resolver Pattern") as the Mutator and Reconciler.
+	// "Shared Resolver Pattern"
 	res := resolver.NewResolver(v.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
-
-	// 1. Validate Core Templates
-	if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.TemplateDefaults.CoreTemplate); err != nil {
-		return err
-	}
-	if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef != "" {
-		if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.MultiAdmin.TemplateRef); err != nil {
-			return err
-		}
-	}
-	if cluster.Spec.GlobalTopoServer != nil && cluster.Spec.GlobalTopoServer.TemplateRef != "" {
-		if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.GlobalTopoServer.TemplateRef); err != nil {
-			return err
-		}
-	}
-	if cluster.Spec.MultiAdminWeb != nil && cluster.Spec.MultiAdminWeb.TemplateRef != "" {
-		if err := res.ValidateCoreTemplateReference(ctx, cluster.Spec.MultiAdminWeb.TemplateRef); err != nil {
-			return err
-		}
-	}
-
-	// 2. Validate Cell Templates
-	if err := res.ValidateCellTemplateReference(ctx, cluster.Spec.TemplateDefaults.CellTemplate); err != nil {
-		return err
-	}
-	for _, cell := range cluster.Spec.Cells {
-		if err := res.ValidateCellTemplateReference(ctx, cell.CellTemplate); err != nil {
-			return err
-		}
-	}
-
-	// 3. Validate Shard Templates
-	if err := res.ValidateShardTemplateReference(ctx, cluster.Spec.TemplateDefaults.ShardTemplate); err != nil {
-		return err
-	}
-	for _, db := range cluster.Spec.Databases {
-		for _, tg := range db.TableGroups {
-			for _, shard := range tg.Shards {
-				if err := res.ValidateShardTemplateReference(ctx, shard.ShardTemplate); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
+	return res.ValidateClusterIntegrity(ctx, cluster)
 }
 
 func (v *MultigresClusterValidator) validateLogic(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (admission.Warnings, error) {
+	// Create an ephemeral resolver for validation
 	res := resolver.NewResolver(v.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
-	var warnings admission.Warnings
-
-	// Extract all valid cell names for this cluster
-	var cellNames []multigresv1alpha1.CellName
-	validCells := make(map[multigresv1alpha1.CellName]bool)
-	for _, c := range cluster.Spec.Cells {
-		cellNames = append(cellNames, c.Name)
-		validCells[c.Name] = true
-	}
-
-	// Iterate through every Shard and "Simulate" Resolution
-	for _, db := range cluster.Spec.Databases {
-		for _, tg := range db.TableGroups {
-			for _, shard := range tg.Shards {
-				// ------------------------------------------------------------------
-				// 1. Orphan Override Check
-				// ------------------------------------------------------------------
-				if shard.Overrides != nil && len(shard.Overrides.Pools) > 0 {
-					// We must resolve the template to know what pools *should* exist.
-					// Pass empty string if ShardTemplate is empty to resolve default/implicit.
-
-					tpl, err := res.ResolveShardTemplate(ctx, shard.ShardTemplate)
-					if err != nil {
-						// This should have been caught by validateTemplatesExist, but handling it safe.
-						return nil, fmt.Errorf(
-							"failed to resolve template for orphan check: %w",
-							err,
-						)
-					}
-
-					if tpl != nil {
-						for poolName := range shard.Overrides.Pools {
-							if _, exists := tpl.Spec.Pools[poolName]; !exists {
-								warnings = append(warnings, fmt.Sprintf(
-									"Pool '%s' defined in overrides for shard '%s' does not exist in template '%s'. A new pool will be created.",
-									poolName,
-									shard.Name,
-									tpl.Name,
-								))
-							}
-						}
-					}
-				}
-
-				// ------------------------------------------------------------------
-				// 2. Logic Resolution
-				// ------------------------------------------------------------------
-				// Dry-Run Resolution
-				// We pass allCellNames just like the Reconciler would, to simulate the final state
-				orch, pools, err := res.ResolveShard(ctx, &shard, cellNames)
-				if err != nil {
-					return nil, fmt.Errorf(
-						"validation failed: cannot resolve shard '%s': %w",
-						shard.Name,
-						err,
-					)
-				}
-
-				// Check 1: Empty Cells (Orphaned Shard)
-				// If after resolution (and defaulting), cells are STILL empty, it's a broken config.
-				if len(orch.Cells) == 0 {
-					return nil, fmt.Errorf(
-						"shard '%s' matches NO cells (check your cell names or template configuration)",
-						shard.Name,
-					)
-				}
-
-				for poolName, pool := range pools {
-					// Check 1b: Empty Pool cells
-					if len(pool.Cells) == 0 {
-						return nil, fmt.Errorf(
-							"pool '%s' in shard '%s' matches NO cells",
-							poolName,
-							shard.Name,
-						)
-					}
-				}
-
-				// Check 2: Invalid Cells (Reference Validity)
-				for _, c := range orch.Cells {
-					if !validCells[multigresv1alpha1.CellName(c)] {
-						return nil, fmt.Errorf(
-							"shard '%s' is assigned to non-existent cell '%s'",
-							shard.Name,
-							c,
-						)
-					}
-				}
-
-				for poolName, pool := range pools {
-					// Check 2b: Invalid Pool cells
-					for _, c := range pool.Cells {
-						if !validCells[multigresv1alpha1.CellName(c)] {
-							return nil, fmt.Errorf(
-								"pool '%s' in shard '%s' is assigned to non-existent cell '%s'",
-								poolName,
-								shard.Name,
-								c,
-							)
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return warnings, nil
+	return res.ValidateClusterLogic(ctx, cluster)
 }
 
 // ============================================================================

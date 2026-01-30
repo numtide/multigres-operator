@@ -39,6 +39,9 @@ type reconcileTestCase struct {
 	// NEW: Verify specific events were emitted
 	expectedEvents []string
 	validate       func(testing.TB, client.Client)
+
+	// NEW: Allow injecting a different scheme for the Reconciler (to test builder errors)
+	customReconcilerScheme *runtime.Scheme
 }
 
 // runReconcileTest is the shared runner for all split test files
@@ -114,9 +117,16 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 
 			// Create a buffered fake recorder to capture events
 			fakeRecorder := record.NewFakeRecorder(100)
+
+			// Determine scheme for Reconciler
+			reconcilerScheme := scheme
+			if tc.customReconcilerScheme != nil {
+				reconcilerScheme = tc.customReconcilerScheme
+			}
+
 			reconciler := &MultigresClusterReconciler{
 				Client:   finalClient,
-				Scheme:   scheme,
+				Scheme:   reconcilerScheme,
 				Recorder: fakeRecorder,
 			}
 
@@ -212,6 +222,7 @@ func setupFixtures(tb testing.TB) (
 			},
 		},
 	}
+	coreTpl.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("CoreTemplate"))
 
 	cellTpl := &multigresv1alpha1.CellTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-cell", Namespace: namespace},
@@ -221,6 +232,7 @@ func setupFixtures(tb testing.TB) (
 			},
 		},
 	}
+	cellTpl.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("CellTemplate"))
 
 	shardTpl := &multigresv1alpha1.ShardTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "default-shard", Namespace: namespace},
@@ -238,6 +250,7 @@ func setupFixtures(tb testing.TB) (
 			},
 		},
 	}
+	shardTpl.SetGroupVersionKind(multigresv1alpha1.GroupVersion.WithKind("ShardTemplate"))
 
 	baseCluster := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{

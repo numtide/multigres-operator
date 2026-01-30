@@ -3,6 +3,7 @@ package multigrescluster
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -612,7 +613,236 @@ func TestReconcile_Global(t *testing.T) {
 				}
 			},
 		},
+		"Idempotency: No changes needed": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				// No changes to spec
+			},
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.TopoServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-global-topo",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+					Spec: multigresv1alpha1.TopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd:topo"},
+					},
+				},
+				// We need to ensure we have the other objects too otherwise they will be created
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName + "-multiadmin",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(5)), // Matches admin-core which has 5 replicas
+					},
+				},
+				// MultiAdminWeb will participate
+			},
+			validate: func(t testing.TB, c client.Client) {
+				// Just ensure no error
+			},
+		},
+		"Error: Reconcile Global Topo Failed (Propagated)": {
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
+			},
+			wantErrMsg: "simulated error",
+		},
+		"Error: Reconcile MultiAdmin Failed (Propagated)": {
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(clusterName+"-multiadmin", errSimulated),
+			},
+			wantErrMsg: "simulated error",
+		},
+		"Error: Reconcile MultiAdminWeb Failed (Propagated)": {
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(clusterName+"-multiadmin-web", errSimulated),
+			},
+			wantErrMsg: "simulated error",
+		},
+		"Error: Reconcile MultiAdmin Service Failed": {
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: func(obj client.Object) error {
+					if obj.GetName() == clusterName+"-multiadmin" &&
+						obj.GetObjectKind().GroupVersionKind().Kind == "Service" {
+						return errSimulated
+					}
+					return nil
+				},
+			},
+			wantErrMsg: "failed to apply multiadmin service",
+		},
+		"Error: Reconcile MultiAdminWeb Service Failed": {
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: func(obj client.Object) error {
+					if obj.GetName() == clusterName+"-multiadmin-web" &&
+						obj.GetObjectKind().GroupVersionKind().Kind == "Service" {
+						return errSimulated
+					}
+					return nil
+				},
+			},
+			wantErrMsg: "failed to apply multiadmin-web service",
+		},
+		"Error: Build MultiAdmin Deployment Failed (Scheme)": {
+			// Bypass Global Topo builder by using External spec
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					External: &multigresv1alpha1.ExternalTopoServerSpec{
+						Endpoints: []multigresv1alpha1.EndpointUrl{"http://external:2379"},
+					},
+				}
+			},
+			// Inject a scheme that does NOT have the MultigresCluster type registered.
+			customReconcilerScheme: func() *runtime.Scheme {
+				s := runtime.NewScheme()
+				_ = appsv1.AddToScheme(s) // Needed for Deployment
+				_ = corev1.AddToScheme(s) // Needed for Service
+				return s
+			}(),
+			wantErrMsg: "failed to build multiadmin deployment",
+		},
+		"Error: Build Global Topo Failed (Scheme)": {
+			customReconcilerScheme: func() *runtime.Scheme {
+				s := runtime.NewScheme()
+				_ = appsv1.AddToScheme(s)
+				_ = corev1.AddToScheme(s)
+				// Missing MultigresCluster
+				return s
+			}(),
+			wantErrMsg: "failed to build global topo server",
+		},
 	}
 
 	runReconcileTest(t, tests)
+}
+
+// TestReconcile_Global_BuilderErrors tests builder errors that are difficult to reach via integration schemes
+// due to sequential dependencies. We use variable indirection to mock the builder functions.
+func TestReconcile_Global_BuilderErrors(t *testing.T) {
+	// This test modifies package-level variables, so it cannot run in parallel.
+	// t.Parallel() is intentionally omitted.
+
+	scheme := setupScheme()
+	coreTpl, _, _, baseCluster, _, _, _ := setupFixtures(t)
+
+	t.Run("Error: Build MultiAdmin Service Failed (Mock)", func(t *testing.T) {
+		// Mock the builder
+		originalBuild := buildMultiAdminService
+		defer func() { buildMultiAdminService = originalBuild }()
+
+		buildMultiAdminService = func(_ *multigresv1alpha1.MultigresCluster, _ *runtime.Scheme) (*corev1.Service, error) {
+			return nil, errors.New("mocked builder error")
+		}
+
+		// Setup client
+		clientBuilder := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{})
+		c := clientBuilder.Build()
+
+		// Manually create template to ensure it exists
+		if err := c.Create(t.Context(), coreTpl.DeepCopy()); err != nil {
+			t.Fatalf("Failed to create CoreTemplate: %v", err)
+		}
+
+		reconciler := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		// Use External Topo to skip Topo builder failure
+		cluster := baseCluster.DeepCopy()
+		cluster.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+			External: &multigresv1alpha1.ExternalTopoServerSpec{
+				Endpoints: []multigresv1alpha1.EndpointUrl{"http://external:2379"},
+			},
+		}
+
+		// Initialize resolver with correct namespace and defaults using constructor
+		res := resolver.NewResolver(c, baseCluster.Namespace, baseCluster.Spec.TemplateDefaults)
+		err := reconciler.reconcileMultiAdmin(t.Context(), cluster, res)
+		if err == nil {
+			t.Error("Expected error, got nil")
+		} else if !strings.Contains(err.Error(), "failed to build multiadmin service") {
+			t.Errorf("Expected 'failed to build multiadmin service', got: %v", err)
+		}
+	})
+
+	t.Run("Error: Build MultiAdminWeb Deployment Failed (Mock)", func(t *testing.T) {
+		// Mock the builder
+		originalBuild := buildMultiAdminWebDeployment
+		defer func() { buildMultiAdminWebDeployment = originalBuild }()
+
+		buildMultiAdminWebDeployment = func(_ *multigresv1alpha1.MultigresCluster, _ *multigresv1alpha1.StatelessSpec, _ *runtime.Scheme) (*appsv1.Deployment, error) {
+			return nil, errors.New("mocked builder error")
+		}
+
+		// Setup client
+		clientBuilder := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{})
+		c := clientBuilder.Build()
+
+		// Manually create template to ensure it exists
+		if err := c.Create(t.Context(), coreTpl.DeepCopy()); err != nil {
+			t.Fatalf("Failed to create CoreTemplate: %v", err)
+		}
+
+		reconciler := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		res := resolver.NewResolver(c, baseCluster.Namespace, baseCluster.Spec.TemplateDefaults)
+		err := reconciler.reconcileMultiAdminWeb(t.Context(), cluster, res)
+		if err == nil {
+			t.Error("Expected error, got nil")
+		} else if !strings.Contains(err.Error(), "failed to build multiadmin-web deployment") {
+			t.Errorf("Expected 'failed to build multiadmin-web deployment', got: %v", err)
+		}
+	})
+
+	t.Run("Error: Build MultiAdminWeb Service Failed (Mock)", func(t *testing.T) {
+		// Mock the builder
+		originalBuild := buildMultiAdminWebService
+		defer func() { buildMultiAdminWebService = originalBuild }()
+
+		buildMultiAdminWebService = func(_ *multigresv1alpha1.MultigresCluster, _ *runtime.Scheme) (*corev1.Service, error) {
+			return nil, errors.New("mocked builder error")
+		}
+
+		// Setup client
+		clientBuilder := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{})
+		c := clientBuilder.Build()
+
+		// Manually create template to ensure it exists
+		if err := c.Create(t.Context(), coreTpl.DeepCopy()); err != nil {
+			t.Fatalf("Failed to create CoreTemplate: %v", err)
+		}
+
+		reconciler := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		res := resolver.NewResolver(c, baseCluster.Namespace, baseCluster.Spec.TemplateDefaults)
+		err := reconciler.reconcileMultiAdminWeb(t.Context(), cluster, res)
+		if err == nil {
+			t.Error("Expected error, got nil")
+		} else if !strings.Contains(err.Error(), "failed to build multiadmin-web service") {
+			t.Errorf("Expected 'failed to build multiadmin-web service', got: %v", err)
+		}
+	})
 }

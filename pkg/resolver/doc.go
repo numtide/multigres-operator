@@ -32,15 +32,26 @@
 //     They fetch external templates from the API server and determine the effective
 //     configuration by checking for inline definitions vs. template references.
 //
+//  3. Validation (Webhook):
+//     The 'Validate...' methods (e.g. ValidateClusterIntegrity) are used during admission
+//     to enforce strict referential integrity and logical consistency. They simulate the
+//     resolution process to catch configuration errors (like referencing missing templates
+//     or invalid overrides) before the cluster is persisted.
+//
 // Usage:
 //
-//	// Create a resolver
-//	res := resolver.NewResolver(client, namespace, cluster.Spec.TemplateDefaults)
+//		// Create a resolver
+//		res := resolver.NewResolver(client, namespace, cluster.Spec.TemplateDefaults)
 //
-//	// Webhook: Apply static and smart defaults to the object
-//	res.PopulateClusterDefaults(cluster)
+//		// Webhook: Apply static and smart defaults to the object
+//		res.PopulateClusterDefaults(cluster)
 //
-//	// Controller: Calculate final config for a specific component
-//	// This handles the Inline > Template > Default precedence logic
-//	globalTopoSpec, err := res.ResolveGlobalTopo(ctx, cluster)
+//	 // Webhook: Validate the cluster structure
+//	 if err := res.ValidateClusterIntegrity(ctx, cluster); err != nil {
+//	     return err
+//	 }
+//
+//		// Controller: Calculate final config for a specific component
+//		// This handles the Inline > Template > Default precedence logic
+//		globalTopoSpec, err := res.ResolveGlobalTopo(ctx, cluster)
 package resolver
