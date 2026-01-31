@@ -499,4 +499,5 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 			t.Errorf("Deployment failed to update to v2: %v", err)
 		}
 	})
+
 }
