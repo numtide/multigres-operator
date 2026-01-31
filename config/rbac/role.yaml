@@ -28,15 +28,24 @@ rules:
   - patch
 - apiGroups:
   - admissionregistration.k8s.io
+  resourceNames:
+  - multigres-operator-mutating-webhook-configuration
   resources:
   - mutatingwebhookconfigurations
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - admissionregistration.k8s.io
+  resourceNames:
+  - multigres-operator-validating-webhook-configuration
+  resources:
   - validatingwebhookconfigurations
   verbs:
   - get
-  - list
   - patch
   - update
-  - watch
 - apiGroups:
   - apps
   resources:
