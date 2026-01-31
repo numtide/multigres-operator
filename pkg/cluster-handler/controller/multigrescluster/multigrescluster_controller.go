@@ -3,7 +3,6 @@ package multigrescluster
 import (
 	"context"
 	"fmt"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -12,7 +11,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
@@ -82,7 +83,7 @@ func (r *MultigresClusterReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -101,6 +102,38 @@ func (r *MultigresClusterReconciler) SetupWithManager(
 		Owns(&multigresv1alpha1.TableGroup{}).
 		Owns(&multigresv1alpha1.TopoServer{}).
 		Owns(&appsv1.Deployment{}).
+		Watches(
+			&multigresv1alpha1.CoreTemplate{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueRequestsFromTemplate),
+		).
+		Watches(
+			&multigresv1alpha1.CellTemplate{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueRequestsFromTemplate),
+		).
+		Watches(
+			&multigresv1alpha1.ShardTemplate{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueRequestsFromTemplate),
+		).
 		WithOptions(controllerOpts).
 		Complete(r)
+}
+
+// enqueueRequestsFromTemplate returns a list of requests for all MultigresClusters in the same namespace
+// as the triggered Template. This ensures that if a default template changes, all clusters using it (potentially) are updated.
+func (r *MultigresClusterReconciler) enqueueRequestsFromTemplate(
+	ctx context.Context,
+	o client.Object,
+) []reconcile.Request {
+	clusters := &multigresv1alpha1.MultigresClusterList{}
+	if err := r.List(ctx, clusters, client.InNamespace(o.GetNamespace())); err != nil {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, c := range clusters.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&c),
+		})
+	}
+	return requests
 }
