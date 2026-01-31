@@ -27,8 +27,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -228,17 +226,6 @@ func main() {
 			CertDir: webhookCertDir,
 			TLSOpts: tlsOpts,
 		}),
-		Client: client.Options{
-			// Disable caching for resources we need during bootstrap/cert rotation
-			Cache: &client.CacheOptions{
-				DisableFor: []client.Object{
-					&corev1.Secret{},
-					&appsv1.Deployment{},
-					&admissionregistrationv1.MutatingWebhookConfiguration{},
-					&admissionregistrationv1.ValidatingWebhookConfiguration{},
-				},
-			},
-		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -276,8 +263,6 @@ func main() {
 		}
 
 		// Register rotator as a background runnable (forever rotation)
-		// We switch the client to the Manager's client for the long-running process
-		rotator.Client = mgr.GetClient()
 		if err := mgr.Add(rotator); err != nil {
 			setupLog.Error(err, "unable to add cert rotator to manager")
 			os.Exit(1)
