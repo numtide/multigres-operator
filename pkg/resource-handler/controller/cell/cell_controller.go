@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -26,7 +27,8 @@ const (
 // CellReconciler reconciles a Cell object.
 type CellReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile handles Cell resource reconciliation.
@@ -56,17 +58,20 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			logger.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Event(cell, "Normal", "Finalizer", "Added finalizer")
 	}
 
 	// Reconcile MultiGateway Deployment
 	if err := r.reconcileMultiGatewayDeployment(ctx, cell); err != nil {
 		logger.Error(err, "Failed to reconcile MultiGateway Deployment")
+		r.Recorder.Eventf(cell, "Warning", "FailedApply", "Failed to sync Gateway Deployment: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile MultiGateway Service
 	if err := r.reconcileMultiGatewayService(ctx, cell); err != nil {
 		logger.Error(err, "Failed to reconcile MultiGateway Service")
+		r.Recorder.Eventf(cell, "Warning", "FailedApply", "Failed to reconcile MultiGateway Service: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -76,6 +81,7 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
+	r.Recorder.Event(cell, "Normal", "Synced", "Successfully reconciled Cell")
 	return ctrl.Result{}, nil
 }
 
@@ -98,6 +104,7 @@ func (r *CellReconciler) handleDeletion(
 			logger.Error(err, "Failed to remove finalizer")
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Event(cell, "Normal", "Deleted", "Object finalized and deleted")
 	}
 
 	return ctrl.Result{}, nil

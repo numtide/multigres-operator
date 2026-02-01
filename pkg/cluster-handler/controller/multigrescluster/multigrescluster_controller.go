@@ -65,24 +65,29 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 	if err := r.reconcileGlobalComponents(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile global components")
+		r.Recorder.Eventf(cluster, "Warning", "FailedApply", "Failed to reconcile global components: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	if err := r.reconcileCells(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile cells")
+		r.Recorder.Eventf(cluster, "Warning", "FailedApply", "Failed to reconcile cells: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	if err := r.reconcileDatabases(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile databases")
+		r.Recorder.Eventf(cluster, "Warning", "FailedApply", "Failed to reconcile databases: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	if err := r.updateStatus(ctx, cluster); err != nil {
 		l.Error(err, "Failed to update status")
+		r.Recorder.Eventf(cluster, "Warning", "FailedApply", "Failed to update status: %v", err)
 		return ctrl.Result{}, err
 	}
 
+	r.Recorder.Event(cluster, "Normal", "Synced", "Successfully reconciled MultigresCluster")
 	return ctrl.Result{}, nil
 }
 

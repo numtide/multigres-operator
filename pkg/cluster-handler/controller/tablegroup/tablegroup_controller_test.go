@@ -3,6 +3,7 @@ package tablegroup
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -88,11 +89,13 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 		preReconcileClient func(testing.TB, client.Client) // Hook to modify client state before Reconcile
 		nilRecorder        bool                            // If true, sets the Recorder to nil
 		skipCreate         bool                            // If true, the object won't be created in the fake client (simulates Not Found)
+		expectedEvents     []string                        // events expected to be recorded
 		validate           func(testing.TB, client.Client)
 	}{
 		"Create: Shard Creation": {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
+			expectedEvents:  []string{"Normal Applied Applied Shard", "Normal Synced Successfully reconciled TableGroup"},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				// Expect hashed name: md5("test-cluster", "db1", "tg1", "shard-0") -> "0a..."
@@ -144,6 +147,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					},
 				},
 			},
+			expectedEvents: []string{"Normal Applied Applied Shard", "Normal Synced Successfully reconciled TableGroup"},
 			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
 				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
@@ -371,6 +375,34 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				t.Errorf("Unexpected error from Reconcile: %v", err)
 			}
 
+			// Verify Events
+			if len(tc.expectedEvents) > 0 {
+				if fakeRecorder, ok := recorder.(*record.FakeRecorder); ok {
+					close(fakeRecorder.Events)
+					var gotEvents []string
+					for evt := range fakeRecorder.Events {
+						gotEvents = append(gotEvents, evt)
+					}
+
+					for _, want := range tc.expectedEvents {
+						found := false
+						for _, got := range gotEvents {
+							if strings.Contains(got, want) {
+								found = true
+								break
+							}
+						}
+						if !found {
+							t.Errorf(
+								"Expected event containing %q not found. Got events: %v",
+								want,
+								gotEvents,
+							)
+						}
+					}
+				}
+			}
+
 			if tc.validate != nil {
 				tc.validate(t, baseClient)
 			}
@@ -392,6 +424,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 		existingObjects    []client.Object
 		preReconcileUpdate func(testing.TB, *multigresv1alpha1.TableGroup)
 		failureConfig      *testutil.FailureConfig
+		expectedEvents     []string
 	}{
 		"Error: Get TableGroup Failed": {
 			tableGroup:      baseTG.DeepCopy(),
@@ -399,6 +432,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnGet: testutil.FailOnKeyName(tgName, errSimulated),
 			},
+			// Fails before any event recording
 		},
 		"Error: Apply Shard Failed": {
 			tableGroup:      baseTG.DeepCopy(),
@@ -415,6 +449,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 					errSimulated,
 				),
 			},
+			expectedEvents: []string{"Warning FailedApply Failed to apply shard"},
 		},
 
 		"Error: List Shards Failed (during pruning)": {
@@ -428,6 +463,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 					return nil
 				},
 			},
+			expectedEvents: []string{"Warning CleanUpError Failed to list shards for pruning"},
 		},
 		"Error: Status List Failed (Second List Call)": {
 			tableGroup:      baseTG.DeepCopy(),
@@ -446,6 +482,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 					}
 				}(),
 			},
+			expectedEvents: []string{"Warning StatusError Failed to list shards for status"},
 		},
 		"Error: Delete Orphan Shard Failed": {
 			tableGroup: baseTG.DeepCopy(),
@@ -484,6 +521,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 					errSimulated,
 				),
 			},
+			expectedEvents: []string{"Warning CleanUpError Failed to delete orphan shard"},
 		},
 		"Error: Update Status Failed": {
 			tableGroup:      baseTG.DeepCopy(),
@@ -491,6 +529,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnStatusUpdate: testutil.FailOnObjectName(tgName, errSimulated),
 			},
+			expectedEvents: []string{"Warning StatusError Failed to update status"},
 		},
 	}
 
@@ -527,10 +566,11 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			// Ideally we catch "Build Failed" in a separate manual test if it requires structural changes (like Reconciler.Scheme change).
 			// But let's try to add it here as a special case? No, the loop uses 'scheme'.
 
+			fakeRecorder := record.NewFakeRecorder(100)
 			reconciler := &TableGroupReconciler{
 				Client:   finalClient,
 				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(100),
+				Recorder: fakeRecorder,
 			}
 
 			req := ctrl.Request{
@@ -543,6 +583,32 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			_, err := reconciler.Reconcile(t.Context(), req)
 			if err == nil {
 				t.Error("Expected error from Reconcile, got nil")
+			}
+
+			// Verify Events
+			if len(tc.expectedEvents) > 0 {
+				close(fakeRecorder.Events)
+				var gotEvents []string
+				for evt := range fakeRecorder.Events {
+					gotEvents = append(gotEvents, evt)
+				}
+
+				for _, want := range tc.expectedEvents {
+					found := false
+					for _, got := range gotEvents {
+						if strings.Contains(got, want) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf(
+							"Expected event containing %q not found. Got events: %v",
+							want,
+							gotEvents,
+						)
+					}
+				}
 			}
 		})
 	}

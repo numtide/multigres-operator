@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -382,8 +383,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			}
 
 			reconciler := &TopoServerReconciler{
-				Client: fakeClient,
-				Scheme: scheme,
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
 			}
 
 			// Create the TopoServer resource if not in existing objects
@@ -445,8 +447,9 @@ func TestTopoServerReconciler_ReconcileNotFound(t *testing.T) {
 		Build()
 
 	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
 	}
 
 	// Reconcile non-existent resource
@@ -509,8 +512,9 @@ func TestTopoServerReconciler_UpdateStatus(t *testing.T) {
 			Build()
 
 		r := &TopoServerReconciler{
-			Client: fakeClient,
-			Scheme: scheme,
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
 		}
 
 		if err := r.updateStatus(t.Context(), toposerver); err != nil {

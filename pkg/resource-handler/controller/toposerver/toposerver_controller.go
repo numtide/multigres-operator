@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -25,7 +26,8 @@ const (
 // TopoServerReconciler reconciles a TopoServer object.
 type TopoServerReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile handles TopoServer resource reconciliation.
@@ -58,23 +60,27 @@ func (r *TopoServerReconciler) Reconcile(
 			logger.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Event(toposerver, "Normal", "Finalizer", "Added finalizer")
 	}
 
 	// Reconcile StatefulSet
 	if err := r.reconcileStatefulSet(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile StatefulSet")
+		r.Recorder.Eventf(toposerver, "Warning", "FailedApply", "Failed to reconcile StatefulSet: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile headless Service
 	if err := r.reconcileHeadlessService(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile headless Service")
+		r.Recorder.Eventf(toposerver, "Warning", "FailedApply", "Failed to reconcile headless Service: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile client Service
 	if err := r.reconcileClientService(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile client Service")
+		r.Recorder.Eventf(toposerver, "Warning", "FailedApply", "Failed to reconcile client Service: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -84,6 +90,7 @@ func (r *TopoServerReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	r.Recorder.Event(toposerver, "Normal", "Synced", "Successfully reconciled TopoServer")
 	return ctrl.Result{}, nil
 }
 
@@ -239,6 +246,7 @@ func (r *TopoServerReconciler) handleDeletion(
 			logger.Error(err, "Failed to remove finalizer")
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Event(toposerver, "Normal", "Deleted", "Object finalized and deleted")
 	}
 
 	return ctrl.Result{}, nil
