@@ -65,7 +65,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 	if err := r.reconcileGlobalComponents(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile global components")
-		r.Recorder.Eventf(cluster, "Warning", "FailedApply", "Failed to reconcile global components: %v", err)
+		r.Recorder.Eventf(
+			cluster,
+			"Warning",
+			"FailedApply",
+			"Failed to reconcile global components: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 
@@ -77,7 +83,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 	if err := r.reconcileDatabases(ctx, cluster, res); err != nil {
 		l.Error(err, "Failed to reconcile databases")
-		r.Recorder.Eventf(cluster, "Warning", "FailedApply", "Failed to reconcile databases: %v", err)
+		r.Recorder.Eventf(
+			cluster,
+			"Warning",
+			"FailedApply",
+			"Failed to reconcile databases: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 

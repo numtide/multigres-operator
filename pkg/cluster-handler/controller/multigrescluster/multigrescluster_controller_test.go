@@ -409,7 +409,10 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				},
 			},
 			// VERIFY EVENT: Ensure the event is emitted on success
-			expectedEvents: []string{"Normal Deleted Deleted orphaned TableGroup", "Normal Synced Successfully reconciled MultigresCluster"},
+			expectedEvents: []string{
+				"Normal Deleted Deleted orphaned TableGroup",
+				"Normal Synced Successfully reconciled MultigresCluster",
+			},
 			validate: func(t testing.TB, c client.Client) {
 				tg := &multigresv1alpha1.TableGroup{}
 				err := c.Get(

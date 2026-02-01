@@ -66,21 +66,39 @@ func (r *TopoServerReconciler) Reconcile(
 	// Reconcile StatefulSet
 	if err := r.reconcileStatefulSet(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile StatefulSet")
-		r.Recorder.Eventf(toposerver, "Warning", "FailedApply", "Failed to reconcile StatefulSet: %v", err)
+		r.Recorder.Eventf(
+			toposerver,
+			"Warning",
+			"FailedApply",
+			"Failed to reconcile StatefulSet: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile headless Service
 	if err := r.reconcileHeadlessService(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile headless Service")
-		r.Recorder.Eventf(toposerver, "Warning", "FailedApply", "Failed to reconcile headless Service: %v", err)
+		r.Recorder.Eventf(
+			toposerver,
+			"Warning",
+			"FailedApply",
+			"Failed to reconcile headless Service: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile client Service
 	if err := r.reconcileClientService(ctx, toposerver); err != nil {
 		logger.Error(err, "Failed to reconcile client Service")
-		r.Recorder.Eventf(toposerver, "Warning", "FailedApply", "Failed to reconcile client Service: %v", err)
+		r.Recorder.Eventf(
+			toposerver,
+			"Warning",
+			"FailedApply",
+			"Failed to reconcile client Service: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 

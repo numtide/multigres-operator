@@ -95,7 +95,10 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 		"Create: Shard Creation": {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
-			expectedEvents:  []string{"Normal Applied Applied Shard", "Normal Synced Successfully reconciled TableGroup"},
+			expectedEvents: []string{
+				"Normal Applied Applied Shard",
+				"Normal Synced Successfully reconciled TableGroup",
+			},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				// Expect hashed name: md5("test-cluster", "db1", "tg1", "shard-0") -> "0a..."
@@ -147,7 +150,10 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					},
 				},
 			},
-			expectedEvents: []string{"Normal Applied Applied Shard", "Normal Synced Successfully reconciled TableGroup"},
+			expectedEvents: []string{
+				"Normal Applied Applied Shard",
+				"Normal Synced Successfully reconciled TableGroup",
+			},
 			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
 				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
