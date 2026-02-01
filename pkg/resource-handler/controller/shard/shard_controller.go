@@ -10,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -26,7 +28,8 @@ const (
 // ShardReconciler reconciles a Shard object.
 type ShardReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // Reconcile handles Shard resource reconciliation.
@@ -59,17 +62,20 @@ func (r *ShardReconciler) Reconcile(
 			logger.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Event(shard, "Normal", "Finalizer", "Added finalizer")
 	}
 
 	// Reconcile pg_hba ConfigMap first (required by all pools before StatefulSets start)
 	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
 		logger.Error(err, "Failed to reconcile pg_hba ConfigMap")
+		r.Recorder.Eventf(shard, "Warning", "ConfigError", "Failed to generate pg_hba: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	multiOrchCells, err := getMultiOrchCells(shard)
 	if err != nil {
+		r.Recorder.Eventf(shard, "Warning", "ConfigError", "Failed to determine MultiOrch cells: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -79,12 +85,14 @@ func (r *ShardReconciler) Reconcile(
 		// Reconcile MultiOrch Deployment for this cell
 		if err := r.reconcileMultiOrchDeployment(ctx, shard, cellName); err != nil {
 			logger.Error(err, "Failed to reconcile MultiOrch Deployment", "cell", cellName)
+			r.Recorder.Eventf(shard, "Warning", "FailedApply", "Failed to supply MultiOrch Deployment for cell %s: %v", cellName, err)
 			return ctrl.Result{}, err
 		}
 
 		// Reconcile MultiOrch Service for this cell
 		if err := r.reconcileMultiOrchService(ctx, shard, cellName); err != nil {
 			logger.Error(err, "Failed to reconcile MultiOrch Service", "cell", cellName)
+			r.Recorder.Eventf(shard, "Warning", "FailedApply", "Failed to supply MultiOrch Service for cell %s: %v", cellName, err)
 			return ctrl.Result{}, err
 		}
 	}
@@ -93,6 +101,7 @@ func (r *ShardReconciler) Reconcile(
 	for poolName, pool := range shard.Spec.Pools {
 		if err := r.reconcilePool(ctx, shard, string(poolName), pool); err != nil {
 			logger.Error(err, "Failed to reconcile pool", "poolName", poolName)
+			r.Recorder.Eventf(shard, "Warning", "FailedApply", "Failed to reconcile pool %s: %v", poolName, err)
 			return ctrl.Result{}, err
 		}
 	}
@@ -103,6 +112,7 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled Shard")
 	return ctrl.Result{}, nil
 }
 
@@ -125,6 +135,7 @@ func (r *ShardReconciler) handleDeletion(
 			logger.Error(err, "Failed to remove finalizer")
 			return ctrl.Result{}, err
 		}
+		r.Recorder.Event(shard, "Normal", "Deleted", "Object finalized and deleted")
 	}
 
 	return ctrl.Result{}, nil

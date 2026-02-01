@@ -310,6 +310,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 
 	tests := map[string]reconcileTestCase{
 		"Create: Full Cluster Creation - Verify Images and Wiring": {
+			expectedEvents: []string{"Normal Synced Successfully reconciled MultigresCluster"},
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				// Verify Cell (Basic wiring check)
@@ -351,6 +352,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				}
 			},
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			expectedEvents:  []string{"Normal Synced Successfully reconciled MultigresCluster"},
 			wantErrMsg:      "",
 		},
 		"Error: Apply TableGroup Failed": {
@@ -361,7 +363,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					errSimulated,
 				),
 			},
-			wantErrMsg: "failed to apply tablegroup",
+			expectedEvents: []string{"Warning FailedApply Failed to reconcile databases"},
+			wantErrMsg:     "failed to apply tablegroup",
 		},
 		"Error: Delete Orphan TableGroup Failed": {
 			existingObjects: []client.Object{
@@ -390,7 +393,9 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					errSimulated,
 				),
 			},
-			wantErrMsg: "failed to delete orphaned tablegroup",
+			// Note: This failure happens inside reconcileDatabases -> pruneTableGroups
+			expectedEvents: []string{"Warning FailedApply Failed to reconcile databases"},
+			wantErrMsg:     "failed to delete orphaned tablegroup",
 		},
 		"Success: Prune Orphan TableGroup": {
 			existingObjects: []client.Object{
@@ -404,7 +409,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				},
 			},
 			// VERIFY EVENT: Ensure the event is emitted on success
-			expectedEvents: []string{"Normal Deleted Deleted orphaned TableGroup"},
+			expectedEvents: []string{"Normal Deleted Deleted orphaned TableGroup", "Normal Synced Successfully reconciled MultigresCluster"},
 			validate: func(t testing.TB, c client.Client) {
 				tg := &multigresv1alpha1.TableGroup{}
 				err := c.Get(
@@ -436,7 +441,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: testutil.FailOnObjectName(clusterName+"-global-topo", errSimulated),
 			},
-			wantErrMsg: "failed to apply global topo server",
+			expectedEvents: []string{"Warning FailedApply Failed to reconcile global components"},
+			wantErrMsg:     "failed to apply global topo server",
 		},
 		"Error: Reconcile Cells Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
@@ -446,7 +452,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					errSimulated,
 				),
 			},
-			wantErrMsg: "failed to apply cell",
+			expectedEvents: []string{"Warning FailedApply Failed to reconcile cells"},
+			wantErrMsg:     "failed to apply cell",
 		},
 		"Error: Reconcile Databases Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
@@ -456,14 +463,16 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					errSimulated,
 				),
 			},
-			wantErrMsg: "failed to apply tablegroup",
+			expectedEvents: []string{"Warning FailedApply Failed to reconcile databases"},
+			wantErrMsg:     "failed to apply tablegroup",
 		},
 		"Error: Update Status Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
 				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
 			},
-			wantErrMsg: "failed to update cluster status",
+			expectedEvents: []string{"Warning FailedApply Failed to update status"},
+			wantErrMsg:     "failed to update cluster status",
 		},
 		"Error: getGlobalTopoRef Failed (Cells)": {
 			// Note: With caching, we can't rely on counting Get calls.
@@ -473,7 +482,9 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnGet: testutil.FailOnKeyName("default-core", errSimulated),
 			},
-			wantErrMsg: "failed to resolve global topo",
+			// Global topo resolution fails early in reconcileGlobalComponents
+			expectedEvents: []string{"Warning FailedApply Failed to reconcile global components"},
+			wantErrMsg:     "failed to resolve global topo",
 		},
 		"Success: External Global Topo Resolution": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -485,6 +496,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				}
 			},
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			expectedEvents:  []string{"Normal Synced Successfully reconciled MultigresCluster"},
 			validate: func(t testing.TB, c client.Client) {
 				cell := &multigresv1alpha1.Cell{}
 				cellName := name.JoinWithConstraints(
@@ -518,8 +530,9 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					"test.finalizer",
 				} // Prevent immediate deletion by fake client
 			},
-			// Expect NO error and NO events (since it returns early)
-			wantErrMsg: "",
+			// Expect NO event (returns early)
+			expectedEvents: []string{},
+			wantErrMsg:     "",
 		},
 	}
 
