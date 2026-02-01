@@ -4,11 +4,12 @@ go 1.25.2
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/numtide/multigres-operator/api v0.0.0-20260130152921-ee5e4f7c3549
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260130152921-ee5e4f7c3549
-	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260130152921-ee5e4f7c3549
+	github.com/numtide/multigres-operator/api v0.0.0-20260201095720-46d1757a01be
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260201095720-46d1757a01be
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260201095720-46d1757a01be
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
+	k8s.io/client-go v0.34.3
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	sigs.k8s.io/controller-runtime v0.22.4
 )
@@ -67,7 +68,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/apiextensions-apiserver v0.34.3 // indirect
-	k8s.io/client-go v0.34.3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect

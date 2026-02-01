@@ -75,7 +75,13 @@ func (r *ShardReconciler) Reconcile(
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	multiOrchCells, err := getMultiOrchCells(shard)
 	if err != nil {
-		r.Recorder.Eventf(shard, "Warning", "ConfigError", "Failed to determine MultiOrch cells: %v", err)
+		r.Recorder.Eventf(
+			shard,
+			"Warning",
+			"ConfigError",
+			"Failed to determine MultiOrch cells: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 
@@ -85,14 +91,28 @@ func (r *ShardReconciler) Reconcile(
 		// Reconcile MultiOrch Deployment for this cell
 		if err := r.reconcileMultiOrchDeployment(ctx, shard, cellName); err != nil {
 			logger.Error(err, "Failed to reconcile MultiOrch Deployment", "cell", cellName)
-			r.Recorder.Eventf(shard, "Warning", "FailedApply", "Failed to supply MultiOrch Deployment for cell %s: %v", cellName, err)
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"FailedApply",
+				"Failed to supply MultiOrch Deployment for cell %s: %v",
+				cellName,
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 
 		// Reconcile MultiOrch Service for this cell
 		if err := r.reconcileMultiOrchService(ctx, shard, cellName); err != nil {
 			logger.Error(err, "Failed to reconcile MultiOrch Service", "cell", cellName)
-			r.Recorder.Eventf(shard, "Warning", "FailedApply", "Failed to supply MultiOrch Service for cell %s: %v", cellName, err)
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"FailedApply",
+				"Failed to supply MultiOrch Service for cell %s: %v",
+				cellName,
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 	}
@@ -101,7 +121,14 @@ func (r *ShardReconciler) Reconcile(
 	for poolName, pool := range shard.Spec.Pools {
 		if err := r.reconcilePool(ctx, shard, string(poolName), pool); err != nil {
 			logger.Error(err, "Failed to reconcile pool", "poolName", poolName)
-			r.Recorder.Eventf(shard, "Warning", "FailedApply", "Failed to reconcile pool %s: %v", poolName, err)
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile pool %s: %v",
+				poolName,
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 	}

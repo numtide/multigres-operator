@@ -64,14 +64,26 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	// Reconcile MultiGateway Deployment
 	if err := r.reconcileMultiGatewayDeployment(ctx, cell); err != nil {
 		logger.Error(err, "Failed to reconcile MultiGateway Deployment")
-		r.Recorder.Eventf(cell, "Warning", "FailedApply", "Failed to sync Gateway Deployment: %v", err)
+		r.Recorder.Eventf(
+			cell,
+			"Warning",
+			"FailedApply",
+			"Failed to sync Gateway Deployment: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile MultiGateway Service
 	if err := r.reconcileMultiGatewayService(ctx, cell); err != nil {
 		logger.Error(err, "Failed to reconcile MultiGateway Service")
-		r.Recorder.Eventf(cell, "Warning", "FailedApply", "Failed to reconcile MultiGateway Service: %v", err)
+		r.Recorder.Eventf(
+			cell,
+			"Warning",
+			"FailedApply",
+			"Failed to reconcile MultiGateway Service: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 
