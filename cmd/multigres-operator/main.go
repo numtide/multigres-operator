@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"os"
 	"path/filepath"
@@ -93,12 +94,20 @@ func main() {
 
 	defaultNS := os.Getenv("POD_NAMESPACE")
 	if defaultNS == "" {
-		defaultNS = "multigres-system"
+		setupLog.Error(
+			errors.New("POD_NAMESPACE environment variable must be set"),
+			"invalid configuration",
+		)
+		os.Exit(1)
 	}
 
 	defaultSA := os.Getenv("POD_SERVICE_ACCOUNT")
 	if defaultSA == "" {
-		defaultSA = "multigres-operator-controller-manager"
+		setupLog.Error(
+			errors.New("POD_SERVICE_ACCOUNT environment variable must be set"),
+			"invalid configuration",
+		)
+		os.Exit(1)
 	}
 
 	// General Flags
