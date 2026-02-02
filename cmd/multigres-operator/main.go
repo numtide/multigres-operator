@@ -27,10 +27,15 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -41,11 +46,11 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
 	tablegroupcontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
+	"github.com/numtide/multigres-operator/pkg/resolver"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
 	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
-
-	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	multigreswebhook "github.com/numtide/multigres-operator/pkg/webhook"
 	cert "github.com/numtide/multigres-operator/pkg/webhook/cert"
 )
@@ -213,6 +218,47 @@ func main() {
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// Cache Configuration (The "Hybrid" Strategy)
+	// -------------------------------------------------------------------------
+	// We implement a Split-Brain Caching strategy to balance Scalability vs. Usability.
+	//
+	// 1. GLOBAL FILTER ("The Noise Cancelling"):
+	//    For high-volume resources (Secrets, Services, StatefulSets), we strictly
+	//    filter the cache to ONLY store objects managed by this operator.
+	//    This prevents the "Memory Bomb" where the operator caches 5,000+ Helm
+	//    secrets from other tenants, leading to OOMs.
+	//
+	// 2. LOCAL EXCEPTION ("The Safe Zone"):
+	//    For the Operator's own namespace (defaultNS), we cache EVERYTHING.
+	//    This is critical for:
+	//    - Cert-Manager Secrets (which are created by another controller and lack our label).
+	//    - Leader Election Leases.
+	//    - The Operator's own Deployment (managed by Kustomize).
+	//
+	// 3. UNFILTERED RESOURCES ("The Flexibility"):
+	//    We do NOT filter ConfigMaps. Users frequently provide their own unlabeled
+	//    ConfigMaps for Postgres configuration (postgresql.conf). The operator needs
+	//    to read and hash these to trigger rolling updates. Since ConfigMaps are
+	//    generally lower volume than Secrets, the trade-off favors Usability here.
+	// -------------------------------------------------------------------------
+
+	// 1. Create the Label Selector for "app.kubernetes.io/managed-by = multigres-operator"
+	labelReq, _ := labels.NewRequirement(
+		metadata.LabelAppManagedBy,
+		selection.Equals,
+		[]string{metadata.ManagedByMultigres},
+	)
+	selector := labels.NewSelector().Add(*labelReq)
+
+	// 2. Define Cache Configs
+	// Global Config: Strictly filter by label to prevent OOM
+	filteredConfig := cache.Config{
+		LabelSelector: selector,
+	}
+	// Local Config: Cache everything (for Cert-Manager / Leader Election)
+	unfilteredConfig := cache.Config{}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -221,6 +267,43 @@ func main() {
 		LeaderElectionID:       "multigres-operator.multigres.com",
 		// RELEASE LEADER ON CANCEL: Enables faster failover during rolling upgrades
 		LeaderElectionReleaseOnCancel: true,
+
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				// -----------------------------------------------------------
+				// SECRETS: The "Memory Bomb" Fix
+				// -----------------------------------------------------------
+				&corev1.Secret{}: {
+					Namespaces: map[string]cache.Config{
+						// Rule 1: In the Operator's Namespace, watch EVERYTHING (Cert-Manager, etc.)
+						defaultNS: unfilteredConfig,
+						// Rule 2: In ALL OTHER namespaces, ONLY watch labeled secrets
+						cache.AllNamespaces: filteredConfig,
+					},
+				},
+				// -----------------------------------------------------------
+				// STATEFULSETS & SERVICES: High Volume Resources
+				// -----------------------------------------------------------
+				&appsv1.StatefulSet{}: {
+					Namespaces: map[string]cache.Config{
+						defaultNS:           unfilteredConfig,
+						cache.AllNamespaces: filteredConfig,
+					},
+				},
+				&corev1.Service{}: {
+					Namespaces: map[string]cache.Config{
+						defaultNS:           unfilteredConfig,
+						cache.AllNamespaces: filteredConfig,
+					},
+				},
+				// -----------------------------------------------------------
+				// CONFIGMAPS: Left Unfiltered
+				// -----------------------------------------------------------
+				// We deliberately do NOT list ConfigMaps here. They fall back to
+				// global defaults (Unfiltered in All Namespaces). This allows
+				// the operator to read/hash user-provided ConfigMaps without labels.
+			},
+		},
 		WebhookServer: ctrlwebhook.NewServer(ctrlwebhook.Options{
 			Port:    9443,
 			CertDir: webhookCertDir,
