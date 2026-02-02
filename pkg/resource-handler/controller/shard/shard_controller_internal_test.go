@@ -337,38 +337,6 @@ func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
 	}
 }
 
-// TestHandleDeletion_NoFinalizer tests early return when no finalizer is present.
-func TestHandleDeletion_NoFinalizer(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-shard",
-			Namespace:  "default",
-			Finalizers: []string{}, // No finalizer
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(shard).
-		Build()
-
-	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	result, err := reconciler.handleDeletion(context.Background(), shard)
-	if err != nil {
-		t.Errorf("handleDeletion() should not error when no finalizer, got: %v", err)
-	}
-	if result.RequeueAfter > 0 {
-		t.Error("handleDeletion() should not requeue when no finalizer")
-	}
-}
-
 // TestReconcile_PatchError tests error path on Patch operations.
 func TestReconcile_PatchError(t *testing.T) {
 	tests := map[string]struct {

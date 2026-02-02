@@ -2,7 +2,6 @@ package shard
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 
@@ -102,15 +101,6 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					types.NamespacedName{Name: hashedHeadless, Namespace: "default"},
 					poolSvc); err != nil {
 					t.Errorf("Pool headless Service should exist: %v", err)
-				}
-
-				// Verify finalizer was added
-				updatedShard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-shard", Namespace: "default"}, updatedShard); err != nil {
-					t.Fatalf("Failed to get Shard: %v", err)
-				}
-				if !slices.Contains(updatedShard.Finalizers, "shard.multigres.com/finalizer") {
-					t.Errorf("Finalizer should be added")
 				}
 			},
 		},
@@ -361,9 +351,8 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 		"update existing resources": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "existing-shard",
-					Namespace:  "default",
-					Finalizers: []string{"shard.multigres.com/finalizer"},
+					Name:      "existing-shard",
+					Namespace: "default",
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -455,13 +444,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		"deletion with finalizer": {
+
+		"deletion - early exit": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-shard-deletion",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{"shard.multigres.com/finalizer"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -471,8 +460,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					},
 					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
 							},
@@ -486,16 +476,19 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						Name:              "test-shard-deletion",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{"shard.multigres.com/finalizer"},
+						Finalizers:        []string{"testing"},
 					},
 					Spec: multigresv1alpha1.ShardSpec{
+						DatabaseName:   "testdb",
+						TableGroupName: "default",
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							Cells: []multigresv1alpha1.CellName{"zone1"},
 						},
 						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 							"primary": {
-								Cells: []multigresv1alpha1.CellName{"zone1"},
-								Type:  "replica",
+								Cells:           []multigresv1alpha1.CellName{"zone1"},
+								Type:            "replica",
+								ReplicasPerCell: ptr.To(int32(1)),
 								Storage: multigresv1alpha1.StorageSpec{
 									Size: "10Gi",
 								},
@@ -505,15 +498,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				updatedShard := &multigresv1alpha1.Shard{}
-				err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-shard-deletion", Namespace: "default"},
-					updatedShard)
-				if err == nil {
-					t.Errorf(
-						"Shard object should be deleted but still exists (finalizers: %v)",
-						updatedShard.Finalizers,
-					)
+				// Verify MultiOrch Deployment was NOT created
+				moDeploy := &appsv1.Deployment{}
+				hashedMoName := buildHashedMultiOrchName(shard, "zone1")
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: hashedMoName, Namespace: "default"},
+					moDeploy); err == nil {
+					t.Errorf("MultiOrch Deployment should NOT exist")
 				}
 			},
 		},
@@ -710,89 +701,6 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 
-		"error on finalizer Update": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-shard", testutil.ErrInjected),
-			},
-			wantErr: true,
-		},
-		"deletion error on finalizer removal": {
-			shard: &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-shard-del",
-					Namespace:         "default",
-					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{"shard.multigres.com/finalizer"},
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
-					TableGroupName: "default",
-					MultiOrch: multigresv1alpha1.MultiOrchSpec{
-						Cells: []multigresv1alpha1.CellName{"zone1"},
-					},
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"primary": {
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-							Type:  "replica",
-							Storage: multigresv1alpha1.StorageSpec{
-								Size: "10Gi",
-							},
-						},
-					},
-				},
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.Shard{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              "test-shard-del",
-						Namespace:         "default",
-						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{"shard.multigres.com/finalizer"},
-					},
-					Spec: multigresv1alpha1.ShardSpec{
-						MultiOrch: multigresv1alpha1.MultiOrchSpec{
-							Cells: []multigresv1alpha1.CellName{"zone1"},
-						},
-						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-							"primary": {
-								Cells: []multigresv1alpha1.CellName{"zone1"},
-								Type:  "replica",
-								Storage: multigresv1alpha1.StorageSpec{
-									Size: "10Gi",
-								},
-							},
-						},
-					},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-shard-del", testutil.ErrInjected),
-			},
-			wantErr: true,
-		},
 		"error on Get Shard (network error)": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
