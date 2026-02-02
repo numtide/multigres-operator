@@ -4,14 +4,17 @@
 package shard_test
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1162,5 +1165,131 @@ func multipoolerPorts(t testing.TB) []corev1.ContainerPort {
 		tcpPort(t, "http", 15200),
 		tcpPort(t, "grpc", 15270),
 		tcpPort(t, "postgres", 5432),
+	}
+}
+
+func TestReconcileDeletions(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	mgr := testutil.SetUpEnvtestManager(t, scheme,
+		testutil.WithCRDPaths(
+			filepath.Join("../../../../", "config", "crd", "bases"),
+		),
+	)
+
+	// Setup controller with manager
+	if err := (&shardcontroller.ShardReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, controller.Options{
+		SkipNameValidation: ptr.To(true),
+	}); err != nil {
+		t.Fatalf("Failed to create controller, %v", err)
+	}
+
+	ctx := t.Context()
+	k8sClient := mgr.GetClient()
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard-deletion-reconcile",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			ShardName:      "0",
+			MultiOrch: multigresv1alpha1.MultiOrchSpec{
+				Cells: []multigresv1alpha1.CellName{"zone1"},
+			},
+			Images: multigresv1alpha1.ShardImages{
+				MultiOrch:   "ghcr.io/multigres/multigres:main",
+				MultiPooler: "ghcr.io/multigres/multigres:main",
+				Postgres:    "postgres:17",
+			},
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        "global-topo:2379",
+				RootPath:       "/multigres/global",
+				Implementation: "etcd2",
+			},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {
+					Cells:           []multigresv1alpha1.CellName{"zone1"},
+					Type:            "readWrite",
+					ReplicasPerCell: ptr.To(int32(1)),
+					Storage: multigresv1alpha1.StorageSpec{
+						Size: "10Gi",
+					},
+				},
+			},
+		},
+	}
+
+	if err := k8sClient.Create(ctx, shard); err != nil {
+		t.Fatalf("Failed to create Shard: %v", err)
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pg-hba-template",
+			Namespace: "default",
+		},
+	}
+
+	// 1. Wait for ConfigMap to be created initially
+	// We use polling to avoid strict content matching on Data
+	pollFound := false
+	for i := 0; i < 20; i++ {
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: "pg-hba-template", Namespace: "default"}, cm)
+		if err == nil {
+			pollFound = true
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !pollFound {
+		t.Fatalf("ConfigMap not initially created")
+	}
+
+	// 2. Delete ConfigMap
+	// We need to fetch it first to get UID/ResourceVersion for proper deletion if needed,
+	// strictly speaking not needed for k8s deletion by name if we construct it,
+	// but better to be safe with client usage.
+	if err := k8sClient.Delete(ctx, cm); err != nil {
+		t.Fatalf("Failed to delete ConfigMap: %v", err)
+	}
+
+	// 3. Wait for ConfigMap to be recreated
+	// Since the controller watches ConfigMaps, the deletion event should trigger Reconcile.
+	// Reconcile should recreate it.
+	timeout := 10 * time.Second
+	interval := 500 * time.Millisecond
+	ctxWait, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	found := false
+	for {
+		select {
+		case <-ctxWait.Done():
+			t.Fatalf("Timed out waiting for ConfigMap to be recreated")
+		default:
+		}
+
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: "pg-hba-template", Namespace: "default"}, cm)
+		if err == nil {
+			found = true
+			break
+		}
+		time.Sleep(interval)
+	}
+
+	if !found {
+		t.Fatalf("ConfigMap was not recreated")
 	}
 }
