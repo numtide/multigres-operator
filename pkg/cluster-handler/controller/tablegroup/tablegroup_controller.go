@@ -167,9 +167,7 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to list shards for status: %w", err)
 	}
 
-	var (
-		anyDegraded bool
-	)
+	var anyDegraded bool
 
 	for _, s := range existingShards.Items {
 		switch s.Status.Phase {

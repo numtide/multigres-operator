@@ -348,8 +348,8 @@ func TestAddExtraLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-tt.addFunc(tt.initial)
-if diff := cmp.Diff(tt.expected, tt.initial); diff != "" {
+			tt.addFunc(tt.initial)
+			if diff := cmp.Diff(tt.expected, tt.initial); diff != "" {
 				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
 			}
 		})

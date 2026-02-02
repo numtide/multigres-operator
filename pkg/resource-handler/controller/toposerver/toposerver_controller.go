@@ -214,7 +214,11 @@ func (r *TopoServerReconciler) updateStatus(
 	// Update Phase
 	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
 	if toposerver.Status.Phase != multigresv1alpha1.PhaseHealthy {
-		toposerver.Status.Message = fmt.Sprintf("%d/%d replicas ready", sts.Status.ReadyReplicas, sts.Status.Replicas)
+		toposerver.Status.Message = fmt.Sprintf(
+			"%d/%d replicas ready",
+			sts.Status.ReadyReplicas,
+			sts.Status.Replicas,
+		)
 	} else {
 		toposerver.Status.Message = "Ready"
 	}

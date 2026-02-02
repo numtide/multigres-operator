@@ -198,7 +198,11 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	// Update Phase
 	cell.Status.Phase = status.ComputePhase(mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
 	if cell.Status.Phase != multigresv1alpha1.PhaseHealthy {
-		cell.Status.Message = fmt.Sprintf("Gateway: %d/%d replicas ready", mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
+		cell.Status.Message = fmt.Sprintf(
+			"Gateway: %d/%d replicas ready",
+			mgDeploy.Status.ReadyReplicas,
+			mgDeploy.Status.Replicas,
+		)
 	} else {
 		cell.Status.Message = "Ready"
 	}

@@ -393,7 +393,9 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					"shard-0",
 				)
 				shard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: shardName, Namespace: namespace}, shard); !apierrors.IsNotFound(err) {
+				if err := c.Get(t.Context(), types.NamespacedName{Name: shardName, Namespace: namespace}, shard); !apierrors.IsNotFound(
+					err,
+				) {
 					t.Errorf("Expected Shard %s to be deleted", shardName)
 				}
 			},

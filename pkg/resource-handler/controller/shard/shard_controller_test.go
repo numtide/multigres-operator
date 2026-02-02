@@ -1136,7 +1136,12 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			// Check headers
 			for _, obj := range tc.existingObjects {
 				if sts, ok := obj.(*appsv1.StatefulSet); ok {
-					t.Logf("PRERECONCILE STS: %s, Status.Replicas: %d, Status.ReadyReplicas: %d", sts.Name, sts.Status.Replicas, sts.Status.ReadyReplicas)
+					t.Logf(
+						"PRERECONCILE STS: %s, Status.Replicas: %d, Status.ReadyReplicas: %d",
+						sts.Name,
+						sts.Status.Replicas,
+						sts.Status.ReadyReplicas,
+					)
 				}
 			}
 
@@ -1307,7 +1312,11 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			t.Error("PoolsReady should be true when all pools are ready")
 		}
 		if updatedShard.Status.Phase != multigresv1alpha1.PhaseHealthy {
-			t.Errorf("Expected Phase to be %s, got %s", multigresv1alpha1.PhaseHealthy, updatedShard.Status.Phase)
+			t.Errorf(
+				"Expected Phase to be %s, got %s",
+				multigresv1alpha1.PhaseHealthy,
+				updatedShard.Status.Phase,
+			)
 		}
 	})
 
