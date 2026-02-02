@@ -382,7 +382,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName("test-cell", testutil.ErrInjected),
+				OnStatusPatch: testutil.FailOnObjectName("test-cell", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},

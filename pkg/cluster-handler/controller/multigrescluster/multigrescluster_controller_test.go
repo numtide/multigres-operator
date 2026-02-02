@@ -3,6 +3,7 @@ package multigrescluster
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -473,10 +474,19 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 		"Error: Update Status Failed": {
 			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
+				OnStatusPatch: func(obj client.Object) error {
+					if obj.GetName() != clusterName {
+						return fmt.Errorf(
+							"OnStatusPatch called for wrong object: '%s' (wanted '%s')",
+							obj.GetName(),
+							clusterName,
+						)
+					}
+					return errSimulated
+				},
 			},
 			expectedEvents: []string{"Warning FailedApply Failed to update status"},
-			wantErrMsg:     "failed to update cluster status",
+			wantErrMsg:     "failed to patch status",
 		},
 		"Error: getGlobalTopoRef Failed (Cells)": {
 			// Note: With caching, we can't rely on counting Get calls.

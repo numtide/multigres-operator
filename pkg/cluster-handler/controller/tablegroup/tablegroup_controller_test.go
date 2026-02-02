@@ -615,9 +615,9 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			tableGroup:      baseTG.DeepCopy(),
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName(tgName, errSimulated),
+				OnStatusPatch: testutil.FailOnObjectName(tgName, errSimulated),
 			},
-			expectedEvents: []string{"Warning StatusError Failed to update status"},
+			expectedEvents: []string{"Warning StatusError Failed to patch status"},
 		},
 	}
 
@@ -641,7 +641,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 				WithStatusSubresource(&multigresv1alpha1.TableGroup{}, &multigresv1alpha1.Shard{})
 			baseClient := clientBuilder.Build()
 
-			// For OnStatusUpdate failures, we need to make sure the object exists
+			// For OnStatusPatch failures, we need to make sure the object exists
 			// and that we are targeting the right call. The fake client intercepts calls.
 			finalClient := client.Client(baseClient)
 			if tc.failureConfig != nil {

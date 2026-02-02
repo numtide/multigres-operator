@@ -128,8 +128,28 @@ func (r *MultigresClusterReconciler) updateStatus(
 		LastTransitionTime: metav1.Now(),
 	})
 
-	if err := r.Status().Update(ctx, cluster); err != nil {
-		return fmt.Errorf("failed to update cluster status: %w", err)
+	// 1. Construct the Patch Object
+	patchObj := &multigresv1alpha1.MultigresCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+			Kind:       "MultigresCluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		Status: cluster.Status,
+	}
+
+	// 2. Apply the Patch
+	if err := r.Status().Patch(
+		ctx,
+		patchObj,
+		client.Apply,
+		client.FieldOwner("multigres-operator"),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("failed to patch status: %w", err)
 	}
 
 	return nil

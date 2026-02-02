@@ -213,11 +213,31 @@ func (r *TableGroupReconciler) Reconcile(
 		LastTransitionTime: metav1.Now(),
 	})
 
-	if err := r.Status().Update(ctx, tg); err != nil {
+	// 1. Construct the Patch Object
+	patchObj := &multigresv1alpha1.TableGroup{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+			Kind:       "TableGroup",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tg.Name,
+			Namespace: tg.Namespace,
+		},
+		Status: tg.Status,
+	}
+
+	// 2. Apply the Patch
+	if err := r.Status().Patch(
+		ctx,
+		patchObj,
+		client.Apply,
+		client.FieldOwner("multigres-operator"),
+		client.ForceOwnership,
+	); err != nil {
 		if r.Recorder != nil {
-			r.Recorder.Eventf(tg, "Warning", "StatusError", "Failed to update status: %v", err)
+			r.Recorder.Eventf(tg, "Warning", "StatusError", "Failed to patch status: %v", err)
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to patch status: %w", err)
 	}
 
 	if r.Recorder != nil {
