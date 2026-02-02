@@ -3,7 +3,6 @@ package toposerver
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,10 +17,6 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/status"
-)
-
-const (
-	finalizerName = "toposerver.multigres.com/finalizer"
 )
 
 // TopoServerReconciler reconciles a TopoServer object.
@@ -49,19 +44,9 @@ func (r *TopoServerReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
+	// If being deleted, let Kubernetes GC handle cleanup
 	if !toposerver.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, toposerver)
-	}
-
-	// Add finalizer if not present
-	if !slices.Contains(toposerver.Finalizers, finalizerName) {
-		toposerver.Finalizers = append(toposerver.Finalizers, finalizerName)
-		if err := r.Update(ctx, toposerver); err != nil {
-			logger.Error(err, "Failed to add finalizer")
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Event(toposerver, "Normal", "Finalizer", "Added finalizer")
+		return ctrl.Result{}, nil
 	}
 
 	// Reconcile StatefulSet
@@ -276,31 +261,6 @@ func (r *TopoServerReconciler) buildConditions(
 
 	conditions = append(conditions, readyCondition)
 	return conditions
-}
-
-// handleDeletion handles cleanup when TopoServer is being deleted.
-func (r *TopoServerReconciler) handleDeletion(
-	ctx context.Context,
-	toposerver *multigresv1alpha1.TopoServer,
-) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	if slices.Contains(toposerver.Finalizers, finalizerName) {
-		// Perform cleanup if needed
-		// Currently no special cleanup required - owner references handle resource deletion
-
-		// Remove finalizer
-		toposerver.Finalizers = slices.DeleteFunc(toposerver.Finalizers, func(s string) bool {
-			return s == finalizerName
-		})
-		if err := r.Update(ctx, toposerver); err != nil {
-			logger.Error(err, "Failed to remove finalizer")
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Event(toposerver, "Normal", "Deleted", "Object finalized and deleted")
-	}
-
-	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

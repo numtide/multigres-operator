@@ -1,7 +1,6 @@
 package toposerver
 
 import (
-	"slices"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -82,26 +81,15 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						int32(3),
 					)
 				}
-
-				updatedTopoServer := &multigresv1alpha1.TopoServer{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: "test-toposerver", Namespace: "default"}, updatedTopoServer); err != nil {
-					t.Fatalf("Failed to get TopoServer: %v", err)
-				}
-				if !slices.Contains(
-					updatedTopoServer.Finalizers,
-					"toposerver.multigres.com/finalizer",
-				) {
-					t.Errorf("Finalizer should be added")
-				}
 			},
 		},
 		"update existing resources": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "existing-toposerver",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
+					Name:      "existing-toposerver",
+					Namespace: "default",
+
+					Labels: map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{
@@ -159,14 +147,13 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
-		"deletion with finalizer": {
+
+		"deletion - early exit": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-toposerver-deletion",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
-					Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -176,24 +163,18 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Name:              "test-toposerver-deletion",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
-						Labels: map[string]string{
-							"multigres.com/cluster": "test-cluster",
-						},
+						Finalizers:        []string{"testing"},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
-				updatedTopoServer := &multigresv1alpha1.TopoServer{}
-				err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-toposerver-deletion", Namespace: "default"},
-					updatedTopoServer)
-				if err == nil {
-					t.Errorf(
-						"TopoServer object should be deleted but still exists (finalizers: %v)",
-						updatedTopoServer.Finalizers,
-					)
+				// Verify resources were NOT created
+				sts := &appsv1.StatefulSet{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-toposerver", Namespace: "default"},
+					sts); err == nil {
+					t.Errorf("StatefulSet should NOT exist")
 				}
 			},
 		},
@@ -219,10 +200,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 		"error on Get StatefulSet in updateStatus (network error)": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-toposerver-status",
-					Namespace:  "default",
-					Finalizers: []string{"toposerver.multigres.com/finalizer"},
-					Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
+					Name:      "test-toposerver-status",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
@@ -302,51 +282,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"error on finalizer Update": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-toposerver",
-					Namespace: "default",
-					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
-			},
-			existingObjects: []client.Object{},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-toposerver", testutil.ErrInjected),
-			},
-			wantErr: true,
-		},
-		"deletion error on finalizer removal": {
-			toposerver: &multigresv1alpha1.TopoServer{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-toposerver-del",
-					Namespace:         "default",
-					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-					Finalizers:        []string{"toposerver.multigres.com/finalizer"},
-					Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
-				},
-				Spec: multigresv1alpha1.TopoServerSpec{},
-			},
-			existingObjects: []client.Object{
-				&multigresv1alpha1.TopoServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              "test-toposerver-del",
-						Namespace:         "default",
-						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{"toposerver.multigres.com/finalizer"},
-						Labels: map[string]string{
-							"multigres.com/cluster": "test-cluster",
-						},
-					},
-					Spec: multigresv1alpha1.TopoServerSpec{},
-				},
-			},
-			failureConfig: &testutil.FailureConfig{
-				OnUpdate: testutil.FailOnObjectName("test-toposerver-del", testutil.ErrInjected),
-			},
-			wantErr: true,
-		},
+
 		"error on Get TopoServer (network error)": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
@@ -478,10 +414,9 @@ func TestTopoServerReconciler_UpdateStatus(t *testing.T) {
 	t.Run("all_replicas_ready_status", func(t *testing.T) {
 		toposerver := &multigresv1alpha1.TopoServer{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       "test-toposerver-ready",
-				Namespace:  "default",
-				Finalizers: []string{"toposerver.multigres.com/finalizer"},
-				Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
+				Name:      "test-toposerver-ready",
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 			},
 			Spec: multigresv1alpha1.TopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{

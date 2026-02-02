@@ -3,7 +3,6 @@ package cell
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,10 +18,6 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/status"
-)
-
-const (
-	finalizerName = "cell.multigres.com/finalizer"
 )
 
 // CellReconciler reconciles a Cell object.
@@ -47,19 +42,9 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
+	// If being deleted, let Kubernetes GC handle cleanup
 	if !cell.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, cell)
-	}
-
-	// Add finalizer if not present
-	if !slices.Contains(cell.Finalizers, finalizerName) {
-		cell.Finalizers = append(cell.Finalizers, finalizerName)
-		if err := r.Update(ctx, cell); err != nil {
-			logger.Error(err, "Failed to add finalizer")
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Event(cell, "Normal", "Finalizer", "Added finalizer")
+		return ctrl.Result{}, nil
 	}
 
 	// Reconcile MultiGateway Deployment
@@ -95,31 +80,6 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	r.Recorder.Event(cell, "Normal", "Synced", "Successfully reconciled Cell")
-	return ctrl.Result{}, nil
-}
-
-// handleDeletion handles cleanup when Cell is being deleted.
-func (r *CellReconciler) handleDeletion(
-	ctx context.Context,
-	cell *multigresv1alpha1.Cell,
-) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	if slices.Contains(cell.Finalizers, finalizerName) {
-		// Perform cleanup if needed
-		// Currently no special cleanup required - owner references handle resource deletion
-
-		// Remove finalizer
-		cell.Finalizers = slices.DeleteFunc(cell.Finalizers, func(s string) bool {
-			return s == finalizerName
-		})
-		if err := r.Update(ctx, cell); err != nil {
-			logger.Error(err, "Failed to remove finalizer")
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Event(cell, "Normal", "Deleted", "Object finalized and deleted")
-	}
-
 	return ctrl.Result{}, nil
 }
 

@@ -3,7 +3,6 @@ package shard
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,10 +18,6 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/name"
-)
-
-const (
-	finalizerName = "shard.multigres.com/finalizer"
 )
 
 // ShardReconciler reconciles a Shard object.
@@ -50,19 +45,9 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion
+	// If being deleted, let Kubernetes GC handle cleanup
 	if !shard.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, shard)
-	}
-
-	// Add finalizer if not present
-	if !slices.Contains(shard.Finalizers, finalizerName) {
-		shard.Finalizers = append(shard.Finalizers, finalizerName)
-		if err := r.Update(ctx, shard); err != nil {
-			logger.Error(err, "Failed to add finalizer")
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Event(shard, "Normal", "Finalizer", "Added finalizer")
+		return ctrl.Result{}, nil
 	}
 
 	// Reconcile pg_hba ConfigMap first (required by all pools before StatefulSets start)
@@ -140,31 +125,6 @@ func (r *ShardReconciler) Reconcile(
 	}
 
 	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled Shard")
-	return ctrl.Result{}, nil
-}
-
-// handleDeletion handles cleanup when Shard is being deleted.
-func (r *ShardReconciler) handleDeletion(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	if slices.Contains(shard.Finalizers, finalizerName) {
-		// Perform cleanup if needed
-		// Currently no special cleanup required - owner references handle resource deletion
-
-		// Remove finalizer
-		shard.Finalizers = slices.DeleteFunc(shard.Finalizers, func(s string) bool {
-			return s == finalizerName
-		})
-		if err := r.Update(ctx, shard); err != nil {
-			logger.Error(err, "Failed to remove finalizer")
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Event(shard, "Normal", "Deleted", "Object finalized and deleted")
-	}
-
 	return ctrl.Result{}, nil
 }
 

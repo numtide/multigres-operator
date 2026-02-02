@@ -8,8 +8,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
+	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -131,39 +136,6 @@ func TestUpdateStatus_StatefulSetNotFound(t *testing.T) {
 	}
 }
 
-// TestHandleDeletion_NoFinalizer tests early return when no finalizer is present.
-func TestHandleDeletion_NoFinalizer(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-
-	toposerver := &multigresv1alpha1.TopoServer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-toposerver",
-			Namespace:  "default",
-			Finalizers: []string{}, // No finalizer
-		},
-		Spec: multigresv1alpha1.TopoServerSpec{},
-	}
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(toposerver).
-		Build()
-
-	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	result, err := reconciler.handleDeletion(context.Background(), toposerver)
-	if err != nil {
-		t.Errorf("handleDeletion() should not error when no finalizer, got: %v", err)
-	}
-	if result.RequeueAfter > 0 {
-		t.Error("handleDeletion() should not requeue when no finalizer")
-	}
-}
-
 // TestReconcileClientService_PatchError tests error path on Patch client Service.
 func TestReconcileClientService_PatchError(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -238,4 +210,45 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	if err == nil {
 		t.Error("updateStatus() should error on Get failure")
 	}
+}
+
+// TestSetupWithManager tests the manager setup function.
+func TestSetupWithManager(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	// dummy config
+	cfg := &rest.Config{Host: "http://localhost:8080"}
+
+	createMgr := func() ctrl.Manager {
+		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+			Scheme:  scheme,
+			Metrics: metricsserver.Options{BindAddress: "0"},
+		})
+		if err != nil {
+			t.Fatalf("Failed to create manager: %v", err)
+		}
+		return mgr
+	}
+
+	t.Run("default options", func(t *testing.T) {
+		mgr := createMgr()
+		r := &TopoServerReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		if err := r.SetupWithManager(mgr); err != nil {
+			t.Errorf("SetupWithManager() error = %v", err)
+		}
+	})
+
+	t.Run("with options", func(t *testing.T) {
+		mgr := createMgr()
+		r := &TopoServerReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		if err := r.SetupWithManager(mgr, controller.Options{
+			MaxConcurrentReconciles: 1,
+			SkipNameValidation:      ptr.To(true),
+		}); err != nil {
+			t.Errorf("SetupWithManager() with opts error = %v", err)
+		}
+	})
 }
