@@ -20,6 +20,9 @@ spec:
     - jsonPath: .status.readyShards
       name: Shards
       type: integer
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -2387,6 +2390,19 @@ spec:
                   - type
                   type: object
                 type: array
+              message:
+                description: Message provides details about the current phase.
+                type: string
+              phase:
+                description: Phase represents the aggregated lifecycle state of the
+                  table group.
+                enum:
+                - Initializing
+                - Progressing
+                - Healthy
+                - Degraded
+                - Unknown
+                type: string
               readyShards:
                 format: int32
                 type: integer

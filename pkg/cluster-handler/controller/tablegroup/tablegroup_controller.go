@@ -167,20 +167,41 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to list shards for status: %w", err)
 	}
 
+	var (
+		anyDegraded bool
+	)
+
 	for _, s := range existingShards.Items {
-		for _, cond := range s.Status.Conditions {
-			if cond.Type == "Available" && cond.Status == "True" {
-				ready++
-				break
-			}
+		switch s.Status.Phase {
+		case multigresv1alpha1.PhaseHealthy:
+			ready++
+		case multigresv1alpha1.PhaseDegraded:
+			anyDegraded = true
+		default: // Initializing, Progressing, Unknown
+			// consider progressing
 		}
 	}
 
 	tg.Status.TotalShards = total
 	tg.Status.ReadyShards = ready
 
+	switch {
+	case total == 0:
+		tg.Status.Phase = multigresv1alpha1.PhaseInitializing
+		tg.Status.Message = "No Shards"
+	case anyDegraded:
+		tg.Status.Phase = multigresv1alpha1.PhaseDegraded
+		tg.Status.Message = "At least one shard is degraded"
+	case ready == total:
+		tg.Status.Phase = multigresv1alpha1.PhaseHealthy
+		tg.Status.Message = "Ready"
+	default:
+		tg.Status.Phase = multigresv1alpha1.PhaseProgressing
+		tg.Status.Message = fmt.Sprintf("%d/%d shards ready", ready, total)
+	}
+
 	condStatus := metav1.ConditionFalse
-	if ready == total && total > 0 {
+	if tg.Status.Phase == multigresv1alpha1.PhaseHealthy {
 		condStatus = metav1.ConditionTrue
 	} else if total == 0 {
 		condStatus = metav1.ConditionTrue

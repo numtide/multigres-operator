@@ -306,3 +306,71 @@ func TestLabelOperations_ComplexScenarios(t *testing.T) {
 		})
 	}
 }
+
+func TestAddExtraLabels(t *testing.T) {
+	tests := []struct {
+		name     string
+		initial  map[string]string
+		addFunc  func(map[string]string)
+		expected map[string]string
+	}{
+		{
+			name:    "AddPoolLabel",
+			initial: map[string]string{},
+			addFunc: func(m map[string]string) {
+				metadata.AddPoolLabel(m, "pool-1")
+			},
+			expected: map[string]string{
+				"multigres.com/pool": "pool-1",
+			},
+		},
+		{
+			name:    "AddZoneLabel",
+			initial: map[string]string{},
+			addFunc: func(m map[string]string) {
+				metadata.AddZoneLabel(m, "zone-a")
+			},
+			expected: map[string]string{
+				"multigres.com/zone": "zone-a",
+			},
+		},
+		{
+			name:    "AddRegionLabel",
+			initial: map[string]string{},
+			addFunc: func(m map[string]string) {
+				metadata.AddRegionLabel(m, "region-1")
+			},
+			expected: map[string]string{
+				"multigres.com/region": "region-1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+tt.addFunc(tt.initial)
+if diff := cmp.Diff(tt.expected, tt.initial); diff != "" {
+				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetSelectorLabels(t *testing.T) {
+	labels := map[string]string{
+		"app.kubernetes.io/name":       "multigres",
+		"app.kubernetes.io/instance":   "inst-1",
+		"app.kubernetes.io/managed-by": "operator",
+		"app.kubernetes.io/part-of":    "multigres",
+		"other-label":                  "value",
+	}
+
+	want := map[string]string{
+		"app.kubernetes.io/instance": "inst-1",
+	}
+
+	got := metadata.GetSelectorLabels(labels)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("GetSelectorLabels() mismatch (-want +got):\n%s", diff)
+	}
+}

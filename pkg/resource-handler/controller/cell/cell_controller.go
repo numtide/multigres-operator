@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
 const (
@@ -193,6 +194,14 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	r.setConditions(cell, mgDeploy)
 	cell.Status.GatewayReplicas = mgDeploy.Status.Replicas
 	cell.Status.GatewayReadyReplicas = mgDeploy.Status.ReadyReplicas
+
+	// Update Phase
+	cell.Status.Phase = status.ComputePhase(mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
+	if cell.Status.Phase != multigresv1alpha1.PhaseHealthy {
+		cell.Status.Message = fmt.Sprintf("Gateway: %d/%d replicas ready", mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
+	} else {
+		cell.Status.Message = "Ready"
+	}
 
 	if err := r.Status().Update(ctx, cell); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)

@@ -398,6 +398,15 @@ func (r *ShardReconciler) updateStatus(
 	// Update aggregate status fields
 	shard.Status.PoolsReady = (totalPods > 0 && totalPods == readyPods)
 
+	// Update Phase
+	if shard.Status.PoolsReady && shard.Status.OrchReady {
+		shard.Status.Phase = multigresv1alpha1.PhaseHealthy
+		shard.Status.Message = "Ready"
+	} else {
+		shard.Status.Phase = multigresv1alpha1.PhaseProgressing
+		shard.Status.Message = fmt.Sprintf("PoolsReady: %v, OrchReady: %v", shard.Status.PoolsReady, shard.Status.OrchReady)
+	}
+
 	// Update conditions
 	shard.Status.Conditions = r.buildConditions(shard, totalPods, readyPods)
 

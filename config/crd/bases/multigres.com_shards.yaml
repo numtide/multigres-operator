@@ -20,6 +20,9 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Available')].status
       name: Ready
       type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -2365,9 +2368,22 @@ spec:
                   - type
                   type: object
                 type: array
+              message:
+                description: Message provides details about the current phase.
+                type: string
               orchReady:
                 description: OrchReady indicates if the MultiOrch component is ready.
                 type: boolean
+              phase:
+                description: Phase represents the aggregated lifecycle state of the
+                  shard.
+                enum:
+                - Initializing
+                - Progressing
+                - Healthy
+                - Degraded
+                - Unknown
+                type: string
               poolsReady:
                 description: PoolsReady indicates if all data pools are ready.
                 type: boolean

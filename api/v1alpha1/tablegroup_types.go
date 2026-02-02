@@ -89,6 +89,14 @@ type TableGroupStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// Phase represents the aggregated lifecycle state of the table group.
+	// +optional
+	Phase Phase `json:"phase,omitempty"`
+
+	// Message provides details about the current phase.
+	// +optional
+	Message string `json:"message,omitempty"`
+
 	ReadyShards int32 `json:"readyShards"`
 	TotalShards int32 `json:"totalShards"`
 }
@@ -103,6 +111,7 @@ type TableGroupStatus struct {
 
 // TableGroup is the Schema for the tablegroups API
 // +kubebuilder:resource:shortName=tbg
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 type TableGroup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
