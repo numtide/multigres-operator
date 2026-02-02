@@ -65,6 +65,48 @@ func (r *MultigresClusterReconciler) updateStatus(
 		}
 	}
 
+	// Calculate Cluster Phase
+	var (
+		anyDegraded bool
+		allHealthy  = true
+	)
+
+	for _, c := range cells.Items {
+		switch c.Status.Phase {
+		case multigresv1alpha1.PhaseDegraded:
+			anyDegraded = true
+			allHealthy = false
+		case multigresv1alpha1.PhaseHealthy:
+			// ok
+		default:
+			allHealthy = false
+		}
+	}
+
+	for _, tg := range tgs.Items {
+		switch tg.Status.Phase {
+		case multigresv1alpha1.PhaseDegraded:
+			anyDegraded = true
+			allHealthy = false
+		case multigresv1alpha1.PhaseHealthy:
+			// ok
+		default:
+			allHealthy = false
+		}
+	}
+
+	switch {
+	case anyDegraded:
+		cluster.Status.Phase = multigresv1alpha1.PhaseDegraded
+		cluster.Status.Message = "Cluster is degraded"
+	case allHealthy:
+		cluster.Status.Phase = multigresv1alpha1.PhaseHealthy
+		cluster.Status.Message = "Ready"
+	default:
+		cluster.Status.Phase = multigresv1alpha1.PhaseProgressing
+		cluster.Status.Message = "Cluster is progressing"
+	}
+
 	allCellsReady := true
 	for _, c := range cluster.Status.Cells {
 		if !c.Ready {

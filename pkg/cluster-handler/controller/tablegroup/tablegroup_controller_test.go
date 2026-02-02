@@ -140,6 +140,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					},
 					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
 					Status: multigresv1alpha1.ShardStatus{
+						Phase: multigresv1alpha1.PhaseHealthy,
 						Conditions: []metav1.Condition{
 							{
 								Type:               "Available",
@@ -232,6 +233,41 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
+		"Status: Degraded Shard": {
+			tableGroup: baseTG.DeepCopy(),
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+					Status: multigresv1alpha1.ShardStatus{
+						Phase: multigresv1alpha1.PhaseDegraded,
+					},
+				},
+			},
+			validate: func(t testing.TB, c client.Client) {
+				updatedTG := &multigresv1alpha1.TableGroup{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+					t.Fatalf("failed to get tablegroup: %v", err)
+				}
+				if got, want := updatedTG.Status.Phase, multigresv1alpha1.PhaseDegraded; got != want {
+					t.Errorf("Phase mismatch got %q, want %q", got, want)
+				}
+			},
+		},
 		"Status: Zero Shards (Vacuously True)": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
@@ -315,6 +351,50 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					err,
 				) {
 					t.Errorf("Expected Shard %s to NOT be created", shardNameFull)
+				}
+			},
+		},
+		"Success: Prune Orphan Shard": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				// Clear shards from spec
+				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+				},
+			},
+			expectedEvents: []string{
+				"Normal Deleted Deleted orphaned Shard",
+				"Normal Synced Successfully reconciled TableGroup",
+			},
+			validate: func(t testing.TB, c client.Client) {
+				shardName := name.JoinWithConstraints(
+					name.DefaultConstraints,
+					clusterName,
+					dbName,
+					tgLabelName,
+					"shard-0",
+				)
+				shard := &multigresv1alpha1.Shard{}
+				if err := c.Get(t.Context(), types.NamespacedName{Name: shardName, Namespace: namespace}, shard); !apierrors.IsNotFound(err) {
+					t.Errorf("Expected Shard %s to be deleted", shardName)
 				}
 			},
 		},

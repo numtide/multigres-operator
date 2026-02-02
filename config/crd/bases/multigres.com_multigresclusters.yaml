@@ -23,6 +23,9 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -9358,10 +9361,24 @@ spec:
                 description: Databases status summary.
                 maxProperties: 50
                 type: object
+              message:
+                description: Message provides details about the current phase (e.g.
+                  error messages).
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64
                 type: integer
+              phase:
+                description: Phase represents the aggregated lifecycle state of the
+                  cluster.
+                enum:
+                - Initializing
+                - Progressing
+                - Healthy
+                - Degraded
+                - Unknown
+                type: string
             type: object
         type: object
         x-kubernetes-validations:

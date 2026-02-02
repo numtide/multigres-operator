@@ -1133,6 +1133,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 			}
 
+			// Check headers
+			for _, obj := range tc.existingObjects {
+				if sts, ok := obj.(*appsv1.StatefulSet); ok {
+					t.Logf("PRERECONCILE STS: %s, Status.Replicas: %d, Status.ReadyReplicas: %d", sts.Name, sts.Status.Replicas, sts.Status.ReadyReplicas)
+				}
+			}
+
 			// Reconcile
 			req := ctrl.Request{
 				NamespacedName: types.NamespacedName{
@@ -1246,10 +1253,25 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			},
 		}
 
+		moName := buildHashedMultiOrchName(shard, "zone1")
+		mo := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      moName,
+				Namespace: "default",
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(1)),
+			},
+			Status: appsv1.DeploymentStatus{
+				Replicas:      1,
+				ReadyReplicas: 1,
+			},
+		}
+
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(shard, sts).
-			WithStatusSubresource(shard, sts).
+			WithObjects(shard, sts, mo).
+			WithStatusSubresource(shard, sts, mo).
 			Build()
 
 		r := &ShardReconciler{
@@ -1283,6 +1305,9 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		}
 		if !updatedShard.Status.PoolsReady {
 			t.Error("PoolsReady should be true when all pools are ready")
+		}
+		if updatedShard.Status.Phase != multigresv1alpha1.PhaseHealthy {
+			t.Errorf("Expected Phase to be %s, got %s", multigresv1alpha1.PhaseHealthy, updatedShard.Status.Phase)
 		}
 	})
 

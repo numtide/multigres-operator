@@ -311,6 +311,15 @@ type MultigresClusterStatus struct {
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Phase represents the aggregated lifecycle state of the cluster.
+	// +optional
+	Phase Phase `json:"phase,omitempty"`
+
+	// Message provides details about the current phase (e.g. error messages).
+	// +optional
+	Message string `json:"message,omitempty"`
+
 	// Cells status summary.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=50
@@ -345,6 +354,7 @@ type DatabaseStatusSummary struct {
 
 // MultigresCluster is the Schema for the multigresclusters API
 // +kubebuilder:resource:shortName=mgc
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:validation:XValidation:rule="self.metadata.name.size() <= 25",message="MultigresCluster name must be at most 25 characters"
 type MultigresCluster struct {
 	metav1.TypeMeta   `json:",inline"`

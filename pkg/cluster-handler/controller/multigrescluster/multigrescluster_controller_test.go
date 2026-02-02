@@ -1,6 +1,7 @@
 package multigrescluster
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -566,4 +567,68 @@ func TestSetupWithManager_Coverage(t *testing.T) {
 		reconciler := &MultigresClusterReconciler{}
 		_ = reconciler.SetupWithManager(nil, controller.Options{MaxConcurrentReconciles: 1})
 	})
+}
+
+func TestEnqueueRequestsFromTemplate(t *testing.T) {
+	scheme := setupScheme()
+
+	// Create clusters in same namespace
+	cluster1 := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-1", Namespace: "default"},
+	}
+	cluster2 := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-2", Namespace: "default"},
+	}
+	// Create cluster in diff namespace
+	clusterDiff := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-diff", Namespace: "other"},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster1, cluster2, clusterDiff).
+		Build()
+
+	r := &MultigresClusterReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+	}
+
+	// Trigger from a Template in "default"
+	tpl := &multigresv1alpha1.CoreTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "some-tpl", Namespace: "default"},
+	}
+
+	requests := r.enqueueRequestsFromTemplate(context.Background(), tpl)
+
+	// Should match cluster1 and cluster2
+	if len(requests) != 2 {
+		t.Errorf("Expected 2 requests, got %d", len(requests))
+	}
+
+	// Verify request content
+	names := make(map[string]bool)
+	for _, req := range requests {
+		if req.Namespace != "default" {
+			t.Errorf("Expected namespace default, got %s", req.Namespace)
+		}
+		names[req.Name] = true
+	}
+
+	if !names["cluster-1"] || !names["cluster-2"] {
+		t.Errorf("Expected cluster-1 and cluster-2, got %v", names)
+	}
+
+	// Test error case (List fails)
+	// We can't easily make fake client fail List inside enqueueRequestsFromTemplate without
+	// replacing the client with a failure-injecting one.
+	failureConfig := &testutil.FailureConfig{
+		OnList: testutil.FailObjListAfterNCalls(0, errors.New("list error")),
+	}
+	r.Client = testutil.NewFakeClientWithFailures(fakeClient, failureConfig)
+
+	requests = r.enqueueRequestsFromTemplate(context.Background(), tpl)
+	if len(requests) != 0 {
+		t.Errorf("Expected 0 requests on list error, got %d", len(requests))
+	}
 }

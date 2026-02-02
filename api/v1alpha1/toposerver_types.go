@@ -64,6 +64,14 @@ type TopoServerStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// Phase represents the aggregated lifecycle state of the toposerver.
+	// +optional
+	Phase Phase `json:"phase,omitempty"`
+
+	// Message provides details about the current phase.
+	// +optional
+	Message string `json:"message,omitempty"`
+
 	// ClientService is the name of the service for clients.
 	// +optional
 	ClientService string `json:"clientService,omitempty"`
@@ -190,6 +198,7 @@ type GlobalTopoServerRef struct {
 
 // TopoServer is the Schema for the toposervers API
 // +kubebuilder:resource:shortName=tps
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 type TopoServer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

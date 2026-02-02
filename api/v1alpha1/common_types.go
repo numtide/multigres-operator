@@ -125,3 +125,14 @@ type ImageRef string
 
 // +kubebuilder:validation:Enum=readWrite;readOnly
 type PoolType string
+
+// +kubebuilder:validation:Enum=Initializing;Progressing;Healthy;Degraded;Unknown
+type Phase string
+
+const (
+	PhaseInitializing Phase = "Initializing" // Resource is being created
+	PhaseProgressing  Phase = "Progressing"  // Desired state not yet achieved (rolling update)
+	PhaseHealthy      Phase = "Healthy"      // Desired state reached
+	PhaseDegraded     Phase = "Degraded"     // Resource is failing / crashing
+	PhaseUnknown      Phase = "Unknown"
+)

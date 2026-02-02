@@ -110,6 +110,14 @@ type CellStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// Phase represents the aggregated lifecycle state of the cell.
+	// +optional
+	Phase Phase `json:"phase,omitempty"`
+
+	// Message provides details about the current phase.
+	// +optional
+	Message string `json:"message,omitempty"`
+
 	// GatewayReplicas is the total number of gateway pods.
 	GatewayReplicas int32 `json:"gatewayReplicas"`
 
@@ -132,6 +140,7 @@ type CellStatus struct {
 
 // Cell is the Schema for the cells API
 // +kubebuilder:resource:shortName=cel
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 type Cell struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

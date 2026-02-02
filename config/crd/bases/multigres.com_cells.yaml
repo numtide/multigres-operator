@@ -23,6 +23,9 @@ spec:
     - jsonPath: .status.conditions[?(@.type=='Available')].status
       name: Ready
       type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -1379,6 +1382,19 @@ spec:
               gatewayServiceName:
                 description: GatewayServiceName is the DNS name of the gateway service.
                 maxLength: 253
+                type: string
+              message:
+                description: Message provides details about the current phase.
+                type: string
+              phase:
+                description: Phase represents the aggregated lifecycle state of the
+                  cell.
+                enum:
+                - Initializing
+                - Progressing
+                - Healthy
+                - Degraded
+                - Unknown
                 type: string
             required:
             - gatewayReadyReplicas

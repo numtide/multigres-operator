@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
 const (
@@ -209,6 +210,14 @@ func (r *TopoServerReconciler) updateStatus(
 
 	// Update conditions
 	toposerver.Status.Conditions = r.buildConditions(toposerver, sts)
+
+	// Update Phase
+	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
+	if toposerver.Status.Phase != multigresv1alpha1.PhaseHealthy {
+		toposerver.Status.Message = fmt.Sprintf("%d/%d replicas ready", sts.Status.ReadyReplicas, sts.Status.Replicas)
+	} else {
+		toposerver.Status.Message = "Ready"
+	}
 
 	if err := r.Status().Update(ctx, toposerver); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
