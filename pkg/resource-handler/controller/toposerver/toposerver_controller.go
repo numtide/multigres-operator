@@ -223,8 +223,28 @@ func (r *TopoServerReconciler) updateStatus(
 		toposerver.Status.Message = "Ready"
 	}
 
-	if err := r.Status().Update(ctx, toposerver); err != nil {
-		return fmt.Errorf("failed to update status: %w", err)
+	// 1. Construct the Patch Object
+	patchObj := &multigresv1alpha1.TopoServer{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+			Kind:       "TopoServer",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      toposerver.Name,
+			Namespace: toposerver.Namespace,
+		},
+		Status: toposerver.Status,
+	}
+
+	// 2. Apply the Patch
+	if err := r.Status().Patch(
+		ctx,
+		patchObj,
+		client.Apply,
+		client.FieldOwner("multigres-operator"),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("failed to patch status: %w", err)
 	}
 
 	return nil

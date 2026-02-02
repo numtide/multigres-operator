@@ -212,7 +212,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName("test-toposerver", testutil.ErrInjected),
+				OnStatusPatch: testutil.FailOnObjectName("test-toposerver", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},

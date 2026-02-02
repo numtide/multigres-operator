@@ -56,9 +56,9 @@ func TestReconcile_Status(t *testing.T) {
 		},
 		"Error: Update Status Failed (API Error)": {
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
+				OnStatusPatch: testutil.FailOnObjectName(clusterName, errSimulated),
 			},
-			wantErrMsg: "failed to update cluster status",
+			wantErrMsg: "failed to patch status",
 		},
 	}
 

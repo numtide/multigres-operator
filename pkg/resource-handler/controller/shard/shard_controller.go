@@ -410,8 +410,28 @@ func (r *ShardReconciler) updateStatus(
 	// Update conditions
 	shard.Status.Conditions = r.buildConditions(shard, totalPods, readyPods)
 
-	if err := r.Status().Update(ctx, shard); err != nil {
-		return fmt.Errorf("failed to update status: %w", err)
+	// 1. Construct the Patch Object
+	patchObj := &multigresv1alpha1.Shard{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+			Kind:       "Shard",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      shard.Name,
+			Namespace: shard.Namespace,
+		},
+		Status: shard.Status,
+	}
+
+	// 2. Apply the Patch
+	if err := r.Status().Patch(
+		ctx,
+		patchObj,
+		client.Apply,
+		client.FieldOwner("multigres-operator"),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("failed to patch status: %w", err)
 	}
 
 	return nil

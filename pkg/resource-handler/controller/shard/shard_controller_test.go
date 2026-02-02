@@ -546,7 +546,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
-				OnStatusUpdate: testutil.FailOnObjectName("test-shard", testutil.ErrInjected),
+				OnStatusPatch: testutil.FailOnObjectName("test-shard", testutil.ErrInjected),
 			},
 			wantErr: true,
 		},

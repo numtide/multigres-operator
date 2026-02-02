@@ -207,8 +207,28 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 		cell.Status.Message = "Ready"
 	}
 
-	if err := r.Status().Update(ctx, cell); err != nil {
-		return fmt.Errorf("failed to update status: %w", err)
+	// 1. Construct the Patch Object
+	patchObj := &multigresv1alpha1.Cell{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+			Kind:       "Cell",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cell.Name,
+			Namespace: cell.Namespace,
+		},
+		Status: cell.Status,
+	}
+
+	// 2. Apply the Patch
+	if err := r.Status().Patch(
+		ctx,
+		patchObj,
+		client.Apply,
+		client.FieldOwner("multigres-operator"),
+		client.ForceOwnership,
+	); err != nil {
+		return fmt.Errorf("failed to patch status: %w", err)
 	}
 
 	return nil
