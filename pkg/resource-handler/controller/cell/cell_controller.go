@@ -12,9 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/status"
@@ -216,6 +218,9 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 		)
 	}
 
+	// Note: We rely on Server-Side Apply (SSA) to handle idempotency.
+	// If the status hasn't changed, the API server will treat this Patch as a no-op,
+	// so we don't need a manual DeepEqual check here.
 	if err := r.Status().Patch(
 		ctx,
 		patchObj,
@@ -289,7 +294,7 @@ func (r *CellReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.O
 	controllerOpts.MaxConcurrentReconciles = 20
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&multigresv1alpha1.Cell{}).
+		For(&multigresv1alpha1.Cell{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		WithOptions(controllerOpts).

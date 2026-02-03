@@ -165,6 +165,9 @@ func (r *MultigresClusterReconciler) updateStatus(
 		)
 	}
 
+	// Note: We rely on Server-Side Apply (SSA) to handle idempotency.
+	// If the status hasn't changed, the API server will treat this Patch as a no-op,
+	// so we don't need a manual DeepEqual check here.
 	if err := r.Status().Patch(
 		ctx,
 		patchObj,
