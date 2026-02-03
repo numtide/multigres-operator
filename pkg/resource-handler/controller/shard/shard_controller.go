@@ -625,6 +625,8 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 		controllerOpts = opts[0]
 	}
 
+	controllerOpts.MaxConcurrentReconciles = 20
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.Shard{}).
 		Owns(&appsv1.Deployment{}).

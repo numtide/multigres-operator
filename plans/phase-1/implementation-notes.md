@@ -89,3 +89,34 @@ If Option A is impossible, use the API Reader directly. This makes a live call t
 // Direct API call (slower, but sees everything)
 err := mgr.GetAPIReader().Get(ctx, key, &secret)
 ```
+
+## Operator Performance Tuning
+
+### High Concurrency & Throughput
+To handle large-scale clusters with thousands of shards, we have tuned the operator for high concurrency.
+
+**1. Increased API Client Limits**
+The default client-go rate limits (QPS: 5, Burst: 10) are insufficient for an operator managing thousands of resources. We have increased these limits globally:
+- **QPS:** 50
+- **Burst:** 100
+
+This prevents the operator from self-throttling when multiple workers are requesting resources simultaneously.
+
+**2. Parallel Reconciliation (20 Workers)**
+By default, the controller runtime uses a single worker per controller. This means if one Shard is slow to reconcile (e.g. waiting for a slow API call), all other Shards are blocked.
+
+We have enabled **20 Parallel Workers** (`MaxConcurrentReconciles: 20`) for all major controllers:
+- `MultigresCluster`
+- `Shard`
+- `Cell`
+- `TableGroup`
+- `TopoServer`
+
+**Advantages:**
+- **Throughput:** Can process 20 resources simultaneously.
+- **Resilience:** A stalled reconciliation does not block the entire queue.
+- **Speed:** Faster convergence during initial startup or massive updates.
+
+**Downsides:**
+- **Load:** Increases load on the Kubernetes API Server (mitigated by our Caching Strategy).
+- **Complexity:** Requires careful handling of shared resources (though our controllers are designed to be stateless/independent).
