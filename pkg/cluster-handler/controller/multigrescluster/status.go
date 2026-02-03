@@ -30,7 +30,7 @@ func (r *MultigresClusterReconciler) updateStatus(
 	for _, c := range cells.Items {
 		ready := false
 		for _, cond := range c.Status.Conditions {
-			if cond.Type == "Available" && cond.Status == "True" {
+			if cond.Type == "Available" && cond.Status == "True" && c.Status.ObservedGeneration == c.Generation {
 				ready = true
 				break
 			}
@@ -53,7 +53,13 @@ func (r *MultigresClusterReconciler) updateStatus(
 
 	for _, tg := range tgs.Items {
 		stat := dbShards[multigresv1alpha1.DatabaseName(tg.Spec.DatabaseName)]
-		stat.Ready += tg.Status.ReadyShards
+		// If TableGroup is stale, don't count it as providing ready shards?
+		// Or simpler: just ensure we don't count ready shards if TG is stale.
+		// However, TG.Status.ReadyShards might be stale itself.
+		// Strict check:
+		if tg.Status.ObservedGeneration == tg.Generation {
+			stat.Ready += tg.Status.ReadyShards
+		}
 		stat.Total += tg.Status.TotalShards
 		dbShards[multigresv1alpha1.DatabaseName(tg.Spec.DatabaseName)] = stat
 
@@ -73,11 +79,13 @@ func (r *MultigresClusterReconciler) updateStatus(
 	)
 
 	for _, c := range cells.Items {
-		switch c.Status.Phase {
-		case multigresv1alpha1.PhaseDegraded:
+		switch {
+		case c.Status.ObservedGeneration != c.Generation:
+			allHealthy = false
+		case c.Status.Phase == multigresv1alpha1.PhaseDegraded:
 			anyDegraded = true
 			allHealthy = false
-		case multigresv1alpha1.PhaseHealthy:
+		case c.Status.Phase == multigresv1alpha1.PhaseHealthy:
 			// ok
 		default:
 			allHealthy = false
@@ -85,11 +93,13 @@ func (r *MultigresClusterReconciler) updateStatus(
 	}
 
 	for _, tg := range tgs.Items {
-		switch tg.Status.Phase {
-		case multigresv1alpha1.PhaseDegraded:
+		switch {
+		case tg.Status.ObservedGeneration != tg.Generation:
+			allHealthy = false
+		case tg.Status.Phase == multigresv1alpha1.PhaseDegraded:
 			anyDegraded = true
 			allHealthy = false
-		case multigresv1alpha1.PhaseHealthy:
+		case tg.Status.Phase == multigresv1alpha1.PhaseHealthy:
 			// ok
 		default:
 			allHealthy = false

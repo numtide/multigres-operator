@@ -218,6 +218,10 @@ spec:
               message:
                 description: Message provides details about the current phase.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed.
+                format: int64
+                type: integer
               peerService:
                 description: PeerService is the name of the service for peers.
                 type: string

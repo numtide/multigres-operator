@@ -226,7 +226,10 @@ func (r *TopoServerReconciler) updateStatus(
 
 	// Update Phase
 	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
-	if toposerver.Status.Phase != multigresv1alpha1.PhaseHealthy {
+	if sts.Status.ObservedGeneration != sts.Generation {
+		toposerver.Status.Phase = multigresv1alpha1.PhaseProgressing
+		toposerver.Status.Message = "StatefulSet is progressing"
+	} else if toposerver.Status.Phase != multigresv1alpha1.PhaseHealthy {
 		toposerver.Status.Message = fmt.Sprintf(
 			"%d/%d replicas ready",
 			sts.Status.ReadyReplicas,
@@ -235,6 +238,8 @@ func (r *TopoServerReconciler) updateStatus(
 	} else {
 		toposerver.Status.Message = "Ready"
 	}
+
+	toposerver.Status.ObservedGeneration = toposerver.Generation
 
 	// 1. Construct the Patch Object
 	patchObj := &multigresv1alpha1.TopoServer{
@@ -288,14 +293,20 @@ func (r *TopoServerReconciler) buildConditions(
 		LastTransitionTime: metav1.Now(),
 	}
 
-	if sts.Status.ReadyReplicas == sts.Status.Replicas && sts.Status.Replicas > 0 {
+	if sts.Status.ObservedGeneration == sts.Generation &&
+		sts.Status.ReadyReplicas == sts.Status.Replicas &&
+		sts.Status.Replicas > 0 {
 		readyCondition.Status = metav1.ConditionTrue
 		readyCondition.Reason = "AllReplicasReady"
 		readyCondition.Message = fmt.Sprintf("All %d replicas are ready", sts.Status.ReadyReplicas)
 	} else {
 		readyCondition.Status = metav1.ConditionFalse
 		readyCondition.Reason = "NotAllReplicasReady"
-		readyCondition.Message = fmt.Sprintf("%d/%d replicas ready", sts.Status.ReadyReplicas, sts.Status.Replicas)
+		if sts.Status.ObservedGeneration != sts.Generation {
+			readyCondition.Message = "StatefulSet update in progress"
+		} else {
+			readyCondition.Message = fmt.Sprintf("%d/%d replicas ready", sts.Status.ReadyReplicas, sts.Status.Replicas)
+		}
 	}
 
 	conditions = append(conditions, readyCondition)

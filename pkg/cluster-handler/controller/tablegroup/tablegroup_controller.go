@@ -158,10 +158,12 @@ func (r *TableGroupReconciler) Reconcile(
 	var anyDegraded bool
 
 	for _, s := range existingShards.Items {
-		switch s.Status.Phase {
-		case multigresv1alpha1.PhaseHealthy:
+		switch {
+		case s.Status.ObservedGeneration != s.Generation:
+			// Shard is stale/progressing, not ready
+		case s.Status.Phase == multigresv1alpha1.PhaseHealthy:
 			ready++
-		case multigresv1alpha1.PhaseDegraded:
+		case s.Status.Phase == multigresv1alpha1.PhaseDegraded:
 			anyDegraded = true
 		default: // Initializing, Progressing, Unknown
 			// consider progressing
@@ -200,6 +202,8 @@ func (r *TableGroupReconciler) Reconcile(
 		Message:            fmt.Sprintf("%d/%d shards ready", ready, total),
 		LastTransitionTime: metav1.Now(),
 	})
+
+	tg.Status.ObservedGeneration = tg.Generation
 
 	// 1. Construct the Patch Object
 	patchObj := &multigresv1alpha1.TableGroup{

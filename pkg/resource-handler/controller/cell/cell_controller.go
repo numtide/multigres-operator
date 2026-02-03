@@ -176,7 +176,10 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 
 	// Update Phase
 	cell.Status.Phase = status.ComputePhase(mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
-	if cell.Status.Phase != multigresv1alpha1.PhaseHealthy {
+	if mgDeploy.Status.ObservedGeneration != mgDeploy.Generation {
+		cell.Status.Phase = multigresv1alpha1.PhaseProgressing
+		cell.Status.Message = "Gateway Deployment is progressing"
+	} else if cell.Status.Phase != multigresv1alpha1.PhaseHealthy {
 		cell.Status.Message = fmt.Sprintf(
 			"Gateway: %d/%d replicas ready",
 			mgDeploy.Status.ReadyReplicas,
@@ -185,6 +188,8 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	} else {
 		cell.Status.Message = "Ready"
 	}
+
+	cell.Status.ObservedGeneration = cell.Generation
 
 	// 1. Construct the Patch Object
 	patchObj := &multigresv1alpha1.Cell{
@@ -262,7 +267,8 @@ func (r *CellReconciler) setConditions(
 		),
 	}
 
-	allReady := mgDeploy.Status.ReadyReplicas == mgDeploy.Status.Replicas &&
+	allReady := mgDeploy.Status.ObservedGeneration == mgDeploy.Generation &&
+		mgDeploy.Status.ReadyReplicas == mgDeploy.Status.Replicas &&
 		mgDeploy.Status.Replicas > 0
 
 	if allReady {
