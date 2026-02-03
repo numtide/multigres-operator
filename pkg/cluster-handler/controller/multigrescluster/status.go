@@ -30,7 +30,8 @@ func (r *MultigresClusterReconciler) updateStatus(
 	for _, c := range cells.Items {
 		ready := false
 		for _, cond := range c.Status.Conditions {
-			if cond.Type == "Available" && cond.Status == "True" && c.Status.ObservedGeneration == c.Generation {
+			if cond.Type == "Available" && cond.Status == "True" &&
+				c.Status.ObservedGeneration == c.Generation {
 				ready = true
 				break
 			}
