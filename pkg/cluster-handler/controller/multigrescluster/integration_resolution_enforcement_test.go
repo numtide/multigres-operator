@@ -251,7 +251,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 								Name: "default", Default: true,
 								Shards: []multigresv1alpha1.ShardConfig{
 									{
-										Name:          "0",
+										Name:          "0-inf",
 										ShardTemplate: multigresv1alpha1.TemplateRef(tplName),
 										Overrides: &multigresv1alpha1.ShardOverrides{
 											MultiOrch: &multigresv1alpha1.MultiOrchSpec{
@@ -303,7 +303,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				},
 				Shards: []multigresv1alpha1.ShardResolvedSpec{
 					{
-						Name: "0",
+						Name: "0-inf",
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							// VERIFICATION: Only zone-c should be present
 							Cells: []multigresv1alpha1.CellName{"zone-c"},
@@ -408,7 +408,7 @@ func TestMultigresCluster_EnforcementLogic(t *testing.T) {
 	if err := k8sClient.Get(t.Context(), cellKey, cell); err != nil {
 		t.Fatal(err)
 	}
-	cell.Spec.MultiGateway.Replicas = ptr.To(int32(999))
+	cell.Spec.MultiGateway.Replicas = ptr.To(int32(100))
 	if err := k8sClient.Update(t.Context(), cell); err != nil {
 		t.Fatal("Failed to tamper with cell")
 	}

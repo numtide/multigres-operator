@@ -33,6 +33,7 @@ type ShardTemplateSpec struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.all(k, k in self)",message="Pools cannot be removed or renamed in this version (Append-Only)"
 	Pools map[PoolName]PoolSpec `json:"pools,omitempty"`
 }
 

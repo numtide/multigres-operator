@@ -257,6 +257,7 @@ type TableGroupConfig struct {
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.overrides))",message="cannot specify both 'spec' and 'overrides'"
 type ShardConfig struct {
 	// Name is the identifier of the shard (e.g., "0", "1").
+	// +kubebuilder:validation:XValidation:rule="self == '0-inf'",message="shardName must be strictly equal to '0-inf' in this version"
 	Name ShardName `json:"name"`
 
 	// ShardTemplate refers to a ShardTemplate CR.
@@ -282,6 +283,7 @@ type ShardOverrides struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 25)",message="pool names must be <= 25 chars"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.all(k, k in self)",message="Pools cannot be removed or renamed in this version (Append-Only)"
 	Pools map[PoolName]PoolSpec `json:"pools,omitempty"`
 }
 
@@ -295,6 +297,7 @@ type ShardInlineSpec struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 25)",message="pool names must be <= 25 chars"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.all(k, k in self)",message="Pools cannot be removed or renamed in this version (Append-Only)"
 	Pools map[PoolName]PoolSpec `json:"pools,omitempty"`
 }
 
