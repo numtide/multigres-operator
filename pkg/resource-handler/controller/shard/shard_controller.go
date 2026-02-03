@@ -438,6 +438,8 @@ func (r *ShardReconciler) updateStatus(
 		Status: shard.Status,
 	}
 
+	shard.Status.ObservedGeneration = shard.Generation
+
 	// 2. Apply the Patch
 	if oldPhase != shard.Status.Phase {
 		r.Recorder.Eventf(
@@ -493,7 +495,9 @@ func (r *ShardReconciler) updatePoolsStatus(
 			}
 
 			totalPods += sts.Status.Replicas
-			readyPods += sts.Status.ReadyReplicas
+			if sts.Status.ObservedGeneration == sts.Generation {
+				readyPods += sts.Status.ReadyReplicas
+			} // else treat as 0 ready pods because it is stale/progressing
 		}
 	}
 
@@ -535,7 +539,9 @@ func (r *ShardReconciler) updateMultiOrchStatus(
 		}
 
 		// Check if deployment is ready
-		if deploy.Spec.Replicas == nil || deploy.Status.ReadyReplicas != *deploy.Spec.Replicas {
+		if deploy.Spec.Replicas == nil ||
+			deploy.Status.ObservedGeneration != deploy.Generation ||
+			deploy.Status.ReadyReplicas != *deploy.Spec.Replicas {
 			orchReady = false
 			break
 		}

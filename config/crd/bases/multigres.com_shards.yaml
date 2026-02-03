@@ -2376,6 +2376,10 @@ spec:
               message:
                 description: Message provides details about the current phase.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed.
+                format: int64
+                type: integer
               orchReady:
                 description: OrchReady indicates if the MultiOrch component is ready.
                 type: boolean
