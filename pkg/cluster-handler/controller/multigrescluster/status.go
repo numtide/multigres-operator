@@ -144,7 +144,14 @@ func (r *MultigresClusterReconciler) updateStatus(
 
 	// 2. Apply the Patch
 	if oldPhase != cluster.Status.Phase {
-		r.Recorder.Eventf(cluster, "Normal", "PhaseChange", "Transitioned from '%s' to '%s'", oldPhase, cluster.Status.Phase)
+		r.Recorder.Eventf(
+			cluster,
+			"Normal",
+			"PhaseChange",
+			"Transitioned from '%s' to '%s'",
+			oldPhase,
+			cluster.Status.Phase,
+		)
 	}
 
 	if err := r.Status().Patch(
