@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,8 +41,9 @@ func TestReconcileStatefulSet_InvalidScheme(t *testing.T) {
 		Build()
 
 	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
+		Client:   fakeClient,
+		Scheme:   invalidScheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileStatefulSet(context.Background(), toposerver)
@@ -67,8 +69,9 @@ func TestReconcileHeadlessService_InvalidScheme(t *testing.T) {
 		Build()
 
 	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
+		Client:   fakeClient,
+		Scheme:   invalidScheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileHeadlessService(context.Background(), toposerver)
@@ -94,8 +97,9 @@ func TestReconcileClientService_InvalidScheme(t *testing.T) {
 		Build()
 
 	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
+		Client:   fakeClient,
+		Scheme:   invalidScheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileClientService(context.Background(), toposerver)
@@ -125,8 +129,9 @@ func TestUpdateStatus_StatefulSetNotFound(t *testing.T) {
 		Build()
 
 	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	// Call updateStatus when StatefulSet doesn't exist yet
@@ -167,8 +172,9 @@ func TestReconcileClientService_PatchError(t *testing.T) {
 	})
 
 	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileClientService(context.Background(), toposerver)
@@ -202,8 +208,9 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	})
 
 	reconciler := &TopoServerReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.updateStatus(context.Background(), toposerver)
@@ -235,7 +242,11 @@ func TestSetupWithManager(t *testing.T) {
 
 	t.Run("default options", func(t *testing.T) {
 		mgr := createMgr()
-		r := &TopoServerReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		r := &TopoServerReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
 		if err := r.SetupWithManager(mgr); err != nil {
 			t.Errorf("SetupWithManager() error = %v", err)
 		}
@@ -243,7 +254,11 @@ func TestSetupWithManager(t *testing.T) {
 
 	t.Run("with options", func(t *testing.T) {
 		mgr := createMgr()
-		r := &TopoServerReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		r := &TopoServerReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
 		if err := r.SetupWithManager(mgr, controller.Options{
 			MaxConcurrentReconciles: 1,
 			SkipNameValidation:      ptr.To(true),

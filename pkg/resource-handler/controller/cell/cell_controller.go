@@ -105,6 +105,8 @@ func (r *CellReconciler) reconcileMultiGatewayDeployment(
 		return fmt.Errorf("failed to apply MultiGateway Deployment: %w", err)
 	}
 
+	r.Recorder.Eventf(cell, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
@@ -130,11 +132,14 @@ func (r *CellReconciler) reconcileMultiGatewayService(
 		return fmt.Errorf("failed to apply MultiGateway Service: %w", err)
 	}
 
+	r.Recorder.Eventf(cell, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
 // updateStatus updates the Cell status based on observed state.
 func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alpha1.Cell) error {
+	oldPhase := cell.Status.Phase
 	// Get the MultiGateway Deployment to check status
 	mgDeploy := &appsv1.Deployment{}
 	err := r.Get(
@@ -181,6 +186,10 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	}
 
 	// 2. Apply the Patch
+	if oldPhase != cell.Status.Phase {
+		r.Recorder.Eventf(cell, "Normal", "PhaseChange", "Transitioned from '%s' to '%s'", oldPhase, cell.Status.Phase)
+	}
+
 	if err := r.Status().Patch(
 		ctx,
 		patchObj,

@@ -15,6 +15,7 @@ func (r *MultigresClusterReconciler) updateStatus(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) error {
+	oldPhase := cluster.Status.Phase
 	cluster.Status.ObservedGeneration = cluster.Generation
 	cluster.Status.Cells = make(map[multigresv1alpha1.CellName]multigresv1alpha1.CellStatusSummary)
 	cluster.Status.Databases = make(
@@ -142,6 +143,10 @@ func (r *MultigresClusterReconciler) updateStatus(
 	}
 
 	// 2. Apply the Patch
+	if oldPhase != cluster.Status.Phase {
+		r.Recorder.Eventf(cluster, "Normal", "PhaseChange", "Transitioned from '%s' to '%s'", oldPhase, cluster.Status.Phase)
+	}
+
 	if err := r.Status().Patch(
 		ctx,
 		patchObj,

@@ -38,8 +38,9 @@ func TestSetupWithManager(t *testing.T) {
 	)
 
 	if err := (&cellcontroller.CellReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("cell-controller"),
 	}).SetupWithManager(mgr, controller.Options{
 		SkipNameValidation: ptr.To(true),
 	}); err != nil {
@@ -469,8 +470,9 @@ func TestCellReconciliation(t *testing.T) {
 			client := mgr.GetClient()
 
 			cellReconciler := &cellcontroller.CellReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
+				Client:   mgr.GetClient(),
+				Scheme:   mgr.GetScheme(),
+				Recorder: mgr.GetEventRecorderFor("cell-controller"),
 			}
 			if err := cellReconciler.SetupWithManager(mgr, controller.Options{
 				// Needed for the parallel test runs

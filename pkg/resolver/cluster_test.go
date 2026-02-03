@@ -372,7 +372,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 			)
 
 			got := tc.input.DeepCopy()
-			if err := r.PopulateClusterDefaults(t.Context(), got); err != nil {
+			if _, err := r.PopulateClusterDefaults(t.Context(), got); err != nil {
 				t.Fatalf("PopulateClusterDefaults failed: %v", err)
 			}
 
@@ -402,7 +402,7 @@ func TestResolver_PopulateClusterDefaults_ClientError(t *testing.T) {
 		},
 	}
 
-	err := r.PopulateClusterDefaults(t.Context(), input)
+	_, err := r.PopulateClusterDefaults(t.Context(), input)
 	if err == nil || !errors.Is(err, errSim) {
 		t.Errorf("Expected simulated error, got %v", err)
 	}

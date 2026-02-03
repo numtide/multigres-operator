@@ -51,22 +51,22 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
+	oldPhase := tg.Status.Phase
+
 	activeShardNames := make(map[string]bool, len(tg.Spec.Shards))
 
 	for _, shardSpec := range tg.Spec.Shards {
 		desired, err := BuildShard(tg, &shardSpec, r.Scheme)
 		if err != nil {
 			l.Error(err, "Failed to build shard", "shard", shardSpec.Name)
-			if r.Recorder != nil {
-				r.Recorder.Eventf(
-					tg,
-					"Warning",
-					"FailedApply",
-					"Failed to build shard %s: %v",
-					shardSpec.Name,
-					err,
-				)
-			}
+			r.Recorder.Eventf(
+				tg,
+				"Warning",
+				"FailedApply",
+				"Failed to build shard %s: %v",
+				shardSpec.Name,
+				err,
+			)
 			return ctrl.Result{}, fmt.Errorf("failed to build shard: %w", err)
 		}
 
@@ -83,22 +83,18 @@ func (r *TableGroupReconciler) Reconcile(
 			client.FieldOwner("multigres-operator"),
 		); err != nil {
 			l.Error(err, "Failed to apply shard", "shard", desired.Name)
-			if r.Recorder != nil {
-				r.Recorder.Eventf(
-					tg,
-					"Warning",
-					"FailedApply",
-					"Failed to apply shard %s: %v",
-					desired.Name,
-					err,
-				)
-			}
+			r.Recorder.Eventf(
+				tg,
+				"Warning",
+				"FailedApply",
+				"Failed to apply shard %s: %v",
+				desired.Name,
+				err,
+			)
 			return ctrl.Result{}, fmt.Errorf("failed to apply shard: %w", err)
 		}
 
-		if r.Recorder != nil {
-			r.Recorder.Eventf(tg, "Normal", "Applied", "Applied Shard %s", desired.Name)
-		}
+		r.Recorder.Eventf(tg, "Normal", "Applied", "Applied Shard %s", desired.Name)
 	}
 
 	// Prune orphan Shards
@@ -108,40 +104,34 @@ func (r *TableGroupReconciler) Reconcile(
 		"multigres.com/database":   string(tg.Spec.DatabaseName),
 		"multigres.com/tablegroup": string(tg.Spec.TableGroupName),
 	}); err != nil {
-		if r.Recorder != nil {
-			r.Recorder.Eventf(
-				tg,
-				"Warning",
-				"CleanUpError",
-				"Failed to list shards for pruning: %v",
-				err,
-			)
-		}
+		r.Recorder.Eventf(
+			tg,
+			"Warning",
+			"CleanUpError",
+			"Failed to list shards for pruning: %v",
+			err,
+		)
 		return ctrl.Result{}, fmt.Errorf("failed to list shards for pruning: %w", err)
 	}
 
 	for _, s := range existingShards.Items {
 		if !activeShardNames[s.Name] {
 			if err := r.Delete(ctx, &s); err != nil {
-				if r.Recorder != nil {
-					r.Recorder.Eventf(
-						tg,
-						"Warning",
-						"CleanUpError",
-						"Failed to delete orphan shard %s: %v",
-						s.Name,
-						err,
-					)
-				}
+				r.Recorder.Eventf(
+					tg,
+					"Warning",
+					"CleanUpError",
+					"Failed to delete orphan shard %s: %v",
+					s.Name,
+					err,
+				)
 				return ctrl.Result{}, fmt.Errorf(
 					"failed to delete orphan shard '%s': %w",
 					s.Name,
 					err,
 				)
 			}
-			if r.Recorder != nil {
-				r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
-			}
+			r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
 		}
 	}
 
@@ -155,15 +145,13 @@ func (r *TableGroupReconciler) Reconcile(
 		"multigres.com/database":   string(tg.Spec.DatabaseName),
 		"multigres.com/tablegroup": string(tg.Spec.TableGroupName),
 	}); err != nil {
-		if r.Recorder != nil {
-			r.Recorder.Eventf(
-				tg,
-				"Warning",
-				"StatusError",
-				"Failed to list shards for status: %v",
-				err,
-			)
-		}
+		r.Recorder.Eventf(
+			tg,
+			"Warning",
+			"StatusError",
+			"Failed to list shards for status: %v",
+			err,
+		)
 		return ctrl.Result{}, fmt.Errorf("failed to list shards for status: %w", err)
 	}
 
@@ -227,6 +215,10 @@ func (r *TableGroupReconciler) Reconcile(
 	}
 
 	// 2. Apply the Patch
+	if oldPhase != tg.Status.Phase {
+		r.Recorder.Eventf(tg, "Normal", "PhaseChange", "Transitioned from '%s' to '%s'", oldPhase, tg.Status.Phase)
+	}
+
 	if err := r.Status().Patch(
 		ctx,
 		patchObj,
@@ -234,15 +226,11 @@ func (r *TableGroupReconciler) Reconcile(
 		client.FieldOwner("multigres-operator"),
 		client.ForceOwnership,
 	); err != nil {
-		if r.Recorder != nil {
-			r.Recorder.Eventf(tg, "Warning", "StatusError", "Failed to patch status: %v", err)
-		}
+		r.Recorder.Eventf(tg, "Warning", "StatusError", "Failed to patch status: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to patch status: %w", err)
 	}
 
-	if r.Recorder != nil {
-		r.Recorder.Event(tg, "Normal", "Synced", "Successfully reconciled TableGroup")
-	}
+	r.Recorder.Event(tg, "Normal", "Synced", "Successfully reconciled TableGroup")
 	return ctrl.Result{}, nil
 }
 

@@ -151,6 +151,8 @@ func (r *ShardReconciler) reconcileMultiOrchDeployment(
 		return fmt.Errorf("failed to apply MultiOrch Deployment: %w", err)
 	}
 
+	r.Recorder.Eventf(shard, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
@@ -177,6 +179,8 @@ func (r *ShardReconciler) reconcilePgHbaConfigMap(
 		return fmt.Errorf("failed to apply pg_hba ConfigMap: %w", err)
 	}
 
+	r.Recorder.Eventf(shard, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
@@ -202,6 +206,8 @@ func (r *ShardReconciler) reconcileMultiOrchService(
 	); err != nil {
 		return fmt.Errorf("failed to apply MultiOrch Service: %w", err)
 	}
+
+	r.Recorder.Eventf(shard, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
 
 	return nil
 }
@@ -275,6 +281,8 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 		return fmt.Errorf("failed to apply pool StatefulSet: %w", err)
 	}
 
+	r.Recorder.Eventf(shard, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
@@ -302,6 +310,8 @@ func (r *ShardReconciler) reconcilePoolBackupPVC(
 	); err != nil {
 		return fmt.Errorf("failed to apply backup PVC: %w", err)
 	}
+
+	r.Recorder.Eventf(shard, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
 
 	return nil
 }
@@ -331,6 +341,8 @@ func (r *ShardReconciler) reconcilePoolHeadlessService(
 		return fmt.Errorf("failed to apply pool headless Service: %w", err)
 	}
 
+	r.Recorder.Eventf(shard, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
@@ -339,6 +351,7 @@ func (r *ShardReconciler) updateStatus(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) error {
+	oldPhase := shard.Status.Phase
 	cellsSet := make(map[multigresv1alpha1.CellName]bool)
 
 	// Update pools status
@@ -384,6 +397,10 @@ func (r *ShardReconciler) updateStatus(
 	}
 
 	// 2. Apply the Patch
+	if oldPhase != shard.Status.Phase {
+		r.Recorder.Eventf(shard, "Normal", "PhaseChange", "Transitioned from '%s' to '%s'", oldPhase, shard.Status.Phase)
+	}
+
 	if err := r.Status().Patch(
 		ctx,
 		patchObj,

@@ -120,6 +120,8 @@ func (r *TopoServerReconciler) reconcileStatefulSet(
 		return fmt.Errorf("failed to apply StatefulSet: %w", err)
 	}
 
+	r.Recorder.Eventf(toposerver, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
@@ -144,6 +146,8 @@ func (r *TopoServerReconciler) reconcileHeadlessService(
 	); err != nil {
 		return fmt.Errorf("failed to apply headless Service: %w", err)
 	}
+
+	r.Recorder.Eventf(toposerver, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
 
 	return nil
 }
@@ -170,6 +174,8 @@ func (r *TopoServerReconciler) reconcileClientService(
 		return fmt.Errorf("failed to apply client Service: %w", err)
 	}
 
+	r.Recorder.Eventf(toposerver, "Normal", "Applied", "Applied %s %s", desired.GroupVersionKind().Kind, desired.Name)
+
 	return nil
 }
 
@@ -178,6 +184,7 @@ func (r *TopoServerReconciler) updateStatus(
 	ctx context.Context,
 	toposerver *multigresv1alpha1.TopoServer,
 ) error {
+	oldPhase := toposerver.Status.Phase
 	// Get the StatefulSet to check status
 	sts := &appsv1.StatefulSet{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name}, sts)
@@ -222,6 +229,10 @@ func (r *TopoServerReconciler) updateStatus(
 	}
 
 	// 2. Apply the Patch
+	if oldPhase != toposerver.Status.Phase {
+		r.Recorder.Eventf(toposerver, "Normal", "PhaseChange", "Transitioned from '%s' to '%s'", oldPhase, toposerver.Status.Phase)
+	}
+
 	if err := r.Status().Patch(
 		ctx,
 		patchObj,
