@@ -81,6 +81,7 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 
 	// Webhook Flags
+	var webhookPort int
 	var webhookEnabled bool
 	var webhookCertDir string
 	var webhookServiceNamespace string
@@ -143,6 +144,7 @@ func main() {
 	)
 
 	// Webhook Flag Configuration
+	flag.IntVar(&webhookPort, "webhook-port", 9443, " The port that the webhook server serves at.")
 	flag.BoolVar(&webhookEnabled, "webhook-enable", true, "Enable the admission webhook server")
 	flag.StringVar(
 		&webhookCertDir,
@@ -314,7 +316,7 @@ func main() {
 			},
 		},
 		WebhookServer: ctrlwebhook.NewServer(ctrlwebhook.Options{
-			Port:    9443,
+			Port:    webhookPort,
 			CertDir: webhookCertDir,
 			TLSOpts: tlsOpts,
 		}),
