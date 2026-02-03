@@ -38,8 +38,9 @@ func TestSetupWithManager(t *testing.T) {
 	)
 
 	if err := (&toposervercontroller.TopoServerReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("toposerver-controller"),
 	}).SetupWithManager(mgr, controller.Options{
 		SkipNameValidation: ptr.To(true),
 	}); err != nil {
@@ -217,8 +218,9 @@ func TestTopoServerReconciliation(t *testing.T) {
 			client := mgr.GetClient()
 
 			toposerverReconciler := &toposervercontroller.TopoServerReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
+				Client:   mgr.GetClient(),
+				Scheme:   mgr.GetScheme(),
+				Recorder: mgr.GetEventRecorderFor("toposerver-controller"),
 			}
 			if err := toposerverReconciler.SetupWithManager(mgr, controller.Options{
 				// Needed for the parallel test runs

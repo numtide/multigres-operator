@@ -53,9 +53,14 @@ func (r *MultigresClusterReconciler) Reconcile(
 	res := resolver.NewResolver(r.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
 
 	// Apply defaults (in-memory) to ensure we have images/configs/system-catalog even if webhook didn't run.
-	if err := res.PopulateClusterDefaults(ctx, cluster); err != nil {
+	decisions, err := res.PopulateClusterDefaults(ctx, cluster)
+	if err != nil {
 		l.Error(err, "Failed to populate cluster defaults")
 		return ctrl.Result{}, err
+	}
+
+	for _, decision := range decisions {
+		r.Recorder.Event(cluster, "Normal", "ImplicitDefault", decision)
 	}
 
 	// If being deleted, let Kubernetes GC handle cleanup

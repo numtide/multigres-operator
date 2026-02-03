@@ -38,8 +38,9 @@ func TestSetupWithManager(t *testing.T) {
 	)
 
 	if err := (&tablegroup.TableGroupReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("tablegroup-controller"),
 	}).SetupWithManager(mgr, controller.Options{
 		SkipNameValidation: ptr.To(true),
 	}); err != nil {
@@ -64,8 +65,9 @@ func TestSetupWithManager_Failure(t *testing.T) {
 
 	// Setup should fail because TableGroup is not in scheme
 	if err := (&tablegroup.TableGroupReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("tablegroup-controller"),
 	}).SetupWithManager(mgr, controller.Options{
 		SkipNameValidation: ptr.To(true),
 	}); err == nil {
@@ -243,8 +245,9 @@ func TestTableGroupReconciliation(t *testing.T) {
 
 			// 3. Setup and Start Controller
 			reconciler := &tablegroup.TableGroupReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
+				Client:   mgr.GetClient(),
+				Scheme:   mgr.GetScheme(),
+				Recorder: mgr.GetEventRecorderFor("tablegroup-controller"),
 			}
 
 			if err := reconciler.SetupWithManager(mgr, controller.Options{

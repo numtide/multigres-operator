@@ -14,7 +14,8 @@ import (
 func (r *Resolver) PopulateClusterDefaults(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
-) error {
+) ([]string, error) {
+	var decisions []string
 	// 1. Default Images
 	if cluster.Spec.Images.Postgres == "" {
 		cluster.Spec.Images.Postgres = DefaultPostgresImage
@@ -66,12 +67,13 @@ func (r *Resolver) PopulateClusterDefaults(
 		// Rule 2: No explicit template. Check for implicit "default".
 		implicitExists, err := r.ShardTemplateExists(ctx, "default")
 		if err != nil {
-			return fmt.Errorf("failed to check for implicit shard template: %w", err)
+			return nil, fmt.Errorf("failed to check for implicit shard template: %w", err)
 		}
 		if implicitExists {
 			shouldInjectDefaults = false
 		} else {
 			shouldInjectDefaults = true
+			decisions = append(decisions, "Implicitly injected default 'readWrite' pool configuration using the 'default' ShardTemplate")
 		}
 	}
 
@@ -120,7 +122,7 @@ func (r *Resolver) PopulateClusterDefaults(
 		}
 	}
 
-	return nil
+	return decisions, nil
 }
 
 // ResolveGlobalTopo determines the final GlobalTopoServer configuration.

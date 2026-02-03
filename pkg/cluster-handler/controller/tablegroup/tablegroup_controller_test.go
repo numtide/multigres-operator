@@ -87,7 +87,6 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 		existingObjects    []client.Object
 		preReconcileUpdate func(testing.TB, *multigresv1alpha1.TableGroup)
 		preReconcileClient func(testing.TB, client.Client) // Hook to modify client state before Reconcile
-		nilRecorder        bool                            // If true, sets the Recorder to nil
 		skipCreate         bool                            // If true, the object won't be created in the fake client (simulates Not Found)
 		expectedEvents     []string                        // events expected to be recorded
 		validate           func(testing.TB, client.Client)
@@ -400,11 +399,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
-		"Success: No Recorder": {
-			tableGroup:      baseTG.DeepCopy(),
-			existingObjects: []client.Object{},
-			nilRecorder:     true,
-		},
+
 		"Success: Build Shard (Long Name - Truncated)": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
@@ -440,10 +435,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				tc.preReconcileClient(t, baseClient)
 			}
 
-			var recorder record.EventRecorder
-			if !tc.nilRecorder {
-				recorder = record.NewFakeRecorder(100)
-			}
+			recorder := record.NewFakeRecorder(100)
 
 			reconciler := &TableGroupReconciler{
 				Client:   baseClient,
@@ -465,28 +457,26 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 
 			// Verify Events
 			if len(tc.expectedEvents) > 0 {
-				if fakeRecorder, ok := recorder.(*record.FakeRecorder); ok {
-					close(fakeRecorder.Events)
-					var gotEvents []string
-					for evt := range fakeRecorder.Events {
-						gotEvents = append(gotEvents, evt)
-					}
+				close(recorder.Events)
+				var gotEvents []string
+				for evt := range recorder.Events {
+					gotEvents = append(gotEvents, evt)
+				}
 
-					for _, want := range tc.expectedEvents {
-						found := false
-						for _, got := range gotEvents {
-							if strings.Contains(got, want) {
-								found = true
-								break
-							}
+				for _, want := range tc.expectedEvents {
+					found := false
+					for _, got := range gotEvents {
+						if strings.Contains(got, want) {
+							found = true
+							break
 						}
-						if !found {
-							t.Errorf(
-								"Expected event containing %q not found. Got events: %v",
-								want,
-								gotEvents,
-							)
-						}
+					}
+					if !found {
+						t.Errorf(
+							"Expected event containing %q not found. Got events: %v",
+							want,
+							gotEvents,
+						)
 					}
 				}
 			}

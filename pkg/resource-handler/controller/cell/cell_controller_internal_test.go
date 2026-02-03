@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,8 +44,9 @@ func TestReconcileMultiGatewayDeployment_InvalidScheme(t *testing.T) {
 		Build()
 
 	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
+		Client:   fakeClient,
+		Scheme:   invalidScheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileMultiGatewayDeployment(context.Background(), cell)
@@ -72,8 +74,9 @@ func TestReconcileMultiGatewayService_InvalidScheme(t *testing.T) {
 		Build()
 
 	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: invalidScheme,
+		Client:   fakeClient,
+		Scheme:   invalidScheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileMultiGatewayService(context.Background(), cell)
@@ -105,8 +108,9 @@ func TestUpdateStatus_MultiGatewayDeploymentNotFound(t *testing.T) {
 		Build()
 
 	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	// Call updateStatus when MultiGateway Deployment doesn't exist yet
@@ -152,8 +156,9 @@ func TestReconcileMultiGatewayDeployment_PatchError(t *testing.T) {
 	})
 
 	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileMultiGatewayDeployment(context.Background(), cell)
@@ -195,8 +200,9 @@ func TestReconcileMultiGatewayService_PatchError(t *testing.T) {
 	})
 
 	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.reconcileMultiGatewayService(context.Background(), cell)
@@ -237,8 +243,9 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	})
 
 	reconciler := &CellReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.updateStatus(context.Background(), cell)
@@ -249,7 +256,9 @@ func TestUpdateStatus_GetError(t *testing.T) {
 
 // TestSetConditions_ZeroReplicas tests setConditions when deployments have zero replicas.
 func TestSetConditions_ZeroReplicas(t *testing.T) {
-	reconciler := &CellReconciler{}
+	reconciler := &CellReconciler{
+		Recorder: record.NewFakeRecorder(100),
+	}
 
 	cell := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
@@ -322,7 +331,11 @@ func TestSetupWithManager(t *testing.T) {
 
 	t.Run("default options", func(t *testing.T) {
 		mgr := createMgr()
-		r := &CellReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		r := &CellReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
 		if err := r.SetupWithManager(mgr); err != nil {
 			t.Errorf("SetupWithManager() error = %v", err)
 		}
@@ -330,7 +343,11 @@ func TestSetupWithManager(t *testing.T) {
 
 	t.Run("with options", func(t *testing.T) {
 		mgr := createMgr()
-		r := &CellReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		r := &CellReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
 		if err := r.SetupWithManager(mgr, controller.Options{
 			MaxConcurrentReconciles: 1,
 			SkipNameValidation:      ptr.To(true),

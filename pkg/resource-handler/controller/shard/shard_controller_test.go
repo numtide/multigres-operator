@@ -1020,7 +1020,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			reconciler := &ShardReconciler{
 				Client:   fakeClient,
 				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(10),
+				Recorder: record.NewFakeRecorder(1000),
 			}
 			if tc.reconcilerScheme != nil {
 				reconciler.Scheme = tc.reconcilerScheme
@@ -1188,8 +1188,9 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client: fakeClient,
-			Scheme: scheme,
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
 		}
 
 		if err := r.updateStatus(context.Background(), shard); err != nil {
@@ -1273,8 +1274,9 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client: fakeClient,
-			Scheme: scheme,
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
 		}
 
 		if err := r.updateStatus(context.Background(), shard); err != nil {

@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -117,8 +118,9 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		Build()
 
 	r := &MultigresClusterReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	if err := r.updateStatus(context.Background(), cluster); err != nil {
@@ -308,8 +310,9 @@ func TestUpdateStatus_ZeroResources(t *testing.T) {
 		Build()
 
 	r := &MultigresClusterReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	if err := r.updateStatus(context.Background(), cluster); err != nil {

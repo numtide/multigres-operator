@@ -16,6 +16,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/google/go-cmp/cmp"
@@ -143,7 +144,9 @@ func TestBuildConditions(t *testing.T) {
 			shard := &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{Generation: tc.generation},
 			}
-			r := &ShardReconciler{}
+			r := &ShardReconciler{
+				Recorder: record.NewFakeRecorder(100),
+			}
 			got := r.buildConditions(shard, tc.totalPods, tc.readyPods)
 
 			// Use go-cmp for exact match, ignoring LastTransitionTime
@@ -287,8 +290,9 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				Build()
 
 			reconciler := &ShardReconciler{
-				Client: fakeClient,
-				Scheme: invalidScheme,
+				Client:   fakeClient,
+				Scheme:   invalidScheme,
+				Recorder: record.NewFakeRecorder(100),
 			}
 
 			err := tc.reconcileFunc(reconciler, context.Background(), shard)
@@ -326,8 +330,9 @@ func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	// Call updateStatus when pool StatefulSet doesn't exist yet
@@ -461,8 +466,9 @@ func TestReconcile_PatchError(t *testing.T) {
 			})
 
 			reconciler := &ShardReconciler{
-				Client: fakeClient,
-				Scheme: scheme,
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(100),
 			}
 
 			err := tc.reconcileFunc(reconciler, context.Background(), shard)
@@ -591,8 +597,9 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 			}
 
 			reconciler := &ShardReconciler{
-				Client: fakeClient,
-				Scheme: scheme,
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(100),
 			}
 
 			err := reconciler.updateStatus(context.Background(), shard)
@@ -656,8 +663,9 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	})
 
 	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
 	}
 
 	err := reconciler.updateStatus(context.Background(), shard)
@@ -689,7 +697,11 @@ func TestSetupWithManager(t *testing.T) {
 
 	t.Run("default options", func(t *testing.T) {
 		mgr := createMgr()
-		r := &ShardReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		r := &ShardReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
 		if err := r.SetupWithManager(mgr); err != nil {
 			t.Errorf("SetupWithManager() error = %v", err)
 		}
@@ -697,7 +709,11 @@ func TestSetupWithManager(t *testing.T) {
 
 	t.Run("with options", func(t *testing.T) {
 		mgr := createMgr()
-		r := &ShardReconciler{Client: mgr.GetClient(), Scheme: scheme}
+		r := &ShardReconciler{
+			Client:   mgr.GetClient(),
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
 		if err := r.SetupWithManager(mgr, controller.Options{
 			MaxConcurrentReconciles: 1,
 			SkipNameValidation:      ptr.To(true),

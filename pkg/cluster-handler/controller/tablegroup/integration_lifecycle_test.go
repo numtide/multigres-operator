@@ -48,8 +48,9 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 
 		// Start Controller
 		if err := (&tablegroup.TableGroupReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:   mgr.GetClient(),
+			Scheme:   mgr.GetScheme(),
+			Recorder: mgr.GetEventRecorderFor("tablegroup-controller"),
 		}).SetupWithManager(mgr, controller.Options{SkipNameValidation: ptr.To(true)}); err != nil {
 			t.Fatal(err)
 		}

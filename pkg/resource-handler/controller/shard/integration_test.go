@@ -42,8 +42,9 @@ func TestSetupWithManager(t *testing.T) {
 	)
 
 	if err := (&shardcontroller.ShardReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("shard-controller"),
 	}).SetupWithManager(mgr, controller.Options{
 		SkipNameValidation: ptr.To(true),
 	}); err != nil {
@@ -973,9 +974,11 @@ func TestShardReconciliation(t *testing.T) {
 			)
 			client := mgr.GetClient()
 
+			// 3. Setup and Start Controller
 			shardReconciler := &shardcontroller.ShardReconciler{
-				Client: mgr.GetClient(),
-				Scheme: mgr.GetScheme(),
+				Client:   mgr.GetClient(),
+				Scheme:   mgr.GetScheme(),
+				Recorder: mgr.GetEventRecorderFor("shard-controller"),
 			}
 			if err := shardReconciler.SetupWithManager(mgr, controller.Options{
 				// Needed for the parallel test runs
@@ -1184,8 +1187,9 @@ func TestReconcileDeletions(t *testing.T) {
 
 	// Setup controller with manager
 	if err := (&shardcontroller.ShardReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("shard-controller"),
 	}).SetupWithManager(mgr, controller.Options{
 		SkipNameValidation: ptr.To(true),
 	}); err != nil {

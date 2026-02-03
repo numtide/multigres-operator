@@ -40,7 +40,7 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	}
 
 	// 1. Static Defaulting (Images, System Catalog)
-	if err := d.Resolver.PopulateClusterDefaults(ctx, cluster); err != nil {
+	if _, err := d.Resolver.PopulateClusterDefaults(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to populate cluster defaults: %w", err)
 	}
 
