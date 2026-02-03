@@ -1093,6 +1093,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
+                    maximum: 128
                     minimum: 0
                     type: integer
                   resources:
@@ -2098,6 +2099,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
+                    maximum: 128
                     minimum: 0
                     type: integer
                   resources:

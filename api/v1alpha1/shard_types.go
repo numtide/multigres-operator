@@ -53,6 +53,7 @@ type MultiOrchSpec struct {
 	// Cells defines the list of cells where this MultiOrch should be deployed.
 	// If empty, it defaults to all cells where pools are defined.
 	// +optional
+	// +listType=set
 	// +kubebuilder:validation:MaxItems=50
 	Cells []CellName `json:"cells,omitempty"`
 }
@@ -66,11 +67,14 @@ type PoolSpec struct {
 
 	// Cells defines the list of cells where this Pool should be deployed.
 	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=50
 	Cells []CellName `json:"cells,omitempty"`
 
 	// ReplicasPerCell is the desired number of pods PER CELL in this pool.
 	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=32
 	// +optional
 	ReplicasPerCell *int32 `json:"replicasPerCell,omitempty"`
 

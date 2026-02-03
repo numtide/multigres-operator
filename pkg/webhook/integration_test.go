@@ -15,8 +15,10 @@ import (
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/scale/scheme"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -39,6 +41,7 @@ var (
 	k8sClient    client.Client // Direct Client (Bypasses Cache) - Use for assertions
 	cachedClient client.Client // Cached Client (Manager) - Use for checking Webhook visibility
 	testEnv      *envtest.Environment
+	TestCfg      *rest.Config
 	ctx          context.Context
 	cancel       context.CancelFunc
 )
@@ -55,6 +58,7 @@ func TestMain(m *testing.M) {
 	_ = admissionv1.AddToScheme(s)
 	_ = appsv1.AddToScheme(s)
 	_ = corev1.AddToScheme(s)
+	_ = rbacv1.AddToScheme(s)
 
 	// 3. Setup EnvTest
 	crdPath := filepath.Join("..", "..", "config", "crd", "bases")
@@ -68,7 +72,8 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	cfg, err := testEnv.Start()
+	var err error
+	TestCfg, err = testEnv.Start()
 	if err != nil {
 		fmt.Printf("Failed to start envtest: %v\n", err)
 		os.Exit(1)
@@ -76,7 +81,7 @@ func TestMain(m *testing.M) {
 
 	// 4. Setup Manager & Webhook
 	webhookOpts := testEnv.WebhookInstallOptions
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+	mgr, err := ctrl.NewManager(TestCfg, ctrl.Options{
 		Scheme: s,
 		Metrics: metricsserver.Options{
 			BindAddress: "0",
@@ -98,7 +103,7 @@ func TestMain(m *testing.M) {
 	cachedClient = mgr.GetClient()
 
 	// k8sClient is used to Assert data in tests (Direct API access, no cache lag)
-	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
+	k8sClient, err = client.New(TestCfg, client.Options{Scheme: s})
 	if err != nil {
 		fmt.Printf("Failed to create direct client: %v\n", err)
 		os.Exit(1)
@@ -471,7 +476,7 @@ func TestWebhook_DeepTemplateProtection(t *testing.T) {
 								Default: true,
 								Shards: []multigresv1alpha1.ShardConfig{
 									{
-										Name:          "0",
+										Name:          "0-inf",
 										ShardTemplate: multigresv1alpha1.TemplateRef(stName),
 									},
 								},

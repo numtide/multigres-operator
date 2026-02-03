@@ -59,6 +59,7 @@ spec:
                   type: string
                 maxItems: 50
                 type: array
+                x-kubernetes-list-type: set
               globalTopoServer:
                 description: GlobalTopoServer reference (always populated).
                 properties:
@@ -1065,6 +1066,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
+                    maximum: 128
                     minimum: 0
                     type: integer
                   resources:

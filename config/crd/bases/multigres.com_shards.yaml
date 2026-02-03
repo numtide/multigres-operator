@@ -1065,6 +1065,7 @@ spec:
                       type: string
                     maxItems: 50
                     type: array
+                    x-kubernetes-list-type: set
                   podAnnotations:
                     additionalProperties:
                       type: string
@@ -1086,6 +1087,7 @@ spec:
                   replicas:
                     description: Replicas is the desired number of pods.
                     format: int32
+                    maximum: 128
                     minimum: 0
                     type: integer
                   resources:
@@ -2104,7 +2106,9 @@ spec:
                         minLength: 1
                         type: string
                       maxItems: 50
+                      minItems: 1
                       type: array
+                      x-kubernetes-list-type: set
                     multipooler:
                       description: Multipooler container configuration.
                       properties:
@@ -2237,6 +2241,7 @@ spec:
                       description: ReplicasPerCell is the desired number of pods PER
                         CELL in this pool.
                       format: int32
+                      maximum: 32
                       minimum: 0
                       type: integer
                     storage:

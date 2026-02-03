@@ -4,13 +4,55 @@
 package webhook_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func getPrivilegedClient(t *testing.T) client.Client {
+	t.Helper()
+	if TestCfg == nil {
+		t.Fatal("TestCfg is nil")
+	}
+
+	// Ensure the impersonated identity has permissions (cluster-admin)
+	binding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "operator-admin-binding"},
+		Subjects: []rbacv1.Subject{
+			{Kind: "User", Name: "system:serviceaccount:default:multigres-operator", APIGroup: "rbac.authorization.k8s.io"},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+	// Use the existing admin client to create the binding
+	if err := k8sClient.Create(context.Background(), binding); err != nil {
+		// Ignore if already exists, otherwise fail
+		if client.IgnoreAlreadyExists(err) != nil {
+			t.Fatalf("Failed to create ClusterRoleBinding: %v", err)
+		}
+	}
+
+	config := *TestCfg
+	config.Impersonate = rest.ImpersonationConfig{
+		UserName: "system:serviceaccount:default:multigres-operator",
+	}
+	c, err := client.New(&config, client.Options{Scheme: k8sClient.Scheme()})
+	if err != nil {
+		t.Fatalf("Failed to create privileged client: %v", err)
+	}
+	return c
+}
 
 func TestCEL_MultigresCluster(t *testing.T) {
 	t.Parallel()
@@ -396,5 +438,221 @@ func TestCEL_MultiAdmin(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCEL_ShardImmutability(t *testing.T) {
+	t.Parallel()
+
+	shardName := "immutable-shard"
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      shardName,
+			Namespace: testNamespace,
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "postgres",
+			TableGroupName: "default",
+			ShardName:      "0",
+			Images: multigresv1alpha1.ShardImages{
+				Postgres:    "postgres:15",
+				MultiOrch:   "multiorch:latest",
+				MultiPooler: "multipooler:latest",
+			},
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        "etcd:2379",
+				RootPath:       "/multigres",
+				Implementation: "etcd",
+			},
+			MultiOrch: multigresv1alpha1.MultiOrchSpec{
+				StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+			},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"read-write": {
+					Type:            "readWrite",
+					Cells:           []multigresv1alpha1.CellName{"cell-1"},
+					ReplicasPerCell: ptr.To(int32(1)),
+				},
+			},
+		},
+	}
+
+	// Create
+	privClient := getPrivilegedClient(t)
+	if err := privClient.Create(ctx, shard); err != nil {
+		t.Fatalf("Failed to create Shard: %v", err)
+	}
+
+	// Try to update immutable fields (Validation removed by user, so updates should succeed)
+	toUpdate := shard.DeepCopy()
+	toUpdate.Spec.DatabaseName = "other-db"
+	if err := privClient.Update(ctx, toUpdate); err != nil {
+		t.Errorf("Expected success when updating previously immutable databaseName, got error: %v", err)
+	}
+
+	// Refetch to avoid conflict
+	if err := privClient.Get(ctx, client.ObjectKeyFromObject(shard), shard); err != nil {
+		t.Fatal(err)
+	}
+
+	toUpdate = shard.DeepCopy()
+	toUpdate.Spec.TableGroupName = "other-tg"
+	if err := privClient.Update(ctx, toUpdate); err != nil {
+		t.Errorf("Expected success when updating previously immutable tableGroupName, got error: %v", err)
+	}
+
+	// Refetch to avoid conflict
+	if err := privClient.Get(ctx, client.ObjectKeyFromObject(shard), shard); err != nil {
+		t.Fatal(err)
+	}
+
+	toUpdate = shard.DeepCopy()
+	toUpdate.Spec.ShardName = "1"
+	if err := privClient.Update(ctx, toUpdate); err != nil {
+		t.Errorf("Expected success when updating previously immutable shardName, got error: %v", err)
+	}
+}
+
+func TestCEL_ExtendedValidation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		shard       client.Object
+		expectError string
+	}{
+		{
+			name: "Invalid Duplicate Cells in MultiOrch",
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "cel-duplicate-multiorch-cells", Namespace: testNamespace},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName: "postgres", TableGroupName: "default", ShardName: "0",
+					Images:           multigresv1alpha1.ShardImages{Postgres: "p", MultiOrch: "o", MultiPooler: "po"},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{Address: "etcd", RootPath: "/", Implementation: "etcd"},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"cell-1", "cell-1"}, // Duplicate
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"rw": {Cells: []multigresv1alpha1.CellName{"cell-1"}},
+					},
+				},
+			},
+			expectError: "Duplicate value", // Set validation error
+		},
+		{
+			name: "Invalid Duplicate Cells in Pool",
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "cel-duplicate-pool-cells", Namespace: testNamespace},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName: "postgres", TableGroupName: "default", ShardName: "0",
+					Images:           multigresv1alpha1.ShardImages{Postgres: "p", MultiOrch: "o", MultiPooler: "po"},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{Address: "etcd", RootPath: "/", Implementation: "etcd"},
+					MultiOrch:        multigresv1alpha1.MultiOrchSpec{},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"rw": {
+							Cells: []multigresv1alpha1.CellName{"cell-1", "cell-1"}, // Duplicate
+						},
+					},
+				},
+			},
+			expectError: "Duplicate value",
+		},
+		{
+			name: "Invalid Empty Pool Cells",
+			shard: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "multigres.com/v1alpha1",
+					"kind":       "Shard",
+					"metadata": map[string]interface{}{
+						"name":      "cel-empty-pool-cells",
+						"namespace": testNamespace,
+					},
+					"spec": map[string]interface{}{
+						"databaseName":   "postgres",
+						"tableGroupName": "default",
+						"shardName":      "0",
+						"images": map[string]interface{}{
+							"postgres":    "p",
+							"multiorch":   "o",
+							"multipooler": "po",
+						},
+						"globalTopoServer": map[string]interface{}{
+							"address":        "etcd",
+							"rootPath":       "/",
+							"implementation": "etcd",
+						},
+						"multiOrch": map[string]interface{}{
+							"replicas": 1, // Inlined StatelessSpec
+						},
+						"pools": map[string]interface{}{
+							"rw": map[string]interface{}{
+								"cells":           []interface{}{}, // Explicit empty array to trigger MinItems
+								"replicasPerCell": 1,
+								"type":            "readWrite",
+							},
+						},
+					},
+				},
+			},
+			expectError: "should have at least 1 items",
+		},
+		{
+			name: "Invalid ReplicasPerCell Limit",
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "cel-replicas-per-cell-limit", Namespace: testNamespace},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName: "postgres", TableGroupName: "default", ShardName: "0",
+					Images:           multigresv1alpha1.ShardImages{Postgres: "p", MultiOrch: "o", MultiPooler: "po"},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{Address: "etcd", RootPath: "/", Implementation: "etcd"},
+					MultiOrch:        multigresv1alpha1.MultiOrchSpec{},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"rw": {
+							Cells:           []multigresv1alpha1.CellName{"cell-1"},
+							ReplicasPerCell: ptr.To(int32(33)), // > 32
+						},
+					},
+				},
+			},
+			expectError: "less than or equal to 32",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			privClient := getPrivilegedClient(t)
+			err := privClient.Create(ctx, tc.shard)
+			if err == nil {
+				t.Fatal("Expected error, got nil")
+			}
+			if tc.expectError != "" {
+				if !strings.Contains(err.Error(), tc.expectError) {
+					t.Logf("ACTUAL ERROR: %v", err)
+					t.Errorf("Expected error message to contain %q, got %q", tc.expectError, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestCEL_StatelessReplicasLimit(t *testing.T) {
+	t.Parallel()
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cel-stateless-replicas-limit", Namespace: testNamespace},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+				Spec: &multigresv1alpha1.StatelessSpec{
+					Replicas: ptr.To(int32(129)), // > 128
+				},
+			},
+		},
+	}
+
+	err := k8sClient.Create(ctx, cluster)
+	if err == nil {
+		t.Fatal("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "less than or equal to 128") {
+		t.Errorf("Expected error to contain 'less than or equal to 128', got %v", err)
 	}
 }

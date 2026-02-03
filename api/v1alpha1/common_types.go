@@ -32,6 +32,7 @@ import (
 type StatelessSpec struct {
 	// Replicas is the desired number of pods.
 	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=128
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 

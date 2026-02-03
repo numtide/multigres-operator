@@ -207,7 +207,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									Name:    "default",
 									Default: true,
 									Shards: []multigresv1alpha1.ShardConfig{{
-										Name: "s1",
+										Name: "0-inf",
 										Spec: &multigresv1alpha1.ShardInlineSpec{
 											MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
 											Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
@@ -453,7 +453,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 						Shards: []multigresv1alpha1.ShardResolvedSpec{
 							{
-								Name: "s1",
+								Name: "0-inf",
 								MultiOrch: multigresv1alpha1.MultiOrchSpec{
 									Cells: []multigresv1alpha1.CellName{"zone-a"},
 									StatelessSpec: multigresv1alpha1.StatelessSpec{

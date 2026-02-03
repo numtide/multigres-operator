@@ -68,6 +68,7 @@ type CellSpec struct {
 
 	// AllCells list for discovery.
 	// +optional
+	// +listType=set
 	// +kubebuilder:validation:MaxItems=50
 	AllCells []CellName `json:"allCells,omitempty"`
 
