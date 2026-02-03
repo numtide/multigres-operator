@@ -118,6 +118,8 @@ func (r *MultigresClusterReconciler) SetupWithManager(
 		controllerOpts = opts[0]
 	}
 
+	controllerOpts.MaxConcurrentReconciles = 20
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.MultigresCluster{}).
 		Owns(&multigresv1alpha1.Cell{}).

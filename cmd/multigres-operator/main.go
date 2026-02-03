@@ -270,7 +270,12 @@ func main() {
 	// Local Config: Cache everything (for Cert-Manager / Leader Election)
 	unfilteredConfig := cache.Config{}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	// Adjust the client config to prevent throttling with high concurrency
+	config := ctrl.GetConfigOrDie()
+	config.QPS = 50
+	config.Burst = 100
+
+	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: probeAddr,

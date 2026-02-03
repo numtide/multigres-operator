@@ -280,6 +280,8 @@ func (r *CellReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.O
 		controllerOpts = opts[0]
 	}
 
+	controllerOpts.MaxConcurrentReconciles = 20
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.Cell{}).
 		Owns(&appsv1.Deployment{}).

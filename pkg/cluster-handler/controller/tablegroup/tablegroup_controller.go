@@ -251,6 +251,8 @@ func (r *TableGroupReconciler) SetupWithManager(
 		controllerOpts = opts[0]
 	}
 
+	controllerOpts.MaxConcurrentReconciles = 20
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.TableGroup{}).
 		Owns(&multigresv1alpha1.Shard{}).

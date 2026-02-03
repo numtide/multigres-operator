@@ -312,6 +312,8 @@ func (r *TopoServerReconciler) SetupWithManager(
 		controllerOpts = opts[0]
 	}
 
+	controllerOpts.MaxConcurrentReconciles = 20
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.TopoServer{}).
 		Owns(&appsv1.StatefulSet{}).
