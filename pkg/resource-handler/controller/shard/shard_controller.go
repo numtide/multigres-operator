@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -423,7 +424,7 @@ func (r *ShardReconciler) updateStatus(
 	}
 
 	// Update conditions
-	shard.Status.Conditions = r.buildConditions(shard, totalPods, readyPods)
+	r.setConditions(shard, totalPods, readyPods)
 
 	// 1. Construct the Patch Object
 	patchObj := &multigresv1alpha1.Shard{
@@ -560,32 +561,27 @@ func cellSetToSlice(cellsSet map[multigresv1alpha1.CellName]bool) []multigresv1a
 	return cells
 }
 
-// buildConditions creates status conditions based on observed state.
-func (r *ShardReconciler) buildConditions(
+// setConditions creates status conditions based on observed state.
+func (r *ShardReconciler) setConditions(
 	shard *multigresv1alpha1.Shard,
 	totalPods, readyPods int32,
-) []metav1.Condition {
-	conditions := []metav1.Condition{}
-
+) {
 	// Available condition
 	availableCondition := metav1.Condition{
 		Type:               "Available",
 		ObservedGeneration: shard.Generation,
-		LastTransitionTime: metav1.Now(),
+		Status:             metav1.ConditionFalse,
+		Reason:             "NotAllPodsReady",
+		Message:            fmt.Sprintf("%d/%d pods ready", readyPods, totalPods),
 	}
 
 	if readyPods == totalPods && totalPods > 0 {
 		availableCondition.Status = metav1.ConditionTrue
 		availableCondition.Reason = "AllPodsReady"
 		availableCondition.Message = fmt.Sprintf("All %d pods are ready", readyPods)
-	} else {
-		availableCondition.Status = metav1.ConditionFalse
-		availableCondition.Reason = "NotAllPodsReady"
-		availableCondition.Message = fmt.Sprintf("%d/%d pods ready", readyPods, totalPods)
 	}
 
-	conditions = append(conditions, availableCondition)
-	return conditions
+	meta.SetStatusCondition(&shard.Status.Conditions, availableCondition)
 }
 
 // getMultiOrchCells returns the list of cells where MultiOrch should be deployed.
