@@ -216,7 +216,14 @@ func (r *TableGroupReconciler) Reconcile(
 
 	// 2. Apply the Patch
 	if oldPhase != tg.Status.Phase {
-		r.Recorder.Eventf(tg, "Normal", "PhaseChange", "Transitioned from '%s' to '%s'", oldPhase, tg.Status.Phase)
+		r.Recorder.Eventf(
+			tg,
+			"Normal",
+			"PhaseChange",
+			"Transitioned from '%s' to '%s'",
+			oldPhase,
+			tg.Status.Phase,
+		)
 	}
 
 	if err := r.Status().Patch(
