@@ -90,7 +90,7 @@ If Option A is impossible, use the API Reader directly. This makes a live call t
 err := mgr.GetAPIReader().Get(ctx, key, &secret)
 ```
 
-## Operator Performance Tuning
+# Operator Performance Tuning
 
 ### High Concurrency & Throughput
 To handle large-scale clusters with thousands of shards, we have tuned the operator for high concurrency.
@@ -120,3 +120,66 @@ We have enabled **20 Parallel Workers** (`MaxConcurrentReconciles: 20`) for all 
 **Downsides:**
 - **Load:** Increases load on the Kubernetes API Server (mitigated by our Caching Strategy).
 - **Complexity:** Requires careful handling of shared resources (though our controllers are designed to be stateless/independent).
+
+# Event Filtering & Idempotency
+
+### GenerationChangedPredicate
+
+We apply the `GenerationChangedPredicate` to the **Primary Resource** (the `For` object) in all controllers. This ensures the controller does **not** reconcile when only the `Status` subresource changes, preventing infinite loops where a controller updates status, triggers a new reconcile, updates status again, and so on.
+
+**When to use it:**
+Use this on the *primary* resource being reconciled to break self-recursion loops.
+
+**Code Example:**
+```go
+func (r *MultigresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+    return ctrl.NewControllerManagedBy(mgr).
+        // FILTER: Only reconcile if Spec or Metadata changes. Ignore Status changes.
+        For(&multigresv1alpha1.MultigresCluster{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+        // ...
+        Complete(r)
+}
+```
+
+**Potential Issues:**
+If the controller logic *depended* on reading its own status to make decisions (e.g. "If status is 'Initializing', do X"), using this predicate would break that logic because the controller wouldn't wake up after setting 'Initializing'.
+*   *Mitigation:* Our controllers are designed to be level-triggered based on `Spec` and child resources. We do not use the primary resource's `Status` as a state machine driver; `Status` is purely an output observation.
+
+**Child Resources (Why we don't use it there):**
+We do *not* apply this predicate to child resources (`Owns`). We must react to child resource status transitions (e.g., a Deployment becoming Ready, a Pod changing state) to update the parent's status. Each parent only monitors the status of its *immediate* children (e.g. `MultigresCluster` watches `Cell`, but not `StatefulSet` directly if `Cell` owns it).
+
+### Server-Side Apply (SSA) & Idempotency
+
+We deliberately omit client-side `reflect.DeepEqual` checks before patching status. We rely on the Kubernetes API Server's **Server-Side Apply (SSA)** logic to detect no-ops.
+
+**No-Op Logic:**
+If the status patch matches the existing state, the API Server will treat it as a no-op, generating no events and no resource version updates.
+
+**Code Example:**
+```go
+// SSA Pattern: blindly patch the status.
+// The API Server calculates the diff. If no change, it returns 200 OK with no-op.
+if err := r.Status().Patch(
+    ctx,
+    &multigresv1alpha1.MultigresCluster{
+        ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+        Status:     newStatus,
+    },
+    client.Apply,
+    client.FieldOwner("multigres-operator"),
+    client.ForceOwnership,
+); err != nil {
+    return err
+}
+```
+
+**Alternative (Client-Side Check):**
+If network bandwidth becomes a bottleneck, we *could* implement a client-side check, but it requires deep-copying and careful handling of pointers:
+```go
+// NOT RECOMMENDED unless profiling shows network IO is a bottleneck.
+// Requires deep equality check which is expensive on CPU and hard to maintain.
+if !reflect.DeepEqual(cluster.Status, newStatus) {
+    r.Status().Patch(...)
+}
+```
+**Decision:** We prefer the cleaner code of SSA rely on the API Server's optimized diffing engine until proven otherwise.
