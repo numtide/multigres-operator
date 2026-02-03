@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -222,7 +223,7 @@ func (r *TopoServerReconciler) updateStatus(
 	toposerver.Status.PeerService = toposerver.Name + "-headless"
 
 	// Update conditions
-	toposerver.Status.Conditions = r.buildConditions(toposerver, sts)
+	r.setConditions(toposerver, sts)
 
 	// Update Phase
 	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
@@ -279,18 +280,22 @@ func (r *TopoServerReconciler) updateStatus(
 	return nil
 }
 
-// buildConditions creates status conditions based on observed state.
-func (r *TopoServerReconciler) buildConditions(
+// setConditions creates status conditions based on observed state.
+func (r *TopoServerReconciler) setConditions(
 	toposerver *multigresv1alpha1.TopoServer,
 	sts *appsv1.StatefulSet,
-) []metav1.Condition {
-	conditions := []metav1.Condition{}
-
+) {
 	// Ready condition
 	readyCondition := metav1.Condition{
 		Type:               "Ready",
 		ObservedGeneration: toposerver.Generation,
-		LastTransitionTime: metav1.Now(),
+		Status:             metav1.ConditionFalse,
+		Reason:             "NotAllReplicasReady",
+		Message: fmt.Sprintf(
+			"%d/%d replicas ready",
+			sts.Status.ReadyReplicas,
+			sts.Status.Replicas,
+		),
 	}
 
 	if sts.Status.ObservedGeneration == sts.Generation &&
@@ -299,18 +304,11 @@ func (r *TopoServerReconciler) buildConditions(
 		readyCondition.Status = metav1.ConditionTrue
 		readyCondition.Reason = "AllReplicasReady"
 		readyCondition.Message = fmt.Sprintf("All %d replicas are ready", sts.Status.ReadyReplicas)
-	} else {
-		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Reason = "NotAllReplicasReady"
-		if sts.Status.ObservedGeneration != sts.Generation {
-			readyCondition.Message = "StatefulSet update in progress"
-		} else {
-			readyCondition.Message = fmt.Sprintf("%d/%d replicas ready", sts.Status.ReadyReplicas, sts.Status.Replicas)
-		}
+	} else if sts.Status.ObservedGeneration != sts.Generation {
+		readyCondition.Message = "StatefulSet update in progress"
 	}
 
-	conditions = append(conditions, readyCondition)
-	return conditions
+	meta.SetStatusCondition(&toposerver.Status.Conditions, readyCondition)
 }
 
 // SetupWithManager sets up the controller with the Manager.

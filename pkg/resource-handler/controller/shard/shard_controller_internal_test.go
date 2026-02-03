@@ -88,7 +88,7 @@ func buildHashedMultiOrchName(shard *multigresv1alpha1.Shard, cellName string) s
 	)
 }
 
-func TestBuildConditions(t *testing.T) {
+func TestSetConditions(t *testing.T) {
 	tests := map[string]struct {
 		generation int64
 		totalPods  int32
@@ -147,12 +147,13 @@ func TestBuildConditions(t *testing.T) {
 			r := &ShardReconciler{
 				Recorder: record.NewFakeRecorder(100),
 			}
-			got := r.buildConditions(shard, tc.totalPods, tc.readyPods)
+			r.setConditions(shard, tc.totalPods, tc.readyPods)
+			got := shard.Status.Conditions
 
 			// Use go-cmp for exact match, ignoring LastTransitionTime
 			opts := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")
 			if diff := cmp.Diff(tc.want, got, opts); diff != "" {
-				t.Errorf("buildConditions() mismatch (-want +got):\n%s", diff)
+				t.Errorf("setConditions() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
