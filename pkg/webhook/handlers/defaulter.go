@@ -49,6 +49,9 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	scopedResolver := *d.Resolver
 	scopedResolver.Namespace = cluster.Namespace
 	scopedResolver.TemplateDefaults = cluster.Spec.TemplateDefaults
+	scopedResolver.CoreTemplateCache = make(map[string]*multigresv1alpha1.CoreTemplate)
+	scopedResolver.CellTemplateCache = make(map[string]*multigresv1alpha1.CellTemplate)
+	scopedResolver.ShardTemplateCache = make(map[string]*multigresv1alpha1.ShardTemplate)
 
 	// 2.5 Promote Implicit Defaults to Explicit
 	// If the user hasn't specified a template, but a "default" one exists,

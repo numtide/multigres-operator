@@ -89,20 +89,16 @@ func (r *Resolver) ResolveShardTemplate(
 	}
 
 	// Check cache first
-	if cached, found := r.shardTemplateCache[string(resolvedName)]; found {
-		return cached.DeepCopy(), nil
+	if cached, found := r.ShardTemplateCache[string(resolvedName)]; found {
+		return cached, nil
 	}
 
+	// 2. Fetch
 	tpl := &multigresv1alpha1.ShardTemplate{}
-	err := r.Client.Get(
-		ctx,
-		types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace},
-		tpl,
-	)
-	if err != nil {
+	key := types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace}
+	if err := r.Client.Get(ctx, key, tpl); err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
-				// Don't cache fallback empty templates
 				return &multigresv1alpha1.ShardTemplate{}, nil
 			}
 			return nil, fmt.Errorf("referenced ShardTemplate '%s' not found: %w", resolvedName, err)
@@ -110,8 +106,8 @@ func (r *Resolver) ResolveShardTemplate(
 		return nil, fmt.Errorf("failed to get ShardTemplate: %w", err)
 	}
 
-	// Store in cache
-	r.shardTemplateCache[string(resolvedName)] = tpl
+	// 3. Cache
+	r.ShardTemplateCache[string(resolvedName)] = tpl
 	return tpl.DeepCopy(), nil
 }
 

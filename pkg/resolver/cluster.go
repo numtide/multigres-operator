@@ -256,17 +256,14 @@ func (r *Resolver) ResolveCoreTemplate(
 	}
 
 	// Check cache first
-	if cached, found := r.coreTemplateCache[string(resolvedName)]; found {
-		return cached.DeepCopy(), nil
+	if cached, found := r.CoreTemplateCache[string(resolvedName)]; found {
+		return cached, nil
 	}
 
+	// 2. Fetch
 	tpl := &multigresv1alpha1.CoreTemplate{}
-	err := r.Client.Get(
-		ctx,
-		types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace},
-		tpl,
-	)
-	if err != nil {
+	key := types.NamespacedName{Name: string(resolvedName), Namespace: r.Namespace}
+	if err := r.Client.Get(ctx, key, tpl); err != nil {
 		if errors.IsNotFound(err) {
 			if isImplicitFallback {
 				// Don't cache fallback empty templates
@@ -277,8 +274,8 @@ func (r *Resolver) ResolveCoreTemplate(
 		return nil, fmt.Errorf("failed to get CoreTemplate: %w", err)
 	}
 
-	// Store in cache
-	r.coreTemplateCache[string(resolvedName)] = tpl
+	// 3. Cache
+	r.CoreTemplateCache[string(resolvedName)] = tpl
 	return tpl.DeepCopy(), nil
 }
 
