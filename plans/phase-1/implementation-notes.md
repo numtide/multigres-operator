@@ -1,6 +1,8 @@
-# Architecture: Controller Caching Strategy
+# Implementation Notes & Architecture
 
-## The Problem: The Informer Memory Bomb
+## Controller Caching Strategy
+
+### The Problem: The Informer Memory Bomb
 
 By default, the `controller-runtime` cache (Informer) watches *every* instance of a resource kind across *every* namespace.
 In large multi-tenant clusters (e.g. Supabase production), a single cluster may contain:
@@ -18,11 +20,11 @@ This causes:
 - **Slow Startup:** The initial List call times out or takes forever.
 - **Network Load:** Massive unnecessary traffic on the API Server.
 
-## The Solution: Hybrid Global/Local Caching
+### The Solution: Hybrid Global/Local Caching
 
 We implement a **Split-Brain Caching Strategy** using `cache.ByObject` options. This allows us to apply different rules based on the namespace.
 
-### Global Rule (The "Noise Cancelling")
+#### Global Rule (The "Noise Cancelling")
 For high-volume resources in regular user namespaces, we strictly filter the cache to ONLY store objects managed by this operator.
 
 **Filtered Resources:**
@@ -37,7 +39,7 @@ app.kubernetes.io/managed-by = multigres-operator
 ```
 This effectively ignores any Secret/Service/StatefulSet that does not belong to us.
 
-### Local Exception (The "Safe Zone")
+#### Local Exception (The "Safe Zone")
 Some critical resources *must* be seen even if they don't have our label.
 - **Cert-Manager Secrets:** Created by `cert-manager` for webhook TLS.
 - **Leader Election Leases:** Created by `client-go`.
@@ -49,7 +51,7 @@ We configure a specific override for the operator's own namespace (e.g. `multigr
 defaultNS: {} // Unfiltered in our own namespace
 ```
 
-### ConfigMap Policy (The "Flexibility")
+#### ConfigMap Policy (The "Flexibility")
 **Decision:** ConfigMaps are **NOT** filtered globally.
 
 **Reasoning:**
@@ -61,7 +63,7 @@ If we filtered ConfigMaps, the operator would be unable to:
 
 Since ConfigMaps are generally lower volume and lower security risk than Secrets, we trade scalability for usability here.
 
-### Summary Table
+#### Summary Table
 
 | Resource | Scope | Filter | Why? |
 | :--- | :--- | :--- | :--- |
@@ -73,7 +75,7 @@ Since ConfigMaps are generally lower volume and lower security risk than Secrets
 | **StatefulSet** | Operator NS | **NONE (All)** | Self-discovery. |
 | **ConfigMap** | All Namespaces | **NONE (All)** | User Configs (postgresql.conf). |
 
-## Developer Guide: Reading Secrets
+### Developer Guide: Reading Secrets
 
 Because Secrets are filtered globally, you cannot simply `r.Get()` an arbitrary user secret (e.g. `spec.passwordSecretRef`) unless it is labeled.
 
@@ -90,7 +92,7 @@ If Option A is impossible, use the API Reader directly. This makes a live call t
 err := mgr.GetAPIReader().Get(ctx, key, &secret)
 ```
 
-# Operator Performance Tuning
+## Operator Performance Tuning
 
 ### High Concurrency & Throughput
 To handle large-scale clusters with thousands of shards, we have tuned the operator for high concurrency.
@@ -121,7 +123,7 @@ We have enabled **20 Parallel Workers** (`MaxConcurrentReconciles: 20`) for all 
 - **Load:** Increases load on the Kubernetes API Server (mitigated by our Caching Strategy).
 - **Complexity:** Requires careful handling of shared resources (though our controllers are designed to be stateless/independent).
 
-# Event Filtering & Idempotency
+## Event Filtering & Idempotency
 
 ### GenerationChangedPredicate
 
@@ -183,3 +185,29 @@ if !reflect.DeepEqual(cluster.Status, newStatus) {
 }
 ```
 **Decision:** We prefer the cleaner code of SSA rely on the API Server's optimized diffing engine until proven otherwise.
+
+
+## Known Behaviors & Quirks
+
+### Infinite "Configured" Loop (Client-Side Apply)
+
+**The Symptom:**
+When running `kubectl apply -f ...` on a manifest (like `no-templates.yaml`) repeatedly, `kubectl` reports `configured` every time, even though nothing changes in the cluster.
+
+**The Cause:**
+This is a conflict between **Client-Side Apply (CSA)** and **Mutating Webhooks**.
+1.  **The Diff:** Legacy `kubectl apply` compares your local file (which omits defaults like `replicas`) against the live server object (where the webhook has injected `replicas: 1`).
+2.  **The Patch:** `kubectl` sees a discrepancy and sends a PATCH request to **remove** the field (setting it to `null`).
+3.  **The Webhook:** The Webhook intercepts this PATCH and immediately puts `replicas: 1` back.
+4.  **The No-Op:** The API Server sees that the final state matches the initial state and performs a **No-Op** (no `Generation` or `ResourceVersion` bump).
+5.  **The Report:** Despite the server-side no-op, `kubectl` reports `configured` because it successfully sent a non-empty patch.
+
+**The Verdict:**
+This is **standard Kubernetes behavior** for Operators with defaulting webhooks (common in Istio, Cert-Manager, etc.). It is a limitation of the legacy `kubectl apply` logic, not a bug in the operator.
+
+**The Solution:**
+
+It's worth noting here that this is NOT an issue, but if seeing repeatedly `configured` is disturbing the following can be done:
+
+* **Recommended:** Use Server-Side Apply (`kubectl apply --server-side`). This moves the merge logic to the API server, which correctly handles ownership and defaults without fighting.
+* **Alternative:** Explicitly set all default values in your local YAML to match the server state (e.g., manually add `replicas: 1`).

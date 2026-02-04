@@ -2323,6 +2323,9 @@ spec:
                   type: object
                 maxItems: 32
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               tableGroupName:
                 description: TableGroupName is the name of this table group.
                 maxLength: 25
@@ -2395,6 +2398,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               message:
                 description: Message provides details about the current phase.
                 type: string

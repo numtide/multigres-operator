@@ -169,6 +169,7 @@ spec:
                         maxItems: 20
                         minItems: 1
                         type: array
+                        x-kubernetes-list-type: set
                         x-kubernetes-validations:
                         - message: endpoints must be valid URLs
                           rule: self.all(x, x.matches('^https?://'))

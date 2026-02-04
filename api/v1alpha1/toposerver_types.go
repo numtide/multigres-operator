@@ -66,6 +66,8 @@ type TopoServerStatus struct {
 
 	// Conditions represent the latest available observations.
 	// +optional
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// Phase represents the aggregated lifecycle state of the toposerver.
@@ -141,6 +143,7 @@ type ExternalTopoServerSpec struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=20
 	// +kubebuilder:validation:XValidation:rule="self.all(x, x.matches('^https?://'))",message="endpoints must be valid URLs"
+	// +listType=set
 	Endpoints []EndpointUrl `json:"endpoints"`
 
 	// CASecret is the name of the secret containing the CA certificate.
