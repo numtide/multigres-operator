@@ -54,7 +54,7 @@ func (r *Resolver) ResolveCellTemplate(
 	}
 
 	// Check cache first
-	if cached, found := r.cellTemplateCache[string(resolvedName)]; found {
+	if cached, found := r.CellTemplateCache[string(resolvedName)]; found {
 		return cached.DeepCopy(), nil
 	}
 
@@ -76,7 +76,7 @@ func (r *Resolver) ResolveCellTemplate(
 	}
 
 	// Store in cache
-	r.cellTemplateCache[string(resolvedName)] = tpl
+	r.CellTemplateCache[string(resolvedName)] = tpl
 	return tpl.DeepCopy(), nil
 }
 

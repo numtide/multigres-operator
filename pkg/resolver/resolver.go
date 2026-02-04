@@ -23,12 +23,12 @@ type Resolver struct {
 	Namespace string
 	// TemplateDefaults contains the cluster-level template references.
 	TemplateDefaults multigresv1alpha1.TemplateDefaults
-	// coreTemplateCache is a request-scoped cache for CoreTemplates.
-	coreTemplateCache map[string]*multigresv1alpha1.CoreTemplate
-	// cellTemplateCache is a request-scoped cache for CellTemplates.
-	cellTemplateCache map[string]*multigresv1alpha1.CellTemplate
-	// shardTemplateCache is a request-scoped cache for ShardTemplates.
-	shardTemplateCache map[string]*multigresv1alpha1.ShardTemplate
+	// CoreTemplateCache is a request-scoped cache for CoreTemplates.
+	CoreTemplateCache map[string]*multigresv1alpha1.CoreTemplate
+	// CellTemplateCache is a request-scoped cache for CellTemplates.
+	CellTemplateCache map[string]*multigresv1alpha1.CellTemplate
+	// ShardTemplateCache is a request-scoped cache for ShardTemplates.
+	ShardTemplateCache map[string]*multigresv1alpha1.ShardTemplate
 }
 
 // NewResolver creates a new defaults.Resolver.
@@ -41,9 +41,9 @@ func NewResolver(
 		Client:             c,
 		Namespace:          namespace,
 		TemplateDefaults:   tplDefaults,
-		coreTemplateCache:  make(map[string]*multigresv1alpha1.CoreTemplate),
-		cellTemplateCache:  make(map[string]*multigresv1alpha1.CellTemplate),
-		shardTemplateCache: make(map[string]*multigresv1alpha1.ShardTemplate),
+		CoreTemplateCache:  make(map[string]*multigresv1alpha1.CoreTemplate),
+		CellTemplateCache:  make(map[string]*multigresv1alpha1.CellTemplate),
+		ShardTemplateCache: make(map[string]*multigresv1alpha1.ShardTemplate),
 	}
 }
 
