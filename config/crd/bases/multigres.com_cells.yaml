@@ -1266,6 +1266,7 @@ spec:
                         maxItems: 20
                         minItems: 1
                         type: array
+                        x-kubernetes-list-type: set
                         x-kubernetes-validations:
                         - message: endpoints must be valid URLs
                           rule: self.all(x, x.matches('^https?://'))
@@ -1372,6 +1373,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               gatewayReadyReplicas:
                 description: GatewayReadyReplicas is the number of gateway pods that
                   are ready.

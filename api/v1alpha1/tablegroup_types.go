@@ -59,6 +59,8 @@ type TableGroupSpec struct {
 	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`
 
 	// Shards is the list of FULLY RESOLVED shard specifications.
+	// +listType=map
+	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Shards []ShardResolvedSpec `json:"shards"`
 }
@@ -91,6 +93,8 @@ type TableGroupStatus struct {
 
 	// Conditions represent the latest available observations.
 	// +optional
+	// +listType=map
+	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// Phase represents the aggregated lifecycle state of the table group.

@@ -2316,6 +2316,7 @@ spec:
                   type: string
                 maxItems: 50
                 type: array
+                x-kubernetes-list-type: set
               conditions:
                 description: Conditions represent the latest available observations.
                 items:
@@ -2373,6 +2374,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               message:
                 description: Message provides details about the current phase.
                 type: string
