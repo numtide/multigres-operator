@@ -192,13 +192,13 @@ func TestResolver_ValidateReference(t *testing.T) {
 	t.Run("Core", func(t *testing.T) {
 		r := NewResolver(cEmpty, ns)
 
-		// Empty name -> Valid
+		// Empty name -> Valid (no explicit reference)
 		if err := r.ValidateCoreTemplateReference(t.Context(), ""); err != nil {
 			t.Errorf("Empty name should be valid, got %v", err)
 		}
-		// Fallback name ("default") -> Valid even if missing in client
-		if err := r.ValidateCoreTemplateReference(t.Context(), FallbackCoreTemplate); err != nil {
-			t.Errorf("Fallback name should be valid even if missing, got %v", err)
+		// Explicit "default" reference with missing template -> Invalid
+		if err := r.ValidateCoreTemplateReference(t.Context(), FallbackCoreTemplate); err == nil {
+			t.Error("Explicit 'default' reference should error when template is missing")
 		}
 		// Random missing -> Invalid
 		if err := r.ValidateCoreTemplateReference(t.Context(), "missing"); err == nil {
@@ -223,8 +223,9 @@ func TestResolver_ValidateReference(t *testing.T) {
 		if err := r.ValidateCellTemplateReference(t.Context(), ""); err != nil {
 			t.Errorf("Empty name should be valid, got %v", err)
 		}
-		if err := r.ValidateCellTemplateReference(t.Context(), FallbackCellTemplate); err != nil {
-			t.Errorf("Fallback name should be valid even if missing, got %v", err)
+		// Explicit "default" reference with missing template -> Invalid
+		if err := r.ValidateCellTemplateReference(t.Context(), FallbackCellTemplate); err == nil {
+			t.Error("Explicit 'default' reference should error when template is missing")
 		}
 		if err := r.ValidateCellTemplateReference(t.Context(), "missing"); err == nil {
 			t.Error("Missing template should error")
@@ -245,8 +246,9 @@ func TestResolver_ValidateReference(t *testing.T) {
 		if err := r.ValidateShardTemplateReference(t.Context(), ""); err != nil {
 			t.Errorf("Empty name should be valid, got %v", err)
 		}
-		if err := r.ValidateShardTemplateReference(t.Context(), FallbackShardTemplate); err != nil {
-			t.Errorf("Fallback name should be valid even if missing, got %v", err)
+		// Explicit "default" reference with missing template -> Invalid
+		if err := r.ValidateShardTemplateReference(t.Context(), FallbackShardTemplate); err == nil {
+			t.Error("Explicit 'default' reference should error when template is missing")
 		}
 		if err := r.ValidateShardTemplateReference(t.Context(), "missing"); err == nil {
 			t.Error("Missing template should error")

@@ -56,9 +56,6 @@ func (r *Resolver) ValidateCoreTemplateReference(
 	if name == "" {
 		return nil
 	}
-	if name == FallbackCoreTemplate {
-		return nil
-	}
 
 	exists, err := r.CoreTemplateExists(ctx, name)
 	if err != nil {
@@ -102,9 +99,6 @@ func (r *Resolver) ValidateCellTemplateReference(
 	if name == "" {
 		return nil
 	}
-	if name == FallbackCellTemplate {
-		return nil
-	}
 
 	exists, err := r.CellTemplateExists(ctx, name)
 	if err != nil {
@@ -146,9 +140,6 @@ func (r *Resolver) ValidateShardTemplateReference(
 	name multigresv1alpha1.TemplateRef,
 ) error {
 	if name == "" {
-		return nil
-	}
-	if name == FallbackShardTemplate {
 		return nil
 	}
 
