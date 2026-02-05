@@ -368,7 +368,6 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 			r := NewResolver(
 				fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build(),
 				"default",
-				multigresv1alpha1.TemplateDefaults{},
 			)
 
 			got := tc.input.DeepCopy()
@@ -394,7 +393,7 @@ func TestResolver_PopulateClusterDefaults_ClientError(t *testing.T) {
 			OnGet: func(_ client.ObjectKey) error { return errSim },
 		})
 
-	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
+	r := NewResolver(mc, "default")
 	// This input triggers the "check implicit shard template" path because ShardTemplate is empty
 	input := &multigresv1alpha1.MultigresCluster{
 		Spec: multigresv1alpha1.MultigresClusterSpec{
@@ -617,7 +616,7 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
-			r := NewResolver(c, ns, tc.cluster.Spec.TemplateDefaults)
+			r := NewResolver(c, ns)
 
 			got, err := r.ResolveGlobalTopo(t.Context(), tc.cluster)
 			if tc.wantErr {
@@ -702,7 +701,7 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
-			r := NewResolver(c, ns, tc.cluster.Spec.TemplateDefaults)
+			r := NewResolver(c, ns)
 
 			got, err := r.ResolveMultiAdmin(t.Context(), tc.cluster)
 			if tc.wantErr {
@@ -730,7 +729,6 @@ func TestResolver_ResolveCoreTemplate(t *testing.T) {
 	r := NewResolver(
 		fake.NewClientBuilder().WithScheme(scheme).Build(),
 		"default",
-		multigresv1alpha1.TemplateDefaults{},
 	)
 
 	// 1. Implicit Fallback ("default" or "") -> Not Found -> Returns nil, nil (No Error)
@@ -767,7 +765,7 @@ func TestResolver_ClientErrors_Core(t *testing.T) {
 	}
 	c := testutil.NewFakeClientWithFailures(baseClient, failConfig)
 
-	r := NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{})
+	r := NewResolver(c, "default")
 
 	_, err := r.ResolveCoreTemplate(t.Context(), "any")
 	if err == nil || !errors.Is(err, errSim) {
@@ -842,7 +840,7 @@ func TestResolver_ResolveMultiAdminWeb(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
-			r := NewResolver(c, ns, tc.cluster.Spec.TemplateDefaults)
+			r := NewResolver(c, ns)
 
 			got, err := r.ResolveMultiAdminWeb(t.Context(), tc.cluster)
 			if tc.wantErr {

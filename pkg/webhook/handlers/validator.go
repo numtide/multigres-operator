@@ -83,7 +83,7 @@ func (v *MultigresClusterValidator) validateTemplatesExist(
 ) error {
 	// Create an ephemeral resolver for validation
 	// "Shared Resolver Pattern"
-	res := resolver.NewResolver(v.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
+	res := resolver.NewResolver(v.Client, cluster.Namespace)
 	return res.ValidateClusterIntegrity(ctx, cluster)
 }
 
@@ -92,7 +92,7 @@ func (v *MultigresClusterValidator) validateLogic(
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (admission.Warnings, error) {
 	// Create an ephemeral resolver for validation
-	res := resolver.NewResolver(v.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
+	res := resolver.NewResolver(v.Client, cluster.Namespace)
 	return res.ValidateClusterLogic(ctx, cluster)
 }
 

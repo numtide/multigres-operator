@@ -135,7 +135,7 @@ func TestResolver_ValidateClusterIntegrity(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			r := NewResolver(fakeClient, "default", tc.cluster.Spec.TemplateDefaults)
+			r := NewResolver(fakeClient, "default")
 			err := r.ValidateClusterIntegrity(t.Context(), tc.cluster)
 
 			if tc.wantErr == "" {
@@ -362,7 +362,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			if tc.clientFailures != nil {
 				c = testutil.NewFakeClientWithFailures(fakeClient, tc.clientFailures)
 			}
-			r := NewResolver(c, "default", tc.cluster.Spec.TemplateDefaults)
+			r := NewResolver(c, "default")
 			warnings, err := r.ValidateClusterLogic(t.Context(), tc.cluster)
 
 			// Check Error

@@ -21,6 +21,9 @@ const (
 	// FallbackShardTemplate is the name of the template to look for if no specific ShardTemplate is referenced.
 	FallbackShardTemplate = "default"
 
+	// DefaultPoolName is the name used for the default pool when no pools are specified in a ShardTemplate.
+	DefaultPoolName = "default"
+
 	// DefaultSystemDatabaseName is the name of the mandatory system database.
 	DefaultSystemDatabaseName = "postgres"
 

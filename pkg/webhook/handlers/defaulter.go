@@ -48,7 +48,6 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	// We copy the resolver and point it to the Object's Namespace.
 	scopedResolver := *d.Resolver
 	scopedResolver.Namespace = cluster.Namespace
-	scopedResolver.TemplateDefaults = cluster.Spec.TemplateDefaults
 	scopedResolver.CoreTemplateCache = make(map[string]*multigresv1alpha1.CoreTemplate)
 	scopedResolver.CellTemplateCache = make(map[string]*multigresv1alpha1.CellTemplate)
 	scopedResolver.ShardTemplateCache = make(map[string]*multigresv1alpha1.ShardTemplate)
@@ -62,21 +61,18 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 			exists, _ := scopedResolver.CoreTemplateExists(ctx, resolver.FallbackCoreTemplate)
 			if exists {
 				cluster.Spec.TemplateDefaults.CoreTemplate = resolver.FallbackCoreTemplate
-				scopedResolver.TemplateDefaults.CoreTemplate = resolver.FallbackCoreTemplate
 			}
 		}
 		if cluster.Spec.TemplateDefaults.CellTemplate == "" {
 			exists, _ := scopedResolver.CellTemplateExists(ctx, resolver.FallbackCellTemplate)
 			if exists {
 				cluster.Spec.TemplateDefaults.CellTemplate = resolver.FallbackCellTemplate
-				scopedResolver.TemplateDefaults.CellTemplate = resolver.FallbackCellTemplate
 			}
 		}
 		if cluster.Spec.TemplateDefaults.ShardTemplate == "" {
 			exists, _ := scopedResolver.ShardTemplateExists(ctx, resolver.FallbackShardTemplate)
 			if exists {
 				cluster.Spec.TemplateDefaults.ShardTemplate = resolver.FallbackShardTemplate
-				scopedResolver.TemplateDefaults.ShardTemplate = resolver.FallbackShardTemplate
 			}
 		}
 	}

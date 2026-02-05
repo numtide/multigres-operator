@@ -46,7 +46,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileGlobalTopoServer(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to missing global topo spec, got nil")
@@ -73,7 +73,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdmin(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to missing multi admin spec, got nil")
@@ -100,7 +100,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdminWeb(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to missing multi admin web spec, got nil")
@@ -131,7 +131,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileGlobalTopoServer(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil || err.Error() != "failed to apply global topo server: patch error" {
 			t.Errorf("Expected 'patch error', got %v", err)
@@ -158,7 +158,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdmin(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil || err.Error() != "failed to apply multiadmin deployment: patch error" {
 			t.Errorf("Expected 'patch error', got %v", err)
@@ -185,7 +185,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdminWeb(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil || err.Error() != "failed to apply multiadmin-web deployment: patch error" {
 			t.Errorf("Expected 'patch error', got %v", err)
@@ -213,7 +213,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileGlobalTopoServer(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to build failure, got nil")
@@ -237,7 +237,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdmin(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to build failure, got nil")
@@ -261,7 +261,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdminWeb(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to build failure, got nil")
@@ -292,7 +292,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdmin(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to build failure, got nil")
@@ -322,7 +322,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdmin(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil || err.Error() != "failed to apply multiadmin service: service patch error" {
 			t.Errorf("Expected 'service patch error', got %v", err)
@@ -348,7 +348,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdminWeb(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to build failure, got nil")
@@ -378,7 +378,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 		err := r.reconcileMultiAdminWeb(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil ||
 			err.Error() != "failed to apply multiadmin-web service: service patch error" {
@@ -765,7 +765,7 @@ func TestReconcile_Global_BuilderErrors(t *testing.T) {
 		}
 
 		// Initialize resolver with correct namespace and defaults using constructor
-		res := resolver.NewResolver(c, baseCluster.Namespace, baseCluster.Spec.TemplateDefaults)
+		res := resolver.NewResolver(c, baseCluster.Namespace)
 		err := reconciler.reconcileMultiAdmin(t.Context(), cluster, res)
 		if err == nil {
 			t.Error("Expected error, got nil")
@@ -801,7 +801,7 @@ func TestReconcile_Global_BuilderErrors(t *testing.T) {
 		}
 
 		cluster := baseCluster.DeepCopy()
-		res := resolver.NewResolver(c, baseCluster.Namespace, baseCluster.Spec.TemplateDefaults)
+		res := resolver.NewResolver(c, baseCluster.Namespace)
 		err := reconciler.reconcileMultiAdminWeb(t.Context(), cluster, res)
 		if err == nil {
 			t.Error("Expected error, got nil")
@@ -837,7 +837,7 @@ func TestReconcile_Global_BuilderErrors(t *testing.T) {
 		}
 
 		cluster := baseCluster.DeepCopy()
-		res := resolver.NewResolver(c, baseCluster.Namespace, baseCluster.Spec.TemplateDefaults)
+		res := resolver.NewResolver(c, baseCluster.Namespace)
 		err := reconciler.reconcileMultiAdminWeb(t.Context(), cluster, res)
 		if err == nil {
 			t.Error("Expected error, got nil")

@@ -334,7 +334,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 					c = testutil.NewFakeClientWithFailures(c, tc.failureConfig)
 				}
 
-				res = resolver.NewResolver(c, "test-ns", multigresv1alpha1.TemplateDefaults{})
+				res = resolver.NewResolver(c, "test-ns")
 			}
 
 			defaulter := NewMultigresClusterDefaulter(res)

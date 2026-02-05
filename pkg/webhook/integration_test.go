@@ -110,11 +110,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// 6. Setup Resolver & Handlers
-	res := resolver.NewResolver(cachedClient, testNamespace, multigresv1alpha1.TemplateDefaults{
-		CoreTemplate:  "default",
-		CellTemplate:  "default",
-		ShardTemplate: "default",
-	})
+res := resolver.NewResolver(cachedClient, testNamespace)
 
 	if err := multigreswebhook.Setup(mgr, res, multigreswebhook.Options{
 		Enable:       true,

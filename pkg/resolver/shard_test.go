@@ -136,7 +136,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
-			r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
+			r := NewResolver(c, ns)
 
 			orch, pools, err := r.ResolveShard(t.Context(), tc.config, tc.allCellNames)
 			if tc.wantErr {
@@ -213,7 +213,7 @@ func TestResolver_ResolveShardTemplate(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
 				Build()
-			r := NewResolver(c, ns, tc.defaults)
+			r := NewResolver(c, ns)
 
 			res, err := r.ResolveShardTemplate(t.Context(), tc.reqName)
 			if tc.wantErr {
@@ -475,7 +475,7 @@ func TestResolver_ClientErrors_Shard(t *testing.T) {
 			OnGet: func(_ client.ObjectKey) error { return errSimulated },
 		},
 	)
-	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
+	r := NewResolver(mc, "default")
 
 	_, err := r.ResolveShardTemplate(t.Context(), "any")
 	if err == nil ||

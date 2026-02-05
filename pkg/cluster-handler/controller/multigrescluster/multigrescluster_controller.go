@@ -52,7 +52,7 @@ func (r *MultigresClusterReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to get MultigresCluster: %w", err)
 	}
 
-	res := resolver.NewResolver(r.Client, cluster.Namespace, cluster.Spec.TemplateDefaults)
+	res := resolver.NewResolver(r.Client, cluster.Namespace)
 
 	// Apply defaults (in-memory) to ensure we have images/configs/system-catalog even if webhook didn't run.
 	decisions, err := res.PopulateClusterDefaults(ctx, cluster)

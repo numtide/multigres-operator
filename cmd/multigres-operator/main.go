@@ -88,11 +88,6 @@ func main() {
 	var webhookServiceAccount string
 	var webhookServiceName string
 
-	// Template Default Flags
-	var defaultCoreTemplate string
-	var defaultCellTemplate string
-	var defaultShardTemplate string
-
 	defaultNS := os.Getenv("POD_NAMESPACE")
 	if defaultNS == "" {
 		setupLog.Error(
@@ -169,26 +164,6 @@ func main() {
 		"webhook-service-name",
 		"multigres-operator-webhook-service",
 		"Name of the Kubernetes Service for the webhook",
-	)
-
-	// Template Defaults
-	flag.StringVar(
-		&defaultCoreTemplate,
-		"default-core-template",
-		"default",
-		"Default CoreTemplate name",
-	)
-	flag.StringVar(
-		&defaultCellTemplate,
-		"default-cell-template",
-		"default",
-		"Default CellTemplate name",
-	)
-	flag.StringVar(
-		&defaultShardTemplate,
-		"default-shard-template",
-		"default",
-		"Default ShardTemplate name",
 	)
 
 	opts := zap.Options{Development: true}
@@ -372,11 +347,6 @@ func main() {
 	globalResolver := resolver.NewResolver(
 		mgr.GetClient(),
 		webhookServiceNamespace,
-		multigresv1alpha1.TemplateDefaults{
-			CoreTemplate:  multigresv1alpha1.TemplateRef(defaultCoreTemplate),
-			CellTemplate:  multigresv1alpha1.TemplateRef(defaultCellTemplate),
-			ShardTemplate: multigresv1alpha1.TemplateRef(defaultShardTemplate),
-		},
 	)
 
 	if err = (&multigresclustercontroller.MultigresClusterReconciler{

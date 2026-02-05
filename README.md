@@ -184,9 +184,6 @@ You can customize the operator's behavior by passing flags to the binary (or edi
 | `--webhook-cert-dir` | `/var/run/secrets/webhook` | Directory to read/write webhook certificates. |
 | `--webhook-service-name` | `multigres-operator-webhook-service` | Name of the Service pointing to the webhook. |
 | `--webhook-service-namespace`| *Current Namespace* | Namespace of the webhook service. |
-| `--default-core-template` | `"default"` | Name of the CoreTemplate to use as namespace fallback. |
-| `--default-cell-template` | `"default"` | Name of the CellTemplate to use as namespace fallback. |
-| `--default-shard-template` | `"default"` | Name of the ShardTemplate to use as namespace fallback. |
 | `--metrics-bind-address` | `"0"` | Address for metrics (set to `:8080` to enable). |
 | `--leader-elect` | `false` | Enable leader election (recommended for HA deployments). |
 
