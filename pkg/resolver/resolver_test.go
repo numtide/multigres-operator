@@ -71,8 +71,7 @@ func TestNewResolver(t *testing.T) {
 	t.Parallel()
 
 	c := fake.NewClientBuilder().Build()
-r := NewResolver(c, "ns")
-	r = NewResolver(c, "ns")
+	r := NewResolver(c, "ns")
 
 	if got, want := r.Client, c; got != want {
 		t.Errorf("Client mismatch: got %v, want %v", got, want)
