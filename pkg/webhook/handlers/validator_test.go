@@ -222,7 +222,7 @@ func TestMultigresClusterValidator(t *testing.T) {
 			wantAllowed: false,
 			wantMessage: "injected test error",
 		},
-		"Allowed: Missing Fallback Templates": {
+		"Denied: Missing Explicit Default Templates": {
 			object: func() *multigresv1alpha1.MultigresCluster {
 				c := baseCluster.DeepCopy()
 				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{
@@ -233,7 +233,8 @@ func TestMultigresClusterValidator(t *testing.T) {
 				return c
 			}(),
 			operation:   "Create",
-			wantAllowed: true,
+			wantAllowed: false,
+			wantMessage: "referenced CoreTemplate 'default' not found",
 		},
 		"Error: Missing CellTemplate (Core Valid)": {
 			object: func() *multigresv1alpha1.MultigresCluster {
