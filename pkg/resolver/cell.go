@@ -45,9 +45,6 @@ func (r *Resolver) ResolveCellTemplate(
 	resolvedName := name
 	isImplicitFallback := false
 
-	if resolvedName == "" {
-		resolvedName = r.TemplateDefaults.CellTemplate
-	}
 	if resolvedName == "" || resolvedName == FallbackCellTemplate {
 		resolvedName = FallbackCellTemplate
 		isImplicitFallback = true

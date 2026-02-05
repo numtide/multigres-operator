@@ -81,7 +81,6 @@ func TestSetup(t *testing.T) {
 	baseResolver := resolver.NewResolver(
 		baseClient,
 		"default",
-		multigresv1alpha1.TemplateDefaults{},
 	)
 
 	tests := map[string]struct {

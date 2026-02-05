@@ -93,7 +93,7 @@ func TestResolver_ResolveCell(t *testing.T) {
 					WithObjects(tc.objects...).
 					Build()
 			}
-			r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
+			r := NewResolver(c, ns)
 
 			gw, topo, err := r.ResolveCell(t.Context(), tc.config)
 			if tc.wantErr {
@@ -170,7 +170,7 @@ func TestResolver_ResolveCellTemplate(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(tc.existingObjects...).
 				Build()
-			r := NewResolver(c, ns, tc.defaults)
+			r := NewResolver(c, ns)
 
 			res, err := r.ResolveCellTemplate(t.Context(), tc.reqName)
 			if tc.wantErr {
@@ -360,7 +360,7 @@ func TestResolver_ClientErrors_Cell(t *testing.T) {
 			OnGet: func(_ client.ObjectKey) error { return errSimulated },
 		},
 	)
-	r := NewResolver(mc, "default", multigresv1alpha1.TemplateDefaults{})
+	r := NewResolver(mc, "default")
 
 	_, err := r.ResolveCellTemplate(t.Context(), "any")
 	if err == nil ||

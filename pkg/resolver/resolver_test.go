@@ -71,17 +71,14 @@ func TestNewResolver(t *testing.T) {
 	t.Parallel()
 
 	c := fake.NewClientBuilder().Build()
-	defaults := multigresv1alpha1.TemplateDefaults{CoreTemplate: "foo"}
-	r := NewResolver(c, "ns", defaults)
+r := NewResolver(c, "ns")
+	r = NewResolver(c, "ns")
 
 	if got, want := r.Client, c; got != want {
 		t.Errorf("Client mismatch: got %v, want %v", got, want)
 	}
 	if got, want := r.Namespace, "ns"; got != want {
 		t.Errorf("Namespace mismatch: got %q, want %q", got, want)
-	}
-	if got, want := r.TemplateDefaults.CoreTemplate, multigresv1alpha1.TemplateRef("foo"); got != want {
-		t.Errorf("Defaults mismatch: got %q, want %q", got, want)
 	}
 }
 
@@ -101,7 +98,7 @@ func TestResolver_TemplateExists(t *testing.T) {
 	objs := []client.Object{coreTpl, cellTpl, shardTpl}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
-	r := NewResolver(c, ns, multigresv1alpha1.TemplateDefaults{})
+	r := NewResolver(c, ns)
 
 	// 1. CoreTemplateExists
 	t.Run("CoreTemplateExists", func(t *testing.T) {
@@ -151,7 +148,7 @@ func TestResolver_TemplateExists(t *testing.T) {
 		failClient := testutil.NewFakeClientWithFailures(c, &testutil.FailureConfig{
 			OnGet: func(_ client.ObjectKey) error { return errSim },
 		})
-		rFail := NewResolver(failClient, ns, multigresv1alpha1.TemplateDefaults{})
+		rFail := NewResolver(failClient, ns)
 
 		if _, err := rFail.CoreTemplateExists(t.Context(), "any"); err == nil ||
 			!errors.Is(err, errSim) {
@@ -194,7 +191,7 @@ func TestResolver_ValidateReference(t *testing.T) {
 
 	// Case 1: Core Template
 	t.Run("Core", func(t *testing.T) {
-		r := NewResolver(cEmpty, ns, multigresv1alpha1.TemplateDefaults{})
+		r := NewResolver(cEmpty, ns)
 
 		// Empty name -> Valid
 		if err := r.ValidateCoreTemplateReference(t.Context(), ""); err != nil {
@@ -210,7 +207,7 @@ func TestResolver_ValidateReference(t *testing.T) {
 		}
 
 		// Real existence (Implicit Default)
-		rExists := NewResolver(cWithDefaults, ns, multigresv1alpha1.TemplateDefaults{})
+		rExists := NewResolver(cWithDefaults, ns)
 		if err := rExists.ValidateCoreTemplateReference(t.Context(), "default"); err != nil {
 			t.Errorf("Existing template should be valid, got %v", err)
 		}
@@ -222,7 +219,7 @@ func TestResolver_ValidateReference(t *testing.T) {
 
 	// Case 2: Cell Template
 	t.Run("Cell", func(t *testing.T) {
-		r := NewResolver(cEmpty, ns, multigresv1alpha1.TemplateDefaults{})
+		r := NewResolver(cEmpty, ns)
 
 		if err := r.ValidateCellTemplateReference(t.Context(), ""); err != nil {
 			t.Errorf("Empty name should be valid, got %v", err)
@@ -233,7 +230,7 @@ func TestResolver_ValidateReference(t *testing.T) {
 		if err := r.ValidateCellTemplateReference(t.Context(), "missing"); err == nil {
 			t.Error("Missing template should error")
 		}
-		rExists := NewResolver(cWithDefaults, ns, multigresv1alpha1.TemplateDefaults{})
+		rExists := NewResolver(cWithDefaults, ns)
 		if err := rExists.ValidateCellTemplateReference(t.Context(), "default"); err != nil {
 			t.Errorf("Existing template should be valid, got %v", err)
 		}
@@ -244,7 +241,7 @@ func TestResolver_ValidateReference(t *testing.T) {
 
 	// Case 3: Shard Template
 	t.Run("Shard", func(t *testing.T) {
-		r := NewResolver(cEmpty, ns, multigresv1alpha1.TemplateDefaults{})
+		r := NewResolver(cEmpty, ns)
 
 		if err := r.ValidateShardTemplateReference(t.Context(), ""); err != nil {
 			t.Errorf("Empty name should be valid, got %v", err)
@@ -255,7 +252,7 @@ func TestResolver_ValidateReference(t *testing.T) {
 		if err := r.ValidateShardTemplateReference(t.Context(), "missing"); err == nil {
 			t.Error("Missing template should error")
 		}
-		rExists := NewResolver(cWithDefaults, ns, multigresv1alpha1.TemplateDefaults{})
+		rExists := NewResolver(cWithDefaults, ns)
 		if err := rExists.ValidateShardTemplateReference(t.Context(), "default"); err != nil {
 			t.Errorf("Existing template should be valid, got %v", err)
 		}
@@ -273,7 +270,7 @@ func TestResolver_ValidateReference(t *testing.T) {
 				OnGet: func(_ client.ObjectKey) error { return errSim },
 			},
 		)
-		rFail := NewResolver(failClient, ns, multigresv1alpha1.TemplateDefaults{})
+		rFail := NewResolver(failClient, ns)
 
 		// Should propagate error
 		if err := rFail.ValidateCoreTemplateReference(t.Context(), "any"); !errors.Is(err, errSim) {
@@ -311,7 +308,7 @@ func TestResolver_Caching(t *testing.T) {
 			},
 		})
 
-		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+		r := NewResolver(clientWithCounter, ns)
 
 		// First call - should hit the API
 		tpl1, err := r.ResolveCoreTemplate(t.Context(), "default")
@@ -355,7 +352,7 @@ func TestResolver_Caching(t *testing.T) {
 			},
 		})
 
-		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+		r := NewResolver(clientWithCounter, ns)
 
 		// First call
 		tpl1, err := r.ResolveCellTemplate(t.Context(), "default")
@@ -401,7 +398,7 @@ func TestResolver_Caching(t *testing.T) {
 			},
 		})
 
-		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+		r := NewResolver(clientWithCounter, ns)
 
 		// First call
 		tpl1, err := r.ResolveShardTemplate(t.Context(), "default")
@@ -452,7 +449,7 @@ func TestResolver_Caching(t *testing.T) {
 			},
 		)
 
-		r := NewResolver(clientWithCounter, ns, multigresv1alpha1.TemplateDefaults{})
+		r := NewResolver(clientWithCounter, ns)
 
 		// Call with empty name (triggers fallback)
 		_, err := r.ResolveShardTemplate(t.Context(), "")

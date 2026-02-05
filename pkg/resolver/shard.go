@@ -45,7 +45,7 @@ func (r *Resolver) ResolveShard(
 	}
 
 	if len(pools) == 0 {
-		pools["default"] = multigresv1alpha1.PoolSpec{
+		pools[DefaultPoolName] = multigresv1alpha1.PoolSpec{
 			Type:  "readWrite",
 			Cells: multiOrch.Cells,
 		}
@@ -80,9 +80,6 @@ func (r *Resolver) ResolveShardTemplate(
 	resolvedName := name
 	isImplicitFallback := false
 
-	if resolvedName == "" {
-		resolvedName = r.TemplateDefaults.ShardTemplate
-	}
 	if resolvedName == "" || resolvedName == FallbackShardTemplate {
 		resolvedName = FallbackShardTemplate
 		isImplicitFallback = true

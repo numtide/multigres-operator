@@ -247,9 +247,6 @@ func (r *Resolver) ResolveCoreTemplate(
 	resolvedName := name
 	isImplicitFallback := false
 
-	if resolvedName == "" {
-		resolvedName = r.TemplateDefaults.CoreTemplate
-	}
 	if resolvedName == "" || resolvedName == FallbackCoreTemplate {
 		resolvedName = FallbackCoreTemplate
 		isImplicitFallback = true

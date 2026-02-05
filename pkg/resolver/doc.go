@@ -41,7 +41,7 @@
 // Usage:
 //
 //		// Create a resolver
-//		res := resolver.NewResolver(client, namespace, cluster.Spec.TemplateDefaults)
+//		res := resolver.NewResolver(client, namespace)
 //
 //		// Webhook: Apply static and smart defaults to the object
 //		res.PopulateClusterDefaults(cluster)

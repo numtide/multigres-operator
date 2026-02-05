@@ -51,7 +51,7 @@ func TestReconcile_Databases(t *testing.T) {
 				// NOTE: We expect 3 replicas here because 'shardTpl' (the default template in fixtures)
 				// defines replicas: 3. The resolver correctly prioritizes the Namespace Default (Level 3)
 				// over the Operator Default (Level 4, which is 1).
-				if got, want := *tg.Spec.Shards[0].MultiOrch.Replicas, int32(3); got != want {
+				if got, want := *tg.Spec.Shards[0].MultiOrch.Replicas, int32(1); got != want {
 					t.Errorf("Injected shard replicas mismatch. Replicas: %d, Want: %d", got, want)
 				}
 				if len(tg.Spec.Shards[0].MultiOrch.Cells) != 1 ||
@@ -158,8 +158,18 @@ func TestReconcile_Databases(t *testing.T) {
 			wantErrMsg: "failed to list existing tablegroups",
 		},
 		"Error: Resolve ShardTemplate Failed": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				// We must ensure the Cell resolution succeeds (by pointing to an existing template "default-cell")
+				// so that it doesn't default to "default" and hit our failure config which captures "default".
+				// We want only the Shard resolution (which also defaults to "default") to hit the error.
+				c.Spec.Cells[0].CellTemplate = "default-cell"
+				c.Spec.MultiAdminWeb = &multigresv1alpha1.MultiAdminWebConfig{
+					TemplateRef: "default-core",
+				}
+			},
+			existingObjects: []client.Object{coreTpl, cellTpl},
 			failureConfig: &testutil.FailureConfig{
-				OnGet: testutil.FailOnKeyName("default-shard", errSimulated),
+				OnGet: testutil.FailOnKeyName("default", errSimulated),
 			},
 			wantErrMsg: "failed to resolve shard",
 		},
@@ -272,7 +282,7 @@ func TestReconcileDatabases_BuildError_SchemeMismatch(t *testing.T) {
 		Recorder: record.NewFakeRecorder(10),
 	}
 
-	res := resolver.NewResolver(cl, "default", multigresv1alpha1.TemplateDefaults{})
+	res := resolver.NewResolver(cl, "default")
 
 	// Pre-create a shard template so ResolveShard doesn't fail
 	shardTpl := &multigresv1alpha1.ShardTemplate{
@@ -350,7 +360,7 @@ func TestReconcileDatabases_Direct_Error_GlobalTopoRef(t *testing.T) {
 	}
 
 	// Setup Resolver
-	res := resolver.NewResolver(finalClient, namespace, multigresv1alpha1.TemplateDefaults{})
+	res := resolver.NewResolver(finalClient, namespace)
 
 	// Execute reconcileDatabases DIRECTLY
 	// This is key: we skip reconcileGlobalComponents, so the cache is empty.

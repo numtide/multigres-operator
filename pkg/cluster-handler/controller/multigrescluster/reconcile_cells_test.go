@@ -40,7 +40,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		err := r.reconcileCells(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to missing global topo, got nil")
@@ -73,7 +73,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		err := r.reconcileCells(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to missing cell template, got nil")
@@ -99,7 +99,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		err := r.reconcileCells(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil || err.Error() != "failed to list existing cells: list error" {
 			t.Errorf("Expected 'list error', got %v", err)
@@ -133,7 +133,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		err := r.reconcileCells(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil || err.Error() != "failed to apply cell 'zone-a': patch error" {
 			t.Errorf("Expected 'patch error', got %v", err)
@@ -173,7 +173,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		err := r.reconcileCells(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		// Note: The loop might continue or return error immediately depending on implementation.
 		// Current implementation returns error immediately on delete failure.
@@ -207,7 +207,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		err := r.reconcileCells(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err == nil {
 			t.Error("Expected error due to build failure (scheme mismatch), got nil")
@@ -250,7 +250,7 @@ func TestReconcileCells_HappyPath(t *testing.T) {
 		err := r.reconcileCells(
 			context.Background(),
 			cluster,
-			resolver.NewResolver(c, "default", multigresv1alpha1.TemplateDefaults{}),
+			resolver.NewResolver(c, "default"),
 		)
 		if err != nil {
 			t.Fatalf("Expected happy path success, got %v", err)
