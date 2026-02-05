@@ -1,5 +1,3 @@
-// pkg/webhook/handlers/doc.go
-
 // Package handlers implements the specific business logic for Kubernetes Admission Control.
 //
 // It contains implementations of the controller-runtime 'admission.Handler' interface for

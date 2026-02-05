@@ -1,4 +1,4 @@
-// Package testutil provides test utility for Kubernetes operators. The amin
+// Package testutil provides test utilities for Kubernetes operators. The main
 // support is around envtest and resource watching logic, where you can use
 // the following code to wait for the matching resource to appear.
 //
