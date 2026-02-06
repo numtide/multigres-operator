@@ -90,6 +90,10 @@ func TestTopoServerReconciliation(t *testing.T) {
 						Selector: &metav1.LabelSelector{
 							MatchLabels: metadata.GetSelectorLabels(toposerverLabels(t, "test-cluster")),
 						},
+						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+							WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+							WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: toposerverLabels(t, "test-cluster"),
@@ -179,6 +183,140 @@ func TestTopoServerReconciliation(t *testing.T) {
 						Namespace:       "default",
 						Labels:          toposerverLabels(t, "test-cluster"),
 						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeClusterIP,
+						ClusterIP: corev1.ClusterIPNone,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "client", 2379),
+							tcpServicePort(t, "peer", 2380),
+						},
+						Selector:                 metadata.GetSelectorLabels(toposerverLabels(t, "test-cluster")),
+						PublishNotReadyAddresses: true,
+					},
+				},
+			},
+		},
+		"toposerver with delete pvc policy": {
+			toposerver: &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "delete-policy-topo",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
+					},
+				},
+			},
+			wantResources: []client.Object{
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "delete-policy-topo",
+						Namespace:       "default",
+						Labels:          toposerverLabels(t, "test-cluster"),
+						OwnerReferences: toposerverOwnerRefs(t, "delete-policy-topo"),
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    ptr.To(int32(3)),
+						ServiceName: "delete-policy-topo-headless",
+						Selector: &metav1.LabelSelector{
+							MatchLabels: metadata.GetSelectorLabels(toposerverLabels(t, "test-cluster")),
+						},
+						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+							WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+							WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: toposerverLabels(t, "test-cluster"),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "etcd",
+										Image: "gcr.io/etcd-development/etcd:v3.5.9",
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "client", 2379),
+											tcpPort(t, "peer", 2380),
+										},
+										Env: []corev1.EnvVar{
+											{
+												Name: "POD_NAME",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.name",
+													},
+												},
+											},
+											{
+												Name: "POD_NAMESPACE",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.namespace",
+													},
+												},
+											},
+											{Name: "ETCD_NAME", Value: "$(POD_NAME)"},
+											{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
+											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
+											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
+											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).delete-policy-topo-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
+											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).delete-policy-topo-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
+											{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
+											{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "delete-policy-topo"},
+											{Name: "ETCD_INITIAL_CLUSTER", Value: "delete-policy-topo-0=http://delete-policy-topo-0.delete-policy-topo-headless.default.svc.cluster.local:2380,delete-policy-topo-1=http://delete-policy-topo-1.delete-policy-topo-headless.default.svc.cluster.local:2380,delete-policy-topo-2=http://delete-policy-topo-2.delete-policy-topo-headless.default.svc.cluster.local:2380"},
+										},
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "data", MountPath: "/var/lib/etcd"},
+										},
+									},
+								},
+							},
+						},
+						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+							{
+								ObjectMeta: metav1.ObjectMeta{Name: "data"},
+								Spec: corev1.PersistentVolumeClaimSpec{
+									AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+									Resources: corev1.VolumeResourceRequirements{
+										Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+								},
+								Status: corev1.PersistentVolumeClaimStatus{
+									Phase: corev1.ClaimPending,
+								},
+							},
+						},
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "delete-policy-topo",
+						Namespace:       "default",
+						Labels:          toposerverLabels(t, "test-cluster"),
+						OwnerReferences: toposerverOwnerRefs(t, "delete-policy-topo"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "client", 2379),
+						},
+						Selector: metadata.GetSelectorLabels(toposerverLabels(t, "test-cluster")),
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "delete-policy-topo-headless",
+						Namespace:       "default",
+						Labels:          toposerverLabels(t, "test-cluster"),
+						OwnerReferences: toposerverOwnerRefs(t, "delete-policy-topo"),
 					},
 					Spec: corev1.ServiceSpec{
 						Type:      corev1.ServiceTypeClusterIP,

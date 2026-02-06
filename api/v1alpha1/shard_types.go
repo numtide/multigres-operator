@@ -98,6 +98,11 @@ type PoolSpec struct {
 	// Affinity defines the pod's scheduling constraints.
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for this pool.
+	// Overrides Shard, TableGroup, and MultigresCluster settings.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ============================================================================
@@ -131,6 +136,11 @@ type ShardSpec struct {
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[PoolName]PoolSpec `json:"pools"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for this shard's pools.
+	// Inherited from MultigresCluster.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ShardImages defines the images required for a Shard.

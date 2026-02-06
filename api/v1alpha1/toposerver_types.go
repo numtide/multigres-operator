@@ -52,6 +52,11 @@ type EndpointUrl string
 type TopoServerSpec struct {
 	// Etcd defines the configuration if using Etcd.
 	Etcd *EtcdSpec `json:"etcd,omitempty"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for etcd.
+	// Inherited from MultigresCluster.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ============================================================================
@@ -118,6 +123,11 @@ type EtcdSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=512
 	RootPath string `json:"rootPath,omitempty"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for etcd volumes.
+	// Overrides GlobalTopoServerSpec and MultigresCluster settings.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // GlobalTopoServerSpec defines the configuration for the global topology server.
@@ -135,6 +145,11 @@ type GlobalTopoServerSpec struct {
 	// TemplateRef refers to a CoreTemplate to load configuration from.
 	// +optional
 	TemplateRef TemplateRef `json:"templateRef,omitempty"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for topology server.
+	// Overrides MultigresCluster setting.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ExternalTopoServerSpec defines connection details for an external system.

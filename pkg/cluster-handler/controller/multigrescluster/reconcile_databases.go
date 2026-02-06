@@ -42,8 +42,18 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 			}
 
 			for _, shard := range tg.Shards {
+				// Create a copy to avoid mutating the original spec
+				shardCfg := shard.DeepCopy()
+
+				// Apply Global Template Default if Shard Template is not explicitly set
+				if shardCfg.ShardTemplate == "" && cluster.Spec.TemplateDefaults.ShardTemplate != "" {
+					shardCfg.ShardTemplate = cluster.Spec.TemplateDefaults.ShardTemplate
+				}
+
+				r.Recorder.Eventf(cluster, "Normal", "Debug", "Resolving shard %s with template '%s' (Original: '%s', Default: '%s')", shard.Name, shardCfg.ShardTemplate, shard.ShardTemplate, cluster.Spec.TemplateDefaults.ShardTemplate)
+
 				// Pass allCellNames to the resolver so it can perform "Empty means Everybody" defaulting
-				orch, pools, err := res.ResolveShard(ctx, &shard, allCellNames)
+				orch, pools, pvcPolicy, err := res.ResolveShard(ctx, shardCfg, allCellNames)
 				if err != nil {
 					r.Recorder.Eventf(
 						cluster,
@@ -63,9 +73,10 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				// The Resolver now handles the "Empty Cells = All Cells" logic authoritative.
 				// We no longer need to manually infer or sort here, just trust the resolver.
 				resolvedShards = append(resolvedShards, multigresv1alpha1.ShardResolvedSpec{
-					Name:      string(shard.Name),
-					MultiOrch: *orch,
-					Pools:     pools,
+					Name:              string(shard.Name),
+					MultiOrch:         *orch,
+					Pools:             pools,
+					PVCDeletionPolicy: pvcPolicy,
 				})
 			}
 

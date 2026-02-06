@@ -147,7 +147,8 @@ func (r *Resolver) ResolveGlobalTopo(
 
 	if coreTemplate != nil && coreTemplate.Spec.GlobalTopoServer != nil {
 		finalSpec = &multigresv1alpha1.GlobalTopoServerSpec{
-			Etcd: coreTemplate.Spec.GlobalTopoServer.Etcd.DeepCopy(),
+			Etcd:              coreTemplate.Spec.GlobalTopoServer.Etcd.DeepCopy(),
+			PVCDeletionPolicy: coreTemplate.Spec.GlobalTopoServer.PVCDeletionPolicy,
 		}
 	} else {
 		finalSpec = &multigresv1alpha1.GlobalTopoServerSpec{
@@ -169,6 +170,11 @@ func (r *Resolver) ResolveGlobalTopo(
 
 	if finalSpec.Etcd != nil {
 		defaultEtcdSpec(finalSpec.Etcd)
+	}
+
+	// Merge GlobalTopoServerSpec-level PVCDeletionPolicy
+	if spec != nil && spec.PVCDeletionPolicy != nil {
+		finalSpec.PVCDeletionPolicy = spec.PVCDeletionPolicy
 	}
 
 	return finalSpec, nil
@@ -291,5 +297,8 @@ func mergeEtcdSpec(base *multigresv1alpha1.EtcdSpec, override *multigresv1alpha1
 	}
 	if override.RootPath != "" {
 		base.RootPath = override.RootPath
+	}
+	if override.PVCDeletionPolicy != nil {
+		base.PVCDeletionPolicy = override.PVCDeletionPolicy
 	}
 }

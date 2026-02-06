@@ -17,16 +17,16 @@ func (r *Resolver) ResolveShard(
 	ctx context.Context,
 	shardSpec *multigresv1alpha1.ShardConfig,
 	allCellNames []multigresv1alpha1.CellName,
-) (*multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, error) {
+) (*multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, *multigresv1alpha1.PVCDeletionPolicy, error) {
 	// 1. Fetch Template
 	templateName := shardSpec.ShardTemplate
 	tpl, err := r.ResolveShardTemplate(ctx, templateName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// 2. Merge Logic
-	multiOrch, pools := mergeShardConfig(tpl, shardSpec.Overrides, shardSpec.Spec)
+	multiOrch, pools, pvcPolicy := mergeShardConfig(tpl, shardSpec.Overrides, shardSpec.Spec)
 
 	// 3. Apply Deep Defaults (Level 4)
 	defaultStatelessSpec(&multiOrch.StatelessSpec, DefaultResourcesOrch(), 1)
@@ -69,7 +69,7 @@ func (r *Resolver) ResolveShard(
 		pools[name] = p
 	}
 
-	return &multiOrch, pools, nil
+	return &multiOrch, pools, pvcPolicy, nil
 }
 
 // ResolveShardTemplate fetches and resolves a ShardTemplate by name.
@@ -108,15 +108,15 @@ func (r *Resolver) ResolveShardTemplate(
 	return tpl.DeepCopy(), nil
 }
 
-// mergeShardConfig merges a template spec with overrides and an inline spec.
 func mergeShardConfig(
 	template *multigresv1alpha1.ShardTemplate,
 	overrides *multigresv1alpha1.ShardOverrides,
 	inline *multigresv1alpha1.ShardInlineSpec,
-) (multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec) {
+) (multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, *multigresv1alpha1.PVCDeletionPolicy) {
 	// 1. Start with Template (Base)
 	var multiOrch multigresv1alpha1.MultiOrchSpec
 	pools := make(map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec)
+	var pvcPolicy *multigresv1alpha1.PVCDeletionPolicy
 
 	if template != nil {
 		if template.Spec.MultiOrch != nil {
@@ -124,6 +124,9 @@ func mergeShardConfig(
 		}
 		for k, v := range template.Spec.Pools {
 			pools[k] = *v.DeepCopy()
+		}
+		if template.Spec.PVCDeletionPolicy != nil {
+			pvcPolicy = template.Spec.PVCDeletionPolicy
 		}
 	}
 
@@ -153,9 +156,14 @@ func mergeShardConfig(
 				pools[k] = v
 			}
 		}
+
+		// Inline PVCDeletionPolicy overrides template
+		if inline.PVCDeletionPolicy != nil {
+			pvcPolicy = inline.PVCDeletionPolicy
+		}
 	}
 
-	return multiOrch, pools
+	return multiOrch, pools, pvcPolicy
 }
 
 func mergeMultiOrchSpec(
@@ -194,6 +202,9 @@ func mergePoolSpec(
 	}
 	if override.Affinity != nil {
 		out.Affinity = override.Affinity.DeepCopy()
+	}
+	if override.PVCDeletionPolicy != nil {
+		out.PVCDeletionPolicy = override.PVCDeletionPolicy
 	}
 	return out
 }

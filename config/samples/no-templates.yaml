@@ -4,6 +4,9 @@ metadata:
   name: inline
   namespace: default
 spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
   # ----------------------------------------------------------------
   # 1. Global Components (Inline)
   # ----------------------------------------------------------------

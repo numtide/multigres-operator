@@ -48,9 +48,13 @@ func BuildShard(
 			GlobalTopoServer: tg.Spec.GlobalTopoServer,
 			MultiOrch:        shardSpec.MultiOrch,
 			Pools:            shardSpec.Pools,
+			// Merge hierarchy: Shard → TableGroup
+			PVCDeletionPolicy: multigresv1alpha1.MergePVCDeletionPolicy(
+				shardSpec.PVCDeletionPolicy,
+				tg.Spec.PVCDeletionPolicy,
+			),
 		},
 	}
-
 	if err := controllerutil.SetControllerReference(tg, shardCR, scheme); err != nil {
 		return nil, err
 	}

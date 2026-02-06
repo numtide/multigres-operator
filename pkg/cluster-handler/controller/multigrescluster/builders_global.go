@@ -24,6 +24,11 @@ func BuildGlobalTopoServer(
 	spec *multigresv1alpha1.GlobalTopoServerSpec,
 	scheme *runtime.Scheme,
 ) (*multigresv1alpha1.TopoServer, error) {
+	if spec == nil {
+		return nil, nil
+	}
+
+	// Only build TopoServer for etcd-based backends. External topo servers are managed externally.
 	if spec.Etcd == nil {
 		return nil, nil
 	}
@@ -31,9 +36,25 @@ func BuildGlobalTopoServer(
 	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentGlobalTopo)
 	metadata.AddClusterLabel(labels, cluster.Name)
 
+	// Merge hierarchy: Etcd → GlobalTopoServer → MultigresCluster
+
+	// 1. Merge Cluster and GlobalTopo
+	mergedGlobal := multigresv1alpha1.MergePVCDeletionPolicy(
+		spec.PVCDeletionPolicy,
+		cluster.Spec.PVCDeletionPolicy,
+	)
+
+	// 2. Merge Etcd and Result 1
+	var etcdPolicy *multigresv1alpha1.PVCDeletionPolicy
+	if spec.Etcd != nil {
+		etcdPolicy = spec.Etcd.PVCDeletionPolicy
+	}
+
+	finalPolicy := multigresv1alpha1.MergePVCDeletionPolicy(etcdPolicy, mergedGlobal)
+
 	ts := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-global-topo", cluster.Name),
+			Name:      cluster.Name + "-global-topo",
 			Namespace: cluster.Namespace,
 			Labels:    labels,
 		},
@@ -45,6 +66,7 @@ func BuildGlobalTopoServer(
 				Resources: spec.Etcd.Resources,
 				RootPath:  spec.Etcd.RootPath,
 			},
+			PVCDeletionPolicy: finalPolicy,
 		},
 	}
 

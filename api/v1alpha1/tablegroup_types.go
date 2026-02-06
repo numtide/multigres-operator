@@ -63,6 +63,11 @@ type TableGroupSpec struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Shards []ShardResolvedSpec `json:"shards"`
+
+	// P VCDeletionPolicy controls PVC lifecycle for all shards in this table group.
+	// Inherited from MultigresCluster.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,
@@ -79,6 +84,11 @@ type ShardResolvedSpec struct {
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"
 	Pools map[PoolName]PoolSpec `json:"pools"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for pools in this shard.
+	// Overrides TableGroup and MultigresCluster settings.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ============================================================================

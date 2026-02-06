@@ -24,12 +24,13 @@ func TestResolver_ResolveShard(t *testing.T) {
 	_, _, shardTpl, ns := setupFixtures(t)
 
 	tests := map[string]struct {
-		config       *multigresv1alpha1.ShardConfig
-		objects      []client.Object
-		wantOrch     *multigresv1alpha1.MultiOrchSpec
-		wantPools    map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec
-		wantErr      bool
-		allCellNames []multigresv1alpha1.CellName
+		config        *multigresv1alpha1.ShardConfig
+		objects       []client.Object
+		wantOrch      *multigresv1alpha1.MultiOrchSpec
+		wantPools     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec
+		wantPVCPolicy *multigresv1alpha1.PVCDeletionPolicy
+		wantErr       bool
+		allCellNames  []multigresv1alpha1.CellName
 	}{
 		"Template Found": {
 			config:  &multigresv1alpha1.ShardConfig{ShardTemplate: "default"},
@@ -130,6 +131,36 @@ func TestResolver_ResolveShard(t *testing.T) {
 				},
 			},
 		},
+		"PVC Policy Explicit": {
+			config: &multigresv1alpha1.ShardConfig{
+				Spec: &multigresv1alpha1.ShardInlineSpec{
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{"p": {}},
+				},
+			},
+			wantOrch: &multigresv1alpha1.MultiOrchSpec{
+				StatelessSpec: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(1)),
+					Resources: DefaultResourcesOrch(),
+				},
+			},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p": {
+					ReplicasPerCell: ptr.To(int32(1)),
+					Storage:         multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
+					Postgres:        multigresv1alpha1.ContainerConfig{Resources: DefaultResourcesPostgres()},
+					Multipooler:     multigresv1alpha1.ContainerConfig{Resources: DefaultResourcesPooler()},
+				},
+			},
+			wantPVCPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+				WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -138,7 +169,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
 			r := NewResolver(c, ns)
 
-			orch, pools, err := r.ResolveShard(t.Context(), tc.config, tc.allCellNames)
+			orch, pools, pvcPolicy, err := r.ResolveShard(t.Context(), tc.config, tc.allCellNames)
 			if tc.wantErr {
 				if err == nil {
 					t.Error("Expected error")
@@ -154,6 +185,9 @@ func TestResolver_ResolveShard(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.wantPools, pools, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("Pools Diff (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantPVCPolicy, pvcPolicy); diff != "" {
+				t.Errorf("PVC Policy Diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -452,7 +486,7 @@ func TestMergeShardConfig(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			orch, pools := mergeShardConfig(tc.tpl, tc.overrides, tc.inline)
+			orch, pools, _ := mergeShardConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
 				t.Errorf("Orch mismatch (-want +got):\n%s", diff)

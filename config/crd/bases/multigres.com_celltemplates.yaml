@@ -53,6 +53,32 @@ spec:
                         maxLength: 512
                         minLength: 1
                         type: string
+                      pvcDeletionPolicy:
+                        description: |-
+                          PVCDeletionPolicy controls PVC lifecycle for etcd volumes.
+                          Overrides GlobalTopoServerSpec and MultigresCluster settings.
+                        properties:
+                          whenDeleted:
+                            default: Retain
+                            description: |-
+                              WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                              - Retain (default): PVCs are kept for manual review and recovery
+                              - Delete: PVCs are automatically deleted with the cluster
+                            enum:
+                            - Retain
+                            - Delete
+                            type: string
+                          whenScaled:
+                            default: Retain
+                            description: |-
+                              WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                              - Retain (default): PVCs from scaled-down pods are kept
+                              - Delete: PVCs are automatically deleted when pods are removed
+                            enum:
+                            - Retain
+                            - Delete
+                            type: string
+                        type: object
                       replicas:
                         description: Replicas is the desired number of etcd members.
                         format: int32

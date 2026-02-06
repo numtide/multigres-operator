@@ -375,7 +375,7 @@ func (r *Resolver) ValidateClusterLogic(
 				// ------------------------------------------------------------------
 				// Dry-Run Resolution
 				// We pass allCellNames just like the Reconciler would, to simulate the final state
-				orch, pools, err := r.ResolveShard(ctx, &shard, cellNames)
+				orch, pools, _, err := r.ResolveShard(ctx, &shard, cellNames)
 				if err != nil {
 					return nil, fmt.Errorf(
 						"validation failed: cannot resolve shard '%s': %w",
