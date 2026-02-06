@@ -44,7 +44,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"default": {
 					Type:            "readWrite",
-					ReplicasPerCell: ptr.To(int32(1)),
+					ReplicasPerCell: ptr.To(int32(3)),
 					Storage: multigresv1alpha1.StorageSpec{
 						Size: DefaultEtcdStorageSize,
 					},
@@ -79,7 +79,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			// FIX: Updated to expect fully hydrated defaults for pool "p"
 			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p": {
-					ReplicasPerCell: ptr.To(int32(1)),
+					ReplicasPerCell: ptr.To(int32(3)),
 					Storage: multigresv1alpha1.StorageSpec{
 						Size: DefaultEtcdStorageSize, // "1Gi"
 					},
@@ -116,7 +116,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p1": {
 					Type:            "read",
-					ReplicasPerCell: ptr.To(int32(1)),
+					ReplicasPerCell: ptr.To(int32(3)),
 					// Expect injected cells
 					Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
 					Storage: multigresv1alpha1.StorageSpec{
@@ -151,7 +151,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			},
 			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"p": {
-					ReplicasPerCell: ptr.To(int32(1)),
+					ReplicasPerCell: ptr.To(int32(3)),
 					Storage:         multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 					Postgres: multigresv1alpha1.ContainerConfig{
 						Resources: DefaultResourcesPostgres(),
@@ -420,7 +420,7 @@ func TestMergeShardConfig(t *testing.T) {
 			tpl: &multigresv1alpha1.ShardTemplate{
 				Spec: multigresv1alpha1.ShardTemplateSpec{
 					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"p1": {Type: "read", ReplicasPerCell: ptr.To(int32(1))},
+						"p1": {Type: "read", ReplicasPerCell: ptr.To(int32(3))},
 					},
 				},
 			},
@@ -431,7 +431,7 @@ func TestMergeShardConfig(t *testing.T) {
 			},
 			wantOrch: multigresv1alpha1.MultiOrchSpec{},
 			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-				"p1": {Type: "read", ReplicasPerCell: ptr.To(int32(1))},
+				"p1": {Type: "read", ReplicasPerCell: ptr.To(int32(3))},
 			},
 		},
 		"Inline Priority": {
