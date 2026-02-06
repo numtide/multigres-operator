@@ -114,7 +114,8 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	defer store.Close()
+	// TODO: handle store.Close() error properly
+	defer func() { _ = store.Close() }()
 
 	dbName := string(shard.Spec.DatabaseName)
 
@@ -167,7 +168,8 @@ func (r *ShardReconciler) unregisterDatabaseFromTopology(
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	defer store.Close()
+	// TODO: handle store.Close() error properly
+	defer func() { _ = store.Close() }()
 
 	dbName := string(shard.Spec.DatabaseName)
 

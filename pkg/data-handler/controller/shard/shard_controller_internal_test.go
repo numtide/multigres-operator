@@ -54,7 +54,7 @@ func TestDefaultCreateTopoStore(t *testing.T) {
 			}
 
 			if !tc.wantErr && store != nil {
-				store.Close()
+				_ = store.Close() // TODO: handle store.Close() error properly
 			}
 		})
 	}
@@ -194,7 +194,7 @@ func TestUnregisterDatabaseSuccessPath(t *testing.T) {
 	err := setupStore.CreateDatabase(context.Background(), "postgres", &clustermetadata.Database{
 		Name: "postgres",
 	})
-	setupStore.Close()
+	_ = setupStore.Close() // TODO: handle setupStore.Close() error properly
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestUnregisterDatabaseSuccessPath(t *testing.T) {
 	// Verify database was deleted
 	verifyStore := topoclient.NewWithFactory(factory, "/test", nil, nil)
 	_, err = verifyStore.GetDatabase(context.Background(), "postgres")
-	verifyStore.Close()
+	_ = verifyStore.Close() // TODO: handle verifyStore.Close() error properly
 	if err == nil {
 		t.Error("Database should be deleted from topology")
 	}

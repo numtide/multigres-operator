@@ -109,7 +109,8 @@ func TestRegisterCellInTopology(t *testing.T) {
 					Store: realStore,
 					createCellFunc: func(ctx context.Context, cellName string, cell *clustermetadata.Cell) error {
 						// Clean up the real store when test completes
-						defer baseStore.Close()
+						// TODO: handle baseStore.Close() error properly
+						defer func() { _ = baseStore.Close() }()
 						// Return a non-NodeExists error to trigger line 145
 						return topoclient.TopoError{
 							Code:    topoclient.Timeout,
@@ -259,7 +260,8 @@ func TestUnregisterCellFromTopology(t *testing.T) {
 					Store: realStore,
 					deleteCellFunc: func(ctx context.Context, cellName string, force bool) error {
 						// Clean up the real store when test completes
-						defer baseStore.Close()
+						// TODO: handle baseStore.Close() error properly
+						defer func() { _ = baseStore.Close() }()
 						// Return a non-NoNode error to trigger line 175
 						return topoclient.TopoError{
 							Code:    topoclient.NodeNotEmpty,
