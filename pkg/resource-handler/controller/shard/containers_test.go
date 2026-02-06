@@ -251,7 +251,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 				},
 			},
@@ -323,7 +323,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					Images: multigresv1alpha1.ShardImages{
 						MultiPooler: "custom/multipooler:v1.0.0",
@@ -398,7 +398,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 				},
 			},
@@ -543,7 +543,7 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 				},
 			},

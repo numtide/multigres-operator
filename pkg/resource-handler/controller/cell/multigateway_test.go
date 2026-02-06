@@ -39,7 +39,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 				},
 			},
@@ -136,7 +136,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(5)),
@@ -239,7 +239,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 				},
 			},
@@ -336,7 +336,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Affinity: &corev1.Affinity{
@@ -469,7 +469,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Resources: corev1.ResourceRequirements{
@@ -589,7 +589,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 				},
 			},

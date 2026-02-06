@@ -34,7 +34,7 @@ spec:
   globalTopoServer:
     address: kind-toposerver-sample:2379
     rootPath: /multigres/global
-    implementation: etcd2
+    implementation: etcd
 
   # Cell-local topology server configuration (optional)
   # If specified, creates a local etcd cluster for this cell

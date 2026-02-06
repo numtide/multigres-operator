@@ -168,7 +168,7 @@ func (r *MultigresClusterReconciler) getGlobalTopoRef(
 	return multigresv1alpha1.GlobalTopoServerRef{
 		Address:        address,
 		RootPath:       rootPath,
-		Implementation: "etcd2",
+		Implementation: "etcd",
 	}, nil
 }
 

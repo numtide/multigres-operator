@@ -40,7 +40,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone-a"},
@@ -108,7 +108,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
-											Implementation: "etcd2",
+											Implementation: "etcd",
 										},
 									},
 								}, "zone-a"),
@@ -132,7 +132,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{
@@ -203,7 +203,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
-											Implementation: "etcd2",
+											Implementation: "etcd",
 										},
 									},
 								}, "zone1"),
@@ -227,7 +227,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						StatelessSpec: multigresv1alpha1.StatelessSpec{
@@ -298,7 +298,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
-											Implementation: "etcd2",
+											Implementation: "etcd",
 										},
 									},
 								}, "zone1"),

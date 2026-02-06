@@ -109,7 +109,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "etcd:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					Shards: []multigresv1alpha1.ShardResolvedSpec{
 						{
@@ -164,7 +164,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        "etcd:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
@@ -199,7 +199,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        "etcd:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						MultiOrch: multigresv1alpha1.MultiOrchSpec{
 							StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},

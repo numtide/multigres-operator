@@ -128,7 +128,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 						RegisterCell: true,
@@ -202,7 +202,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 					Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 					RootPath:       "/multigres/global",
-					Implementation: "etcd2",
+					Implementation: "etcd",
 				},
 				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 					RegisterCell: true,
@@ -299,7 +299,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 					Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 					RootPath:       "/multigres/global",
-					Implementation: "etcd2",
+					Implementation: "etcd",
 				},
 				Shards: []multigresv1alpha1.ShardResolvedSpec{
 					{
@@ -394,7 +394,7 @@ func TestMultigresCluster_EnforcementLogic(t *testing.T) {
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 				Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 				RootPath:       "/multigres/global",
-				Implementation: "etcd2",
+				Implementation: "etcd",
 			},
 			TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 				RegisterCell: true,
@@ -565,7 +565,7 @@ func TestMultigresCluster_TemplateOverrides(t *testing.T) {
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 				Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 				RootPath:       "/multigres/global",
-				Implementation: "etcd2",
+				Implementation: "etcd",
 			},
 			Shards: []multigresv1alpha1.ShardResolvedSpec{
 				{
