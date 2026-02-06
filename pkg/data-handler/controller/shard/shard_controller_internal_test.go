@@ -75,7 +75,7 @@ func TestDefaultCreateTopoStore_InvalidImplementation(t *testing.T) {
 	store, err := defaultCreateTopoStore(shard)
 	if err == nil {
 		if store != nil {
-			store.Close()
+			_ = store.Close() // TODO: handle store.Close() error properly
 		}
 		t.Error("defaultCreateTopoStore() should error with invalid implementation")
 	}
@@ -113,7 +113,8 @@ func TestGetTopoStoreUsesCustom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getTopoStore() error = %v", err)
 	}
-	defer store.Close()
+	// TODO: handle store.Close() error properly
+	defer func() { _ = store.Close() }()
 
 	if !customCalled {
 		t.Error("Custom factory should have been called")
@@ -146,7 +147,8 @@ func TestGetTopoStoreUsesDefault(t *testing.T) {
 		t.Fatalf("getTopoStore() error = %v", err)
 	}
 	if store != nil {
-		defer store.Close()
+		// TODO: handle store.Close() error properly
+		defer func() { _ = store.Close() }()
 	}
 }
 
