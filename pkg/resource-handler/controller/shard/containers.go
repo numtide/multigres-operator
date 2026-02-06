@@ -265,20 +265,20 @@ func buildMultiPoolerSidecar(
 
 	args := []string{
 		"multipooler", // Subcommand
-		"--http-port", "15200",
-		"--grpc-port", "15270",
-		"--pooler-dir", PoolerDirMountPath,
-		"--socket-file", PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432", // Unix socket uses trust auth (no password)
-		"--service-map", "grpc-pooler", // Only enable grpc-pooler service (disables auto-restore service)
-		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
-		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
-		"--cell", cellName,
-		"--database", string(shard.Spec.DatabaseName),
-		"--table-group", string(shard.Spec.TableGroupName),
-		"--shard", string(shard.Spec.ShardName),
-		"--service-id", "$(POD_NAME)", // Use pod name as unique service ID
-		"--pgctld-addr", "localhost:15470",
-		"--pg-port", "5432",
+		"--http-port=15200",
+		"--grpc-port=15270",
+		"--pooler-dir=" + PoolerDirMountPath,
+		"--socket-file=" + PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432", // Unix socket uses trust auth (no password)
+		"--service-map=grpc-pooler", // Only enable grpc-pooler service (disables auto-restore service)
+		"--topo-global-server-addresses=" + shard.Spec.GlobalTopoServer.Address,
+		"--topo-global-root=" + shard.Spec.GlobalTopoServer.RootPath,
+		"--cell=" + cellName,
+		"--database=" + string(shard.Spec.DatabaseName),
+		"--table-group=" + string(shard.Spec.TableGroupName),
+		"--shard=" + string(shard.Spec.ShardName),
+		"--service-id=$(POD_NAME)", // Use pod name as unique service ID
+		"--pgctld-addr=localhost:15470",
+		"--pg-port=5432",
 	}
 
 	return corev1.Container{
@@ -357,15 +357,15 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 	// - Multiple targets (e.g., "postgres,otherdb")
 	args := []string{
 		"multiorch", // Subcommand
-		"--http-port", "15300",
-		"--grpc-port", "15370",
-		"--topo-global-server-addresses", shard.Spec.GlobalTopoServer.Address,
-		"--topo-global-root", shard.Spec.GlobalTopoServer.RootPath,
-		"--cell", cellName,
-		"--watch-targets", "postgres",
-		"--cluster-metadata-refresh-interval", "500ms",
-		"--pooler-health-check-interval", "500ms",
-		"--recovery-cycle-interval", "500ms",
+		"--http-port=15300",
+		"--grpc-port=15370",
+		"--topo-global-server-addresses=" + shard.Spec.GlobalTopoServer.Address,
+		"--topo-global-root=" + shard.Spec.GlobalTopoServer.RootPath,
+		"--cell=" + cellName,
+		"--watch-targets=postgres",
+		"--cluster-metadata-refresh-interval=500ms",
+		"--pooler-health-check-interval=500ms",
+		"--recovery-cycle-interval=500ms",
 	}
 
 	return corev1.Container{
