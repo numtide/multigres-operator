@@ -545,11 +545,11 @@ func TestMultigresCluster_TemplateOverrides(t *testing.T) {
 	wantTG := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nameutil.JoinWithConstraints(
-nameutil.DefaultConstraints,
-clusterName,
-"postgres",
-"default",
-),
+				nameutil.DefaultConstraints,
+				clusterName,
+				"postgres",
+				"default",
+			),
 			Namespace: testNamespace,
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{

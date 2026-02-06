@@ -190,7 +190,11 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 				if !isUsingTemplate {
 					// We pass 'nil' for allCellNames to prevent "Sticky Context Defaults".
 					// We want the Stored Spec to remain empty (dynamic) rather than locking in the current list of cells.
-					multiOrchSpec, poolsSpec, resolvedPvcPolicy, err := scopedResolver.ResolveShard(ctx, shard, nil)
+					multiOrchSpec, poolsSpec, resolvedPvcPolicy, err := scopedResolver.ResolveShard(
+						ctx,
+						shard,
+						nil,
+					)
 					if err != nil {
 						return fmt.Errorf("failed to resolve shard '%s': %w", shard.Name, err)
 					}
