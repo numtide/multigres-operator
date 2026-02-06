@@ -161,6 +161,11 @@ type ExternalTopoServerSpec struct {
 	// +listType=set
 	Endpoints []EndpointUrl `json:"endpoints"`
 
+	// Implementation is the topology implementation type (e.g., "etcd", "memory").
+	// Defaults to "etcd" if not specified.
+	// +optional
+	Implementation string `json:"implementation,omitempty"`
+
 	// CASecret is the name of the secret containing the CA certificate.
 	// +optional
 	// +kubebuilder:validation:MaxLength=253
