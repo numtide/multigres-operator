@@ -398,7 +398,8 @@ func TestReconcile(t *testing.T) {
 			t.Parallel()
 
 			store, factory := memorytopo.NewServerAndFactory(context.Background())
-			defer store.Close()
+			// TODO: handle store.Close() error properly
+			defer func() { _ = store.Close() }()
 
 			if tc.topoSetup != nil {
 				tc.topoSetup(t, store)

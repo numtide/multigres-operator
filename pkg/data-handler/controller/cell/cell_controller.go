@@ -123,7 +123,8 @@ func (r *CellReconciler) registerCellInTopology(
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	defer store.Close()
+	// TODO: handle store.Close() error properly
+	defer func() { _ = store.Close() }()
 
 	cellName := string(cell.Spec.Name)
 
@@ -161,7 +162,8 @@ func (r *CellReconciler) unregisterCellFromTopology(
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	defer store.Close()
+	// TODO: handle store.Close() error properly
+	defer func() { _ = store.Close() }()
 
 	cellName := string(cell.Spec.Name)
 

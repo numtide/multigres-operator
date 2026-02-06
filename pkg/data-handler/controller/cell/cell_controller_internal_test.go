@@ -127,7 +127,8 @@ func TestRegisterCellInTopology(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			store, factory := memorytopo.NewServerAndFactory(context.Background())
-			defer store.Close()
+			// TODO: handle store.Close() error properly
+			defer func() { _ = store.Close() }()
 
 			if tc.topoSetup != nil {
 				tc.topoSetup(t, store)
@@ -278,7 +279,8 @@ func TestUnregisterCellFromTopology(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			store, factory := memorytopo.NewServerAndFactory(context.Background())
-			defer store.Close()
+			// TODO: handle store.Close() error properly
+			defer func() { _ = store.Close() }()
 
 			if tc.topoSetup != nil {
 				tc.topoSetup(t, store)
@@ -436,7 +438,8 @@ func TestHandleDeletion(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			store, factory := memorytopo.NewServerAndFactory(context.Background())
-			defer store.Close()
+			// TODO: handle store.Close() error properly
+			defer func() { _ = store.Close() }()
 
 			if tc.topoSetup != nil {
 				tc.topoSetup(t, store)
@@ -523,7 +526,8 @@ func TestDefaultCreateTopoStore(t *testing.T) {
 			}
 
 			if err == nil {
-				defer store.Close()
+				// TODO: handle store.Close() error properly
+				defer func() { _ = store.Close() }()
 			}
 		})
 	}
@@ -557,7 +561,8 @@ func TestDefaultCreateTopoStore_MemoryImplementation(t *testing.T) {
 		t.Fatal("Expected non-nil store")
 	}
 
-	defer store.Close()
+	// TODO: handle store.Close() error properly
+	defer func() { _ = store.Close() }()
 }
 
 // mockTopoStoreWrapper wraps a real topoclient.Store and allows overriding specific methods
