@@ -410,9 +410,16 @@ func TestReconcile(t *testing.T) {
 
 			// Override createTopoStore for valid implementations
 			if tc.cell.Spec.GlobalTopoServer.Implementation != "invalid-impl" {
-				reconciler.SetCreateTopoStore(func(cellObj *multigresv1alpha1.Cell) (topoclient.Store, error) {
-					return topoclient.NewWithFactory(factory, cellObj.Spec.GlobalTopoServer.RootPath, nil, nil), nil
-				})
+				reconciler.SetCreateTopoStore(
+					func(cellObj *multigresv1alpha1.Cell) (topoclient.Store, error) {
+						return topoclient.NewWithFactory(
+							factory,
+							cellObj.Spec.GlobalTopoServer.RootPath,
+							nil,
+							nil,
+						), nil
+					},
+				)
 			}
 
 			req := ctrl.Request{
@@ -435,7 +442,10 @@ func TestReconcile(t *testing.T) {
 
 			// Verify no requeue after is set (controller-runtime watch handles re-reconciliation)
 			if result.RequeueAfter > 0 {
-				t.Errorf("Reconcile() should not set RequeueAfter, controller-runtime watch will trigger re-reconciliation, got %v", result.RequeueAfter)
+				t.Errorf(
+					"Reconcile() should not set RequeueAfter, controller-runtime watch will trigger re-reconciliation, got %v",
+					result.RequeueAfter,
+				)
 			}
 
 			if tc.assertFunc != nil {

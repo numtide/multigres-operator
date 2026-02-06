@@ -156,7 +156,11 @@ func TestRegisterCellInTopology(t *testing.T) {
 			if tc.wantErr {
 				if tc.wantErrContaining != "" && err != nil {
 					if !strings.Contains(err.Error(), tc.wantErrContaining) {
-						t.Errorf("registerCellInTopology() error = %v, want error containing %q", err, tc.wantErrContaining)
+						t.Errorf(
+							"registerCellInTopology() error = %v, want error containing %q",
+							err,
+							tc.wantErrContaining,
+						)
 					}
 				}
 				return
@@ -302,7 +306,11 @@ func TestUnregisterCellFromTopology(t *testing.T) {
 			if tc.wantErr {
 				if tc.wantErrContaining != "" && err != nil {
 					if !strings.Contains(err.Error(), tc.wantErrContaining) {
-						t.Errorf("unregisterCellFromTopology() error = %v, want error containing %q", err, tc.wantErrContaining)
+						t.Errorf(
+							"unregisterCellFromTopology() error = %v, want error containing %q",
+							err,
+							tc.wantErrContaining,
+						)
 					}
 				}
 				return
@@ -451,7 +459,12 @@ func TestHandleDeletion(t *testing.T) {
 			if !tc.useDefaultCreate {
 				// Use memory topo (for happy path testing)
 				reconciler.createTopoStore = func(cellObj *multigresv1alpha1.Cell) (topoclient.Store, error) {
-					return topoclient.NewWithFactory(factory, cellObj.Spec.GlobalTopoServer.RootPath, nil, nil), nil
+					return topoclient.NewWithFactory(
+						factory,
+						cellObj.Spec.GlobalTopoServer.RootPath,
+						nil,
+						nil,
+					), nil
 				}
 			}
 			// If useDefaultCreate is true, leave createTopoStore nil to use defaultCreateTopoStore
@@ -553,7 +566,11 @@ type mockTopoStoreWrapper struct {
 	deleteCellFunc func(ctx context.Context, cellName string, force bool) error
 }
 
-func (m *mockTopoStoreWrapper) CreateCell(ctx context.Context, cellName string, cell *clustermetadata.Cell) error {
+func (m *mockTopoStoreWrapper) CreateCell(
+	ctx context.Context,
+	cellName string,
+	cell *clustermetadata.Cell,
+) error {
 	if m.createCellFunc != nil {
 		return m.createCellFunc(ctx, cellName, cell)
 	}
@@ -566,4 +583,3 @@ func (m *mockTopoStoreWrapper) DeleteCell(ctx context.Context, cellName string, 
 	}
 	return m.Store.DeleteCell(ctx, cellName, force)
 }
-

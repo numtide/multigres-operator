@@ -455,7 +455,10 @@ func TestReconcile(t *testing.T) {
 			}
 
 			if result.RequeueAfter > 0 {
-				t.Errorf("Reconcile() should not set RequeueAfter, controller-runtime watch will trigger re-reconciliation, got %v", result.RequeueAfter)
+				t.Errorf(
+					"Reconcile() should not set RequeueAfter, controller-runtime watch will trigger re-reconciliation, got %v",
+					result.RequeueAfter,
+				)
 			}
 
 			if tc.assertFunc != nil {

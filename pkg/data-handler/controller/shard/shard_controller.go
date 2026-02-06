@@ -104,7 +104,10 @@ func (r *ShardReconciler) handleDeletion(
 }
 
 // registerDatabaseInTopology registers the database metadata in the global topology.
-func (r *ShardReconciler) registerDatabaseInTopology(ctx context.Context, shard *multigresv1alpha1.Shard) error {
+func (r *ShardReconciler) registerDatabaseInTopology(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
 	logger := log.FromContext(ctx)
 
 	store, err := r.getTopoStore(shard)
@@ -142,7 +145,8 @@ func (r *ShardReconciler) registerDatabaseInTopology(ctx context.Context, shard 
 		// Check if the error is because the database already exists
 		var topoErr topoclient.TopoError
 		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NodeExists {
-			logger.V(1).Info("Database already exists in topology, skipping creation", "database", dbName)
+			logger.V(1).
+				Info("Database already exists in topology, skipping creation", "database", dbName)
 			return nil
 		}
 		return fmt.Errorf("failed to create database in topology: %w", err)
@@ -153,7 +157,10 @@ func (r *ShardReconciler) registerDatabaseInTopology(ctx context.Context, shard 
 }
 
 // unregisterDatabaseFromTopology removes the database metadata from the global topology.
-func (r *ShardReconciler) unregisterDatabaseFromTopology(ctx context.Context, shard *multigresv1alpha1.Shard) error {
+func (r *ShardReconciler) unregisterDatabaseFromTopology(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
 	logger := log.FromContext(ctx)
 
 	store, err := r.getTopoStore(shard)
@@ -169,7 +176,8 @@ func (r *ShardReconciler) unregisterDatabaseFromTopology(ctx context.Context, sh
 		// Check if the error is because the database doesn't exist
 		var topoErr topoclient.TopoError
 		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NoNode {
-			logger.V(1).Info("Database does not exist in topology, skipping deletion", "database", dbName)
+			logger.V(1).
+				Info("Database does not exist in topology, skipping deletion", "database", dbName)
 			return nil
 		}
 		return fmt.Errorf("failed to delete database %s from topology: %w", dbName, err)
@@ -228,7 +236,9 @@ func (r *ShardReconciler) getTopoStore(shard *multigresv1alpha1.Shard) (topoclie
 }
 
 // SetCreateTopoStore sets a custom topology store creation function for testing.
-func (r *ShardReconciler) SetCreateTopoStore(f func(*multigresv1alpha1.Shard) (topoclient.Store, error)) {
+func (r *ShardReconciler) SetCreateTopoStore(
+	f func(*multigresv1alpha1.Shard) (topoclient.Store, error),
+) {
 	r.createTopoStore = f
 }
 

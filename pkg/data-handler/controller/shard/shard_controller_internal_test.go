@@ -41,7 +41,6 @@ func TestDefaultCreateTopoStore(t *testing.T) {
 			},
 			wantErr: false,
 		},
-
 	}
 
 	for name, tc := range tests {
@@ -271,7 +270,11 @@ type errorTopoStore struct {
 	deleteDBError error
 }
 
-func (s *errorTopoStore) CreateDatabase(ctx context.Context, database string, db *clustermetadata.Database) error {
+func (s *errorTopoStore) CreateDatabase(
+	ctx context.Context,
+	database string,
+	db *clustermetadata.Database,
+) error {
 	if s.createDBError != nil {
 		return s.createDBError
 	}
@@ -405,4 +408,3 @@ func TestReconcile_ErrorDeletingDatabase(t *testing.T) {
 		t.Error("Reconcile() should error when database deletion fails")
 	}
 }
-

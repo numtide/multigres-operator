@@ -113,7 +113,10 @@ func (r *CellReconciler) handleDeletion(
 
 // registerCellInTopology registers the cell metadata in the global topology
 // using the upstream multigres topoclient library.
-func (r *CellReconciler) registerCellInTopology(ctx context.Context, cell *multigresv1alpha1.Cell) error {
+func (r *CellReconciler) registerCellInTopology(
+	ctx context.Context,
+	cell *multigresv1alpha1.Cell,
+) error {
 	logger := log.FromContext(ctx)
 
 	store, err := r.getTopoStore(cell)
@@ -148,7 +151,10 @@ func (r *CellReconciler) registerCellInTopology(ctx context.Context, cell *multi
 }
 
 // unregisterCellFromTopology removes the cell metadata from the global topology.
-func (r *CellReconciler) unregisterCellFromTopology(ctx context.Context, cell *multigresv1alpha1.Cell) error {
+func (r *CellReconciler) unregisterCellFromTopology(
+	ctx context.Context,
+	cell *multigresv1alpha1.Cell,
+) error {
 	logger := log.FromContext(ctx)
 
 	store, err := r.getTopoStore(cell)
@@ -206,7 +212,9 @@ func (r *CellReconciler) getTopoStore(cell *multigresv1alpha1.Cell) (topoclient.
 }
 
 // SetCreateTopoStore sets a custom topology store creation function for testing.
-func (r *CellReconciler) SetCreateTopoStore(f func(*multigresv1alpha1.Cell) (topoclient.Store, error)) {
+func (r *CellReconciler) SetCreateTopoStore(
+	f func(*multigresv1alpha1.Cell) (topoclient.Store, error),
+) {
 	r.createTopoStore = f
 }
 
