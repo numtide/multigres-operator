@@ -1296,6 +1296,11 @@ spec:
                         x-kubernetes-validations:
                         - message: endpoints must be valid URLs
                           rule: self.all(x, x.matches('^https?://'))
+                      implementation:
+                        description: |-
+                          Implementation is the topology implementation type (e.g., "etcd", "memory").
+                          Defaults to "etcd" if not specified.
+                        type: string
                       rootPath:
                         description: RootPath is the etcd prefix for this cluster.
                         maxLength: 512
