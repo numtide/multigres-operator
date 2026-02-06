@@ -82,7 +82,7 @@ func TestCellReconciliation(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{},
@@ -169,7 +169,7 @@ func TestCellReconciliation(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{},
@@ -256,7 +256,7 @@ func TestCellReconciliation(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{},
@@ -360,7 +360,7 @@ func TestCellReconciliation(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					TopoServer: &multigresv1alpha1.LocalTopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{},

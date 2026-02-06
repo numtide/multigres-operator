@@ -83,7 +83,7 @@ func TestShardReconciliation(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
@@ -717,7 +717,7 @@ func TestShardReconciliation(t *testing.T) {
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
-						Implementation: "etcd2",
+						Implementation: "etcd",
 					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1", "zone2"},
@@ -1509,7 +1509,7 @@ func TestReconcileDeletions(t *testing.T) {
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 				Address:        "global-topo:2379",
 				RootPath:       "/multigres/global",
-				Implementation: "etcd2",
+				Implementation: "etcd",
 			},
 			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"primary": {

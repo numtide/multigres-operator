@@ -423,7 +423,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 							RegisterCell: true,
@@ -453,7 +453,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						Shards: []multigresv1alpha1.ShardResolvedSpec{
 							{
@@ -705,7 +705,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        "minimal-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 							RegisterCell: true,
@@ -734,7 +734,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        "minimal-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						Shards: []multigresv1alpha1.ShardResolvedSpec{
 							{
@@ -985,7 +985,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        "lazy-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 							RegisterCell: true,
@@ -1014,7 +1014,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 							Address:        "lazy-cluster-global-topo." + testNamespace + ".svc:2379",
 							RootPath:       "/multigres/global",
-							Implementation: "etcd2",
+							Implementation: "etcd",
 						},
 						Shards: []multigresv1alpha1.ShardResolvedSpec{
 							{

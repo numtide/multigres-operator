@@ -36,7 +36,7 @@ spec:
   globalTopoServer:
     address: kind-toposerver-sample:2379
     rootPath: /multigres/global
-    implementation: etcd2
+    implementation: etcd
 
   # MultiOrch configuration for shard orchestration
   multiorch:

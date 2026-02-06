@@ -3,7 +3,7 @@ module github.com/numtide/multigres-operator/pkg/cluster-handler
 go 1.25.2
 
 require (
-	github.com/numtide/multigres-operator/api v0.0.0-20260206152735-50b424a37ead
+	github.com/numtide/multigres-operator/api v0.0.0-20260206205418-02802357a635
 	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260206152735-50b424a37ead
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260206152735-50b424a37ead
 	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260206152735-50b424a37ead

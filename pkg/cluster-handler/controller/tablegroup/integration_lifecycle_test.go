@@ -29,7 +29,7 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 	globalTopo := multigresv1alpha1.GlobalTopoServerRef{
 		Address:        "etcd-client:2379",
 		RootPath:       "/multigres/global",
-		Implementation: "etcd2",
+		Implementation: "etcd",
 	}
 
 	// Setup Helper

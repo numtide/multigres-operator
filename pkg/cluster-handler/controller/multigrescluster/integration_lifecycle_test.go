@@ -235,7 +235,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 					Address:        "zombie-test-global-topo.default.svc:2379",
 					RootPath:       "/multigres/global",
-					Implementation: "etcd2",
+					Implementation: "etcd",
 				},
 				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 					RegisterCell: true,
@@ -285,7 +285,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 					Address:        "zombie-test-global-topo.default.svc:2379",
 					RootPath:       "/multigres/global",
-					Implementation: "etcd2",
+					Implementation: "etcd",
 				},
 				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 					RegisterCell: true,

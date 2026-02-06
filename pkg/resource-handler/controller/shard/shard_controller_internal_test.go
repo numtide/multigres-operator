@@ -172,7 +172,7 @@ func TestBuildMultiOrchContainer_WithImage(t *testing.T) {
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 				Address:        "global-topo:2379",
 				RootPath:       "/multigres/global",
-				Implementation: "etcd2",
+				Implementation: "etcd",
 			},
 			Images: multigresv1alpha1.ShardImages{
 				MultiOrch: multigresv1alpha1.ImageRef(customImage),
