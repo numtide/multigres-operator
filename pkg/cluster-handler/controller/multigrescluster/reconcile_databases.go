@@ -46,11 +46,21 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				shardCfg := shard.DeepCopy()
 
 				// Apply Global Template Default if Shard Template is not explicitly set
-				if shardCfg.ShardTemplate == "" && cluster.Spec.TemplateDefaults.ShardTemplate != "" {
+				if shardCfg.ShardTemplate == "" &&
+					cluster.Spec.TemplateDefaults.ShardTemplate != "" {
 					shardCfg.ShardTemplate = cluster.Spec.TemplateDefaults.ShardTemplate
 				}
 
-				r.Recorder.Eventf(cluster, "Normal", "Debug", "Resolving shard %s with template '%s' (Original: '%s', Default: '%s')", shard.Name, shardCfg.ShardTemplate, shard.ShardTemplate, cluster.Spec.TemplateDefaults.ShardTemplate)
+				r.Recorder.Eventf(
+					cluster,
+					"Normal",
+					"Debug",
+					"Resolving shard %s with template '%s' (Original: '%s', Default: '%s')",
+					shard.Name,
+					shardCfg.ShardTemplate,
+					shard.ShardTemplate,
+					cluster.Spec.TemplateDefaults.ShardTemplate,
+				)
 
 				// Pass allCellNames to the resolver so it can perform "Empty means Everybody" defaulting
 				orch, pools, pvcPolicy, err := res.ResolveShard(ctx, shardCfg, allCellNames)

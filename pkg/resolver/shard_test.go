@@ -153,8 +153,12 @@ func TestResolver_ResolveShard(t *testing.T) {
 				"p": {
 					ReplicasPerCell: ptr.To(int32(1)),
 					Storage:         multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
-					Postgres:        multigresv1alpha1.ContainerConfig{Resources: DefaultResourcesPostgres()},
-					Multipooler:     multigresv1alpha1.ContainerConfig{Resources: DefaultResourcesPooler()},
+					Postgres: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPostgres(),
+					},
+					Multipooler: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPooler(),
+					},
 				},
 			},
 			wantPVCPolicy: &multigresv1alpha1.PVCDeletionPolicy{

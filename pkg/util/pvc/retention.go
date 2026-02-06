@@ -9,7 +9,9 @@ import (
 
 // BuildRetentionPolicy converts the operator's PVC deletion policy to Kubernetes StatefulSet retention policy.
 // If policy is nil, defaults to Retain for both WhenDeleted and WhenScaled (safe default).
-func BuildRetentionPolicy(policy *multigresv1alpha1.PVCDeletionPolicy) *appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy {
+func BuildRetentionPolicy(
+	policy *multigresv1alpha1.PVCDeletionPolicy,
+) *appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy {
 	if policy == nil {
 		return &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
 			WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
