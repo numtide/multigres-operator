@@ -50,6 +50,11 @@ func BuildTableGroup(
 			},
 			GlobalTopoServer: globalTopoRef,
 			Shards:           resolvedShards,
+			// Merge hierarchy: TableGroup → MultigresCluster
+			PVCDeletionPolicy: multigresv1alpha1.MergePVCDeletionPolicy(
+				tgCfg.PVCDeletionPolicy,
+				cluster.Spec.PVCDeletionPolicy,
+			),
 		},
 	}
 

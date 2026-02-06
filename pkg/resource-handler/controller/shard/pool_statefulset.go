@@ -15,6 +15,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/storage"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
+	"github.com/numtide/multigres-operator/pkg/util/pvc"
 )
 
 const (
@@ -40,6 +41,11 @@ func BuildPoolStatefulSet(
 	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
+	// Merge hierarchy: Pool → Shard
+	pvcPolicy := multigresv1alpha1.MergePVCDeletionPolicy(
+		poolSpec.PVCDeletionPolicy,
+		shard.Spec.PVCDeletionPolicy,
+	)
 	name := buildPoolNameWithCell(shard, poolName, cellName)
 	// Logic: Use LOGICAL parts from Spec/Labels to avoid chaining hashes.
 	clusterName := shard.Labels["multigres.com/cluster"]
@@ -106,7 +112,8 @@ func BuildPoolStatefulSet(
 					Affinity: poolSpec.Affinity,
 				},
 			},
-			VolumeClaimTemplates: buildPoolVolumeClaimTemplates(poolSpec),
+			VolumeClaimTemplates:                 buildPoolVolumeClaimTemplates(poolSpec),
+			PersistentVolumeClaimRetentionPolicy: pvc.BuildRetentionPolicy(pvcPolicy),
 		},
 	}
 

@@ -91,6 +91,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 						Type: appsv1.RollingUpdateStatefulSetStrategyType,
 					},
+					PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+						WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+						WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: map[string]string{
@@ -290,6 +294,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					PodManagementPolicy: appsv1.ParallelPodManagement,
 					UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 						Type: appsv1.RollingUpdateStatefulSetStrategyType,
+					},
+					PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+						WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+						WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
@@ -495,6 +503,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					PodManagementPolicy: appsv1.ParallelPodManagement,
 					UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 						Type: appsv1.RollingUpdateStatefulSetStrategyType,
+					},
+					PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+						WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+						WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
@@ -713,6 +725,10 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 					PodManagementPolicy: appsv1.ParallelPodManagement,
 					UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 						Type: appsv1.RollingUpdateStatefulSetStrategyType,
+					},
+					PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+						WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+						WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{

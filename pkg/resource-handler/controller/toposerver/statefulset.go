@@ -12,6 +12,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resource-handler/controller/storage"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/pvc"
 )
 
 const (
@@ -40,6 +41,7 @@ func BuildStatefulSet(
 	toposerver *multigresv1alpha1.TopoServer,
 	scheme *runtime.Scheme,
 ) (*appsv1.StatefulSet, error) {
+	pvcPolicy := toposerver.Spec.PVCDeletionPolicy
 	replicas := DefaultReplicas
 	if toposerver.Spec.Etcd != nil && toposerver.Spec.Etcd.Replicas != nil {
 		replicas = *toposerver.Spec.Etcd.Replicas
@@ -105,7 +107,8 @@ func BuildStatefulSet(
 					},
 				},
 			},
-			VolumeClaimTemplates: buildVolumeClaimTemplates(toposerver),
+			VolumeClaimTemplates:                 buildVolumeClaimTemplates(toposerver),
+			PersistentVolumeClaimRetentionPolicy: pvc.BuildRetentionPolicy(pvcPolicy),
 		},
 	}
 

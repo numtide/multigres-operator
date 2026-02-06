@@ -1120,6 +1120,32 @@ spec:
                                   maxLength: 512
                                   minLength: 1
                                   type: string
+                                pvcDeletionPolicy:
+                                  description: |-
+                                    PVCDeletionPolicy controls PVC lifecycle for etcd volumes.
+                                    Overrides GlobalTopoServerSpec and MultigresCluster settings.
+                                  properties:
+                                    whenDeleted:
+                                      default: Retain
+                                      description: |-
+                                        WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                                        - Retain (default): PVCs are kept for manual review and recovery
+                                        - Delete: PVCs are automatically deleted with the cluster
+                                      enum:
+                                      - Retain
+                                      - Delete
+                                      type: string
+                                    whenScaled:
+                                      default: Retain
+                                      description: |-
+                                        WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                                        - Retain (default): PVCs from scaled-down pods are kept
+                                        - Delete: PVCs are automatically deleted when pods are removed
+                                      enum:
+                                      - Retain
+                                      - Delete
+                                      type: string
+                                  type: object
                                 replicas:
                                   description: Replicas is the desired number of etcd
                                     members.
@@ -2338,6 +2364,32 @@ spec:
                             maxLength: 25
                             minLength: 1
                             type: string
+                          pvcDeletionPolicy:
+                            description: |-
+                              PVCDeletionPolicy controls PVC lifecycle for shards in this table group.
+                              Overrides MultigresCluster setting.
+                            properties:
+                              whenDeleted:
+                                default: Retain
+                                description: |-
+                                  WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                                  - Retain (default): PVCs are kept for manual review and recovery
+                                  - Delete: PVCs are automatically deleted with the cluster
+                                enum:
+                                - Retain
+                                - Delete
+                                type: string
+                              whenScaled:
+                                default: Retain
+                                description: |-
+                                  WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                                  - Retain (default): PVCs from scaled-down pods are kept
+                                  - Delete: PVCs are automatically deleted when pods are removed
+                                enum:
+                                - Retain
+                                - Delete
+                                type: string
+                            type: object
                           shards:
                             description: Shards defines the list of shards.
                             items:
@@ -4598,6 +4650,32 @@ spec:
                                                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                                     type: object
                                                 type: object
+                                            type: object
+                                          pvcDeletionPolicy:
+                                            description: |-
+                                              PVCDeletionPolicy controls PVC lifecycle for this pool.
+                                              Overrides Shard, TableGroup, and MultigresCluster settings.
+                                            properties:
+                                              whenDeleted:
+                                                default: Retain
+                                                description: |-
+                                                  WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                                                  - Retain (default): PVCs are kept for manual review and recovery
+                                                  - Delete: PVCs are automatically deleted with the cluster
+                                                enum:
+                                                - Retain
+                                                - Delete
+                                                type: string
+                                              whenScaled:
+                                                default: Retain
+                                                description: |-
+                                                  WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                                                  - Retain (default): PVCs from scaled-down pods are kept
+                                                  - Delete: PVCs are automatically deleted when pods are removed
+                                                enum:
+                                                - Retain
+                                                - Delete
+                                                type: string
                                             type: object
                                           replicasPerCell:
                                             description: ReplicasPerCell is the desired
@@ -6905,6 +6983,32 @@ spec:
                                                     type: object
                                                 type: object
                                             type: object
+                                          pvcDeletionPolicy:
+                                            description: |-
+                                              PVCDeletionPolicy controls PVC lifecycle for this pool.
+                                              Overrides Shard, TableGroup, and MultigresCluster settings.
+                                            properties:
+                                              whenDeleted:
+                                                default: Retain
+                                                description: |-
+                                                  WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                                                  - Retain (default): PVCs are kept for manual review and recovery
+                                                  - Delete: PVCs are automatically deleted with the cluster
+                                                enum:
+                                                - Retain
+                                                - Delete
+                                                type: string
+                                              whenScaled:
+                                                default: Retain
+                                                description: |-
+                                                  WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                                                  - Retain (default): PVCs from scaled-down pods are kept
+                                                  - Delete: PVCs are automatically deleted when pods are removed
+                                                enum:
+                                                - Retain
+                                                - Delete
+                                                type: string
+                                            type: object
                                           replicasPerCell:
                                             description: ReplicasPerCell is the desired
                                               number of pods PER CELL in this pool.
@@ -6958,6 +7062,32 @@ spec:
                                       - message: Pools cannot be removed or renamed
                                           in this version (Append-Only)
                                         rule: oldSelf.all(k, k in self)
+                                    pvcDeletionPolicy:
+                                      description: |-
+                                        PVCDeletionPolicy controls PVC lifecycle for pools in this shard.
+                                        Overrides TableGroup and MultigresCluster settings.
+                                      properties:
+                                        whenDeleted:
+                                          default: Retain
+                                          description: |-
+                                            WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                                            - Retain (default): PVCs are kept for manual review and recovery
+                                            - Delete: PVCs are automatically deleted with the cluster
+                                          enum:
+                                          - Retain
+                                          - Delete
+                                          type: string
+                                        whenScaled:
+                                          default: Retain
+                                          description: |-
+                                            WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                                            - Retain (default): PVCs from scaled-down pods are kept
+                                            - Delete: PVCs are automatically deleted when pods are removed
+                                          enum:
+                                          - Retain
+                                          - Delete
+                                          type: string
+                                      type: object
                                   type: object
                               required:
                               - name
@@ -7013,6 +7143,32 @@ spec:
                         maxLength: 512
                         minLength: 1
                         type: string
+                      pvcDeletionPolicy:
+                        description: |-
+                          PVCDeletionPolicy controls PVC lifecycle for etcd volumes.
+                          Overrides GlobalTopoServerSpec and MultigresCluster settings.
+                        properties:
+                          whenDeleted:
+                            default: Retain
+                            description: |-
+                              WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                              - Retain (default): PVCs are kept for manual review and recovery
+                              - Delete: PVCs are automatically deleted with the cluster
+                            enum:
+                            - Retain
+                            - Delete
+                            type: string
+                          whenScaled:
+                            default: Retain
+                            description: |-
+                              WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                              - Retain (default): PVCs from scaled-down pods are kept
+                              - Delete: PVCs are automatically deleted when pods are removed
+                            enum:
+                            - Retain
+                            - Delete
+                            type: string
+                        type: object
                       replicas:
                         description: Replicas is the desired number of etcd members.
                         format: int32
@@ -7140,6 +7296,32 @@ spec:
                         type: string
                     required:
                     - endpoints
+                    type: object
+                  pvcDeletionPolicy:
+                    description: |-
+                      PVCDeletionPolicy controls PVC lifecycle for topology server.
+                      Overrides MultigresCluster setting.
+                    properties:
+                      whenDeleted:
+                        default: Retain
+                        description: |-
+                          WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                          - Retain (default): PVCs are kept for manual review and recovery
+                          - Delete: PVCs are automatically deleted with the cluster
+                        enum:
+                        - Retain
+                        - Delete
+                        type: string
+                      whenScaled:
+                        default: Retain
+                        description: |-
+                          WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                          - Retain (default): PVCs from scaled-down pods are kept
+                          - Delete: PVCs are automatically deleted when pods are removed
+                        enum:
+                        - Retain
+                        - Delete
+                        type: string
                     type: object
                   templateRef:
                     description: TemplateRef refers to a CoreTemplate to load configuration
@@ -9270,6 +9452,35 @@ spec:
                   rule: has(self.spec) || has(self.templateRef)
                 - message: cannot specify both 'spec' and 'templateRef'
                   rule: '!(has(self.spec) && has(self.templateRef))'
+              pvcDeletionPolicy:
+                default:
+                  whenDeleted: Retain
+                  whenScaled: Retain
+                description: |-
+                  PVCDeletionPolicy controls PVC lifecycle management for all stateful components.
+                  Defaults to Retain/Retain for production safety.
+                properties:
+                  whenDeleted:
+                    default: Retain
+                    description: |-
+                      WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+                      - Retain (default): PVCs are kept for manual review and recovery
+                      - Delete: PVCs are automatically deleted with the cluster
+                    enum:
+                    - Retain
+                    - Delete
+                    type: string
+                  whenScaled:
+                    default: Retain
+                    description: |-
+                      WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                      - Retain (default): PVCs from scaled-down pods are kept
+                      - Delete: PVCs are automatically deleted when pods are removed
+                    enum:
+                    - Retain
+                    - Delete
+                    type: string
+                type: object
               templateDefaults:
                 description: |-
                   TemplateDefaults defines the default templates to use for components

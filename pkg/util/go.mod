@@ -5,6 +5,7 @@ go 1.25.2
 require (
 	github.com/google/go-cmp v0.7.0
 	github.com/numtide/multigres-operator/api v0.0.0-20260205091609-29dbce076ae0
+	k8s.io/api v0.34.1
 )
 
 require (
@@ -19,7 +20,6 @@ require (
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/api v0.34.1 // indirect
 	k8s.io/apimachinery v0.34.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect

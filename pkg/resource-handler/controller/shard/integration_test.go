@@ -240,6 +240,10 @@ func TestShardReconciliation(t *testing.T) {
 						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 							Type: appsv1.RollingUpdateStatefulSetStrategyType,
 						},
+						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+							WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+							WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
@@ -417,6 +421,283 @@ func TestShardReconciliation(t *testing.T) {
 				},
 			},
 		},
+		"shard with delete pvc policy": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "delete-policy-shard",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					ShardName:      "0",
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
+					},
+					Images: multigresv1alpha1.ShardImages{
+						MultiOrch:   "ghcr.io/multigres/multigres:main",
+						MultiPooler: "ghcr.io/multigres/multigres:main",
+						Postgres:    "postgres:17",
+					},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd2",
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone-a"},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{"zone-a"},
+							Type:            "readWrite",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "1Gi",
+							},
+						},
+					},
+				},
+			},
+			wantResources: []client.Object{
+				// MultiOrch Deployment for zone-a
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "delete-policy-shard-multiorch-zone-a",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "delete-policy-shard-multiorch-zone-a", "multiorch", "zone-a"),
+						OwnerReferences: shardOwnerRefs(t, "delete-policy-shard"),
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "delete-policy-shard-multiorch-zone-a", "multiorch", "zone-a")),
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "delete-policy-shard-multiorch-zone-a", "multiorch", "zone-a"),
+							},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Name:  "multiorch",
+										Image: "ghcr.io/multigres/multigres:main",
+										Args: []string{
+											"multiorch",
+											"--http-port", "15300",
+											"--grpc-port", "15370",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--cell", "zone-a",
+											"--watch-targets", "postgres",
+											"--cluster-metadata-refresh-interval", "500ms",
+											"--pooler-health-check-interval", "500ms",
+											"--recovery-cycle-interval", "500ms",
+										},
+										Ports: []corev1.ContainerPort{
+											tcpPort(t, "http", 15300),
+											tcpPort(t, "grpc", 15370),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				// MultiOrch Service for zone-a
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "delete-policy-shard-multiorch-zone-a",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "delete-policy-shard-multiorch-zone-a", "multiorch", "zone-a"),
+						OwnerReferences: shardOwnerRefs(t, "delete-policy-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15300),
+							tcpServicePort(t, "grpc", 15370),
+						},
+						Selector: metadata.GetSelectorLabels(shardLabels(t, "delete-policy-shard-multiorch-zone-a", "multiorch", "zone-a")),
+					},
+				},
+				&appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "delete-policy-shard-pool-primary-zone-a",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
+						OwnerReferences: shardOwnerRefs(t, "delete-policy-shard"),
+					},
+					Spec: appsv1.StatefulSetSpec{
+						ServiceName: "delete-policy-shard-pool-primary-zone-a-headless",
+						Replicas:    ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{
+							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a")),
+						},
+						PodManagementPolicy: appsv1.ParallelPodManagement,
+						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+							Type: appsv1.RollingUpdateStatefulSetStrategyType,
+						},
+						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+							WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+							WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
+						},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
+							},
+							Spec: corev1.PodSpec{
+								InitContainers: []corev1.Container{
+									{
+										Name:  "multipooler",
+										Image: "ghcr.io/multigres/multigres:main",
+										Args: []string{
+											"multipooler",
+											"--http-port", "15200",
+											"--grpc-port", "15270",
+											"--pooler-dir", "/var/lib/pooler",
+											"--socket-file", "/var/lib/pooler/pg_sockets/.s.PGSQL.5432",
+											"--service-map", "grpc-pooler",
+											"--topo-global-server-addresses", "global-topo:2379",
+											"--topo-global-root", "/multigres/global",
+											"--cell", "zone-a",
+											"--database", "testdb",
+											"--table-group", "default",
+											"--shard", "0",
+											"--service-id", "$(POD_NAME)",
+											"--pgctld-addr", "localhost:15470",
+											"--pg-port", "5432",
+										},
+										Ports:         multipoolerPorts(t),
+										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
+										},
+										Env: []corev1.EnvVar{
+											{
+												Name: "POD_NAME",
+												ValueFrom: &corev1.EnvVarSource{
+													FieldRef: &corev1.ObjectFieldSelector{
+														APIVersion: "v1",
+														FieldPath:  "metadata.name",
+													},
+												},
+											},
+										},
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "pgdata", MountPath: "/var/lib/pooler"},
+											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+										},
+									},
+								},
+								Containers: []corev1.Container{
+									{
+										Name:    "postgres",
+										Image:   "postgres:17",
+										Command: []string{"/usr/local/bin/pgctld"},
+										Args: []string{
+											"server",
+											"--pooler-dir=/var/lib/pooler",
+											"--grpc-port=15470",
+											"--pg-port=5432",
+											"--pg-listen-addresses=*",
+											"--pg-database=postgres",
+											"--pg-user=postgres",
+											"--timeout=30",
+											"--log-level=info",
+											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
+											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+										},
+										Env: []corev1.EnvVar{
+											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
+										},
+										SecurityContext: &corev1.SecurityContext{
+											RunAsUser:    ptr.To(int64(999)),
+											RunAsGroup:   ptr.To(int64(999)),
+											RunAsNonRoot: ptr.To(true),
+										},
+										VolumeMounts: []corev1.VolumeMount{
+											{Name: "pgdata", MountPath: "/var/lib/pooler"},
+											// ALTERNATIVE: Uncomment for binary-copy approach
+											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
+											{Name: "backup-data", MountPath: "/backups"},
+											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
+										},
+									},
+								},
+								Volumes: []corev1.Volume{
+									{
+										Name: "backup-data",
+										VolumeSource: corev1.VolumeSource{
+											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+												ClaimName: "backup-data-delete-policy-shard-pool-primary-zone-a",
+											},
+										},
+									},
+									{
+										Name: "socket-dir",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+									{
+										Name: "pg-hba-template",
+										VolumeSource: corev1.VolumeSource{
+											ConfigMap: &corev1.ConfigMapVolumeSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: "pg-hba-template",
+												},
+												DefaultMode: ptr.To(int32(420)),
+											},
+										},
+									},
+								},
+							},
+						},
+						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+							{
+								ObjectMeta: metav1.ObjectMeta{Name: "pgdata"},
+								Spec: corev1.PersistentVolumeClaimSpec{
+									AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+									Resources: corev1.VolumeResourceRequirements{
+										Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+									},
+									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
+								},
+								Status: corev1.PersistentVolumeClaimStatus{
+									Phase: corev1.ClaimPending,
+								},
+							},
+						},
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "delete-policy-shard-pool-primary-zone-a-headless",
+						Namespace:       "default",
+						Labels:          shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
+						OwnerReferences: shardOwnerRefs(t, "delete-policy-shard"),
+					},
+					Spec: corev1.ServiceSpec{
+						Type:      corev1.ServiceTypeClusterIP,
+						ClusterIP: corev1.ClusterIPNone,
+						Ports: []corev1.ServicePort{
+							tcpServicePort(t, "http", 15200),
+							tcpServicePort(t, "grpc", 15270),
+							tcpServicePort(t, "postgres", 5432),
+						},
+						Selector:                 metadata.GetSelectorLabels(shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a")),
+						PublishNotReadyAddresses: true,
+					},
+				},
+			},
+		},
 		"shard with pool spanning two cells": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
@@ -589,6 +870,10 @@ func TestShardReconciliation(t *testing.T) {
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
 							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1")),
+						},
+						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+							WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+							WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
@@ -774,6 +1059,10 @@ func TestShardReconciliation(t *testing.T) {
 						Replicas:    ptr.To(int32(2)),
 						Selector: &metav1.LabelSelector{
 							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2")),
+						},
+						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+							WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+							WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
 						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{

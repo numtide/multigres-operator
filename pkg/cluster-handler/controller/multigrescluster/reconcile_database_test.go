@@ -51,7 +51,7 @@ func TestReconcile_Databases(t *testing.T) {
 				// NOTE: We expect 3 replicas here because 'shardTpl' (the default template in fixtures)
 				// defines replicas: 3. The resolver correctly prioritizes the Namespace Default (Level 3)
 				// over the Operator Default (Level 4, which is 1).
-				if got, want := *tg.Spec.Shards[0].MultiOrch.Replicas, int32(1); got != want {
+				if got, want := *tg.Spec.Shards[0].MultiOrch.Replicas, int32(3); got != want {
 					t.Errorf("Injected shard replicas mismatch. Replicas: %d, Want: %d", got, want)
 				}
 				if len(tg.Spec.Shards[0].MultiOrch.Cells) != 1 ||

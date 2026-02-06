@@ -326,7 +326,12 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 								},
 							},
 						},
+						PVCDeletionPolicy: nil, // Shard-level is nil
 					},
+				},
+				PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+					WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+					WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
 				},
 			},
 		}
@@ -479,5 +484,129 @@ func TestMultigresCluster_V1Alpha1Constraints(t *testing.T) {
 				t.Errorf("Expected error to contain %q, got: %v", tc.errContains, err)
 			}
 		})
+	}
+}
+
+// TestMultigresCluster_TemplateOverrides verifies that properties defined in
+// ShardTemplates (specifically PVCDeletionPolicy) are correctly applied.
+func TestMultigresCluster_TemplateOverrides(t *testing.T) {
+	t.Parallel()
+	k8sClient, watcher := setupIntegration(t)
+
+	// 1. Create a ShardTemplate with specific PVC Policy
+	tplName := "policy-template"
+	tpl := &multigresv1alpha1.ShardTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: tplName, Namespace: testNamespace},
+		Spec: multigresv1alpha1.ShardTemplateSpec{
+			PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+				WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+				WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
+			},
+		},
+	}
+	if err := k8sClient.Create(t.Context(), tpl); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Create Cluster using this template in Defaults
+	clusterName := "template-policy-test"
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: testNamespace},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+				ShardTemplate: multigresv1alpha1.TemplateRef(tplName),
+			},
+			Cells: []multigresv1alpha1.CellConfig{
+				{Name: "zone-a", Zone: "us-east-1a"},
+			},
+			Databases: []multigresv1alpha1.DatabaseConfig{
+				{
+					Name: "postgres", Default: true,
+					TableGroups: []multigresv1alpha1.TableGroupConfig{
+						{
+							Name: "default", Default: true,
+							Shards: []multigresv1alpha1.ShardConfig{
+								{Name: "0-inf"}, // No inline spec, should use template
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := k8sClient.Create(t.Context(), cluster); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Verify TableGroup has the correct Resolved Shard Spec
+	watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
+
+	wantTG := &multigresv1alpha1.TableGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nameutil.JoinWithConstraints(
+nameutil.DefaultConstraints,
+clusterName,
+"postgres",
+"default",
+),
+			Namespace: testNamespace,
+		},
+		Spec: multigresv1alpha1.TableGroupSpec{
+			DatabaseName:   "postgres",
+			TableGroupName: "default",
+			IsDefault:      true,
+			Images: multigresv1alpha1.ShardImages{
+				MultiOrch:       resolver.DefaultMultiOrchImage,
+				MultiPooler:     resolver.DefaultMultiPoolerImage,
+				Postgres:        resolver.DefaultPostgresImage,
+				ImagePullPolicy: resolver.DefaultImagePullPolicy,
+			},
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        clusterName + "-global-topo." + testNamespace + ".svc:2379",
+				RootPath:       "/multigres/global",
+				Implementation: "etcd2",
+			},
+			Shards: []multigresv1alpha1.ShardResolvedSpec{
+				{
+					Name: "0-inf",
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone-a"},
+						StatelessSpec: multigresv1alpha1.StatelessSpec{
+							Replicas:  ptr.To(int32(1)),                // From implicit defaults in resolver
+							Resources: resolver.DefaultResourcesOrch(), // Defaults
+						},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"default": {
+							Type:            "readWrite",
+							Cells:           []multigresv1alpha1.CellName{"zone-a"},
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
+							Postgres: multigresv1alpha1.ContainerConfig{
+								Resources: resolver.DefaultResourcesPostgres(),
+							},
+							Multipooler: multigresv1alpha1.ContainerConfig{
+								Resources: resolver.DefaultResourcesPooler(),
+							},
+						},
+					},
+					// FIX Verification: verify that the POLICY FROM TEMPLATE IS HERE!
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
+					},
+				},
+			},
+			// TG/Cluster level defaults (Retain/Retain)
+			PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+				WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+				WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+			},
+		},
+	}
+
+	if err := watcher.WaitForMatch(wantTG); err != nil {
+		t.Errorf("Template override validation failed: %v", err)
 	}
 }

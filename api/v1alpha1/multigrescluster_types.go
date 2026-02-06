@@ -81,6 +81,12 @@ type MultigresClusterSpec struct {
 	// +kubebuilder:validation:MaxItems=1
 	// +kubebuilder:validation:XValidation:rule="self.all(db, db.name == 'postgres' && db.default == true)",message="in v1alpha1, only the single system database named 'postgres' (marked default: true) is supported"
 	Databases []DatabaseConfig `json:"databases,omitempty"`
+
+	// PVCDeletionPolicy controls PVC lifecycle management for all stateful components.
+	// Defaults to Retain/Retain for production safety.
+	// +optional
+	// +kubebuilder:default={whenDeleted: "Retain", whenScaled: "Retain"}
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ============================================================================
@@ -250,6 +256,11 @@ type TableGroupConfig struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Shards []ShardConfig `json:"shards,omitempty"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for shards in this table group.
+	// Overrides MultigresCluster setting.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ShardConfig defines a specific shard.
@@ -299,6 +310,11 @@ type ShardInlineSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) <= 25)",message="pool names must be <= 25 chars"
 	// +kubebuilder:validation:XValidation:rule="oldSelf.all(k, k in self)",message="Pools cannot be removed or renamed in this version (Append-Only)"
 	Pools map[PoolName]PoolSpec `json:"pools,omitempty"`
+
+	// PVCDeletionPolicy controls PVC lifecycle for pools in this shard.
+	// Overrides TableGroup and MultigresCluster settings.
+	// +optional
+	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
 }
 
 // ============================================================================

@@ -77,6 +77,34 @@ type StorageSpec struct {
 	AccessModes []corev1.PersistentVolumeAccessMode `json:"accessModes,omitempty"`
 }
 
+// PVCRetentionPolicyType defines when to delete PVCs.
+// +kubebuilder:validation:Enum=Retain;Delete
+type PVCRetentionPolicyType string
+
+const (
+	// RetainPVCRetentionPolicy keeps PVCs when resources are deleted or scaled down.
+	RetainPVCRetentionPolicy PVCRetentionPolicyType = "Retain"
+	// DeletePVCRetentionPolicy automatically deletes PVCs when resources are deleted or scaled down.
+	DeletePVCRetentionPolicy PVCRetentionPolicyType = "Delete"
+)
+
+// PVCDeletionPolicy controls PVC lifecycle management for stateful components.
+type PVCDeletionPolicy struct {
+	// WhenDeleted controls PVC deletion when the MultigresCluster is deleted.
+	// - Retain (default): PVCs are kept for manual review and recovery
+	// - Delete: PVCs are automatically deleted with the cluster
+	// +optional
+	// +kubebuilder:default=Retain
+	WhenDeleted PVCRetentionPolicyType `json:"whenDeleted,omitempty"`
+
+	// WhenScaled controls PVC deletion when StatefulSets are scaled down.
+	// - Retain (default): PVCs from scaled-down pods are kept
+	// - Delete: PVCs are automatically deleted when pods are removed
+	// +optional
+	// +kubebuilder:default=Retain
+	WhenScaled PVCRetentionPolicyType `json:"whenScaled,omitempty"`
+}
+
 // ContainerConfig defines generic container configuration.
 type ContainerConfig struct {
 	// Resources defines the compute resource requirements.
@@ -137,3 +165,35 @@ const (
 	PhaseDegraded     Phase = "Degraded"     // Resource is failing / crashing
 	PhaseUnknown      Phase = "Unknown"
 )
+
+// MergePVCDeletionPolicy merges child and parent policies with child taking precedence.
+// If child is nil, returns parent. If both nil, returns nil (caller uses default Retain).
+func MergePVCDeletionPolicy(child, parent *PVCDeletionPolicy) *PVCDeletionPolicy {
+	if child == nil {
+		return parent
+	}
+
+	// Child exists, create merged policy
+	merged := &PVCDeletionPolicy{}
+
+	// Merge WhenDeleted
+	if child.WhenDeleted != "" {
+		merged.WhenDeleted = child.WhenDeleted
+	} else if parent != nil {
+		merged.WhenDeleted = parent.WhenDeleted
+	}
+
+	// Merge WhenScaled
+	if child.WhenScaled != "" {
+		merged.WhenScaled = child.WhenScaled
+	} else if parent != nil {
+		merged.WhenScaled = parent.WhenScaled
+	}
+
+	// If merged is empty, return nil (let caller use defaults)
+	if merged.WhenDeleted == "" && merged.WhenScaled == "" {
+		return nil
+	}
+
+	return merged
+}

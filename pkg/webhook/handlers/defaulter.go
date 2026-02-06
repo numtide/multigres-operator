@@ -190,13 +190,24 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 				if !isUsingTemplate {
 					// We pass 'nil' for allCellNames to prevent "Sticky Context Defaults".
 					// We want the Stored Spec to remain empty (dynamic) rather than locking in the current list of cells.
-					multiOrchSpec, poolsSpec, err := scopedResolver.ResolveShard(ctx, shard, nil)
+					multiOrchSpec, poolsSpec, resolvedPvcPolicy, err := scopedResolver.ResolveShard(ctx, shard, nil)
 					if err != nil {
 						return fmt.Errorf("failed to resolve shard '%s': %w", shard.Name, err)
 					}
+
+					// Preserve PVCDeletionPolicy if it was set in the original spec
+					// Otherwise, use the resolved policy (from template)
+					var pvcPolicy *multigresv1alpha1.PVCDeletionPolicy
+					if shard.Spec != nil && shard.Spec.PVCDeletionPolicy != nil {
+						pvcPolicy = shard.Spec.PVCDeletionPolicy
+					} else {
+						pvcPolicy = resolvedPvcPolicy
+					}
+
 					shard.Spec = &multigresv1alpha1.ShardInlineSpec{
-						MultiOrch: *multiOrchSpec,
-						Pools:     poolsSpec,
+						MultiOrch:         *multiOrchSpec,
+						Pools:             poolsSpec,
+						PVCDeletionPolicy: pvcPolicy,
 					}
 				}
 			}

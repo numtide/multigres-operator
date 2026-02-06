@@ -241,6 +241,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
 							Resources: resolver.DefaultResourcesEtcd(),
 						},
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+						},
 					},
 				},
 				// 2. MultiAdmin Deployment
@@ -472,7 +476,12 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										Multipooler: multigresv1alpha1.ContainerConfig{Resources: resolver.DefaultResourcesPooler()},
 									},
 								},
+								PVCDeletionPolicy: nil, // Shard-level policy is nil (inherited)
 							},
+						},
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
 						},
 					},
 				},
@@ -516,6 +525,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							Replicas:  ptr.To(resolver.DefaultEtcdReplicas),
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
 							Resources: resolver.DefaultResourcesEtcd(),
+						},
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
 						},
 					},
 				},
@@ -748,12 +761,18 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										},
 									},
 								},
+								PVCDeletionPolicy: nil, // Shard-level is nil
 							},
+						},
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
 						},
 					},
 				},
 			},
 		},
+
 		"minimal cluster (lazy user) - regression": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -786,6 +805,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							Replicas:  ptr.To(resolver.DefaultEtcdReplicas),
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
 							Resources: resolver.DefaultResourcesEtcd(),
+						},
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
 						},
 					},
 				},
@@ -1018,7 +1041,12 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										},
 									},
 								},
+								PVCDeletionPolicy: nil,
 							},
+						},
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
 						},
 					},
 				},
