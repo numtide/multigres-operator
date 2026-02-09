@@ -4683,8 +4683,9 @@ spec:
                                                 type: string
                                             type: object
                                           replicasPerCell:
-                                            description: ReplicasPerCell is the desired
-                                              number of pods PER CELL in this pool.
+                                            description: |-
+                                              ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
+                                              Sidecars (like Multipooler) will scale alongside the Postgres pods.
                                             format: int32
                                             maximum: 32
                                             minimum: 0
@@ -7015,8 +7016,9 @@ spec:
                                                 type: string
                                             type: object
                                           replicasPerCell:
-                                            description: ReplicasPerCell is the desired
-                                              number of pods PER CELL in this pool.
+                                            description: |-
+                                              ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
+                                              Sidecars (like Multipooler) will scale alongside the Postgres pods.
                                             format: int32
                                             maximum: 32
                                             minimum: 0

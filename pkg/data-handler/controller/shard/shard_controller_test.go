@@ -108,12 +108,23 @@ func TestReconcile(t *testing.T) {
 					return
 				}
 				wantDB := &clustermetadata.Database{
-					Name:             "postgres",
-					BackupLocation:   "/backups",
+					Name: "postgres",
+					BackupLocation: &clustermetadata.BackupLocation{
+						Location: &clustermetadata.BackupLocation_Filesystem{
+							Filesystem: &clustermetadata.FilesystemBackup{
+								Path: "/backups",
+							},
+						},
+					},
 					DurabilityPolicy: "ANY_2",
 					Cells:            []string{"zone-a", "zone-b", "zone-c"},
 				}
-				opts := cmpopts.IgnoreUnexported(clustermetadata.Database{})
+				opts := cmpopts.IgnoreUnexported(
+					clustermetadata.Database{},
+					clustermetadata.BackupLocation{},
+					clustermetadata.BackupLocation_Filesystem{},
+					clustermetadata.FilesystemBackup{},
+				)
 				if diff := cmp.Diff(wantDB, gotDB, opts); diff != "" {
 					t.Errorf("Database in topology mismatch (-want +got):\n%s", diff)
 				}

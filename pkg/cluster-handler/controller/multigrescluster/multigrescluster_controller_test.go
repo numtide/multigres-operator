@@ -339,6 +339,17 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			wantErrMsg: "failed to get MultigresCluster",
 		},
 
+		"Success: Trigger Implicit Defaults": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.TemplateDefaults = multigresv1alpha1.TemplateDefaults{} // Empty defaults to trigger population
+			},
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			expectedEvents: []string{
+				"Normal ImplicitDefault",
+				"Normal Synced Successfully reconciled MultigresCluster",
+			},
+		},
+
 		"Success: TableGroup Name Too Long (Hashed)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
 				c.Spec.Databases = []multigresv1alpha1.DatabaseConfig{

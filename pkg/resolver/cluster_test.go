@@ -808,7 +808,7 @@ func TestResolver_ResolveMultiAdminWeb(t *testing.T) {
 			},
 			objects: []client.Object{coreTpl},
 			want: &multigresv1alpha1.StatelessSpec{
-				Replicas:  ptr.To(DefaultMultiAdminWebReplicas),
+				Replicas:  ptr.To(int32(3)),
 				Resources: DefaultResourcesAdminWeb(),
 			},
 		},
@@ -857,4 +857,56 @@ func TestResolver_ResolveMultiAdminWeb(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveGlobalTopo_PVCDeletionPolicy(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	r := &Resolver{
+		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+	}
+
+	t.Run("GlobalTopoServerSpec Level", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+					},
+				},
+			},
+		}
+		got, err := r.ResolveGlobalTopo(t.Context(), cluster)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.PVCDeletionPolicy == nil ||
+			got.PVCDeletionPolicy.WhenDeleted != multigresv1alpha1.DeletePVCRetentionPolicy {
+			t.Errorf("Expected GlobalTopo PVCDeletionPolicy=Delete, got %v", got.PVCDeletionPolicy)
+		}
+	})
+
+	t.Run("EtcdSpec Level Override", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						},
+					},
+				},
+			},
+		}
+		got, err := r.ResolveGlobalTopo(t.Context(), cluster)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// mergeEtcdSpec should have applied this to the base
+		if got.Etcd.PVCDeletionPolicy == nil ||
+			got.Etcd.PVCDeletionPolicy.WhenDeleted != multigresv1alpha1.RetainPVCRetentionPolicy {
+			t.Errorf("Expected Etcd PVCDeletionPolicy=Retain, got %v", got.Etcd.PVCDeletionPolicy)
+		}
+	})
 }

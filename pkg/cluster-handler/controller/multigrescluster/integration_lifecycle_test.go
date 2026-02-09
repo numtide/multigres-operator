@@ -50,6 +50,11 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 						},
 					},
 				},
+				// We need a dummy cell for tablegroup validation to pass if it tries to resolve?
+				// Actually, TableGroups don't need cells if not defined inline?
+				// The error message might help: "unknown field Spec".
+				// Ah, DatabaseConfig has fields directly embedded or defined.
+				Cells: []multigresv1alpha1.CellConfig{{Name: "zone-a", Zone: "us-east-1a"}},
 			},
 		}
 
