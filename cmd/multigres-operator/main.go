@@ -27,6 +27,11 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	// Import topology implementations for Vitess
+	// TODO: This pulls in multigres/multigres upstream as the hard direct
+	// dependency from the main module, which we would like to avoid.
+	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
+
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,6 +52,8 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
 	tablegroupcontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
+	datahandlercellcontroller "github.com/numtide/multigres-operator/pkg/data-handler/controller/cell"
+	datahandlershardcontroller "github.com/numtide/multigres-operator/pkg/data-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
@@ -373,6 +380,22 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("cell-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Cell")
+		os.Exit(1)
+	}
+
+	if err = (&datahandlercellcontroller.CellReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Cell-DataHandler")
+		os.Exit(1)
+	}
+
+	if err = (&datahandlershardcontroller.ShardReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Shard-DataHandler")
 		os.Exit(1)
 	}
 
