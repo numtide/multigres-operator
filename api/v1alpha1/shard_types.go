@@ -72,7 +72,8 @@ type PoolSpec struct {
 	// +kubebuilder:validation:MaxItems=50
 	Cells []CellName `json:"cells,omitempty"`
 
-	// ReplicasPerCell is the desired number of pods PER CELL in this pool.
+	// ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
+	// Sidecars (like Multipooler) will scale alongside the Postgres pods.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=32
 	// +optional

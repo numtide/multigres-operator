@@ -11,6 +11,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,7 +38,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			objects: []client.Object{shardTpl},
 			wantOrch: &multigresv1alpha1.MultiOrchSpec{
 				StatelessSpec: multigresv1alpha1.StatelessSpec{
-					Replicas:  ptr.To(int32(1)),
+					Replicas:  ptr.To(int32(3)),
 					Resources: DefaultResourcesOrch(),
 				},
 			},
@@ -485,6 +486,39 @@ func TestMergeShardConfig(t *testing.T) {
 			wantOrch:  multigresv1alpha1.MultiOrchSpec{Cells: []multigresv1alpha1.CellName{"b"}},
 			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
 		},
+
+		"Pool PVC Policy Override": {
+			tpl: &multigresv1alpha1.ShardTemplate{
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"p1": {
+							Type: "read",
+							PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+								WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+							},
+						},
+					},
+				},
+			},
+			overrides: &multigresv1alpha1.ShardOverrides{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"p1": {
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						},
+					},
+				},
+			},
+			wantOrch: multigresv1alpha1.MultiOrchSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p1": {
+					Type: "read",
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -520,4 +554,68 @@ func TestResolver_ClientErrors_Shard(t *testing.T) {
 		err.Error() != "failed to get ShardTemplate: simulated database connection error" {
 		t.Errorf("Error mismatch: got %v, want simulated error", err)
 	}
+}
+
+func TestResolveShard_PVCDeletionPolicy(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	t.Run("From Template", func(t *testing.T) {
+		r := &Resolver{
+			Client: fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(&multigresv1alpha1.ShardTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "tpl-pvc", Namespace: "default"},
+					Spec: multigresv1alpha1.ShardTemplateSpec{
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+						},
+					},
+				}).
+				Build(),
+			Namespace:          "default",
+			ShardTemplateCache: make(map[string]*multigresv1alpha1.ShardTemplate),
+		}
+
+		_, _, policy, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
+			ShardTemplate: "tpl-pvc",
+		}, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if policy == nil || policy.WhenDeleted != multigresv1alpha1.DeletePVCRetentionPolicy {
+			t.Errorf("Expected Template PVCDeletionPolicy=Delete, got %v", policy)
+		}
+	})
+
+	t.Run("Pool Level Override", func(t *testing.T) {
+		r := &Resolver{
+			Client:             fake.NewClientBuilder().WithScheme(scheme).Build(),
+			Namespace:          "default",
+			ShardTemplateCache: make(map[string]*multigresv1alpha1.ShardTemplate),
+		}
+
+		_, pools, _, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
+			Spec: &multigresv1alpha1.ShardInlineSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"custom-pool": {
+						Type: "read",
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						},
+					},
+				},
+			},
+		}, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p, ok := pools["custom-pool"]; !ok {
+			t.Fatal("Expected custom-pool to exist")
+		} else {
+			if p.PVCDeletionPolicy == nil || p.PVCDeletionPolicy.WhenDeleted != multigresv1alpha1.RetainPVCRetentionPolicy {
+				t.Errorf("Expected Pool PVCDeletionPolicy=Retain, got %v", p.PVCDeletionPolicy)
+			}
+		}
+	})
 }

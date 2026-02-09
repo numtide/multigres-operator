@@ -341,3 +341,74 @@ func TestUpdateStatus_ZeroResources(t *testing.T) {
 		t.Errorf("Expected Available=False (no cells), got %s", cond.Status)
 	}
 }
+
+func TestUpdateStatus_GenerationMismatch(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-cluster",
+			Namespace:  "default",
+			Generation: 2,
+		},
+	}
+
+	// Cell with outdated generation
+	cell := &multigresv1alpha1.Cell{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "cell-1",
+			Namespace:  "default",
+			Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
+			Generation: 2,
+		},
+		Spec: multigresv1alpha1.CellSpec{Name: "cell-1"},
+		Status: multigresv1alpha1.CellStatus{
+			ObservedGeneration: 1, // Mismatch
+			Phase:              multigresv1alpha1.PhaseHealthy,
+		},
+	}
+
+	// TableGroup with outdated generation
+	tg := &multigresv1alpha1.TableGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "tg-1",
+			Namespace:  "default",
+			Labels:     map[string]string{"multigres.com/cluster": "test-cluster"},
+			Generation: 2,
+		},
+		Spec: multigresv1alpha1.TableGroupSpec{DatabaseName: "db1"},
+		Status: multigresv1alpha1.TableGroupStatus{
+			ObservedGeneration: 1, // Mismatch
+			Phase:              multigresv1alpha1.PhaseHealthy,
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, cell, tg).
+		WithStatusSubresource(cluster, cell, tg).
+		Build()
+
+	r := &MultigresClusterReconciler{
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
+	}
+
+	if err := r.updateStatus(context.Background(), cluster); err != nil {
+		t.Fatalf("updateStatus failed: %v", err)
+	}
+
+	if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(cluster), cluster); err != nil {
+		t.Fatalf("Failed to refresh cluster: %v", err)
+	}
+
+	// Should be transitioning/progressing because components are not observing latest generation
+	if cluster.Status.Phase != multigresv1alpha1.PhaseProgressing {
+		t.Errorf(
+			"Expected PhaseProgressing due to generation mismatch, got %s",
+			cluster.Status.Phase,
+		)
+	}
+}

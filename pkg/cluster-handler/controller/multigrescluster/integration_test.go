@@ -212,7 +212,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
 											Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 												"primary": {
-													ReplicasPerCell: ptr.To(int32(1)),
+													ReplicasPerCell: ptr.To(int32(3)),
 													Type:            "readWrite",
 													Cells:           []multigresv1alpha1.CellName{"zone-a"},
 												},
@@ -467,7 +467,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 								},
 								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 									"primary": {
-										ReplicasPerCell: ptr.To(int32(1)),
+										ReplicasPerCell: ptr.To(int32(3)),
 										Type:            "readWrite",
 										Cells:           []multigresv1alpha1.CellName{"zone-a"},
 										// FIX: Expect defaults for pool resources
@@ -751,7 +751,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									"default": {
 										Type:            "readWrite",
 										Cells:           []multigresv1alpha1.CellName{"zone-a"},
-										ReplicasPerCell: ptr.To(int32(1)),
+										ReplicasPerCell: ptr.To(int32(3)),
 										Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize}, // "1Gi"
 										Postgres: multigresv1alpha1.ContainerConfig{
 											Resources: resolver.DefaultResourcesPostgres(),
@@ -1031,7 +1031,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									"default": {
 										Type:            "readWrite",
 										Cells:           []multigresv1alpha1.CellName{"zone-a"},
-										ReplicasPerCell: ptr.To(int32(1)),
+										ReplicasPerCell: ptr.To(int32(3)),
 										Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize}, // "1Gi"
 										Postgres: multigresv1alpha1.ContainerConfig{
 											Resources: resolver.DefaultResourcesPostgres(),

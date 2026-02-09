@@ -4,7 +4,7 @@ go 1.25.2
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/multigres/multigres v0.0.0-20260206210928-8ffb46295efa
+	github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c
 	github.com/numtide/multigres-operator/api v0.0.0-20260206210705-905fbad49bf9
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260206152735-50b424a37ead
 	k8s.io/apimachinery v0.35.0
@@ -129,4 +129,11 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2-0.20260122202528-d9cc6641c482 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
+)
+
+exclude (
+	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
+	google.golang.org/genproto v0.0.0-20180819201941-24fa4b261c55
+	google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
+	google.golang.org/genproto v0.0.0-20200423170343-7949de9c1215
 )

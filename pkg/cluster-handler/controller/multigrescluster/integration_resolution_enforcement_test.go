@@ -316,8 +316,8 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 							"default": {
 								Type:            "readWrite",
 								Cells:           []multigresv1alpha1.CellName{"zone-c"},
-								ReplicasPerCell: ptr.To(int32(1)),
-								Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
+								ReplicasPerCell: ptr.To(int32(3)),
+								Storage:         multigresv1alpha1.StorageSpec{Size: "1Gi"},
 								Postgres: multigresv1alpha1.ContainerConfig{
 									Resources: resolver.DefaultResourcesPostgres(),
 								},
@@ -581,8 +581,8 @@ func TestMultigresCluster_TemplateOverrides(t *testing.T) {
 						"default": {
 							Type:            "readWrite",
 							Cells:           []multigresv1alpha1.CellName{"zone-a"},
-							ReplicasPerCell: ptr.To(int32(1)),
-							Storage:         multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
+							ReplicasPerCell: ptr.To(int32(3)),
+							Storage:         multigresv1alpha1.StorageSpec{Size: "1Gi"},
 							Postgres: multigresv1alpha1.ContainerConfig{
 								Resources: resolver.DefaultResourcesPostgres(),
 							},

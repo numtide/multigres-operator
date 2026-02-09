@@ -135,8 +135,14 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 
 	// Build database metadata
 	dbMetadata := &clustermetadata.Database{
-		Name:             dbName,
-		BackupLocation:   r.getBackupLocation(shard),
+		Name: dbName,
+		BackupLocation: &clustermetadata.BackupLocation{
+			Location: &clustermetadata.BackupLocation_Filesystem{
+				Filesystem: &clustermetadata.FilesystemBackup{
+					Path: r.getBackupLocation(shard),
+				},
+			},
+		},
 		DurabilityPolicy: r.getDurabilityPolicy(shard),
 		Cells:            cells,
 	}

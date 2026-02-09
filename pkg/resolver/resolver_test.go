@@ -36,7 +36,7 @@ func setupFixtures(t testing.TB) (
 				// Image is not in StatelessSpec, it is global
 			},
 			MultiAdminWeb: &multigresv1alpha1.StatelessSpec{
-				Replicas: ptr.To(int32(1)),
+				Replicas: ptr.To(int32(3)),
 			},
 		},
 	}
@@ -45,7 +45,7 @@ func setupFixtures(t testing.TB) (
 		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
 		Spec: multigresv1alpha1.CellTemplateSpec{
 			MultiGateway: &multigresv1alpha1.StatelessSpec{
-				Replicas: ptr.To(int32(1)),
+				Replicas: ptr.To(int32(3)),
 			},
 			LocalTopoServer: &multigresv1alpha1.LocalTopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{Image: "local-etcd-default"},
@@ -58,7 +58,7 @@ func setupFixtures(t testing.TB) (
 		Spec: multigresv1alpha1.ShardTemplateSpec{
 			MultiOrch: &multigresv1alpha1.MultiOrchSpec{
 				StatelessSpec: multigresv1alpha1.StatelessSpec{
-					Replicas: ptr.To(int32(1)),
+					Replicas: ptr.To(int32(3)),
 				},
 			},
 		},

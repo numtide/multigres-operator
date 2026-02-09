@@ -132,7 +132,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 														Type: "readWrite",
 														// Cells should be nil to avoid sticky defaults
 														Cells:           nil,
-														ReplicasPerCell: ptr.To(int32(1)),
+														ReplicasPerCell: ptr.To(int32(3)),
 														Storage: multigresv1alpha1.StorageSpec{
 															Size: "1Gi",
 														},
@@ -316,6 +316,114 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 				}(),
 			},
 			expectError: "failed to resolve shard 's1'",
+		},
+		"PVC Policy Preservation": {
+			input: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Databases: []multigresv1alpha1.DatabaseConfig{
+						{
+							Name: "db",
+							TableGroups: []multigresv1alpha1.TableGroupConfig{{
+								Name: "tg",
+								Shards: []multigresv1alpha1.ShardConfig{{
+									Name: "s1",
+									Spec: &multigresv1alpha1.ShardInlineSpec{
+										PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+											WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+										},
+									},
+								}},
+							}},
+						},
+					},
+				},
+			},
+			validate: func(t testing.TB, cluster *multigresv1alpha1.MultigresCluster) {
+				t.Helper()
+				want := &multigresv1alpha1.MultigresCluster{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+					Spec: multigresv1alpha1.MultigresClusterSpec{
+						TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+							CoreTemplate:  "",
+							CellTemplate:  "",
+							ShardTemplate: "",
+						},
+						GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+							Etcd: &multigresv1alpha1.EtcdSpec{
+								Image:    resolver.DefaultEtcdImage,
+								Replicas: ptr.To(int32(3)),
+								Storage: multigresv1alpha1.StorageSpec{
+									Size: resolver.DefaultEtcdStorageSize,
+								},
+								Resources: resolver.DefaultResourcesEtcd(),
+							},
+						},
+						MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+							Spec: &multigresv1alpha1.StatelessSpec{
+								Replicas:  ptr.To(int32(1)),
+								Resources: resolver.DefaultResourcesAdmin(),
+							},
+						},
+						MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+							Spec: &multigresv1alpha1.StatelessSpec{
+								Replicas:  ptr.To(int32(1)),
+								Resources: resolver.DefaultResourcesAdminWeb(),
+							},
+						},
+						Images: multigresv1alpha1.ClusterImages{
+							Postgres:        resolver.DefaultPostgresImage,
+							MultiAdmin:      resolver.DefaultMultiAdminImage,
+							MultiAdminWeb:   resolver.DefaultMultiAdminWebImage,
+							MultiOrch:       resolver.DefaultMultiOrchImage,
+							MultiPooler:     resolver.DefaultMultiPoolerImage,
+							MultiGateway:    resolver.DefaultMultiGatewayImage,
+							ImagePullPolicy: resolver.DefaultImagePullPolicy,
+						},
+						Databases: []multigresv1alpha1.DatabaseConfig{
+							{
+								Name: "db",
+								TableGroups: []multigresv1alpha1.TableGroupConfig{{
+									Name: "tg",
+									Shards: []multigresv1alpha1.ShardConfig{{
+										Name: "s1",
+										Spec: &multigresv1alpha1.ShardInlineSpec{
+											PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+												WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+											},
+											MultiOrch: multigresv1alpha1.MultiOrchSpec{
+												StatelessSpec: multigresv1alpha1.StatelessSpec{
+													Replicas:  ptr.To(int32(1)),
+													Resources: resolver.DefaultResourcesOrch(),
+												},
+												Cells: nil, // Dynamic
+											},
+											Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+												"default": {
+													Type:            "readWrite",
+													ReplicasPerCell: ptr.To(int32(3)),
+													Storage: multigresv1alpha1.StorageSpec{
+														Size: resolver.DefaultEtcdStorageSize,
+													},
+													Postgres: multigresv1alpha1.ContainerConfig{
+														Resources: resolver.DefaultResourcesPostgres(),
+													},
+													Multipooler: multigresv1alpha1.ContainerConfig{
+														Resources: resolver.DefaultResourcesPooler(),
+													},
+												},
+											},
+										},
+									}},
+								}},
+							},
+						},
+					},
+				}
+				if diff := cmp.Diff(want, cluster, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("Cluster mismatch (-want +got):\n%s", diff)
+				}
+			},
 		},
 	}
 
