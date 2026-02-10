@@ -27,8 +27,8 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/numtide/multigres-operator/api v0.0.0-20260209133112-f17dbd59166e h1:jsBgQywwdSHjQZLHdEourxSVZig0FMDzM54LKBjTFfM=
-github.com/numtide/multigres-operator/api v0.0.0-20260209133112-f17dbd59166e/go.mod h1:kpRw+FCWMIYfM85N4I1kGUhTVkJ7nwLvDVumWvLOMSI=
+github.com/numtide/multigres-operator/api v0.0.0-20260210092054-f7ad64000b6d h1:cTpqOPPJfI2IGm9VZPXGygEMQhO5AHpnle9EphvZSyo=
+github.com/numtide/multigres-operator/api v0.0.0-20260210092054-f7ad64000b6d/go.mod h1:7nlnBwoyLSbEloUaHHC6X3ncWZeuOvkOBnnF9cSW+Wg=
 github.com/onsi/ginkgo/v2 v2.27.2 h1:LzwLj0b89qtIy6SSASkzlNvX6WktqurSHwkk2ipF/Ns=
 github.com/onsi/ginkgo/v2 v2.27.2/go.mod h1:ArE1D/XhNXBXCBkKOLkbsb2c81dQHCRcF5zwn/ykDRo=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=
