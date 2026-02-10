@@ -37,6 +37,9 @@ func (r *TopoServerReconciler) Reconcile(
 	req ctrl.Request,
 ) (ctrl.Result, error) {
 	start := time.Now()
+	ctx, span := monitoring.StartReconcileSpan(ctx, "TopoServer.Reconcile", req.Name, req.Namespace, "TopoServer")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("reconcile started")
 
@@ -47,6 +50,7 @@ func (r *TopoServerReconciler) Reconcile(
 			logger.Info("TopoServer resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
+		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to get TopoServer")
 		return ctrl.Result{}, err
 	}
@@ -57,48 +61,72 @@ func (r *TopoServerReconciler) Reconcile(
 	}
 
 	// Reconcile StatefulSet
-	if err := r.reconcileStatefulSet(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to reconcile StatefulSet")
-		r.Recorder.Eventf(
-			toposerver,
-			"Warning",
-			"FailedApply",
-			"Failed to reconcile StatefulSet: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.ReconcileStatefulSet")
+		if err := r.reconcileStatefulSet(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile StatefulSet")
+			r.Recorder.Eventf(
+				toposerver,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile StatefulSet: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Reconcile headless Service
-	if err := r.reconcileHeadlessService(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to reconcile headless Service")
-		r.Recorder.Eventf(
-			toposerver,
-			"Warning",
-			"FailedApply",
-			"Failed to reconcile headless Service: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.ReconcileHeadlessService")
+		if err := r.reconcileHeadlessService(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile headless Service")
+			r.Recorder.Eventf(
+				toposerver,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile headless Service: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Reconcile client Service
-	if err := r.reconcileClientService(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to reconcile client Service")
-		r.Recorder.Eventf(
-			toposerver,
-			"Warning",
-			"FailedApply",
-			"Failed to reconcile client Service: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.ReconcileClientService")
+		if err := r.reconcileClientService(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile client Service")
+			r.Recorder.Eventf(
+				toposerver,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile client Service: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.UpdateStatus")
+		if err := r.updateStatus(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())

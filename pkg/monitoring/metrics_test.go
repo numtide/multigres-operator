@@ -24,8 +24,8 @@ func TestMetricNamingConvention(t *testing.T) {
 
 		for desc := range ch {
 			name := extractMetricName(desc)
-			if !strings.HasPrefix(name, "multigres_") {
-				t.Errorf("metric %q does not start with multigres_ prefix", name)
+			if !strings.HasPrefix(name, "multigres_operator_") {
+				t.Errorf("metric %q does not start with multigres_operator_ prefix", name)
 			}
 		}
 	}

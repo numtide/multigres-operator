@@ -38,6 +38,9 @@ func (r *ShardReconciler) Reconcile(
 	req ctrl.Request,
 ) (ctrl.Result, error) {
 	start := time.Now()
+	ctx, span := monitoring.StartReconcileSpan(ctx, "Shard.Reconcile", req.Name, req.Namespace, "Shard")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("reconcile started")
 
@@ -48,6 +51,7 @@ func (r *ShardReconciler) Reconcile(
 			logger.Info("Shard resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
+		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to get Shard")
 		return ctrl.Result{}, err
 	}
@@ -59,76 +63,99 @@ func (r *ShardReconciler) Reconcile(
 
 	// Reconcile pg_hba ConfigMap first (required by all pools before StatefulSets start)
 	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
+		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to reconcile pg_hba ConfigMap")
 		r.Recorder.Eventf(shard, "Warning", "ConfigError", "Failed to generate pg_hba: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	// Reconcile MultiOrch - one Deployment and Service per cell
-	multiOrchCells, err := getMultiOrchCells(shard)
-	if err != nil {
-		r.Recorder.Eventf(
-			shard,
-			"Warning",
-			"ConfigError",
-			"Failed to determine MultiOrch cells: %v",
-			err,
-		)
-		return ctrl.Result{}, err
-	}
-
-	for _, cell := range multiOrchCells {
-		cellName := string(cell)
-
-		// Reconcile MultiOrch Deployment for this cell
-		if err := r.reconcileMultiOrchDeployment(ctx, shard, cellName); err != nil {
-			logger.Error(err, "Failed to reconcile MultiOrch Deployment", "cell", cellName)
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileMultiOrch")
+		multiOrchCells, err := getMultiOrchCells(shard)
+		if err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
 			r.Recorder.Eventf(
 				shard,
 				"Warning",
-				"FailedApply",
-				"Failed to supply MultiOrch Deployment for cell %s: %v",
-				cellName,
+				"ConfigError",
+				"Failed to determine MultiOrch cells: %v",
 				err,
 			)
 			return ctrl.Result{}, err
 		}
 
-		// Reconcile MultiOrch Service for this cell
-		if err := r.reconcileMultiOrchService(ctx, shard, cellName); err != nil {
-			logger.Error(err, "Failed to reconcile MultiOrch Service", "cell", cellName)
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"FailedApply",
-				"Failed to supply MultiOrch Service for cell %s: %v",
-				cellName,
-				err,
-			)
-			return ctrl.Result{}, err
+		for _, cell := range multiOrchCells {
+			cellName := string(cell)
+
+			// Reconcile MultiOrch Deployment for this cell
+			if err := r.reconcileMultiOrchDeployment(ctx, shard, cellName); err != nil {
+				monitoring.RecordSpanError(childSpan, err)
+				childSpan.End()
+				logger.Error(err, "Failed to reconcile MultiOrch Deployment", "cell", cellName)
+				r.Recorder.Eventf(
+					shard,
+					"Warning",
+					"FailedApply",
+					"Failed to supply MultiOrch Deployment for cell %s: %v",
+					cellName,
+					err,
+				)
+				return ctrl.Result{}, err
+			}
+
+			// Reconcile MultiOrch Service for this cell
+			if err := r.reconcileMultiOrchService(ctx, shard, cellName); err != nil {
+				monitoring.RecordSpanError(childSpan, err)
+				childSpan.End()
+				logger.Error(err, "Failed to reconcile MultiOrch Service", "cell", cellName)
+				r.Recorder.Eventf(
+					shard,
+					"Warning",
+					"FailedApply",
+					"Failed to supply MultiOrch Service for cell %s: %v",
+					cellName,
+					err,
+				)
+				return ctrl.Result{}, err
+			}
 		}
+		childSpan.End()
 	}
 
 	// Reconcile each pool
-	for poolName, pool := range shard.Spec.Pools {
-		if err := r.reconcilePool(ctx, shard, string(poolName), pool); err != nil {
-			logger.Error(err, "Failed to reconcile pool", "poolName", poolName)
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"FailedApply",
-				"Failed to reconcile pool %s: %v",
-				poolName,
-				err,
-			)
-			return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePools")
+		for poolName, pool := range shard.Spec.Pools {
+			if err := r.reconcilePool(ctx, shard, string(poolName), pool); err != nil {
+				monitoring.RecordSpanError(childSpan, err)
+				childSpan.End()
+				logger.Error(err, "Failed to reconcile pool", "poolName", poolName)
+				r.Recorder.Eventf(
+					shard,
+					"Warning",
+					"FailedApply",
+					"Failed to reconcile pool %s: %v",
+					poolName,
+					err,
+				)
+				return ctrl.Result{}, err
+			}
 		}
+		childSpan.End()
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, shard); err != nil {
-		logger.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.UpdateStatus")
+		if err := r.updateStatus(ctx, shard); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())

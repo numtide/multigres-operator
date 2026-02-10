@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 )
 
 const (
@@ -43,6 +44,9 @@ type ShardReconciler struct {
 // Reconcile handles Shard resource reconciliation for data plane operations.
 func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
+	ctx, span := monitoring.StartReconcileSpan(ctx, "ShardData.Reconcile", req.Name, req.Namespace, "Shard")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("reconcile started")
 
@@ -53,19 +57,27 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			logger.Info("Shard resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
+		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to get Shard")
 		return ctrl.Result{}, err
 	}
 
 	// Handle deletion
 	if !shard.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, shard)
+		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.HandleDeletion")
+		result, err := r.handleDeletion(ctx, shard)
+		if err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+		}
+		childSpan.End()
+		return result, err
 	}
 
 	// Add finalizer if not present
 	if !slices.Contains(shard.Finalizers, finalizerName) {
 		shard.Finalizers = append(shard.Finalizers, finalizerName)
 		if err := r.Update(ctx, shard); err != nil {
+			monitoring.RecordSpanError(span, err)
 			r.Recorder.Eventf(
 				shard,
 				"Warning",
@@ -80,16 +92,22 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Register database in topology
-	if err := r.registerDatabaseInTopology(ctx, shard); err != nil {
-		r.Recorder.Eventf(
-			shard,
-			"Warning",
-			"TopologyError",
-			"Failed to register database in topology: %v",
-			err,
-		)
-		logger.Error(err, "Failed to register database in topology")
-		return ctrl.Result{}, err
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.RegisterDatabaseInTopology")
+		if err := r.registerDatabaseInTopology(ctx, shard); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"TopologyError",
+				"Failed to register database in topology: %v",
+				err,
+			)
+			logger.Error(err, "Failed to register database in topology")
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())

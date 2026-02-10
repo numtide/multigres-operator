@@ -61,29 +61,46 @@ func (v *MultigresClusterValidator) validate(
 	obj runtime.Object,
 ) (admission.Warnings, error) {
 	start := time.Now()
+	ctx, span := monitoring.StartChildSpan(ctx, "Webhook.Validate")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("validation webhook started")
 
 	cluster, ok := obj.(*multigresv1alpha1.MultigresCluster)
 	if !ok {
 		err := fmt.Errorf("expected MultigresCluster, got %T", obj)
+		monitoring.RecordSpanError(span, err)
 		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
 		return nil, err
 	}
 
 	// 1. Stateful Validation (Level 4): Referential Integrity
-	if err := v.validateTemplatesExist(ctx, cluster); err != nil {
-		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
-		return nil, err
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Webhook.ValidateTemplatesExist")
+		if err := v.validateTemplatesExist(ctx, cluster); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
+			return nil, err
+		}
+		childSpan.End()
 	}
 
 	// 2. Deep Logic Validation (Safety Checks)
-	if warnings, err := v.validateLogic(ctx, cluster); err != nil {
-		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
-		return warnings, err
-	} else if len(warnings) > 0 {
-		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", nil, time.Since(start))
-		return warnings, nil
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Webhook.ValidateLogic")
+		if warnings, err := v.validateLogic(ctx, cluster); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
+			return warnings, err
+		} else if len(warnings) > 0 {
+			childSpan.End()
+			monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", nil, time.Since(start))
+			return warnings, nil
+		}
+		childSpan.End()
 	}
 
 	monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", nil, time.Since(start))

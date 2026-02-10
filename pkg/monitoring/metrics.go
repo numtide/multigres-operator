@@ -13,7 +13,7 @@ import (
 var (
 	clusterInfo = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "multigres_cluster_info",
+			Name: "multigres_operator_cluster_info",
 			Help: "Info-style metric for MultigresCluster discovery and phase tracking. Always 1.",
 		},
 		[]string{"name", "namespace", "phase"},
@@ -21,7 +21,7 @@ var (
 
 	clusterCellsTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "multigres_cluster_cells_total",
+			Name: "multigres_operator_cluster_cells_total",
 			Help: "Number of cells in a MultigresCluster.",
 		},
 		[]string{"cluster", "namespace"},
@@ -29,7 +29,7 @@ var (
 
 	clusterShardsTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "multigres_cluster_shards_total",
+			Name: "multigres_operator_cluster_shards_total",
 			Help: "Number of shards in a MultigresCluster.",
 		},
 		[]string{"cluster", "namespace"},
@@ -37,7 +37,7 @@ var (
 
 	cellGatewayReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "multigres_cell_gateway_replicas",
+			Name: "multigres_operator_cell_gateway_replicas",
 			Help: "MultiGateway replica counts for a Cell.",
 		},
 		[]string{"cell", "namespace", "state"},
@@ -45,7 +45,7 @@ var (
 
 	shardPoolReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "multigres_shard_pool_replicas",
+			Name: "multigres_operator_shard_pool_replicas",
 			Help: "Pool replica counts for a Shard.",
 		},
 		[]string{"shard", "pool", "namespace", "state"},
@@ -53,7 +53,7 @@ var (
 
 	toposerverReplicas = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "multigres_toposerver_replicas",
+			Name: "multigres_operator_toposerver_replicas",
 			Help: "TopoServer replica counts.",
 		},
 		[]string{"name", "namespace", "state"},
@@ -61,7 +61,7 @@ var (
 
 	webhookRequestTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "multigres_webhook_request_total",
+			Name: "multigres_operator_webhook_request_total",
 			Help: "Total number of webhook admission requests.",
 		},
 		[]string{"operation", "resource", "result"},
@@ -69,7 +69,7 @@ var (
 
 	webhookRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "multigres_webhook_request_duration_seconds",
+			Name:    "multigres_operator_webhook_request_duration_seconds",
 			Help:    "Latency of webhook admission handling in seconds.",
 			Buckets: prometheus.DefBuckets,
 		},

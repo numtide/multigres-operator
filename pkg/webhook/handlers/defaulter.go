@@ -33,19 +33,25 @@ func NewMultigresClusterDefaulter(r *resolver.Resolver) *MultigresClusterDefault
 // Default implements webhook.CustomDefaulter.
 func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Object) error {
 	start := time.Now()
+	ctx, span := monitoring.StartChildSpan(ctx, "Webhook.Default")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("defaulting webhook started")
 
 	// SAFETY CHECK
 	if d.Resolver == nil {
 		err := fmt.Errorf("defaulter not initialized: resolver is nil")
+		monitoring.RecordSpanError(span, err)
 		monitoring.RecordWebhookRequest("DEFAULT", "MultigresCluster", err, time.Since(start))
 		return err
 	}
 
 	cluster, ok := obj.(*multigresv1alpha1.MultigresCluster)
 	if !ok {
-		return fmt.Errorf("expected MultigresCluster, got %T", obj)
+		err := fmt.Errorf("expected MultigresCluster, got %T", obj)
+		monitoring.RecordSpanError(span, err)
+		return err
 	}
 
 	// 1. Static Defaulting (Images, System Catalog)

@@ -34,6 +34,9 @@ type CellReconciler struct {
 // Reconcile handles Cell resource reconciliation.
 func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
+	ctx, span := monitoring.StartReconcileSpan(ctx, "Cell.Reconcile", req.Name, req.Namespace, "Cell")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("reconcile started")
 
@@ -44,6 +47,7 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			logger.Info("Cell resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
+		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to get Cell")
 		return ctrl.Result{}, err
 	}
@@ -54,35 +58,53 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// Reconcile MultiGateway Deployment
-	if err := r.reconcileMultiGatewayDeployment(ctx, cell); err != nil {
-		logger.Error(err, "Failed to reconcile MultiGateway Deployment")
-		r.Recorder.Eventf(
-			cell,
-			"Warning",
-			"FailedApply",
-			"Failed to sync Gateway Deployment: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "Cell.ReconcileDeployment")
+		if err := r.reconcileMultiGatewayDeployment(ctx, cell); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile MultiGateway Deployment")
+			r.Recorder.Eventf(
+				cell,
+				"Warning",
+				"FailedApply",
+				"Failed to sync Gateway Deployment: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Reconcile MultiGateway Service
-	if err := r.reconcileMultiGatewayService(ctx, cell); err != nil {
-		logger.Error(err, "Failed to reconcile MultiGateway Service")
-		r.Recorder.Eventf(
-			cell,
-			"Warning",
-			"FailedApply",
-			"Failed to reconcile MultiGateway Service: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "Cell.ReconcileService")
+		if err := r.reconcileMultiGatewayService(ctx, cell); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile MultiGateway Service")
+			r.Recorder.Eventf(
+				cell,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile MultiGateway Service: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, cell); err != nil {
-		logger.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Cell.UpdateStatus")
+		if err := r.updateStatus(ctx, cell); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())

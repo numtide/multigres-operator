@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 )
 
 const (
@@ -44,6 +45,9 @@ type CellReconciler struct {
 // Reconcile handles Cell resource reconciliation for data plane operations.
 func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
+	ctx, span := monitoring.StartReconcileSpan(ctx, "CellData.Reconcile", req.Name, req.Namespace, "Cell")
+	defer span.End()
+
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("reconcile started")
 
@@ -54,19 +58,27 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			logger.Info("Cell resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
+		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to get Cell")
 		return ctrl.Result{}, err
 	}
 
 	// Handle deletion
 	if !cell.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, cell)
+		_, childSpan := monitoring.StartChildSpan(ctx, "CellData.HandleDeletion")
+		result, err := r.handleDeletion(ctx, cell)
+		if err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+		}
+		childSpan.End()
+		return result, err
 	}
 
 	// Add finalizer if not present
 	if !slices.Contains(cell.Finalizers, finalizerName) {
 		cell.Finalizers = append(cell.Finalizers, finalizerName)
 		if err := r.Update(ctx, cell); err != nil {
+			monitoring.RecordSpanError(span, err)
 			r.Recorder.Eventf(
 				cell,
 				"Warning",
@@ -88,16 +100,22 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// Register cell in topology
-	if err := r.registerCellInTopology(ctx, cell); err != nil {
-		r.Recorder.Eventf(
-			cell,
-			"Warning",
-			"TopologyError",
-			"Failed to register cell in topology: %v",
-			err,
-		)
-		logger.Error(err, "Failed to register cell in topology")
-		return ctrl.Result{}, err
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "CellData.RegisterCellInTopology")
+		if err := r.registerCellInTopology(ctx, cell); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			r.Recorder.Eventf(
+				cell,
+				"Warning",
+				"TopologyError",
+				"Failed to register cell in topology: %v",
+				err,
+			)
+			logger.Error(err, "Failed to register cell in topology")
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
