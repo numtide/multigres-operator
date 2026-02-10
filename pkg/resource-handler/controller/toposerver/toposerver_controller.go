@@ -39,6 +39,7 @@ func (r *TopoServerReconciler) Reconcile(
 	start := time.Now()
 	ctx, span := monitoring.StartReconcileSpan(ctx, "TopoServer.Reconcile", req.Name, req.Namespace, "TopoServer")
 	defer span.End()
+	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("reconcile started")

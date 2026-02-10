@@ -62,8 +62,7 @@ import (
 	multigreswebhook "github.com/numtide/multigres-operator/pkg/webhook"
 	cert "github.com/numtide/multigres-operator/pkg/webhook/cert"
 
-	// Side-effect import: registers domain-specific Prometheus metrics.
-	_ "github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 )
 
 var (
@@ -181,6 +180,18 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Initialize distributed tracing (noop if OTEL_EXPORTER_OTLP_ENDPOINT is unset).
+	shutdownTracing, err := monitoring.InitTracing(context.Background(), "multigres-operator", version)
+	if err != nil {
+		setupLog.Error(err, "failed to initialise tracing")
+		os.Exit(1)
+	}
+	defer func() {
+		if err := shutdownTracing(context.Background()); err != nil {
+			setupLog.Error(err, "failed to shut down tracing")
+		}
+	}()
 
 	disableHTTP2 := func(c *tls.Config) {
 		setupLog.Info("disabling http/2")

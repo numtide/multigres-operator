@@ -41,6 +41,7 @@ func (r *TableGroupReconciler) Reconcile(
 	start := time.Now()
 	ctx, span := monitoring.StartReconcileSpan(ctx, "TableGroup.Reconcile", req.Name, req.Namespace, "TableGroup")
 	defer span.End()
+	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
 	l := log.FromContext(ctx)
 	l.V(1).Info("reconcile started")

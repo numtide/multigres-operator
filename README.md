@@ -243,6 +243,95 @@ spec:
 
 ---
 
+## Observability
+
+The operator ships with built-in support for **metrics**, **alerting**, **distributed tracing**, and **structured logging**.
+
+### Metrics
+
+Metrics are served via the standard controller-runtime Prometheus endpoint. Set `--metrics-bind-address=:8080` (or any port) to enable it.
+
+The operator exposes two classes of metrics:
+
+**Framework Metrics** (provided automatically by controller-runtime):
+- `controller_runtime_reconcile_total` — total reconcile count per controller
+- `controller_runtime_reconcile_errors_total` — reconcile error rate
+- `controller_runtime_reconcile_time_seconds` — reconcile latency histogram
+- `workqueue_depth` — work queue backlog
+
+**Operator-Specific Metrics**:
+
+| Metric | Type | Labels | Description |
+|:---|:---|:---|:---|
+| `multigres_operator_cluster_info` | Gauge | `name`, `namespace`, `phase` | Cluster phase tracking (always 1) |
+| `multigres_operator_cluster_cells_total` | Gauge | `cluster`, `namespace` | Cell count |
+| `multigres_operator_cluster_shards_total` | Gauge | `cluster`, `namespace` | Shard count |
+| `multigres_operator_cell_gateway_replicas` | Gauge | `cell`, `namespace`, `state` | Gateway ready/desired replicas |
+| `multigres_operator_shard_pool_replicas` | Gauge | `shard`, `pool`, `namespace`, `state` | Pool ready/desired replicas |
+| `multigres_operator_toposerver_replicas` | Gauge | `name`, `namespace`, `state` | TopoServer ready/desired replicas |
+| `multigres_operator_webhook_request_total` | Counter | `operation`, `resource`, `result` | Webhook admission request count |
+| `multigres_operator_webhook_request_duration_seconds` | Histogram | `operation`, `resource` | Webhook latency |
+
+### Alerts
+
+Pre-configured PrometheusRule alerts are provided in `config/monitoring/prometheus-rules.yaml`. Apply them to a Prometheus Operator installation:
+
+```bash
+kubectl apply -f config/monitoring/prometheus-rules.yaml
+```
+
+| Alert | Severity | Fires When |
+|:---|:---:|:---|
+| [`MultigresClusterReconcileErrors`](docs/monitoring/runbooks/MultigresClusterReconcileErrors.md) | warning | Sustained non-zero reconcile error rate (5m) |
+| [`MultigresClusterDegraded`](docs/monitoring/runbooks/MultigresClusterDegraded.md) | warning | Cluster phase ≠ "Healthy" for >10m |
+| [`MultigresCellGatewayUnavailable`](docs/monitoring/runbooks/MultigresCellGatewayUnavailable.md) | critical | Zero ready gateway replicas in a cell (5m) |
+| [`MultigresShardPoolDegraded`](docs/monitoring/runbooks/MultigresShardPoolDegraded.md) | warning | Ready < desired replicas for >10m |
+| [`MultigresWebhookErrors`](docs/monitoring/runbooks/MultigresWebhookErrors.md) | warning | Webhook returning errors (5m) |
+| [`MultigresReconcileSlow`](docs/monitoring/runbooks/MultigresReconcileSlow.md) | warning | p99 reconcile latency >30s (5m) |
+| [`MultigresControllerSaturated`](docs/monitoring/runbooks/MultigresControllerSaturated.md) | warning | Work queue depth >50 for >10m |
+
+Each alert links to a dedicated runbook with investigation steps, PromQL queries, and remediation actions.
+
+### Grafana Dashboards
+
+Two Grafana dashboards are included in `config/monitoring/`:
+
+- **Operator Dashboard** (`grafana-dashboard-operator.json`) — reconcile rates, error rates, latencies, queue depth, and webhook performance.
+- **Cluster Dashboard** (`grafana-dashboard-cluster.json`) — per-cluster topology (cells, shards), replica health, and phase tracking.
+
+Import via the Grafana dashboards ConfigMap:
+```bash
+kubectl apply -f config/monitoring/grafana-dashboards.yaml
+```
+
+### Distributed Tracing
+
+The operator supports **OpenTelemetry distributed tracing** via OTLP gRPC. Tracing is **disabled by default** and incurs zero overhead when off.
+
+**Enabling tracing:** Set a single environment variable on the operator Deployment:
+
+```yaml
+env:
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "tempo.observability.svc.cluster.local:4317"  # or your OTel collector
+```
+
+The endpoint must speak **OTLP gRPC** — this can be an OpenTelemetry Collector, Grafana Tempo, Jaeger, or any compatible backend.
+
+**What gets traced:**
+- Every controller reconciliation (MultigresCluster, Cell, Shard, TableGroup, TopoServer)
+- Sub-operations within a reconcile (ReconcileCells, UpdateStatus, PopulateDefaults, etc.)
+- Webhook admission handling (defaulting and validation)
+- Webhook-to-reconcile trace propagation: the defaulter webhook injects a trace context into cluster annotations so the first reconciliation appears as a child span of the webhook trace
+
+**Additional OTel configuration:** The operator respects all standard [OTel environment variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/) including `OTEL_TRACES_SAMPLER`, `OTEL_EXPORTER_OTLP_INSECURE`, and `OTEL_SERVICE_NAME`.
+
+### Structured Logging
+
+The operator uses structured JSON logging (`zap` via controller-runtime). When tracing is enabled, every log line within a traced operation automatically includes `trace_id` and `span_id` fields, enabling **log-trace correlation** — click a log line in Grafana Loki to jump directly to the associated trace.
+
+---
+
 ## Webhook & Certificate Management
 
 The operator includes a Mutating and Validating Webhook to enforce defaults and data integrity.

@@ -233,6 +233,13 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 		}
 	}
 
+	// Inject trace context into annotations so the controller can continue
+	// the trace started by this webhook across the async boundary.
+	if cluster.Annotations == nil {
+		cluster.Annotations = make(map[string]string)
+	}
+	monitoring.InjectTraceContext(ctx, cluster.Annotations)
+
 	monitoring.RecordWebhookRequest("DEFAULT", "MultigresCluster", nil, time.Since(start))
 	logger.V(1).Info("defaulting webhook complete", "duration", time.Since(start).String())
 	return nil

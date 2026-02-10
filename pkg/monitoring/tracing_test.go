@@ -3,12 +3,19 @@ package monitoring
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestStartReconcileSpan(t *testing.T) {
@@ -144,6 +151,130 @@ func TestRecordSpanError(t *testing.T) {
 		}
 		if spans[0].Status.Code == codes.Error {
 			t.Error("nil error should not set error status")
+		}
+	})
+}
+
+func TestInitTracing_NoopWhenEndpointUnset(t *testing.T) {
+	// Ensure OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+	shutdown, err := InitTracing(context.Background(), "test-svc", "v0.0.1")
+	if err != nil {
+		t.Fatalf("InitTracing() returned error: %v", err)
+	}
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown() returned error: %v", err)
+	}
+}
+
+func TestInjectAndExtractTraceContext(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	Tracer = tp.Tracer(tracerName)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	t.Run("round-trips trace context through annotations", func(t *testing.T) {
+		ctx, span := Tracer.Start(context.Background(), "webhook")
+		originalTraceID := span.SpanContext().TraceID()
+
+		annotations := make(map[string]string)
+		InjectTraceContext(ctx, annotations)
+		span.End()
+
+		if _, ok := annotations[annotationTraceparent]; !ok {
+			t.Fatal("expected traceparent annotation to be set")
+		}
+		if _, ok := annotations[annotationTraceparentTS]; !ok {
+			t.Fatal("expected traceparent-ts annotation to be set")
+		}
+
+		parentCtx, isStale := ExtractTraceContext(annotations)
+		if isStale {
+			t.Error("fresh annotation should not be stale")
+		}
+		sc := trace.SpanFromContext(parentCtx).SpanContext()
+		if sc.TraceID() != originalTraceID {
+			t.Errorf("extracted trace ID = %s, want %s", sc.TraceID(), originalTraceID)
+		}
+	})
+
+	t.Run("stale annotation", func(t *testing.T) {
+		ctx, span := Tracer.Start(context.Background(), "old-webhook")
+
+		annotations := make(map[string]string)
+		InjectTraceContext(ctx, annotations)
+		span.End()
+
+		// Backdate the timestamp by 15 minutes.
+		staleTS := time.Now().Add(-15 * time.Minute).Unix()
+		annotations[annotationTraceparentTS] = strconv.FormatInt(staleTS, 10)
+
+		_, isStale := ExtractTraceContext(annotations)
+		if !isStale {
+			t.Error("expected stale annotation to be detected")
+		}
+	})
+
+	t.Run("missing annotation returns background context", func(t *testing.T) {
+		parentCtx, isStale := ExtractTraceContext(map[string]string{})
+		if isStale {
+			t.Error("empty annotations should not be stale")
+		}
+		sc := trace.SpanFromContext(parentCtx).SpanContext()
+		if sc.IsValid() {
+			t.Error("expected invalid span context from empty annotations")
+		}
+	})
+
+	t.Run("missing timestamp treated as stale", func(t *testing.T) {
+		ctx, span := Tracer.Start(context.Background(), "no-ts-webhook")
+		annotations := make(map[string]string)
+		InjectTraceContext(ctx, annotations)
+		span.End()
+
+		delete(annotations, annotationTraceparentTS)
+
+		_, isStale := ExtractTraceContext(annotations)
+		if !isStale {
+			t.Error("missing timestamp should be treated as stale")
+		}
+	})
+}
+
+func TestEnrichLoggerWithTrace(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	Tracer = tp.Tracer(tracerName)
+
+	t.Run("adds trace_id and span_id to logger", func(t *testing.T) {
+		ctx, span := Tracer.Start(context.Background(), "test-op")
+		defer span.End()
+
+		// Set up a logger in context.
+		ctx = logr.NewContext(ctx, logr.Discard())
+		enrichedCtx := EnrichLoggerWithTrace(ctx)
+
+		// The enriched context should have a logger that can extract values.
+		logger := log.FromContext(enrichedCtx)
+		// We can't easily inspect logr values, but we can verify the function
+		// doesn't panic and returns a different context.
+		if enrichedCtx == ctx {
+			t.Error("expected enriched context to differ from original")
+		}
+		_ = logger
+	})
+
+	t.Run("noop for invalid span context", func(t *testing.T) {
+		ctx := logr.NewContext(context.Background(), logr.Discard())
+		result := EnrichLoggerWithTrace(ctx)
+		// With no valid span, the context should be returned unchanged.
+		if result != ctx {
+			t.Error("expected unchanged context for invalid span")
 		}
 	})
 }

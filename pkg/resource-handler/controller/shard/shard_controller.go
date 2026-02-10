@@ -40,6 +40,7 @@ func (r *ShardReconciler) Reconcile(
 	start := time.Now()
 	ctx, span := monitoring.StartReconcileSpan(ctx, "Shard.Reconcile", req.Name, req.Namespace, "Shard")
 	defer span.End()
+	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("reconcile started")

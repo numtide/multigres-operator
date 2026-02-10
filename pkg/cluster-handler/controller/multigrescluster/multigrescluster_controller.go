@@ -18,6 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"go.opentelemetry.io/otel/trace"
+
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/resolver"
@@ -46,6 +48,7 @@ func (r *MultigresClusterReconciler) Reconcile(
 	start := time.Now()
 	ctx, span := monitoring.StartReconcileSpan(ctx, "MultigresCluster.Reconcile", req.Name, req.Namespace, "MultigresCluster")
 	defer span.End()
+	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
 	l := log.FromContext(ctx)
 	l.V(1).Info("reconcile started")
@@ -58,6 +61,22 @@ func (r *MultigresClusterReconciler) Reconcile(
 		}
 		monitoring.RecordSpanError(span, err)
 		return ctrl.Result{}, fmt.Errorf("failed to get MultigresCluster: %w", err)
+	}
+
+	// Bridge the async webhook → reconcile trace gap.
+	// If the webhook injected a traceparent into the cluster's annotations,
+	// restart the span under that parent context (or link if stale).
+	if parentCtx, isStale := monitoring.ExtractTraceContext(cluster.GetAnnotations()); trace.SpanFromContext(parentCtx).SpanContext().IsValid() {
+		span.End() // End the initial orphan span.
+		if isStale {
+			ctx, span = monitoring.Tracer.Start(ctx, "MultigresCluster.Reconcile",
+				trace.WithLinks(trace.LinkFromContext(parentCtx)),
+			)
+		} else {
+			ctx, span = monitoring.StartReconcileSpan(parentCtx, "MultigresCluster.Reconcile", req.Name, req.Namespace, "MultigresCluster")
+		}
+		ctx = monitoring.EnrichLoggerWithTrace(ctx)
+		l = log.FromContext(ctx)
 	}
 
 	res := resolver.NewResolver(r.Client, cluster.Namespace)
