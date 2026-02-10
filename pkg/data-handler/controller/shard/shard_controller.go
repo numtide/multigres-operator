@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"k8s.io/client-go/tools/record"
+
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
@@ -33,6 +35,7 @@ const (
 type ShardReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
+	Recorder        record.EventRecorder
 	createTopoStore func(*multigresv1alpha1.Shard) (topoclient.Store, error)
 }
 
@@ -60,6 +63,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if !slices.Contains(shard.Finalizers, finalizerName) {
 		shard.Finalizers = append(shard.Finalizers, finalizerName)
 		if err := r.Update(ctx, shard); err != nil {
+			r.Recorder.Eventf(shard, "Warning", "FinalizerFailed", "Failed to add finalizer: %v", err)
 			logger.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
@@ -68,11 +72,13 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// Register database in topology
 	if err := r.registerDatabaseInTopology(ctx, shard); err != nil {
+		r.Recorder.Eventf(shard, "Warning", "TopologyError", "Failed to register database in topology: %v", err)
 		logger.Error(err, "Failed to register database in topology")
 		return ctrl.Result{}, err
 	}
 
 	logger.Info("Database registered in topology successfully")
+	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled database topology")
 	return ctrl.Result{}, nil
 }
 
@@ -86,6 +92,7 @@ func (r *ShardReconciler) handleDeletion(
 	if slices.Contains(shard.Finalizers, finalizerName) {
 		// Clean up database data from topology
 		if err := r.unregisterDatabaseFromTopology(ctx, shard); err != nil {
+			r.Recorder.Eventf(shard, "Warning", "CleanupFailed", "Failed to clean up database from topology: %v", err)
 			logger.Error(err, "Failed to unregister database from topology")
 			return ctrl.Result{}, err
 		}
@@ -156,10 +163,12 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 				Info("Database already exists in topology, skipping creation", "database", dbName)
 			return nil
 		}
+		r.Recorder.Eventf(shard, "Warning", "RegistrationFailed", "Failed to register database in topology: %v", err)
 		return fmt.Errorf("failed to create database in topology: %w", err)
 	}
 
 	logger.Info("Database metadata stored in topology", "database", dbName)
+	r.Recorder.Eventf(shard, "Normal", "DatabaseRegistered", "Registered database '%s' in topology", dbName)
 	return nil
 }
 
@@ -188,10 +197,12 @@ func (r *ShardReconciler) unregisterDatabaseFromTopology(
 				Info("Database does not exist in topology, skipping deletion", "database", dbName)
 			return nil
 		}
+		r.Recorder.Eventf(shard, "Warning", "UnregistrationFailed", "Failed to remove database from topology: %v", err)
 		return fmt.Errorf("failed to delete database %s from topology: %w", dbName, err)
 	}
 
 	logger.Info("Database metadata removed from topology", "database", dbName)
+	r.Recorder.Eventf(shard, "Normal", "DatabaseUnregistered", "Removed database '%s' from topology", dbName)
 	return nil
 }
 
