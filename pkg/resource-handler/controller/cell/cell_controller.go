@@ -286,12 +286,12 @@ func (r *CellReconciler) setConditions(
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *CellReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.Options) error {
-	controllerOpts := controller.Options{}
+	controllerOpts := controller.Options{
+		MaxConcurrentReconciles: 20,
+	}
 	if len(opts) > 0 {
 		controllerOpts = opts[0]
 	}
-
-	controllerOpts.MaxConcurrentReconciles = 20
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.Cell{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
