@@ -17,6 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"k8s.io/client-go/tools/record"
+
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/data-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -435,8 +437,9 @@ func TestReconcile(t *testing.T) {
 			}
 
 			reconciler := &shard.ShardReconciler{
-				Client: c,
-				Scheme: scheme,
+				Client:   c,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
 			}
 
 			// Use custom topo store function if provided, otherwise default to memory topo

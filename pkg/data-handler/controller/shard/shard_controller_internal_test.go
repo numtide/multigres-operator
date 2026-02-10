@@ -13,7 +13,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -184,8 +186,9 @@ func TestUnregisterDatabaseSuccessPath(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
 	}
 
 	// Setup memory topo with database
@@ -330,8 +333,9 @@ func TestReconcile_ErrorRegisteringDatabase(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
 	}
 
 	// Set custom factory that returns a store that fails CreateDatabase
@@ -389,8 +393,9 @@ func TestReconcile_ErrorDeletingDatabase(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
 	}
 
 	// Set custom factory that returns a store that fails DeleteDatabase

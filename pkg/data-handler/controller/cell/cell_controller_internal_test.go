@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"k8s.io/client-go/tools/record"
+
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
@@ -134,7 +136,9 @@ func TestRegisterCellInTopology(t *testing.T) {
 				tc.topoSetup(t, store)
 			}
 
-			reconciler := &CellReconciler{}
+			reconciler := &CellReconciler{
+				Recorder: record.NewFakeRecorder(10),
+			}
 
 			// Setup topology store creation based on test needs
 			if tc.mockCreateFunc != nil {
@@ -286,7 +290,9 @@ func TestUnregisterCellFromTopology(t *testing.T) {
 				tc.topoSetup(t, store)
 			}
 
-			reconciler := &CellReconciler{}
+			reconciler := &CellReconciler{
+				Recorder: record.NewFakeRecorder(10),
+			}
 
 			// Setup topology store creation based on test needs
 			if tc.mockCreateFunc != nil {
@@ -456,8 +462,9 @@ func TestHandleDeletion(t *testing.T) {
 			}
 
 			reconciler := &CellReconciler{
-				Client: c,
-				Scheme: scheme,
+				Client:   c,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
 			}
 
 			// Setup topology store creation based on test needs
