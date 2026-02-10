@@ -61,6 +61,9 @@ import (
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	multigreswebhook "github.com/numtide/multigres-operator/pkg/webhook"
 	cert "github.com/numtide/multigres-operator/pkg/webhook/cert"
+
+	// Side-effect import: registers domain-specific Prometheus metrics.
+	_ "github.com/numtide/multigres-operator/pkg/monitoring"
 )
 
 var (
@@ -117,8 +120,8 @@ func main() {
 	flag.StringVar(
 		&metricsAddr,
 		"metrics-bind-address",
-		"0",
-		"The address the metrics endpoint binds to.",
+		":8443",
+		"The address the metrics endpoint binds to. Use '0' to disable.",
 	)
 	flag.StringVar(
 		&probeAddr,

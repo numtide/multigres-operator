@@ -3,6 +3,7 @@ package toposerver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
@@ -34,7 +36,9 @@ func (r *TopoServerReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
+	start := time.Now()
 	logger := log.FromContext(ctx)
+	logger.V(1).Info("reconcile started")
 
 	// Fetch the TopoServer instance
 	toposerver := &multigresv1alpha1.TopoServer{}
@@ -97,6 +101,7 @@ func (r *TopoServerReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(toposerver, "Normal", "Synced", "Successfully reconciled TopoServer")
 	return ctrl.Result{}, nil
 }
@@ -229,6 +234,7 @@ func (r *TopoServerReconciler) updateStatus(
 
 	// Update Phase
 	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
+	monitoring.SetTopoServerReplicas(toposerver.Name, toposerver.Namespace, sts.Status.Replicas, sts.Status.ReadyReplicas)
 	if sts.Status.ObservedGeneration != sts.Generation {
 		toposerver.Status.Phase = multigresv1alpha1.PhaseProgressing
 		toposerver.Status.Message = "StatefulSet is progressing"

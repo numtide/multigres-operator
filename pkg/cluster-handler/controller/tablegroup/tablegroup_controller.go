@@ -3,6 +3,7 @@ package tablegroup
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,7 +37,9 @@ func (r *TableGroupReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
+	start := time.Now()
 	l := log.FromContext(ctx)
+	l.V(1).Info("reconcile started")
 
 	tg := &multigresv1alpha1.TableGroup{}
 	err := r.Get(ctx, req.NamespacedName, tg)
@@ -246,6 +249,7 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to patch status: %w", err)
 	}
 
+	l.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(tg, "Normal", "Synced", "Successfully reconciled TableGroup")
 	return ctrl.Result{}, nil
 }

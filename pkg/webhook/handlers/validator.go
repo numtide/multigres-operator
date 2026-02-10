@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 )
 
@@ -57,23 +60,34 @@ func (v *MultigresClusterValidator) validate(
 	ctx context.Context,
 	obj runtime.Object,
 ) (admission.Warnings, error) {
+	start := time.Now()
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("validation webhook started")
+
 	cluster, ok := obj.(*multigresv1alpha1.MultigresCluster)
 	if !ok {
-		return nil, fmt.Errorf("expected MultigresCluster, got %T", obj)
+		err := fmt.Errorf("expected MultigresCluster, got %T", obj)
+		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
+		return nil, err
 	}
 
 	// 1. Stateful Validation (Level 4): Referential Integrity
 	if err := v.validateTemplatesExist(ctx, cluster); err != nil {
+		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
 		return nil, err
 	}
 
 	// 2. Deep Logic Validation (Safety Checks)
 	if warnings, err := v.validateLogic(ctx, cluster); err != nil {
+		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", err, time.Since(start))
 		return warnings, err
 	} else if len(warnings) > 0 {
+		monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", nil, time.Since(start))
 		return warnings, nil
 	}
 
+	monitoring.RecordWebhookRequest("VALIDATE", "MultigresCluster", nil, time.Since(start))
+	logger.V(1).Info("validation webhook complete", "duration", time.Since(start).String())
 	return nil, nil
 }
 

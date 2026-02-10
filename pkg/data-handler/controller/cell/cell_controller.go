@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
@@ -42,7 +43,9 @@ type CellReconciler struct {
 
 // Reconcile handles Cell resource reconciliation for data plane operations.
 func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	start := time.Now()
 	logger := log.FromContext(ctx)
+	logger.V(1).Info("reconcile started")
 
 	// Fetch the Cell instance
 	cell := &multigresv1alpha1.Cell{}
@@ -97,6 +100,7 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
+	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	logger.Info("Cell registered in topology successfully")
 	r.Recorder.Event(cell, "Normal", "Synced", "Successfully reconciled Cell topology")
 	return ctrl.Result{}, nil

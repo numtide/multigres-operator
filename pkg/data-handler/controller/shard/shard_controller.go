@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
@@ -41,7 +42,9 @@ type ShardReconciler struct {
 
 // Reconcile handles Shard resource reconciliation for data plane operations.
 func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	start := time.Now()
 	logger := log.FromContext(ctx)
+	logger.V(1).Info("reconcile started")
 
 	// Fetch the Shard instance
 	shard := &multigresv1alpha1.Shard{}
@@ -89,6 +92,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
+	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	logger.Info("Database registered in topology successfully")
 	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled database topology")
 	return ctrl.Result{}, nil

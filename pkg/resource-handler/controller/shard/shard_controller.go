@@ -3,6 +3,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -35,7 +37,9 @@ func (r *ShardReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
+	start := time.Now()
 	logger := log.FromContext(ctx)
+	logger.V(1).Info("reconcile started")
 
 	// Fetch the Shard instance
 	shard := &multigresv1alpha1.Shard{}
@@ -127,6 +131,7 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled Shard")
 	return ctrl.Result{}, nil
 }
@@ -504,6 +509,8 @@ func (r *ShardReconciler) updatePoolsStatus(
 			if sts.Status.ObservedGeneration == sts.Generation {
 				readyPods += sts.Status.ReadyReplicas
 			} // else treat as 0 ready pods because it is stale/progressing
+
+			monitoring.SetShardPoolReplicas(shard.Name, string(poolName), shard.Namespace, sts.Status.Replicas, sts.Status.ReadyReplicas)
 		}
 	}
 

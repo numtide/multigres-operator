@@ -3,6 +3,7 @@ package multigrescluster
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 )
 
@@ -41,7 +43,9 @@ func (r *MultigresClusterReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
+	start := time.Now()
 	l := log.FromContext(ctx)
+	l.V(1).Info("reconcile started")
 
 	cluster := &multigresv1alpha1.MultigresCluster{}
 	err := r.Get(ctx, req.NamespacedName, cluster)
@@ -106,6 +110,15 @@ func (r *MultigresClusterReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	// Emit cluster-level metrics
+	monitoring.SetClusterInfo(cluster.Name, cluster.Namespace, string(cluster.Status.Phase))
+	totalShards := int(0)
+	for _, db := range cluster.Status.Databases {
+		totalShards += int(db.TotalShards)
+	}
+	monitoring.SetClusterTopology(cluster.Name, cluster.Namespace, len(cluster.Status.Cells), totalShards)
+
+	l.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(cluster, "Normal", "Synced", "Successfully reconciled MultigresCluster")
 	return ctrl.Result{}, nil
 }
