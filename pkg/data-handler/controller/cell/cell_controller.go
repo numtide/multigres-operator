@@ -64,7 +64,13 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if !slices.Contains(cell.Finalizers, finalizerName) {
 		cell.Finalizers = append(cell.Finalizers, finalizerName)
 		if err := r.Update(ctx, cell); err != nil {
-			r.Recorder.Eventf(cell, "Warning", "FinalizerFailed", "Failed to add finalizer: %v", err)
+			r.Recorder.Eventf(
+				cell,
+				"Warning",
+				"FinalizerFailed",
+				"Failed to add finalizer: %v",
+				err,
+			)
 			logger.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}
@@ -80,7 +86,13 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	// Register cell in topology
 	if err := r.registerCellInTopology(ctx, cell); err != nil {
-		r.Recorder.Eventf(cell, "Warning", "TopologyError", "Failed to register cell in topology: %v", err)
+		r.Recorder.Eventf(
+			cell,
+			"Warning",
+			"TopologyError",
+			"Failed to register cell in topology: %v",
+			err,
+		)
 		logger.Error(err, "Failed to register cell in topology")
 		return ctrl.Result{}, err
 	}
@@ -100,7 +112,13 @@ func (r *CellReconciler) handleDeletion(
 	if slices.Contains(cell.Finalizers, finalizerName) {
 		// Clean up cell data from topology
 		if err := r.unregisterCellFromTopology(ctx, cell); err != nil {
-			r.Recorder.Eventf(cell, "Warning", "CleanupFailed", "Failed to clean up cell from topology: %v", err)
+			r.Recorder.Eventf(
+				cell,
+				"Warning",
+				"CleanupFailed",
+				"Failed to clean up cell from topology: %v",
+				err,
+			)
 			logger.Error(err, "Failed to unregister cell from topology")
 			return ctrl.Result{}, err
 		}
@@ -151,12 +169,24 @@ func (r *CellReconciler) registerCellInTopology(
 			logger.V(1).Info("Cell already exists in topology, skipping creation")
 			return nil
 		}
-		r.Recorder.Eventf(cell, "Warning", "RegistrationFailed", "Failed to register cell in topology: %v", err)
+		r.Recorder.Eventf(
+			cell,
+			"Warning",
+			"RegistrationFailed",
+			"Failed to register cell in topology: %v",
+			err,
+		)
 		return fmt.Errorf("failed to create cell in topology: %w", err)
 	}
 
 	logger.Info("Cell metadata stored in topology", "cellName", cellName)
-	r.Recorder.Eventf(cell, "Normal", "CellRegistered", "Registered cell '%s' in topology", cellName)
+	r.Recorder.Eventf(
+		cell,
+		"Normal",
+		"CellRegistered",
+		"Registered cell '%s' in topology",
+		cellName,
+	)
 	return nil
 }
 
@@ -184,12 +214,24 @@ func (r *CellReconciler) unregisterCellFromTopology(
 			logger.V(1).Info("Cell does not exist in topology, skipping deletion")
 			return nil
 		}
-		r.Recorder.Eventf(cell, "Warning", "UnregistrationFailed", "Failed to remove cell from topology: %v", err)
+		r.Recorder.Eventf(
+			cell,
+			"Warning",
+			"UnregistrationFailed",
+			"Failed to remove cell from topology: %v",
+			err,
+		)
 		return fmt.Errorf("failed to delete cell from topology: %w", err)
 	}
 
 	logger.Info("Cell metadata removed from topology", "cellName", cellName)
-	r.Recorder.Eventf(cell, "Normal", "CellUnregistered", "Removed cell '%s' from topology", cellName)
+	r.Recorder.Eventf(
+		cell,
+		"Normal",
+		"CellUnregistered",
+		"Removed cell '%s' from topology",
+		cellName,
+	)
 	return nil
 }
 

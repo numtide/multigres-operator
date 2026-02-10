@@ -143,10 +143,10 @@ github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c h1:KUene2FBKD/
 github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c/go.mod h1:x+HiTIl2+sC378/i1MSh0SPknIIHf/VH7PGKNN5TI9s=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/numtide/multigres-operator/api v0.0.0-20260210083903-d0fbe7a7dbce h1:w0pB1f7HlHfM7AV8So+NATRoUe8bN2vQp1p9UrxHmkI=
-github.com/numtide/multigres-operator/api v0.0.0-20260210083903-d0fbe7a7dbce/go.mod h1:7nlnBwoyLSbEloUaHHC6X3ncWZeuOvkOBnnF9cSW+Wg=
-github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260210083903-d0fbe7a7dbce h1:LT6/ocD5SjYCRuza5qdT9BdCIgjjmHedmR8KBHLoJp4=
-github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260210083903-d0fbe7a7dbce/go.mod h1:Mu9d9ss422+enNZ1/w3z4J1AYifJhwPGGAVZDjA7g44=
+github.com/numtide/multigres-operator/api v0.0.0-20260210092054-f7ad64000b6d h1:cTpqOPPJfI2IGm9VZPXGygEMQhO5AHpnle9EphvZSyo=
+github.com/numtide/multigres-operator/api v0.0.0-20260210092054-f7ad64000b6d/go.mod h1:7nlnBwoyLSbEloUaHHC6X3ncWZeuOvkOBnnF9cSW+Wg=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260210092054-f7ad64000b6d h1:asXsAwZLU82zMOU/4TVk/EPIIyKtxpxHIejkCS5Iv8s=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260210092054-f7ad64000b6d/go.mod h1:Mu9d9ss422+enNZ1/w3z4J1AYifJhwPGGAVZDjA7g44=
 github.com/onsi/ginkgo/v2 v2.27.2 h1:LzwLj0b89qtIy6SSASkzlNvX6WktqurSHwkk2ipF/Ns=
 github.com/onsi/ginkgo/v2 v2.27.2/go.mod h1:ArE1D/XhNXBXCBkKOLkbsb2c81dQHCRcF5zwn/ykDRo=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=
