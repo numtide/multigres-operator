@@ -155,5 +155,3 @@ exclude (
 )
 
 replace github.com/numtide/multigres-operator/pkg/monitoring => ./pkg/monitoring
-
-replace github.com/numtide/multigres-operator/api => ./api
