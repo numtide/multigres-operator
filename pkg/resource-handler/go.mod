@@ -4,10 +4,10 @@ go 1.25.2
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/numtide/multigres-operator/api v0.0.0-20260211100434-5c54868fb4e4
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260211095746-9930a3c0c66c
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260210092054-f7ad64000b6d
-	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260210092054-f7ad64000b6d
+	github.com/numtide/multigres-operator/api v0.0.0-20260211114702-4eddcd600a98
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260211114702-4eddcd600a98
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260211114702-4eddcd600a98
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260211114702-4eddcd600a98
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
@@ -80,7 +80,6 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
