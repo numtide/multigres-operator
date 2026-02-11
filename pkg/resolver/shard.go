@@ -87,7 +87,7 @@ func (r *Resolver) ResolveShardTemplate(
 
 	// Check cache first
 	if cached, found := r.ShardTemplateCache[string(resolvedName)]; found {
-		return cached, nil
+		return cached.DeepCopy(), nil
 	}
 
 	// 2. Fetch
