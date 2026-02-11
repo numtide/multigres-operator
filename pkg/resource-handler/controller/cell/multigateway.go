@@ -115,6 +115,7 @@ func BuildMultiGatewayDeployment(
 								"--cell", string(cell.Spec.Name),
 							},
 							Resources: cell.Spec.MultiGateway.Resources,
+							Env:       multigresv1alpha1.BuildOTELEnvVars(cell.Spec.Observability),
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "http",

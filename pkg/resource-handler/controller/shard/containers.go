@@ -121,7 +121,7 @@ func buildPostgresContainer(
 		image = string(shard.Spec.Images.Postgres)
 	}
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:    "postgres",
 		Image:   image,
 		Command: []string{PgctldMountPath},
@@ -174,6 +174,10 @@ func buildPostgresContainer(
 			},
 		},
 	}
+	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
+		c.Env = append(c.Env, envVars...)
+	}
+	return c
 }
 
 // buildPgctldContainer creates the postgres container spec using the pgctld image.
@@ -194,7 +198,7 @@ func buildPgctldContainer(
 		image = string(shard.Spec.Images.Postgres)
 	}
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:    "postgres",
 		Image:   image,
 		Command: []string{"/usr/local/bin/pgctld"},
@@ -243,6 +247,10 @@ func buildPgctldContainer(
 			},
 		},
 	}
+	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
+		c.Env = append(c.Env, envVars...)
+	}
+	return c
 }
 
 // buildMultiPoolerSidecar creates the multipooler sidecar container spec.
@@ -281,7 +289,7 @@ func buildMultiPoolerSidecar(
 		"--pg-port=5432",
 	}
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:          "multipooler",
 		Image:         image,
 		Args:          args,
@@ -318,6 +326,10 @@ func buildMultiPoolerSidecar(
 			},
 		},
 	}
+	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
+		c.Env = append(c.Env, envVars...)
+	}
+	return c
 }
 
 // buildPgctldInitContainer creates the pgctld init container spec.
@@ -368,13 +380,17 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		"--recovery-cycle-interval=500ms",
 	}
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:      "multiorch",
 		Image:     image,
 		Args:      args,
 		Ports:     buildMultiOrchContainerPorts(),
 		Resources: shard.Spec.MultiOrch.Resources,
 	}
+	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
+		c.Env = append(c.Env, envVars...)
+	}
+	return c
 }
 
 // buildPgctldVolume creates the shared emptyDir volume for pgctld and pgbackrest binaries.

@@ -142,6 +142,11 @@ type ShardSpec struct {
 	// Inherited from MultigresCluster.
 	// +optional
 	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
+
+	// Observability configures OpenTelemetry for shard-level data-plane components.
+	// Inherited from MultigresCluster.Spec.Observability by the resolver.
+	// +optional
+	Observability *ObservabilityConfig `json:"observability,omitempty"`
 }
 
 // ShardImages defines the images required for a Shard.

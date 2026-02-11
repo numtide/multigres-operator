@@ -141,6 +141,7 @@ func BuildMultiAdminDeployment(
 								},
 							},
 							Resources: spec.Resources,
+							Env:       multigresv1alpha1.BuildOTELEnvVars(cluster.Spec.Observability),
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{

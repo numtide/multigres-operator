@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -39,7 +39,9 @@ const (
 // making instrumentation zero-cost in the default configuration.
 var Tracer = otel.Tracer(tracerName)
 
-// InitTracing initialises the OTel TracerProvider with an OTLP gRPC exporter.
+// InitTracing initialises the OTel TracerProvider using autoexport.
+// The transport protocol is determined by OTEL_EXPORTER_OTLP_PROTOCOL
+// (default: "http/protobuf"). Supported values: "grpc", "http/protobuf".
 // If OTEL_EXPORTER_OTLP_ENDPOINT is unset, tracing is left disabled and a
 // noop shutdown function is returned.
 func InitTracing(ctx context.Context, serviceName, version string) (func(context.Context) error, error) {
@@ -47,7 +49,7 @@ func InitTracing(ctx context.Context, serviceName, version string) (func(context
 		return func(context.Context) error { return nil }, nil
 	}
 
-	exporter, err := otlptracegrpc.New(ctx)
+	exporter, err := autoexport.NewSpanExporter(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("creating OTLP exporter: %w", err)
 	}

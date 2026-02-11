@@ -9464,6 +9464,96 @@ spec:
                   rule: has(self.spec) || has(self.templateRef)
                 - message: cannot specify both 'spec' and 'templateRef'
                   rule: '!(has(self.spec) && has(self.templateRef))'
+              observability:
+                description: |-
+                  Observability configures OpenTelemetry for data-plane components.
+                  When nil, data-plane pods inherit the operator's own OTEL environment
+                  variables at reconcile time. Set fields to override or disable.
+                properties:
+                  logsExporter:
+                    description: |-
+                      LogsExporter selects the logs exporter.
+                      Maps to OTEL_LOGS_EXPORTER.
+                      Upstream defaults to "none" — set to "otlp" to enable log export.
+                    enum:
+                    - otlp
+                    - none
+                    - console
+                    type: string
+                  metricExportInterval:
+                    description: |-
+                      MetricExportInterval in milliseconds.
+                      Maps to OTEL_METRIC_EXPORT_INTERVAL.
+                    type: string
+                  metricsExporter:
+                    description: |-
+                      MetricsExporter selects the metrics exporter.
+                      Maps to OTEL_METRICS_EXPORTER.
+                      Upstream defaults to "none" — set to "otlp" to enable metrics export.
+                    enum:
+                    - otlp
+                    - none
+                    - console
+                    type: string
+                  metricsTemporality:
+                    description: |-
+                      MetricsTemporality selects the temporality preference.
+                      Maps to OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE.
+                    enum:
+                    - cumulative
+                    - delta
+                    type: string
+                  otlpEndpoint:
+                    description: |-
+                      OTLPEndpoint is the OTLP collector endpoint URL.
+                      Maps to OTEL_EXPORTER_OTLP_ENDPOINT.
+                      Example: "http://otel-collector:4318"
+                      Set to "disabled" to explicitly disable telemetry.
+                    type: string
+                  otlpProtocol:
+                    description: |-
+                      OTLPProtocol is the OTLP transport protocol.
+                      Maps to OTEL_EXPORTER_OTLP_PROTOCOL.
+                    enum:
+                    - http/protobuf
+                    - grpc
+                    type: string
+                  samplingConfigRef:
+                    description: |-
+                      SamplingConfigRef references a ConfigMap containing the sampling config file.
+                      Only used when tracesSampler is "multigres_custom".
+                      The ConfigMap is mounted at /etc/otel/ and the file path is passed
+                      via OTEL_TRACES_SAMPLER_CONFIG.
+                    properties:
+                      key:
+                        default: sampling-config.yaml
+                        description: Key is the data key within the ConfigMap.
+                        type: string
+                      name:
+                        description: Name is the ConfigMap name (must be in the same
+                          namespace as the CR).
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  tracesExporter:
+                    description: |-
+                      TracesExporter selects the trace exporter.
+                      Maps to OTEL_TRACES_EXPORTER.
+                      Upstream defaults to "none" — set to "otlp" to enable tracing.
+                    enum:
+                    - otlp
+                    - none
+                    - console
+                    type: string
+                  tracesSampler:
+                    description: |-
+                      TracesSampler selects the sampler.
+                      Maps to OTEL_TRACES_SAMPLER.
+                      Standard values: always_on, always_off, parentbased_traceidratio.
+                      Use "multigres_custom" for file-based sampling (requires SamplingConfigRef).
+                    type: string
+                type: object
               pvcDeletionPolicy:
                 default:
                   whenDeleted: Retain

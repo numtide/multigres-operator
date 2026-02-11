@@ -55,6 +55,7 @@ func BuildTableGroup(
 				tgCfg.PVCDeletionPolicy,
 				cluster.Spec.PVCDeletionPolicy,
 			),
+			Observability: cluster.Spec.Observability,
 		},
 	}
 
