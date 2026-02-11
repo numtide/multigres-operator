@@ -44,7 +44,10 @@ var Tracer = otel.Tracer(tracerName)
 // (default: "http/protobuf"). Supported values: "grpc", "http/protobuf".
 // If OTEL_EXPORTER_OTLP_ENDPOINT is unset, tracing is left disabled and a
 // noop shutdown function is returned.
-func InitTracing(ctx context.Context, serviceName, version string) (func(context.Context) error, error) {
+func InitTracing(
+	ctx context.Context,
+	serviceName, version string,
+) (func(context.Context) error, error) {
 	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") == "" {
 		return func(context.Context) error { return nil }, nil
 	}
@@ -83,7 +86,10 @@ func InitTracing(ctx context.Context, serviceName, version string) (func(context
 // StartReconcileSpan starts a new span for a controller reconciliation.
 // The span is annotated with the Kubernetes resource name, namespace, and kind.
 // Callers must call span.End() when the operation completes.
-func StartReconcileSpan(ctx context.Context, spanName, name, namespace, kind string) (context.Context, trace.Span) {
+func StartReconcileSpan(
+	ctx context.Context,
+	spanName, name, namespace, kind string,
+) (context.Context, trace.Span) {
 	ctx, span := Tracer.Start(ctx, spanName,
 		trace.WithAttributes(
 			attribute.String("k8s.resource.name", name),

@@ -45,7 +45,13 @@ type CellReconciler struct {
 // Reconcile handles Cell resource reconciliation for data plane operations.
 func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	ctx, span := monitoring.StartReconcileSpan(ctx, "CellData.Reconcile", req.Name, req.Namespace, "Cell")
+	ctx, span := monitoring.StartReconcileSpan(
+		ctx,
+		"CellData.Reconcile",
+		req.Name,
+		req.Namespace,
+		"Cell",
+	)
 	defer span.End()
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 

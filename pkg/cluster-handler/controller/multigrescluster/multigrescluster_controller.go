@@ -46,7 +46,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 	req ctrl.Request,
 ) (ctrl.Result, error) {
 	start := time.Now()
-	ctx, span := monitoring.StartReconcileSpan(ctx, "MultigresCluster.Reconcile", req.Name, req.Namespace, "MultigresCluster")
+	ctx, span := monitoring.StartReconcileSpan(
+		ctx,
+		"MultigresCluster.Reconcile",
+		req.Name,
+		req.Namespace,
+		"MultigresCluster",
+	)
 	defer span.End()
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
@@ -66,7 +72,9 @@ func (r *MultigresClusterReconciler) Reconcile(
 	// Bridge the async webhook → reconcile trace gap.
 	// If the webhook injected a traceparent into the cluster's annotations,
 	// restart the span under that parent context (or link if stale).
-	if parentCtx, isStale := monitoring.ExtractTraceContext(cluster.GetAnnotations()); trace.SpanFromContext(parentCtx).SpanContext().IsValid() {
+	if parentCtx, isStale := monitoring.ExtractTraceContext(cluster.GetAnnotations()); trace.SpanFromContext(parentCtx).
+		SpanContext().
+		IsValid() {
 		span.End() // End the initial orphan span.
 		if isStale {
 			ctx, span = monitoring.Tracer.Start(ctx, "MultigresCluster.Reconcile",
@@ -75,6 +83,7 @@ func (r *MultigresClusterReconciler) Reconcile(
 		} else {
 			ctx, span = monitoring.StartReconcileSpan(parentCtx, "MultigresCluster.Reconcile", req.Name, req.Namespace, "MultigresCluster")
 		}
+		defer span.End()
 		ctx = monitoring.EnrichLoggerWithTrace(ctx)
 		l = log.FromContext(ctx)
 	}
@@ -104,7 +113,10 @@ func (r *MultigresClusterReconciler) Reconcile(
 	}
 
 	{
-		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.ReconcileGlobalComponents")
+		ctx, childSpan := monitoring.StartChildSpan(
+			ctx,
+			"MultigresCluster.ReconcileGlobalComponents",
+		)
 		if err := r.reconcileGlobalComponents(ctx, cluster, res); err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
@@ -127,7 +139,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
 			l.Error(err, "Failed to reconcile cells")
-			r.Recorder.Eventf(cluster, "Warning", "FailedApply", "Failed to reconcile cells: %v", err)
+			r.Recorder.Eventf(
+				cluster,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile cells: %v",
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 		childSpan.End()
@@ -169,7 +187,12 @@ func (r *MultigresClusterReconciler) Reconcile(
 	for _, db := range cluster.Status.Databases {
 		totalShards += int(db.TotalShards)
 	}
-	monitoring.SetClusterTopology(cluster.Name, cluster.Namespace, len(cluster.Status.Cells), totalShards)
+	monitoring.SetClusterTopology(
+		cluster.Name,
+		cluster.Namespace,
+		len(cluster.Status.Cells),
+		totalShards,
+	)
 
 	l.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(cluster, "Normal", "Synced", "Successfully reconciled MultigresCluster")

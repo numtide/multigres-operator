@@ -27,7 +27,13 @@ func TestStartReconcileSpan(t *testing.T) {
 	Tracer = tp.Tracer(tracerName)
 
 	ctx := context.Background()
-	ctx, span := StartReconcileSpan(ctx, "MultigresCluster.Reconcile", "my-cluster", "default", "MultigresCluster")
+	ctx, span := StartReconcileSpan(
+		ctx,
+		"MultigresCluster.Reconcile",
+		"my-cluster",
+		"default",
+		"MultigresCluster",
+	)
 	span.End()
 
 	spans := exporter.GetSpans()
@@ -88,7 +94,11 @@ func TestStartChildSpan(t *testing.T) {
 	childSpan := spans[0]
 	parentSpan := spans[1]
 	if childSpan.Parent.SpanID() != parentSpan.SpanContext.SpanID() {
-		t.Errorf("child parent span ID = %s, want %s", childSpan.Parent.SpanID(), parentSpan.SpanContext.SpanID())
+		t.Errorf(
+			"child parent span ID = %s, want %s",
+			childSpan.Parent.SpanID(),
+			parentSpan.SpanContext.SpanID(),
+		)
 	}
 	if childSpan.Name != "ChildOperation" {
 		t.Errorf("child span name = %q, want %q", childSpan.Name, "ChildOperation")
@@ -119,7 +129,11 @@ func TestRecordSpanError(t *testing.T) {
 			t.Errorf("span status = %v, want Error", s.Status.Code)
 		}
 		if s.Status.Description != "something failed" {
-			t.Errorf("span status description = %q, want %q", s.Status.Description, "something failed")
+			t.Errorf(
+				"span status description = %q, want %q",
+				s.Status.Description,
+				"something failed",
+			)
 		}
 
 		// Check that an error event was recorded.
@@ -128,7 +142,8 @@ func TestRecordSpanError(t *testing.T) {
 			if event.Name == "exception" {
 				foundErrorEvent = true
 				for _, attr := range event.Attributes {
-					if attr.Key == attribute.Key("exception.message") && attr.Value.AsString() == "something failed" {
+					if attr.Key == attribute.Key("exception.message") &&
+						attr.Value.AsString() == "something failed" {
 						break
 					}
 				}

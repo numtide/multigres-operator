@@ -182,7 +182,11 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// Initialize distributed tracing (noop if OTEL_EXPORTER_OTLP_ENDPOINT is unset).
-	shutdownTracing, err := monitoring.InitTracing(context.Background(), "multigres-operator", version)
+	shutdownTracing, err := monitoring.InitTracing(
+		context.Background(),
+		"multigres-operator",
+		version,
+	)
 	if err != nil {
 		setupLog.Error(err, "failed to initialise tracing")
 		os.Exit(1)

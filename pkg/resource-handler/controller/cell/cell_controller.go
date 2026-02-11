@@ -34,7 +34,13 @@ type CellReconciler struct {
 // Reconcile handles Cell resource reconciliation.
 func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	ctx, span := monitoring.StartReconcileSpan(ctx, "Cell.Reconcile", req.Name, req.Namespace, "Cell")
+	ctx, span := monitoring.StartReconcileSpan(
+		ctx,
+		"Cell.Reconcile",
+		req.Name,
+		req.Namespace,
+		"Cell",
+	)
 	defer span.End()
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
@@ -203,7 +209,12 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	r.setConditions(cell, mgDeploy)
 	cell.Status.GatewayReplicas = mgDeploy.Status.Replicas
 	cell.Status.GatewayReadyReplicas = mgDeploy.Status.ReadyReplicas
-	monitoring.SetCellGatewayReplicas(cell.Name, cell.Namespace, mgDeploy.Status.Replicas, mgDeploy.Status.ReadyReplicas)
+	monitoring.SetCellGatewayReplicas(
+		cell.Name,
+		cell.Namespace,
+		mgDeploy.Status.Replicas,
+		mgDeploy.Status.ReadyReplicas,
+	)
 
 	// Update Phase
 	cell.Status.Phase = status.ComputePhase(mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
