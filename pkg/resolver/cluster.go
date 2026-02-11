@@ -260,7 +260,7 @@ func (r *Resolver) ResolveCoreTemplate(
 
 	// Check cache first
 	if cached, found := r.CoreTemplateCache[string(resolvedName)]; found {
-		return cached, nil
+		return cached.DeepCopy(), nil
 	}
 
 	// 2. Fetch
