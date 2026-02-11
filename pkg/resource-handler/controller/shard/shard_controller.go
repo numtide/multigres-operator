@@ -467,6 +467,8 @@ func (r *ShardReconciler) updateStatus(
 	// Update conditions
 	r.setConditions(shard, totalPods, readyPods)
 
+	shard.Status.ObservedGeneration = shard.Generation
+
 	// 1. Construct the Patch Object
 	patchObj := &multigresv1alpha1.Shard{
 		TypeMeta: metav1.TypeMeta{
@@ -479,8 +481,6 @@ func (r *ShardReconciler) updateStatus(
 		},
 		Status: shard.Status,
 	}
-
-	shard.Status.ObservedGeneration = shard.Generation
 
 	// 2. Apply the Patch
 	if oldPhase != shard.Status.Phase {
