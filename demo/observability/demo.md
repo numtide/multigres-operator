@@ -19,7 +19,8 @@ how each signal is generated, collected, and visualised.
 6. [Distributed Tracing](#6-distributed-tracing)
 7. [Grafana Dashboards](#7-grafana-dashboards)
 8. [Alerting](#8-alerting)
-9. [Cleanup](#9-cleanup)
+9. [Production Configuration](#9-production-configuration)
+10. [Cleanup](#10-cleanup)
 
 ---
 
@@ -333,7 +334,49 @@ The operator also exposes standard controller-runtime and Go metrics:
 
 ## 6. Distributed Tracing
 
-### 6.1 Architecture
+### 6.1 What Are Traces?
+
+A **distributed trace** is a tree of timed operations (**spans**) that records
+the full lifecycle of a request as it flows through a system. Each span has:
+
+- A **name** describing the operation (e.g. `Cell.Reconcile`)
+- A **duration** (start time → end time)
+- A **parent** linking it to the span that triggered it
+- **Attributes** (key-value metadata such as the resource name or namespace)
+- A **trace ID** shared by every span in the same trace
+
+In a monolithic application, a stack trace gives you the full call chain. In
+a Kubernetes operator, work is split across multiple controllers that react
+asynchronously to watch events — there is no single call stack. Distributed
+tracing reconstructs that causal chain by linking spans across controllers.
+
+#### Why this matters for operators
+
+When a `MultigresCluster` is created, the operator triggers a cascade of
+reconciliations:
+
+```
+MultigresCluster.Reconcile
+  ├── creates Cell → triggers Cell.Reconcile
+  │     ├── creates MultiGateway Deployment
+  │     └── triggers CellData.Reconcile (registers cell in topology)
+  ├── creates TopoServer → triggers TopoServer.Reconcile
+  │     └── creates StatefulSet
+  ├── creates TableGroup → triggers TableGroup.Reconcile
+  │     └── creates Shard → triggers Shard.Reconcile
+  │           ├── creates MultiOrch Deployment
+  │           ├── creates MultiPooler Deployment
+  │           └── triggers ShardData.Reconcile (registers shard in topology)
+  └── creates MultiAdmin Deployment
+```
+
+Without tracing, debugging a failure in `ShardData.Reconcile` means grepping
+logs across multiple controllers and mentally reconstructing the timeline.
+With tracing, you open a single trace and see the full waterfall — which
+controllers ran, in what order, how long each took, and where the failure
+occurred.
+
+### 6.2 How Tracing Works in the Operator
 
 The operator uses OpenTelemetry for distributed tracing. When the environment
 variable `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the operator:
@@ -344,7 +387,7 @@ variable `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the operator:
 4. Enriches logs with trace context (`monitoring.EnrichLoggerWithTrace()`)
 5. Propagates trace context across async boundaries using annotations
 
-### 6.2 Trace Propagation (Webhook → Reconcile)
+### 6.3 Trace Propagation (Webhook → Reconcile)
 
 The operator bridges the async gap between the webhook admission request and the
 controller reconciliation using annotations:
@@ -374,7 +417,7 @@ The annotation `multigres.com/traceparent` carries the W3C Trace Context:
 - `monitoring.InjectTraceContext()` — Webhook writes the traceparent annotation
 - `monitoring.ExtractTraceContext()` — Controller reads it and re-parents its span
 
-### 6.3 Viewing Traces in Grafana
+### 6.4 Viewing Traces in Grafana
 
 1. Open **http://localhost:3000/explore**
 2. Select the **Tempo** datasource
@@ -407,7 +450,7 @@ Find slow reconciliations (>500ms):
 {name =~ ".*Reconcile" && duration > 500ms}
 ```
 
-### 6.4 Log-Trace Correlation
+### 6.5 Log-Trace Correlation
 
 Copy a `trace_id` from the operator logs and paste it into Tempo's
 "Import trace" field to jump directly to the full trace:
@@ -424,6 +467,65 @@ kubectl logs deploy/multigres-operator-controller-manager \
 
 Paste `5e0d253c3e7b3db8671a8f7ad6c71180` into Grafana → Explore → Tempo →
 Import Trace to see the full waterfall.
+
+### 6.6 Debugging with Traces — A Walkthrough
+
+Scenario: a `MultigresCluster` is stuck in `Progressing` and you want to find
+out which sub-controller is failing.
+
+**Step 1 — Find the trace ID from the cluster's logs:**
+
+```bash
+kubectl logs deploy/multigres-operator-controller-manager \
+  -n multigres-operator | grep '"controller":"multigrescluster"' | tail -1
+```
+
+Output:
+```json
+{"controller":"multigrescluster", "msg":"reconcile complete", "trace_id":"07a3af4c44a257a71260af8628312b03", ...}
+```
+
+**Step 2 — Open the trace in Grafana:**
+
+Go to Grafana → Explore → Tempo and search by trace ID
+`07a3af4c44a257a71260af8628312b03`. You will see a waterfall like:
+
+```
+[MultigresCluster.Reconcile]  ─────────────────────────── 45ms
+  [Cell.Reconcile]            ──────────────────────────── 74ms
+  [TopoServer.Reconcile]      ────────────────────── 32ms
+  [TableGroup.Reconcile]      ──────────────────────── 53ms
+    [Shard.Reconcile]         ─────────────────────────── 134ms
+  [CellData.Reconcile]        ─── ERROR ── 1.0s ──────────
+  [ShardData.Reconcile]       ─── ERROR ── 1.0s ──────────
+```
+
+**Step 3 — Identify the problem:**
+
+The `CellData.Reconcile` and `ShardData.Reconcile` spans show errors with
+1.0s duration — they are timing out trying to register with the TopoServer.
+Clicking the span reveals the error attribute:
+
+```
+status: ERROR
+error.message: "rpc error: code = Unavailable desc = connection refused"
+```
+
+This tells you the data-handler controllers cannot reach the TopoServer's etcd
+cluster, which is still starting. The operator will automatically retry and
+the errors will resolve once etcd is ready.
+
+**Step 4 — Correlate with logs:**
+
+Search the operator logs for the same trace ID:
+
+```bash
+kubectl logs deploy/multigres-operator-controller-manager \
+  -n multigres-operator | grep '07a3af4c44a257a71260af8628312b03'
+```
+
+This returns every log line emitted during that trace, across all controllers,
+giving you the complete narrative of what happened.
 
 ---
 
@@ -556,7 +658,190 @@ Example runbook checklist (from `MultigresClusterReconcileErrors.md`):
 
 ---
 
-## 9. Cleanup
+## 9. Production Configuration
+
+The demo setup uses the Kind observability overlay for convenience. In
+production you will deploy the operator and observability stack separately.
+This section explains how to configure each.
+
+### 9.1 Operator Tracing
+
+The operator itself is configured through environment variables on the
+controller-manager Deployment. Tracing is opt-in: if
+`OTEL_EXPORTER_OTLP_ENDPOINT` is not set, tracing is completely disabled
+(noop TracerProvider).
+
+| Environment Variable | Default | Description |
+|--|--|--|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | _(unset/disabled)_ | OTLP collector URL (e.g. `http://otel-collector.monitoring:4318`) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Transport protocol (`http/protobuf` or `grpc`) |
+| `OTEL_TRACES_EXPORTER` | `otlp` | Exporter backend. Set `none` to disable |
+| `OTEL_TRACES_SAMPLER` | `always_on` | Sampling strategy (`always_on`, `parentbased_traceidratio`, etc.) |
+
+Example Deployment patch:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multigres-operator-controller-manager
+  namespace: multigres-operator
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+```
+
+The operator registers itself with `service.name=multigres-operator` in
+its trace resource.
+
+### 9.2 Data-Plane Telemetry (MultigresCluster → Cell → Shard)
+
+The operator configures OpenTelemetry on the data-plane components it deploys
+(MultiOrch, MultiPooler, MultiGateway) through the `ObservabilityConfig` in
+the CRD hierarchy.
+
+#### Inheritance model
+
+```
+MultigresCluster.spec.observability
+          │
+          ├──▶ Cell.spec.observability     (MultiGateway container)
+          │
+          └──▶ Shard.spec.observability    (MultiOrch, MultiPooler containers)
+                (via TableGroup/ShardSpec)
+```
+
+When the operator creates Cell and Shard child resources, it copies
+`cluster.Spec.Observability` into each child's spec. The resource-handler
+controllers then call `BuildOTELEnvVars()` to inject the corresponding
+`OTEL_*` environment variables into every data-plane container.
+
+#### Default behaviour (inherit from operator)
+
+If `observability` is not set on the `MultigresCluster` (i.e. `nil`),
+`BuildOTELEnvVars()` falls back to the operator process's own environment
+variables. This means data-plane pods automatically inherit the operator's
+telemetry endpoint with zero configuration:
+
+```yaml
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: production
+spec:
+  # observability: not set → inherits operator's OTEL_EXPORTER_OTLP_ENDPOINT
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"
+```
+
+#### Override per cluster
+
+To send a specific cluster's data-plane telemetry to a different collector
+(e.g. a team-specific Tempo instance), set the `observability` field:
+
+```yaml
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: team-analytics
+spec:
+  observability:
+    otlpEndpoint: "http://team-analytics-collector.monitoring:4318"
+    tracesExporter: "otlp"
+    metricsExporter: "otlp"
+    tracesSampler: "parentbased_traceidratio"
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"
+```
+
+#### Disable data-plane telemetry
+
+Set `otlpEndpoint` to `"disabled"` to suppress all OTEL environment variables
+for that cluster's data-plane pods:
+
+```yaml
+spec:
+  observability:
+    otlpEndpoint: "disabled"
+```
+
+#### Full ObservabilityConfig reference
+
+| Field | Maps to Env Var | Values |
+|--|--|--|
+| `otlpEndpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | URL or `"disabled"` |
+| `otlpProtocol` | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf`, `grpc` |
+| `tracesExporter` | `OTEL_TRACES_EXPORTER` | `otlp`, `none`, `console` |
+| `metricsExporter` | `OTEL_METRICS_EXPORTER` | `otlp`, `none`, `console` |
+| `logsExporter` | `OTEL_LOGS_EXPORTER` | `otlp`, `none`, `console` |
+| `metricExportInterval` | `OTEL_METRIC_EXPORT_INTERVAL` | Milliseconds (e.g. `"60000"`) |
+| `metricsTemporality` | `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` | `cumulative`, `delta` |
+| `tracesSampler` | `OTEL_TRACES_SAMPLER` | `always_on`, `always_off`, `parentbased_traceidratio`, `multigres_custom` |
+| `samplingConfigRef` | `OTEL_TRACES_SAMPLER_CONFIG` | ConfigMap ref for file-based sampling |
+
+### 9.3 Distinguishing Operator vs Data-Plane Traces
+
+When both the operator and data-plane components send traces to the same
+collector, you can distinguish them using the `service.name` resource
+attribute:
+
+| Component | `service.name` |
+|--|--|
+| Operator | `multigres-operator` |
+| MultiOrch | Set by the multiorch binary (e.g. `multiorch`) |
+| MultiPooler | Set by the multipooler binary (e.g. `multipooler`) |
+| MultiGateway | Set by the multigateway binary (e.g. `multigateway`) |
+
+In Tempo, filter by service name to see only one component's traces:
+
+```traceql
+{resource.service.name = "multigres-operator"}
+```
+
+```traceql
+{resource.service.name = "multiorch"}
+```
+
+Or see all Multigres-related traces:
+
+```traceql
+{resource.service.name =~ "multigres.*|multi.*"}
+```
+
+### 9.4 Prometheus & Grafana
+
+For production, deploy Prometheus (or the Prometheus Operator) and Grafana
+separately. The operator provides ready-to-use resources under
+`config/monitoring/`:
+
+| Resource | File | Purpose |
+|--|--|--|
+| PrometheusRule | `config/monitoring/prometheus-rules.yaml` | Alert definitions |
+| ConfigMap (dashboards) | `config/monitoring/grafana-dashboards.yaml` | Grafana dashboard JSON |
+
+Apply them with:
+
+```bash
+kubectl apply -k config/monitoring/
+```
+
+Prometheus scrapes the operator's `/metrics` endpoint. The operator exposes
+it on `:8443` with mTLS. Configure a `ServiceMonitor` or a direct
+`scrape_config` pointing to the `multigres-operator-controller-manager`
+Service.
+
+---
+
+## 10. Cleanup
 
 Remove the sample cluster:
 
