@@ -157,6 +157,8 @@ github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260210092054-
 github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260210092054-f7ad64000b6d/go.mod h1:63AFZ+kMSgJNsiqo0dJA09sND+3gc3cHR5J85I1OPW8=
 github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260210092054-f7ad64000b6d h1:gZ9r3GQ/D/AWoi1wR0x9q9TRYTd8Kzwt3HxlZkXhlao=
 github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260210092054-f7ad64000b6d/go.mod h1:1sIRf2KI/PsMhgy5VBcRYuOjO7PbdcFkvhn0sk2lQfM=
+github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260211095746-9930a3c0c66c h1:eJTbNmed/9761+xs6XnJBFCgEmYrEO/gIn0mguJelw0=
+github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260211095746-9930a3c0c66c/go.mod h1:DVuFnEpCPMJHeV5mtHTKrqkjGks+o+y3L7XlT8rcKFY=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260210092054-f7ad64000b6d h1:1x/nn1VbjmAdo4pQf29L8RZEKrqRsTGRpgypdugrVBY=
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260210092054-f7ad64000b6d/go.mod h1:tEAj5qK19UlWqPln+RLojeGgL7bS9vzuLO98zionDZk=
 github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260210092054-f7ad64000b6d h1:CRx1Hpb9xsug8pe/LdI4vPCaXhVJuhLgfuPP2EOYRQg=
