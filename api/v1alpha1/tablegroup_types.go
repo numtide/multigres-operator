@@ -64,10 +64,15 @@ type TableGroupSpec struct {
 	// +kubebuilder:validation:MaxItems=32
 	Shards []ShardResolvedSpec `json:"shards"`
 
-	// P VCDeletionPolicy controls PVC lifecycle for all shards in this table group.
+	// PVCDeletionPolicy controls PVC lifecycle for all shards in this table group.
 	// Inherited from MultigresCluster.
 	// +optional
 	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
+
+	// Observability configures OpenTelemetry for shard-level data-plane components.
+	// Inherited from MultigresCluster.Spec.Observability.
+	// +optional
+	Observability *ObservabilityConfig `json:"observability,omitempty"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,

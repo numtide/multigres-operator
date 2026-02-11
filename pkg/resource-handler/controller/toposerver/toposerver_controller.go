@@ -3,6 +3,7 @@ package toposerver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
@@ -34,7 +36,13 @@ func (r *TopoServerReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
+	start := time.Now()
+	ctx, span := monitoring.StartReconcileSpan(ctx, "TopoServer.Reconcile", req.Name, req.Namespace, "TopoServer")
+	defer span.End()
+	ctx = monitoring.EnrichLoggerWithTrace(ctx)
+
 	logger := log.FromContext(ctx)
+	logger.V(1).Info("reconcile started")
 
 	// Fetch the TopoServer instance
 	toposerver := &multigresv1alpha1.TopoServer{}
@@ -43,6 +51,7 @@ func (r *TopoServerReconciler) Reconcile(
 			logger.Info("TopoServer resource not found, ignoring")
 			return ctrl.Result{}, nil
 		}
+		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to get TopoServer")
 		return ctrl.Result{}, err
 	}
@@ -53,50 +62,75 @@ func (r *TopoServerReconciler) Reconcile(
 	}
 
 	// Reconcile StatefulSet
-	if err := r.reconcileStatefulSet(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to reconcile StatefulSet")
-		r.Recorder.Eventf(
-			toposerver,
-			"Warning",
-			"FailedApply",
-			"Failed to reconcile StatefulSet: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.ReconcileStatefulSet")
+		if err := r.reconcileStatefulSet(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile StatefulSet")
+			r.Recorder.Eventf(
+				toposerver,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile StatefulSet: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Reconcile headless Service
-	if err := r.reconcileHeadlessService(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to reconcile headless Service")
-		r.Recorder.Eventf(
-			toposerver,
-			"Warning",
-			"FailedApply",
-			"Failed to reconcile headless Service: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.ReconcileHeadlessService")
+		if err := r.reconcileHeadlessService(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile headless Service")
+			r.Recorder.Eventf(
+				toposerver,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile headless Service: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Reconcile client Service
-	if err := r.reconcileClientService(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to reconcile client Service")
-		r.Recorder.Eventf(
-			toposerver,
-			"Warning",
-			"FailedApply",
-			"Failed to reconcile client Service: %v",
-			err,
-		)
-		return ctrl.Result{}, err
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.ReconcileClientService")
+		if err := r.reconcileClientService(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile client Service")
+			r.Recorder.Eventf(
+				toposerver,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile client Service: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, toposerver); err != nil {
-		logger.Error(err, "Failed to update status")
-		return ctrl.Result{}, err
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.UpdateStatus")
+		if err := r.updateStatus(ctx, toposerver); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to update status")
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
+	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(toposerver, "Normal", "Synced", "Successfully reconciled TopoServer")
 	return ctrl.Result{}, nil
 }
@@ -229,6 +263,7 @@ func (r *TopoServerReconciler) updateStatus(
 
 	// Update Phase
 	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
+	monitoring.SetTopoServerReplicas(toposerver.Name, toposerver.Namespace, sts.Status.Replicas, sts.Status.ReadyReplicas)
 	if sts.Status.ObservedGeneration != sts.Generation {
 		toposerver.Status.Phase = multigresv1alpha1.PhaseProgressing
 		toposerver.Status.Message = "StatefulSet is progressing"

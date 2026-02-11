@@ -3,6 +3,7 @@ package tablegroup
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -17,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 )
 
 // TableGroupReconciler reconciles a TableGroup object.
@@ -36,7 +38,13 @@ func (r *TableGroupReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
+	start := time.Now()
+	ctx, span := monitoring.StartReconcileSpan(ctx, "TableGroup.Reconcile", req.Name, req.Namespace, "TableGroup")
+	defer span.End()
+	ctx = monitoring.EnrichLoggerWithTrace(ctx)
+
 	l := log.FromContext(ctx)
+	l.V(1).Info("reconcile started")
 
 	tg := &multigresv1alpha1.TableGroup{}
 	err := r.Get(ctx, req.NamespacedName, tg)
@@ -44,6 +52,7 @@ func (r *TableGroupReconciler) Reconcile(
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+		monitoring.RecordSpanError(span, err)
 		return ctrl.Result{}, fmt.Errorf("failed to get TableGroup: %w", err)
 	}
 
@@ -246,6 +255,7 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to patch status: %w", err)
 	}
 
+	l.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(tg, "Normal", "Synced", "Successfully reconciled TableGroup")
 	return ctrl.Result{}, nil
 }

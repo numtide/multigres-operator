@@ -3,11 +3,14 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 )
 
@@ -29,14 +32,26 @@ func NewMultigresClusterDefaulter(r *resolver.Resolver) *MultigresClusterDefault
 
 // Default implements webhook.CustomDefaulter.
 func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+	start := time.Now()
+	ctx, span := monitoring.StartChildSpan(ctx, "Webhook.Default")
+	defer span.End()
+
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("defaulting webhook started")
+
 	// SAFETY CHECK
 	if d.Resolver == nil {
-		return fmt.Errorf("defaulter not initialized: resolver is nil")
+		err := fmt.Errorf("defaulter not initialized: resolver is nil")
+		monitoring.RecordSpanError(span, err)
+		monitoring.RecordWebhookRequest("DEFAULT", "MultigresCluster", err, time.Since(start))
+		return err
 	}
 
 	cluster, ok := obj.(*multigresv1alpha1.MultigresCluster)
 	if !ok {
-		return fmt.Errorf("expected MultigresCluster, got %T", obj)
+		err := fmt.Errorf("expected MultigresCluster, got %T", obj)
+		monitoring.RecordSpanError(span, err)
+		return err
 	}
 
 	// 1. Static Defaulting (Images, System Catalog)
@@ -218,5 +233,14 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 		}
 	}
 
+	// Inject trace context into annotations so the controller can continue
+	// the trace started by this webhook across the async boundary.
+	if cluster.Annotations == nil {
+		cluster.Annotations = make(map[string]string)
+	}
+	monitoring.InjectTraceContext(ctx, cluster.Annotations)
+
+	monitoring.RecordWebhookRequest("DEFAULT", "MultigresCluster", nil, time.Since(start))
+	logger.V(1).Info("defaulting webhook complete", "duration", time.Since(start).String())
 	return nil
 }

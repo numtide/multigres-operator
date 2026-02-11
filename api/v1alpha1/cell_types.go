@@ -75,6 +75,11 @@ type CellSpec struct {
 	// TopologyReconciliation flags.
 	// +optional
 	TopologyReconciliation TopologyReconciliation `json:"topologyReconciliation,omitempty"`
+
+	// Observability configures OpenTelemetry for cell-level data-plane components.
+	// Inherited from MultigresCluster.Spec.Observability by the resolver.
+	// +optional
+	Observability *ObservabilityConfig `json:"observability,omitempty"`
 }
 
 // CellImages defines the images required for a Cell.

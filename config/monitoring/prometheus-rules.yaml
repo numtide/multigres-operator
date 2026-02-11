@@ -1,0 +1,108 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: multigres-operator-alerts
+  labels:
+    app.kubernetes.io/name: multigres-operator
+    app.kubernetes.io/component: monitoring
+spec:
+  groups:
+    - name: multigres-operator.rules
+      rules:
+        # ── Errors ────────────────────────────────────────────────
+
+        - alert: MultigresClusterReconcileErrors
+          expr: rate(controller_runtime_reconcile_errors_total{controller=~"multigrescluster|tablegroup"}[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MultigresCluster controller is failing reconciles"
+            description: >-
+              Controller {{ $labels.controller }} has had a non-zero reconcile
+              error rate for the last 5 minutes (current: {{ $value | humanize }}/s).
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterReconcileErrors.md"
+
+        - alert: MultigresClusterDegraded
+          expr: multigres_operator_cluster_info{phase!="Healthy"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MultigresCluster {{ $labels.name }} is degraded"
+            description: >-
+              Cluster {{ $labels.name }} in namespace {{ $labels.namespace }}
+              has been in phase "{{ $labels.phase }}" for more than 10 minutes.
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterDegraded.md"
+
+        - alert: MultigresCellGatewayUnavailable
+          expr: multigres_operator_cell_gateway_replicas{state="ready"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Cell {{ $labels.cell }} has zero ready gateway replicas"
+            description: >-
+              Cell {{ $labels.cell }} in namespace {{ $labels.namespace }} has
+              had zero ready MultiGateway replicas for 5 minutes. Traffic
+              cannot be routed to this cell.
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresCellGatewayUnavailable.md"
+
+        - alert: MultigresShardPoolDegraded
+          expr: >-
+            multigres_operator_shard_pool_replicas{state="ready"}
+            <
+            multigres_operator_shard_pool_replicas{state="desired"}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Shard {{ $labels.shard }} pool {{ $labels.pool }} has fewer ready replicas than desired"
+            description: >-
+              Pool {{ $labels.pool }} of shard {{ $labels.shard }} in namespace
+              {{ $labels.namespace }} has had fewer ready replicas than desired
+              for more than 10 minutes.
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresShardPoolDegraded.md"
+
+        - alert: MultigresWebhookErrors
+          expr: rate(multigres_operator_webhook_request_total{result="error"}[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Multigres admission webhook is returning errors"
+            description: >-
+              The {{ $labels.operation }} webhook for {{ $labels.resource }}
+              has had a non-zero error rate for the last 5 minutes
+              (current: {{ $value | humanize }}/s).
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresWebhookErrors.md"
+
+        # ── Latency ───────────────────────────────────────────────
+
+        - alert: MultigresReconcileSlow
+          expr: histogram_quantile(0.99, rate(controller_runtime_reconcile_time_seconds_bucket[5m])) > 30
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Reconcile p99 latency exceeds 30 seconds"
+            description: >-
+              Controller {{ $labels.controller }} p99 reconcile duration has
+              exceeded 30 seconds for the last 5 minutes
+              (current: {{ $value | humanize }}s).
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresReconcileSlow.md"
+
+        # ── Saturation ────────────────────────────────────────────
+
+        - alert: MultigresControllerSaturated
+          expr: workqueue_depth{name=~"multigrescluster|tablegroup"} > 50
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Controller work queue is consistently deep"
+            description: >-
+              The {{ $labels.name }} controller work queue has been deeper than
+              50 items for more than 10 minutes. The operator cannot keep up
+              with incoming events. Consider increasing MaxConcurrentReconciles.
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresControllerSaturated.md"

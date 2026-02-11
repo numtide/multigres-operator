@@ -87,6 +87,12 @@ type MultigresClusterSpec struct {
 	// +optional
 	// +kubebuilder:default={whenDeleted: "Retain", whenScaled: "Retain"}
 	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
+
+	// Observability configures OpenTelemetry for data-plane components.
+	// When nil, data-plane pods inherit the operator's own OTEL environment
+	// variables at reconcile time. Set fields to override or disable.
+	// +optional
+	Observability *ObservabilityConfig `json:"observability,omitempty"`
 }
 
 // ============================================================================

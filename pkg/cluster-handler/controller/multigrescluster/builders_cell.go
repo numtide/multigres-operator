@@ -48,6 +48,7 @@ func BuildCell(
 				RegisterCell: true,
 				PrunePoolers: true,
 			},
+			Observability: cluster.Spec.Observability,
 		},
 	}
 
