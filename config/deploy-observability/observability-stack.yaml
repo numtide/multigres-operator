@@ -1,0 +1,250 @@
+---
+# ClusterRoleBinding: Allow the operator SA to read its own /metrics endpoint.
+# Prometheus runs with the same SA and uses its bearer token for authentication.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: multigres-operator-metrics-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: multigres-operator-metrics-reader
+subjects:
+  - kind: ServiceAccount
+    name: multigres-operator-controller-manager
+    namespace: multigres-operator
+---
+# ConfigMap: Tempo configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+data:
+  tempo.yaml: |
+    server:
+      http_listen_port: 3200
+
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            http:
+              endpoint: 0.0.0.0:4318
+            grpc:
+              endpoint: 0.0.0.0:4317
+
+    metrics_generator:
+      registry:
+        external_labels:
+          source: tempo
+      storage:
+        path: /tmp/tempo/generator/wal
+        remote_write:
+          - url: http://localhost:9090/api/v1/write
+            send_exemplars: true
+      processor:
+        service_graphs:
+          wait: 10s
+        span_metrics:
+          dimensions: []
+
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /tmp/tempo/blocks
+        wal:
+          path: /tmp/tempo/wal
+---
+# ConfigMap: Prometheus configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: "multigres-operator"
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        static_configs:
+          - targets:
+              - "multigres-operator-controller-manager-metrics-service.multigres-operator.svc:8443"
+---
+# ConfigMap: Grafana datasources (pre-configured with cross-linking)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus-uid
+        access: proxy
+        url: http://localhost:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: "60s"
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: tempo-uid
+      - name: Tempo
+        type: tempo
+        uid: tempo-uid
+        access: proxy
+        url: http://localhost:3200
+        editable: false
+        jsonData:
+          tracesToMetrics:
+            datasourceUid: prometheus-uid
+          serviceMap:
+            datasourceUid: prometheus-uid
+          nodeGraph:
+            enabled: true
+---
+# ConfigMap: Grafana dashboard provisioning
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+data:
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: "default"
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+# Deployment: Observability stack (Prometheus + Tempo + Grafana in one pod)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: observability
+  labels:
+    app: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: observability
+  template:
+    metadata:
+      labels:
+        app: observability
+    spec:
+      serviceAccountName: multigres-operator-controller-manager
+      automountServiceAccountToken: true
+      containers:
+        - name: tempo
+          image: grafana/tempo:2.7.2
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-config.file=/etc/tempo/tempo.yaml"
+          ports:
+            - containerPort: 3200
+              name: tempo-http
+            - containerPort: 4318
+              name: otlp-http
+            - containerPort: 4317
+              name: otlp-grpc
+          volumeMounts:
+            - name: tempo-config
+              mountPath: /etc/tempo
+        - name: prometheus
+          image: prom/prometheus:v3.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9090
+              name: prom-http
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--enable-feature=exemplar-storage"
+            - "--enable-feature=native-histograms"
+            - "--web.enable-otlp-receiver"
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus
+        - name: grafana
+          image: grafana/grafana:11.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Admin"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+            - name: GF_FEATURE_TOGGLES_ENABLE
+              value: "traceqlEditor,traceQLStreaming,correlations"
+          volumeMounts:
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-dashboards-config
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: grafana-dashboard-multigres
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: tempo-config
+          configMap:
+            name: tempo-config
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - name: grafana-dashboards-config
+          configMap:
+            name: grafana-dashboards-config
+        - name: grafana-dashboard-multigres
+          configMap:
+            name: grafana-dashboard-multigres
+---
+# Service: Observability endpoints
+apiVersion: v1
+kind: Service
+metadata:
+  name: observability
+spec:
+  selector:
+    app: observability
+  ports:
+    - port: 3200
+      targetPort: 3200
+      name: tempo-http
+    - port: 4318
+      targetPort: 4318
+      name: otlp-http
+    - port: 4317
+      targetPort: 4317
+      name: otlp-grpc
+    - port: 9090
+      targetPort: 9090
+      name: prometheus
+    - port: 3000
+      targetPort: 3000
+      name: grafana
+  type: ClusterIP
