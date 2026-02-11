@@ -3,6 +3,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -610,6 +611,7 @@ func cellSetToSlice(cellsSet map[multigresv1alpha1.CellName]bool) []multigresv1a
 	for cell := range cellsSet {
 		cells = append(cells, cell)
 	}
+	slices.Sort(cells)
 	return cells
 }
 
@@ -669,6 +671,7 @@ func getMultiOrchCells(shard *multigresv1alpha1.Shard) ([]multigresv1alpha1.Cell
 		)
 	}
 
+	slices.Sort(cells)
 	return cells, nil
 }
 
