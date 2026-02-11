@@ -7,7 +7,7 @@ require (
 	github.com/numtide/multigres-operator/api v0.0.0-20260211100434-5c54868fb4e4
 	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260210092054-f7ad64000b6d
 	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260210092054-f7ad64000b6d
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260210092054-f7ad64000b6d
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260211095746-9930a3c0c66c
 	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260210092054-f7ad64000b6d
 	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260210092054-f7ad64000b6d
 	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260210092054-f7ad64000b6d
@@ -153,5 +153,3 @@ exclude (
 	google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
 	google.golang.org/genproto v0.0.0-20200423170343-7949de9c1215
 )
-
-replace github.com/numtide/multigres-operator/pkg/monitoring => ./pkg/monitoring
