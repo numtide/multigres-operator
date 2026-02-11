@@ -37,6 +37,8 @@ For local testing using Kind, we provide several helper commands:
 | `make kind-deploy` | Deploy operator to local Kind cluster using self-signed certs (Default). |
 | `make kind-deploy-certmanager` | Deploy operator to Kind, installing `cert-manager` for certificate handling. |
 | `make kind-deploy-no-webhook` | Deploy operator to Kind with the webhook fully disabled. |
+| `make kind-deploy-observability` | Deploy operator with full observability stack (Prometheus, Tempo, Grafana). |
+| `make kind-observability-ui` | Deploy observability stack and port-forward all UIs to localhost. |
 
 ### Using Sample Configurations
 We provide a set of samples to get you started quickly:
@@ -303,6 +305,22 @@ Import via the Grafana dashboards ConfigMap:
 ```bash
 kubectl apply -f config/monitoring/grafana-dashboards.yaml
 ```
+
+### Local Development
+
+For local development, the observability overlay in `config/deploy-observability/` bundles Prometheus, Tempo, and Grafana into a single pod alongside the operator. Both dashboards and all datasources are pre-provisioned.
+
+```bash
+make kind-observability-ui
+```
+
+This deploys the operator with tracing enabled and opens port-forwards to:
+
+| Service | URL |
+| :--- | :--- |
+| Grafana | [http://localhost:3000](http://localhost:3000) |
+| Prometheus | [http://localhost:9090](http://localhost:9090) |
+| Tempo | [http://localhost:3200](http://localhost:3200) |
 
 ### Distributed Tracing
 
