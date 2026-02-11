@@ -170,7 +170,7 @@ func (r *MultigresClusterReconciler) Reconcile(
 	}
 
 	{
-		_, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.UpdateStatus")
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.UpdateStatus")
 		if err := r.updateStatus(ctx, cluster); err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
