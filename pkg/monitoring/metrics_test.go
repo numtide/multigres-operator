@@ -89,7 +89,12 @@ func TestGaugeLabels(t *testing.T) {
 			descStr := desc.String()
 			for _, label := range tt.wantLabels {
 				if !strings.Contains(descStr, label) {
-					t.Errorf("metric %s missing label %q in descriptor: %s", tt.name, label, descStr)
+					t.Errorf(
+						"metric %s missing label %q in descriptor: %s",
+						tt.name,
+						label,
+						descStr,
+					)
 				}
 			}
 		})

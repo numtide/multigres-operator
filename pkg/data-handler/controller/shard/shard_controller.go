@@ -44,7 +44,13 @@ type ShardReconciler struct {
 // Reconcile handles Shard resource reconciliation for data plane operations.
 func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	ctx, span := monitoring.StartReconcileSpan(ctx, "ShardData.Reconcile", req.Name, req.Namespace, "Shard")
+	ctx, span := monitoring.StartReconcileSpan(
+		ctx,
+		"ShardData.Reconcile",
+		req.Name,
+		req.Namespace,
+		"Shard",
+	)
 	defer span.End()
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 

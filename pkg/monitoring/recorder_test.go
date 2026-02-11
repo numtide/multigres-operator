@@ -104,7 +104,12 @@ func TestRecordWebhookRequest(t *testing.T) {
 	})
 
 	RecordWebhookRequest("CREATE", "MultigresCluster", nil, 50*time.Millisecond)
-	RecordWebhookRequest("UPDATE", "MultigresCluster", errors.New("validation failed"), 100*time.Millisecond)
+	RecordWebhookRequest(
+		"UPDATE",
+		"MultigresCluster",
+		errors.New("validation failed"),
+		100*time.Millisecond,
+	)
 
 	successVal := counterValue(t, webhookRequestTotal, "CREATE", "MultigresCluster", "success")
 	if successVal != 1 {

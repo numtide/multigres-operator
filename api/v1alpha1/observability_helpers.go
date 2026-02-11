@@ -33,7 +33,11 @@ import (
 // Setting cfg.OTLPEndpoint to "disabled" suppresses all OTEL variables,
 // returning nil regardless of other field values.
 func BuildOTELEnvVars(cfg *ObservabilityConfig) []corev1.EnvVar {
-	endpoint := envOrCRD(cfg, func(c *ObservabilityConfig) string { return c.OTLPEndpoint }, "OTEL_EXPORTER_OTLP_ENDPOINT")
+	endpoint := envOrCRD(
+		cfg,
+		func(c *ObservabilityConfig) string { return c.OTLPEndpoint },
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+	)
 	if endpoint == "" || endpoint == "disabled" {
 		return nil
 	}
@@ -68,7 +72,11 @@ func BuildOTELEnvVars(cfg *ObservabilityConfig) []corev1.EnvVar {
 	appendIfSet("OTEL_METRICS_EXPORTER", metrics, "OTEL_METRICS_EXPORTER")
 	appendIfSet("OTEL_LOGS_EXPORTER", logs, "OTEL_LOGS_EXPORTER")
 	appendIfSet("OTEL_METRIC_EXPORT_INTERVAL", interval, "OTEL_METRIC_EXPORT_INTERVAL")
-	appendIfSet("OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE", temporality, "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE")
+	appendIfSet(
+		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
+		temporality,
+		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
+	)
 	appendIfSet("OTEL_TRACES_SAMPLER", sampler, "OTEL_TRACES_SAMPLER")
 
 	return vars
@@ -76,7 +84,11 @@ func BuildOTELEnvVars(cfg *ObservabilityConfig) []corev1.EnvVar {
 
 // envOrCRD returns the CRD field value if non-empty, otherwise falls back
 // to the named environment variable.
-func envOrCRD(cfg *ObservabilityConfig, getter func(*ObservabilityConfig) string, envName string) string {
+func envOrCRD(
+	cfg *ObservabilityConfig,
+	getter func(*ObservabilityConfig) string,
+	envName string,
+) string {
 	if cfg != nil {
 		if v := getter(cfg); v != "" {
 			return v

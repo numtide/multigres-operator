@@ -37,7 +37,13 @@ func (r *TopoServerReconciler) Reconcile(
 	req ctrl.Request,
 ) (ctrl.Result, error) {
 	start := time.Now()
-	ctx, span := monitoring.StartReconcileSpan(ctx, "TopoServer.Reconcile", req.Name, req.Namespace, "TopoServer")
+	ctx, span := monitoring.StartReconcileSpan(
+		ctx,
+		"TopoServer.Reconcile",
+		req.Name,
+		req.Namespace,
+		"TopoServer",
+	)
 	defer span.End()
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
@@ -263,7 +269,12 @@ func (r *TopoServerReconciler) updateStatus(
 
 	// Update Phase
 	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
-	monitoring.SetTopoServerReplicas(toposerver.Name, toposerver.Namespace, sts.Status.Replicas, sts.Status.ReadyReplicas)
+	monitoring.SetTopoServerReplicas(
+		toposerver.Name,
+		toposerver.Namespace,
+		sts.Status.Replicas,
+		sts.Status.ReadyReplicas,
+	)
 	if sts.Status.ObservedGeneration != sts.Generation {
 		toposerver.Status.Phase = multigresv1alpha1.PhaseProgressing
 		toposerver.Status.Message = "StatefulSet is progressing"

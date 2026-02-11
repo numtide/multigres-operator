@@ -38,7 +38,13 @@ func (r *ShardReconciler) Reconcile(
 	req ctrl.Request,
 ) (ctrl.Result, error) {
 	start := time.Now()
-	ctx, span := monitoring.StartReconcileSpan(ctx, "Shard.Reconcile", req.Name, req.Namespace, "Shard")
+	ctx, span := monitoring.StartReconcileSpan(
+		ctx,
+		"Shard.Reconcile",
+		req.Name,
+		req.Namespace,
+		"Shard",
+	)
 	defer span.End()
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
@@ -538,7 +544,13 @@ func (r *ShardReconciler) updatePoolsStatus(
 				readyPods += sts.Status.ReadyReplicas
 			} // else treat as 0 ready pods because it is stale/progressing
 
-			monitoring.SetShardPoolReplicas(shard.Name, string(poolName), shard.Namespace, sts.Status.Replicas, sts.Status.ReadyReplicas)
+			monitoring.SetShardPoolReplicas(
+				shard.Name,
+				string(poolName),
+				shard.Namespace,
+				sts.Status.Replicas,
+				sts.Status.ReadyReplicas,
+			)
 		}
 	}
 

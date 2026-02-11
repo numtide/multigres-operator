@@ -39,7 +39,13 @@ func (r *TableGroupReconciler) Reconcile(
 	req ctrl.Request,
 ) (ctrl.Result, error) {
 	start := time.Now()
-	ctx, span := monitoring.StartReconcileSpan(ctx, "TableGroup.Reconcile", req.Name, req.Namespace, "TableGroup")
+	ctx, span := monitoring.StartReconcileSpan(
+		ctx,
+		"TableGroup.Reconcile",
+		req.Name,
+		req.Namespace,
+		"TableGroup",
+	)
 	defer span.End()
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
