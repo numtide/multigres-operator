@@ -7,7 +7,7 @@ This directory contains various sample configurations to help you understand how
 | `minimal.yaml` | The simplest possible cluster. Relies entirely on system defaults. |
 | `templated-cluster.yaml` | Demonstrates how to use reusable `Templates` for configuration. |
 | `overrides.yaml` | Advanced usage showing how to patch/override specific fields on top of templates. |
-| `standard-templates.yaml` | A collection of recommended `CoreTemplate`, `CellTemplate`, and `ShardTemplate` specs (in one file). |
+| `templates/` | A directory containing recommended `CoreTemplate`, `CellTemplate`, and `ShardTemplate` specs as individual files. |
 | `default-templates/` | A directory containing individual default files (`cell.yaml`, `core.yaml`, `shard.yaml`). |
 | `external-etcd.yaml` | Demonstrates connecting to an existing external Etcd cluster instead of deploying one. |
 | `no-templates.yaml` | A verbose example where all configuration is defined inline (no templates used). |
@@ -43,7 +43,7 @@ The operator's Webhook and Controller inject standard defaults for all missing c
 ## 2. Templated Cluster (`templated-cluster.yaml`)
 This sample demonstrates the **Template System**. Instead of defining specs inline, you point to reusable templates.
 
-**Prerequisite:** Apply `standard-templates.yaml` first.
+**Prerequisite:** Apply the templates first: `kubectl apply -f config/samples/templates/`
 
 **Input:**
 ```yaml

@@ -45,9 +45,13 @@ We provide a set of samples to get you started quickly:
 
 | Sample | Description |
 | :--- | :--- |
-| `config/samples/minimal.yaml` | A minimal startup cluster for testing. |
-| `config/samples/templated-cluster.yaml` | A full cluster example using templates. |
-| `config/samples/standard-templates.yaml` | Examples of Core, Cell, and Shard templates. |
+| `config/samples/minimal.yaml` | The simplest possible cluster, relying entirely on system defaults. |
+| `config/samples/templated-cluster.yaml` | A full cluster example using reusable templates. |
+| `config/samples/templates/` | Individual `CoreTemplate`, `CellTemplate`, and `ShardTemplate` examples. |
+| `config/samples/default-templates/` | Namespace-level default templates (named `default`). |
+| `config/samples/overrides.yaml` | Advanced usage showing how to override specific fields on top of templates. |
+| `config/samples/no-templates.yaml` | A verbose example where all configuration is defined inline. |
+| `config/samples/external-etcd.yaml` | Connecting to an existing external Etcd cluster. |
 
 To apply a sample:
 ```bash
