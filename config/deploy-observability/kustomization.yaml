@@ -1,0 +1,16 @@
+# Overlay: operator + observability stack (Prometheus, Tempo, Grafana)
+# Usage: kustomize build config/deploy-observability
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: multigres-operator
+resources:
+  - ../default               # Operator + CRDs + RBAC + webhook
+  - observability-stack.yaml # Prometheus + Tempo + Grafana
+  - ../monitoring            # PrometheusRules + Grafana dashboard ConfigMaps
+
+patches:
+  - path: manager-otel-patch.yaml
+    target:
+      kind: Deployment
+      name: controller-manager

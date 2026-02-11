@@ -451,6 +451,34 @@ kind-deploy-no-webhook: kind-up manifests kustomize kind-load ## Deploy controll
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
+.PHONY: kind-deploy-observability
+kind-deploy-observability: kind-up manifests kustomize kind-load ## Deploy operator with full observability stack (Prometheus, Tempo, Grafana)
+	@echo "==> Installing CRDs..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
+		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Installing Prometheus Operator CRDs (for PrometheusRules)..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f \
+		https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.80.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+	@echo "==> Deploying operator with observability stack..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/deploy-observability | \
+		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Waiting for observability stack..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) wait --for=condition=Available \
+		deployment/observability -n multigres-operator --timeout=120s
+	@echo "==> Deployment complete!"
+	@echo "Run 'make kind-observability-ui' to port-forward Grafana, Prometheus, and Tempo"
+
+.PHONY: kind-observability-ui
+kind-observability-ui: kind-deploy-observability ## Deploy observability stack and port-forward Grafana (3000), Prometheus (9090), Tempo (3200)
+	@echo "==> Starting port-forwards (Ctrl+C to stop)..."
+	@echo "    Grafana:    http://localhost:3000"
+	@echo "    Prometheus: http://localhost:9090"
+	@echo "    Tempo:      http://localhost:3200"
+	@KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) port-forward \
+		svc/observability 3000:3000 9090:9090 3200:3200 \
+		-n multigres-operator
+
 
 .PHONY: kind-redeploy
 kind-redeploy: kind-load ## Rebuild image, reload to kind, and restart pods
