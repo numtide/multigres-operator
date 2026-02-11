@@ -286,8 +286,10 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
+	# kustomize has no build-time image override, so we mutate then restore.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 
 ##@ Test
 
@@ -389,6 +391,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side -f -
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
@@ -425,6 +428,7 @@ kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cl
 	@echo "==> Deploying operator..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
@@ -435,9 +439,9 @@ kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-lo
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator (Cert-Manager Mode)..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	# POINT TO THE OVERLAY:
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/deploy-certmanager | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
@@ -448,6 +452,7 @@ kind-deploy-no-webhook: kind-up manifests kustomize kind-load ## Deploy controll
 	@echo "==> Deploying operator..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/no-webhook | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
@@ -463,6 +468,7 @@ kind-deploy-observability: kind-up manifests kustomize kind-load ## Deploy opera
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/deploy-observability | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Waiting for observability stack..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) wait --for=condition=Available \
 		deployment/observability -n multigres-operator --timeout=120s
