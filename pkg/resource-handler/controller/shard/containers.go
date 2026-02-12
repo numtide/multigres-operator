@@ -2,6 +2,7 @@ package shard
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -301,6 +302,26 @@ func buildMultiPoolerSidecar(
 			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
 		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/live",
+					Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
+				},
+			},
+			InitialDelaySeconds: 60,
+			PeriodSeconds:       10,
+		},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ready",
+					Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
+				},
+			},
+			InitialDelaySeconds: 60,
+			PeriodSeconds:       10,
+		},
 		Env: []corev1.EnvVar{
 			{
 				Name: "POD_NAME",
@@ -386,6 +407,26 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		Args:      args,
 		Ports:     buildMultiOrchContainerPorts(),
 		Resources: shard.Spec.MultiOrch.Resources,
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/live",
+					Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
+				},
+			},
+			InitialDelaySeconds: 60,
+			PeriodSeconds:       10,
+		},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ready",
+					Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
+				},
+			},
+			InitialDelaySeconds: 60,
+			PeriodSeconds:       10,
+		},
 	}
 	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
 		c.Env = append(c.Env, envVars...)

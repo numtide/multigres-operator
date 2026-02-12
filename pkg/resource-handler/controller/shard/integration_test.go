@@ -139,6 +139,26 @@ func TestShardReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15300),
 											tcpPort(t, "grpc", 15370),
 										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
 									},
 								},
 							},
@@ -199,6 +219,26 @@ func TestShardReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
 											tcpPort(t, "grpc", 15370),
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
 										},
 									},
 								},
@@ -288,6 +328,26 @@ func TestShardReconciliation(t *testing.T) {
 											RunAsUser:    ptr.To(int64(999)),
 											RunAsGroup:   ptr.To(int64(999)),
 											RunAsNonRoot: ptr.To(true),
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
 										},
 										Env: []corev1.EnvVar{
 											{
@@ -500,6 +560,26 @@ func TestShardReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15300),
 											tcpPort(t, "grpc", 15370),
 										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
 									},
 								},
 							},
@@ -576,6 +656,26 @@ func TestShardReconciliation(t *testing.T) {
 											RunAsUser:    ptr.To(int64(999)),
 											RunAsGroup:   ptr.To(int64(999)),
 											RunAsNonRoot: ptr.To(true),
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
 										},
 										Env: []corev1.EnvVar{
 											{
@@ -773,6 +873,26 @@ func TestShardReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15300),
 											tcpPort(t, "grpc", 15370),
 										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
 									},
 								},
 							},
@@ -833,6 +953,26 @@ func TestShardReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
 											tcpPort(t, "grpc", 15370),
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15300),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
 										},
 									},
 								},
@@ -948,6 +1088,26 @@ func TestShardReconciliation(t *testing.T) {
 											RunAsUser:    ptr.To(int64(999)),
 											RunAsGroup:   ptr.To(int64(999)),
 											RunAsNonRoot: ptr.To(true),
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
 										},
 										Env: []corev1.EnvVar{
 											{
@@ -1138,6 +1298,26 @@ func TestShardReconciliation(t *testing.T) {
 											RunAsGroup:   ptr.To(int64(999)),
 											RunAsNonRoot: ptr.To(true),
 										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15200),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
 										Env: []corev1.EnvVar{
 											{
 												Name: "POD_NAME",
@@ -1256,6 +1436,7 @@ func TestShardReconciliation(t *testing.T) {
 					testutil.IgnoreDeploymentRuntimeFields(),
 					testutil.IgnoreStatefulSetRuntimeFields(),
 					testutil.IgnorePodSpecDefaults(),
+					testutil.IgnoreProbeDefaults(),
 					testutil.IgnoreDeploymentSpecDefaults(),
 					testutil.IgnoreStatefulSetSpecDefaults(),
 				),
