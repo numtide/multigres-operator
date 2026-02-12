@@ -320,13 +320,12 @@ All telemetry (traces, metrics, logs) is pushed to the configured
 The signal flow looks like this:
 
 ```
-┌──────────────┐      ┌────────────────┐      ┌────────────┐
-│  multiorch   │─OTLP─▶                │ traces ▶  Tempo    │
-│  multipooler │─OTLP─▶ OTel Collector │──────▶└────────────┘
-│  multigateway│─OTLP─▶                │ metrics │
-└──────────────┘      └────────────────┘──────▶┌────────────┐
-                                               │ Prometheus │
-                                               └────────────┘
+┌──────────────┐      ┌────────────────┐  traces  ┌────────────┐
+│  multiorch   │─OTLP─▶                │─────────▶│   Tempo    │
+│  multipooler │─OTLP─▶ OTel Collector │          └────────────┘
+│  multigateway│─OTLP─▶                │ metrics  ┌────────────┐
+└──────────────┘      └────────────────┘─────────▶│ Prometheus │
+                                                  └────────────┘
 ```
 
 Data plane metrics use the `multiorch_` prefix (from multiorch) and are
@@ -496,15 +495,15 @@ The operator bridges the async gap between the webhook admission request and the
 controller reconciliation using annotations:
 
 ```
-┌────────────────────┐         ┌──────────────────────┐
-│  Webhook Admission │         │  Controller Reconcile │
-│                    │         │                       │
-│  1. Create span    │         │  4. Extract traceparent│
-│  2. Inject trace   │────────>│     from annotation    │
-│     context into   │         │  5. Create child span  │
-│     annotation     │         │     under parent       │
-│  3. Mutate object  │         │  6. Full trace visible │
-└────────────────────┘         └──────────────────────┘
+┌─────────────────────┐         ┌────────────────────────┐
+│  Webhook Admission  │         │  Controller Reconcile  │
+│                     │         │                        │
+│  1. Create span     │         │  4. Extract traceparent│
+│  2. Inject trace    │────────▶│     from annotation    │
+│     context into    │         │  5. Create child span  │
+│     annotation      │         │     under parent       │
+│  3. Mutate object   │         │  6. Full trace visible │
+└─────────────────────┘         └────────────────────────┘
 ```
 
 The annotation `multigres.com/traceparent` carries the W3C Trace Context:
@@ -1032,34 +1031,34 @@ make kind-down
 ### Data Flow
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                              KUBERNETES CLUSTER                                  │
-│                                                                                  │
-│  ┌──────────────────────────┐                                                    │
-│  │    multigres-operator    │                                                    │
-│  │                          │   OTLP (traces)                                    │
-│  │  Webhooks ─────────────────────┐                                              │
-│  │  Controllers ──────────────────┤                                              │
-│  └──────────────────────────┘     │                                              │
-│               ▲                   │                                              │
-│  Prometheus   │                   │                                              │
-│  scrapes      │                   ▼                                              │
-│  /metrics     │   ┌─────────────────────┐                                        │
-│  (via         │   │  OTel Collector     │  traces   ┌─────────────────┐           │
-│  ServiceMonitor)  │  :4317 (gRPC)       │──────────▶│  Tempo          │           │
-│               │   │  :4318 (HTTP)       │           │  :3200          │           │
-│               │   │                     │  metrics  ├─────────────────┤           │
-│               │   │  Receives OTLP      │──────────▶│  Prometheus     │◀──────────│
-│               │   │  from data plane    │           │  :9090          │           │
-│               │   │  + operator traces  │           │  (Prom Operator │           │
-│               │   └─────────────────────┘           │   managed)      │           │
-│               │                                     └────────┬────────┘           │
-│               │                                              │                    │
-│  ┌────────────│──────┐                   ┌───────────────────▼──────────┐         │
-│  │  multiorch │      │  OTLP (all signals)         Grafana :3000        │         │
-│  │  multipooler      │─────────────────▶ │  Dashboards + Explore       │         │
-│  │  multigateway     │  (traces+metrics) └─────────────────────────────┘         │
-│  │  (data plane)     │                                                            │
-│  └───────────────────┘                                                            │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            KUBERNETES CLUSTER                               │
+│                                                                             │
+│  ┌─────────────────────────┐                                                │
+│  │   multigres-operator    │                                                │
+│  │                         │  OTLP (traces)                                 │
+│  │  Webhooks ────────────────────┐                                          │
+│  │  Controllers ─────────────────┤                                          │
+│  └─────────────────────────┘     │                                          │
+│              ▲                   │                                          │
+│  Prometheus  │                   │                                          │
+│  scrapes     │                   ▼                                          │
+│  /metrics    │   ┌──────────────────────┐                                   │
+│  (via        │   │  OTel Collector      │  traces   ┌──────────────────┐    │
+│  Service-    │   │  :4317 (gRPC)        │──────────▶│  Tempo           │    │
+│  Monitor)    │   │  :4318 (HTTP)        │           │  :3200           │    │
+│              │   │                      │  metrics  └──────────────────┘    │
+│              │   │  Receives OTLP       │──────────▶┌──────────────────┐    │
+│              │   │  from data plane     │           │  Prometheus      │    │
+│              │   │  + operator traces   │           │  :9090           │    │
+│              │   └──────────────────────┘           │  (Prom Operator) │    │
+│              │                                      └───────┬──────────┘    │
+│              │                                              │               │
+│  ┌───────────┴─────────┐                  ┌─────────────────▼─────────────┐ │
+│  │  multiorch          │                  │  Grafana :3000                │ │
+│  │  multipooler        │  OTLP            │  Dashboards + Explore         │ │
+│  │  multigateway       │─────────────────▶│  (queries Prometheus + Tempo) │ │
+│  │  (data plane)       │  (traces+metrics)└───────────────────────────────┘ │
+│  └─────────────────────┘                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
