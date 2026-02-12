@@ -40,7 +40,7 @@ const (
 	DefaultMultiAdminImage = "ghcr.io/multigres/multigres:main"
 
 	// DefaultMultiAdminWebImage is the default container image used for the MultiAdminWeb component.
-	DefaultMultiAdminWebImage = "docker.io/multigres/multiadmin-web:latest"
+	DefaultMultiAdminWebImage = "ghcr.io/multigres/multiadmin-web:main"
 
 	// DefaultMultiAdminWebReplicas is the default number of replicas for the MultiAdminWeb deployment if not specified.
 	DefaultMultiAdminWebReplicas int32 = 1
