@@ -133,6 +133,26 @@ func BuildMultiGatewayDeployment(
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/live",
+										Port: intstr.FromInt32(MultiGatewayHTTPPort),
+									},
+								},
+								InitialDelaySeconds: 60,
+								PeriodSeconds:       10,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/ready",
+										Port: intstr.FromInt32(MultiGatewayHTTPPort),
+									},
+								},
+								InitialDelaySeconds: 60,
+								PeriodSeconds:       10,
+							},
 						},
 					},
 					Affinity: cell.Spec.MultiGateway.Affinity,

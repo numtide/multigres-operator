@@ -125,6 +125,26 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 15432),
 										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
 									},
 								},
 							},
@@ -212,6 +232,26 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 15432),
 										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
 									},
 								},
 							},
@@ -298,6 +338,26 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 15432),
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
 										},
 									},
 								},
@@ -403,6 +463,26 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 15432),
 										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/live",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path: "/ready",
+													Port: intstr.FromInt32(15100),
+												},
+											},
+											InitialDelaySeconds: 60,
+											PeriodSeconds:       10,
+										},
 									},
 								},
 								Affinity: &corev1.Affinity{
@@ -463,6 +543,7 @@ func TestCellReconciliation(t *testing.T) {
 					testutil.IgnoreServiceRuntimeFields(),
 					testutil.IgnoreDeploymentRuntimeFields(),
 					testutil.IgnorePodSpecDefaults(),
+					testutil.IgnoreProbeDefaults(),
 					testutil.IgnoreDeploymentSpecDefaults(),
 				),
 				testutil.WithExtraResource(&multigresv1alpha1.Cell{}),

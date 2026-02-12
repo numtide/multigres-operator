@@ -178,6 +178,22 @@ func IgnoreDeploymentSpecDefaults() cmp.Option {
 	)
 }
 
+// IgnoreProbeDefaults ignores Probe and HTTPGetAction fields that are populated
+// with Kubernetes defaults by the API server, such as Scheme ("HTTP"),
+// TimeoutSeconds (1), SuccessThreshold (1), and FailureThreshold (3).
+func IgnoreProbeDefaults() cmp.Option {
+	return cmp.Options{
+		cmpopts.IgnoreFields(corev1.Probe{},
+			"TimeoutSeconds",   // Defaults to 1
+			"SuccessThreshold", // Defaults to 1
+			"FailureThreshold", // Defaults to 3
+		),
+		cmpopts.IgnoreFields(corev1.HTTPGetAction{},
+			"Scheme", // Defaults to "HTTP"
+		),
+	}
+}
+
 // filterByFieldName returns a filter function that checks if the last path element
 // is a struct field with the given name. Extracted for testability.
 func filterByFieldName(fieldName string) func(cmp.Path) bool {
