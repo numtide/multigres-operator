@@ -37,8 +37,8 @@ For local testing using Kind, we provide several helper commands:
 | `make kind-deploy` | Deploy operator to local Kind cluster using self-signed certs (Default). |
 | `make kind-deploy-certmanager` | Deploy operator to Kind, installing `cert-manager` for certificate handling. |
 | `make kind-deploy-no-webhook` | Deploy operator to Kind with the webhook fully disabled. |
-| `make kind-deploy-observability` | Deploy operator with full observability stack (Prometheus, Tempo, Grafana). |
-| `make kind-observability-ui` | Deploy observability stack and port-forward all UIs to localhost. |
+| `make kind-deploy-observability` | Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana). |
+| `make kind-portforward` | Port-forward Grafana (3000), Prometheus (9090), Tempo (3200) to localhost. Re-run if connection drops. |
 
 ### Using Sample Configurations
 We provide a set of samples to get you started quickly:
@@ -312,10 +312,11 @@ kubectl apply -f config/monitoring/grafana-dashboards.yaml
 
 ### Local Development
 
-For local development, the observability overlay in `config/deploy-observability/` bundles Prometheus, Tempo, and Grafana into a single pod alongside the operator. Both dashboards and all datasources are pre-provisioned.
+For local development, the observability overlay in `config/deploy-observability/` deploys the OTel Collector, Prometheus (via the Prometheus Operator), Tempo, and Grafana as separate pods. Both dashboards and datasources are pre-provisioned.
 
 ```bash
-make kind-observability-ui
+make kind-deploy-observability
+make kind-portforward
 ```
 
 This deploys the operator with tracing enabled and opens port-forwards to:
@@ -326,19 +327,28 @@ This deploys the operator with tracing enabled and opens port-forwards to:
 | Prometheus | [http://localhost:9090](http://localhost:9090) |
 | Tempo | [http://localhost:3200](http://localhost:3200) |
 
+**Metrics collection:** The operator and data-plane components use different metric collection models:
+
+| Component | Metric Model | How it works |
+| :--- | :--- | :--- |
+| **Operator** | **Pull** (Prometheus scrape) | Prometheus scrapes the operator's `/metrics` endpoint via controller-runtime's built-in Prometheus integration |
+| **Data plane** (multiorch, multipooler, etc.) | **Push** (OTLP) | Multigres binaries push metrics via OpenTelemetry to the configured OTLP endpoint |
+
+The OTel Collector receives all pushed OTLP signals from the data plane and routes them: **traces → Tempo**, **metrics → Prometheus** (via its OTLP receiver). This is necessary because multigres components send all signals to a single OTLP endpoint and cannot split them by signal type.
+
 ### Distributed Tracing
 
-The operator supports **OpenTelemetry distributed tracing** via OTLP gRPC. Tracing is **disabled by default** and incurs zero overhead when off.
+The operator supports **OpenTelemetry distributed tracing** via OTLP. Tracing is **disabled by default** and incurs zero overhead when off.
 
 **Enabling tracing:** Set a single environment variable on the operator Deployment:
 
 ```yaml
 env:
   - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "tempo.observability.svc.cluster.local:4317"  # or your OTel collector
+    value: "http://otel-collector.monitoring.svc:4318"  # OTel Collector or Tempo
 ```
 
-The endpoint must speak **OTLP gRPC** — this can be an OpenTelemetry Collector, Grafana Tempo, Jaeger, or any compatible backend.
+The endpoint must speak **OTLP** (HTTP or gRPC) — this can be an OpenTelemetry Collector, Grafana Tempo, Jaeger, or any compatible backend.
 
 **What gets traced:**
 - Every controller reconciliation (MultigresCluster, Cell, Shard, TableGroup, TopoServer)
@@ -351,6 +361,39 @@ The endpoint must speak **OTLP gRPC** — this can be an OpenTelemetry Collector
 ### Structured Logging
 
 The operator uses structured JSON logging (`zap` via controller-runtime). When tracing is enabled, every log line within a traced operation automatically includes `trace_id` and `span_id` fields, enabling **log-trace correlation** — click a log line in Grafana Loki to jump directly to the associated trace.
+
+**Log level configuration:** The operator accepts standard controller-runtime zap flags on its command line:
+
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--zap-devel` | `true` | Development mode preset (see table below) |
+| `--zap-log-level` | depends on mode | Log verbosity: `debug`, `info`, `error`, or an integer (0=debug, 1=info, 2=error) |
+| `--zap-encoder` | depends on mode | Log format: `console` or `json` |
+| `--zap-stacktrace-level` | depends on mode | Minimum level that triggers stacktraces |
+
+`--zap-devel` is a **mode** that sets multiple defaults at once. `--zap-log-level` overrides the mode's default level when specified explicitly:
+
+| Setting | `--zap-devel=true` (default) | `--zap-devel=false` (production) |
+| :--- | :--- | :--- |
+| Default log level | `debug` | `info` |
+| Encoder | `console` (human-readable) | `json` |
+| Stacktraces from | `warn` | `error` |
+
+To change the log level in a deployed operator, add `args` to the manager container:
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          args:
+            - --zap-devel=false       # Production mode (JSON, info level default)
+            - --zap-log-level=info    # Explicit level (overrides mode default)
+```
+
+> [!NOTE]
+> The default build ships with `Development: true`, which sets the default level to `debug` and uses the human-readable console encoder. For production deployments, set `--zap-devel=false` to switch to JSON encoding and `info`-level logging.
 
 ---
 

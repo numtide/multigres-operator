@@ -546,6 +546,48 @@ We considered several approaches to eliminate this behavior entirely, but each h
 * **What we did:** Documented this as a known cosmetic quirk with zero operational impact.
 * **Why this is correct:** The behavior is harmless, standard across the ecosystem, and users have easy workarounds. The alternatives would compromise our API design or user experience for purely cosmetic gain.
 
+## Metrics Collection: Pull vs Push
+
+### The Two Models
+
+The operator ecosystem uses **two different metric collection models** simultaneously:
+
+| Component | Model | Transport | Why |
+|:---|:---|:---|:---|
+| **Operator** | **Pull** (Prometheus scrape) | HTTP `/metrics` on `:8443` | controller-runtime uses `prometheus/client_golang` natively |
+| **Data plane** (multiorch, multipooler, multigateway) | **Push** (OTLP) | gRPC/HTTP to OTLP endpoint | Multigres binaries use the OpenTelemetry SDK with `autoexport` |
+
+### Why the Operator Uses Pull
+
+controller-runtime's metrics infrastructure is built on `prometheus/client_golang`. Every metric registered via `sigs.k8s.io/controller-runtime/pkg/metrics.Registry` is automatically exposed on the HTTP handler. The framework provides no built-in OTLP metrics exporter.
+
+We **could** add one by programmatically creating an `otelsdkmetric.MeterProvider` with an OTLP exporter and bridging the Prometheus registry into it. However, this would:
+
+1. **Fight the framework** — controller-runtime assumes pull-based Prometheus metrics. All built-in metrics (`controller_runtime_reconcile_total`, `workqueue_depth`, etc.) go through the Prometheus registry. Bridging them to OTLP adds complexity for no functional gain.
+2. **Duplicate signals** — Prometheus would still scrape `/metrics`, so every metric would exist in two places unless we disabled scraping entirely, which breaks standard monitoring patterns.
+3. **Be unnecessary** — the Prometheus pull model works well for a single long-lived operator pod. Push-based metrics exist to solve problems the operator doesn't have (short-lived processes, scale-to-zero, high cardinality per-request metrics).
+
+### Why the Data Plane Uses Push
+
+Multigres binaries (multiorch, multipooler, multigateway) are built with the OpenTelemetry SDK and the `autoexport` library, which reads `OTEL_*` environment variables to configure exporters automatically. They have no `/metrics` HTTP endpoint — all telemetry (traces, metrics, logs) is pushed to a single OTLP endpoint.
+
+This design is intentional: multigres components are data-plane workloads that may run at high scale across many pods. Push-based telemetry avoids the complexity of service discovery and scrape configuration for hundreds of pool replicas.
+
+### The OTel Collector Bridge
+
+Because multigres sends **all signals** (traces + metrics) to a single OTLP endpoint, the local observability stack uses an **OTel Collector** to split them:
+
+```
+multigres pods ──OTLP──▶ OTel Collector ──▶ Tempo      (traces)
+                                          ──▶ Prometheus (metrics, via OTLP receiver)
+
+operator pod   ◀── Prometheus scrapes /metrics (pull, unchanged)
+```
+
+Without the collector, metrics would be sent to Tempo (which only handles traces) and silently dropped. The collector's pipeline configuration routes each signal type to the appropriate backend.
+
+In production, organizations typically already have an OTel Collector or a managed observability backend that accepts OTLP natively, making this split transparent.
+
 ## Observability Architecture
 
 ### Package Layout

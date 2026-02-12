@@ -457,13 +457,15 @@ kind-deploy-no-webhook: kind-up manifests kustomize kind-load ## Deploy controll
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
 .PHONY: kind-deploy-observability
-kind-deploy-observability: kind-up manifests kustomize kind-load ## Deploy operator with full observability stack (Prometheus, Tempo, Grafana)
+kind-deploy-observability: kind-up manifests kustomize kind-load ## Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana)
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
-	@echo "==> Installing Prometheus Operator CRDs (for PrometheusRules)..."
+	@echo "==> Installing Prometheus Operator..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f \
-		https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.80.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+		https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.80.0/bundle.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) wait --for=condition=Available \
+		deployment/prometheus-operator -n default --timeout=120s
 	@echo "==> Deploying operator with observability stack..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/deploy-observability | \
@@ -471,19 +473,23 @@ kind-deploy-observability: kind-up manifests kustomize kind-load ## Deploy opera
 	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Waiting for observability stack..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) wait --for=condition=Available \
-		deployment/observability -n multigres-operator --timeout=120s
+		deployment/otel-collector deployment/tempo deployment/grafana \
+		-n multigres-operator --timeout=180s
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) rollout status \
+		statefulset/prometheus-multigres -n multigres-operator --timeout=180s
 	@echo "==> Deployment complete!"
-	@echo "Run 'make kind-observability-ui' to port-forward Grafana, Prometheus, and Tempo"
+	@echo "Run 'make kind-portforward' to port-forward Grafana, Prometheus, and Tempo"
 
-.PHONY: kind-observability-ui
-kind-observability-ui: kind-deploy-observability ## Deploy observability stack and port-forward Grafana (3000), Prometheus (9090), Tempo (3200)
+.PHONY: kind-portforward
+kind-portforward: ## Port-forward Grafana (3000), Prometheus (9090), Tempo (3200). Re-run if connection drops.
 	@echo "==> Starting port-forwards (Ctrl+C to stop)..."
 	@echo "    Grafana:    http://localhost:3000"
 	@echo "    Prometheus: http://localhost:9090"
 	@echo "    Tempo:      http://localhost:3200"
-	@KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) port-forward \
-		svc/observability 3000:3000 9090:9090 3200:3200 \
-		-n multigres-operator
+	@KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) port-forward svc/grafana 3000:3000 -n multigres-operator & \
+	 KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) port-forward svc/prometheus 9090:9090 -n multigres-operator & \
+	 KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) port-forward svc/tempo 3200:3200 -n multigres-operator & \
+	 wait
 
 
 .PHONY: kind-redeploy

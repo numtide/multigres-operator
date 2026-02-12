@@ -4,6 +4,12 @@ This hands-on tutorial walks through every pillar of the operator's observabilit
 stack: **structured logging**, **Kubernetes events**, **Prometheus metrics**,
 **distributed tracing**, **Grafana dashboards**, and **alerting**.
 
+The operator and its data plane use **two different metric models**: the operator
+exposes metrics via a traditional Prometheus scrape endpoint (pull), while data
+plane components (multiorch, multipooler, multigateway) push metrics via
+OpenTelemetry. An OTel Collector bridges the gap by routing pushed signals to
+the appropriate backends.
+
 By the end you will have a running cluster with full telemetry and understand
 how each signal is generated, collected, and visualised.
 
@@ -52,7 +58,7 @@ make kind-deploy-observability
 Once complete, open the UIs with:
 
 ```bash
-make kind-observability-ui
+make kind-portforward
 ```
 
 This starts `kubectl port-forward` and prints the URLs:
@@ -68,19 +74,43 @@ This starts `kubectl port-forward` and prints the URLs:
 > Datasources for Prometheus and Tempo are auto-provisioned with cross-linking
 > (trace → metric correlation) already wired up.
 
+> [!NOTE]
+> `kubectl port-forward` connections can drop under load (especially on Kind).
+> If one connection drops, the others stay alive — just re-run `make kind-portforward`.
+
 ### What gets deployed
 
-The observability overlay (`config/deploy-observability/`) adds a single-pod
-Deployment containing three containers:
+The observability overlay (`config/deploy-observability/`) deploys each service
+as a separate Deployment (or StatefulSet for Prometheus):
 
-| Container   | Image                     | Purpose |
-|-------------|---------------------------|---------|
-| `prometheus`| `prom/prometheus:v3.1.0`  | Scrapes operator `/metrics` endpoint |
-| `tempo`     | `grafana/tempo:2.7.2`     | Receives OTLP traces from the operator |
-| `grafana`   | `grafana/grafana:11.4.0`  | Pre-loaded dashboards and datasources |
+| Deployment         | Image                                          | Purpose |
+|--------------------|------------------------------------------------|---------|
+| `otel-collector`   | `otel/opentelemetry-collector-contrib:0.120.0` | Receives OTLP from data plane, routes traces → Tempo, metrics → Prometheus |
+| `prometheus`       | Managed by Prometheus Operator                 | Scrapes operator `/metrics` via ServiceMonitor and receives pushed metrics via OTLP |
+| `tempo`            | `grafana/tempo:2.7.2`                          | Stores distributed traces |
+| `grafana`          | `grafana/grafana:11.4.0`                       | Pre-loaded dashboards and datasources |
+
+The **Prometheus Operator** is installed from the upstream bundle. It manages
+the Prometheus instance and natively consumes `PrometheusRule` CRDs for alert
+rules and `ServiceMonitor` CRDs for scrape target discovery.
 
 The operator deployment is patched with the environment variable
-`OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` to enable trace export.
+`OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.multigres-operator.svc:4318`
+to enable trace and metric export to the collector.
+
+### Why an OTel Collector?
+
+The operator and data plane have fundamentally different metric architectures:
+
+| Component | Metrics Model | Transport |
+|-----------|---------------|-----------|
+| **Operator** | **Pull** — Prometheus scrapes `/metrics` on `:8443` | controller-runtime uses `prometheus/client_golang` natively |
+| **Data plane** (multiorch, multipooler, multigateway) | **Push** — OTLP to collector | Multigres binaries use the OpenTelemetry SDK; all telemetry (traces + metrics) goes to a single endpoint |
+
+Because multigres components push **all** OTLP signals to one endpoint, we need
+the collector to split them: traces go to Tempo, metrics go to Prometheus. Without
+the collector, data plane metrics would be sent to Tempo and silently dropped
+(Tempo only handles traces).
 
 ---
 
@@ -240,12 +270,18 @@ Annotations:
 
 ## 5. Metrics
 
+Metrics come from **two sources** using different collection models.
+
+### 5.1 Operator Metrics (Pull)
+
 The operator exposes Prometheus metrics on `:8443/metrics` (mTLS-protected in
-production, scraped by the in-cluster Prometheus in this demo).
+production, scraped by the in-cluster Prometheus in this demo). These metrics
+are registered via controller-runtime's Prometheus integration and include both
+custom operator metrics and standard framework metrics.
 
-### 5.1 Custom Metrics
+#### Custom metrics
 
-These are defined in `pkg/monitoring/metrics.go` and set by `pkg/monitoring/recorder.go`.
+Defined in `pkg/monitoring/metrics.go` and set by `pkg/monitoring/recorder.go`.
 
 | Metric Name | Type | Labels | Description |
 |-------------|------|--------|-------------|
@@ -258,7 +294,87 @@ These are defined in `pkg/monitoring/metrics.go` and set by `pkg/monitoring/reco
 | `multigres_operator_webhook_request_total` | Counter | `operation`, `result` | Webhook admission request count |
 | `multigres_operator_webhook_request_duration_seconds` | Histogram | `operation` | Webhook latency distribution |
 
-### 5.2 Querying Metrics
+#### Framework metrics
+
+The operator also exposes standard controller-runtime and Go metrics:
+
+| Metric | Purpose |
+|--------|---------|
+| `controller_runtime_reconcile_total` | Total reconcile count per controller |
+| `controller_runtime_reconcile_errors_total` | Error count per controller |
+| `controller_runtime_reconcile_time_seconds` | Reconcile duration histogram |
+| `workqueue_depth` | Current work queue depth |
+| `go_goroutines` | Active goroutine count |
+| `process_resident_memory_bytes` | Operator RSS |
+
+### 5.2 Data Plane Metrics (Push)
+
+The data plane components (multiorch, multipooler, multigateway) push metrics
+via OTLP to the OTel Collector, which forwards them to Prometheus. These
+metrics are generated by the multigres binaries using the OpenTelemetry SDK.
+
+Unlike the operator's pull model, data plane pods have **no `/metrics` endpoint**.
+All telemetry (traces, metrics, logs) is pushed to the configured
+`OTEL_EXPORTER_OTLP_ENDPOINT`, which points to the OTel Collector.
+
+The signal flow looks like this:
+
+```
+┌──────────────┐      ┌────────────────┐      ┌────────────┐
+│  multiorch   │─OTLP─▶                │ traces ▶  Tempo    │
+│  multipooler │─OTLP─▶ OTel Collector │──────▶└────────────┘
+│  multigateway│─OTLP─▶                │ metrics │
+└──────────────┘      └────────────────┘──────▶┌────────────┐
+                                               │ Prometheus │
+                                               └────────────┘
+```
+
+Data plane metrics use the `multiorch_` prefix (from multiorch) and are
+visible in Prometheus alongside the operator's `multigres_operator_` metrics.
+
+#### Querying data plane metrics
+
+Open the Prometheus UI at **http://localhost:9090** and try:
+
+```promql
+{__name__=~"multiorch_.*"}
+```
+
+You should see metrics like:
+
+| Metric | Description |
+|--------|-----------|
+| `multiorch_recovery_action_duration_milliseconds` | Duration of recovery actions |
+| `multiorch_recovery_cluster_metadata_refresh_duration_seconds` | Metadata refresh latency |
+| `multiorch_recovery_pooler_poll_duration_seconds` | Pooler polling latency |
+| `multiorch_recovery_pooler_store_size` | Number of pooler entries tracked |
+
+> [!NOTE]
+> Data plane metrics only appear **after** the cluster has been created and
+> the multigres pods are running. They arrive via OTLP push through the
+> collector, so there may be a 30-60 second delay after pod startup.
+
+### 5.3 Exploring Prometheus
+
+Open the Prometheus UI at **http://localhost:9090**.
+
+To browse available metrics without knowing their names, click the **⋮** (three
+dots) menu next to the query input box and select **Metrics Explorer**. This
+shows every metric name Prometheus has collected, with search and filter.
+
+Other useful pages:
+
+| Page | URL | Purpose |
+|------|-----|---------|
+| Targets | http://localhost:9090/targets | Shows what Prometheus is scraping and whether each target is UP |
+| Alerts | http://localhost:9090/alerts | Shows configured alert rules and their current state |
+| TSDB Status | http://localhost:9090/tsdb-status | Top metric names by series count |
+
+> [!TIP]
+> Switch to the **Table** tab (instead of Graph) when exploring metrics to see
+> all label combinations at a glance.
+
+### 5.4 Querying Operator Metrics
 
 Open the Prometheus UI at **http://localhost:9090** and try these queries:
 
@@ -316,19 +432,6 @@ controller=toposerver      result=success   count=6
 > these controllers register cells/shards in the topology server, which is
 > unavailable while etcd is still starting. They reconcile again once
 > connectivity is established.
-
-### 5.3 Framework Metrics
-
-The operator also exposes standard controller-runtime and Go metrics:
-
-| Metric | Purpose |
-|--------|---------|
-| `controller_runtime_reconcile_total` | Total reconcile count per controller |
-| `controller_runtime_reconcile_errors_total` | Error count per controller |
-| `controller_runtime_reconcile_time_seconds` | Reconcile duration histogram |
-| `workqueue_depth` | Current work queue depth |
-| `go_goroutines` | Active goroutine count |
-| `process_resident_memory_bytes` | Operator RSS |
 
 ---
 
@@ -441,7 +544,7 @@ You should see traces for every controller reconciliation:
 Find traces for a specific cluster:
 
 ```traceql
-{span.multigrescluster.name = "minimal"}
+{span.k8s.resource.name = "minimal" && span.k8s.resource.kind = "MultigresCluster"}
 ```
 
 Find slow reconciliations (>500ms):
@@ -531,7 +634,7 @@ giving you the complete narrative of what happened.
 
 ## 7. Grafana Dashboards
 
-Two pre-provisioned dashboards give you at-a-glance monitoring.
+Three pre-provisioned dashboards give you at-a-glance monitoring.
 
 ### 7.1 Multigres Operator Overview
 
@@ -566,7 +669,56 @@ This dashboard shows the health of the **clusters being managed**:
 | Pool Replicas | Shard pool desired vs ready replicas |
 | TopoServer Replicas | TopoServer desired vs ready replicas |
 
-### 7.3 Cross-Linking
+### 7.3 Multigres Data Plane
+
+**URL:** http://localhost:3000/d/multigres-data-plane
+
+This dashboard shows telemetry from the **data plane components** (multigateway, multipooler, multiorch, topology). It is organized into four sections:
+
+**Multigateway – Client Gateway:**
+
+| Panel | What it Shows |
+|-------|---------------|
+| HTTP Response Codes | `rate(http_server_duration_milliseconds_count[...])` by status code |
+| HTTP Latency (p95/p50) | Client-facing HTTP latency percentiles |
+| gRPC Client Response Codes | `rate(rpc_client_duration_milliseconds_count[...])` by status |
+| gRPC Client Latency (p95/p50) | gRPC client call latency |
+
+**Multipooler – Connection Pooling:**
+
+| Panel | What it Shows |
+|-------|---------------|
+| gRPC Server Response Codes | Server-side gRPC status codes for pooler |
+| gRPC Server Latency | Server-side gRPC latency percentiles |
+| PostgreSQL Connection Pool States | `multipooler_pgpool_conns` by state (idle/used) |
+| gRPC Connection Cache Size | `multipooler_grpc_connection_cache_size` |
+| gRPC Connection Pool Operations | Reuse vs create rates |
+| gRPC Connection Dial Duration | Time to establish new gRPC connections |
+
+**Multiorch – Orchestration & Recovery:**
+
+| Panel | What it Shows |
+|-------|---------------|
+| gRPC Client Response Codes | RPC calls to multipooler and pgctld |
+| gRPC Client Latency | Latency of outgoing RPC calls |
+| Recovery Actions | `rate(multiorch_recovery_action_total[...])` by type |
+| Recovery Action Duration | Time per recovery action (p95/p50) |
+| Detected Problems | `multiorch_recovery_detected_problems` by type |
+| Health Check Failures | `multiorch_recovery_health_check_failure_total` by check |
+| Pooler Health Check Duration | Time to check pooler health (p95/p50) |
+| Pooler Store Size | Number of poolers tracked |
+| Cluster Metadata Refresh Duration | Time to refresh metadata from topology |
+
+**Topology & Consensus:**
+
+| Panel | What it Shows |
+|-------|---------------|
+| Topology Lock Operations | Lock acquire/release rates by resource type |
+| Topology Lock Duration | Lock hold time (p95/p50) — high values indicate contention |
+
+> **Note:** Panels with exemplars enabled support clicking data points to jump directly to Tempo traces.
+
+### 7.4 Cross-Linking
 
 The dashboards are pre-wired with **Prometheus → Tempo cross-linking**:
 
@@ -574,7 +726,7 @@ The dashboards are pre-wired with **Prometheus → Tempo cross-linking**:
 - Clicking an exemplar opens the full trace in the linked Tempo datasource
 - Tempo is configured with `tracesToMetrics` to link back to Prometheus
 
-This configuration lives in `config/deploy-observability/observability-stack.yaml`:
+This configuration lives in `config/deploy-observability/grafana.yaml`:
 
 ```yaml
 datasources:
@@ -595,8 +747,13 @@ datasources:
 
 ### 8.1 Alert Rules
 
-The operator ships with a `PrometheusRule` CRD (deployed via
-`config/monitoring/prometheus-rules.yaml`) that defines seven alerts:
+The operator ships with alert rules as a `PrometheusRule` CRD in
+`config/monitoring/prometheus-rules.yaml`. The Prometheus Operator natively
+consumes this CRD — no manual rule file configuration needed.
+
+Verify the rules are loaded at http://localhost:9090/alerts.
+
+The rules define seven alerts:
 
 | Alert | Severity | `for` | Condition |
 |-------|----------|-------|-----------|
@@ -835,9 +992,9 @@ kubectl apply -k config/monitoring/
 ```
 
 Prometheus scrapes the operator's `/metrics` endpoint. The operator exposes
-it on `:8443` with mTLS. Configure a `ServiceMonitor` or a direct
-`scrape_config` pointing to the `multigres-operator-controller-manager`
-Service.
+it on `:8443` with mTLS. The dev stack includes a `ServiceMonitor` in
+`config/deploy-observability/prometheus.yaml` as a reference — adapt it to
+your cluster's label selectors.
 
 ---
 
@@ -875,21 +1032,34 @@ make kind-down
 ### Data Flow
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        KUBERNETES CLUSTER                           │
-│                                                                     │
-│  ┌──────────────────────┐     ┌───────────────────────────────────┐ │
-│  │  multigres-operator  │     │     observability pod             │ │
-│  │                      │     │                                   │ │
-│  │  Webhooks ──────────────>  │  ┌─────────┐   ┌──────────────┐  │ │
-│  │  Controllers ───────────>  │  │ Tempo   │   │  Prometheus  │  │ │
-│  │                      │     │  │ :4318   │   │  :9090       │  │ │
-│  │  /metrics ──────────────>  │  └────┬────┘   └──────┬───────┘  │ │
-│  │  OTLP (traces) ────────>  │       │               │          │ │
-│  │                      │     │  ┌────▼───────────────▼───────┐  │ │
-│  │  Structured logs ──────>   │  │       Grafana :3000        │  │ │
-│  │  (stdout/stderr)    │     │  │  Dashboards + Explore      │  │ │
-│  └──────────────────────┘     │  └───────────────────────────┘  │ │
-│                                └───────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                              KUBERNETES CLUSTER                                  │
+│                                                                                  │
+│  ┌──────────────────────────┐                                                    │
+│  │    multigres-operator    │                                                    │
+│  │                          │   OTLP (traces)                                    │
+│  │  Webhooks ─────────────────────┐                                              │
+│  │  Controllers ──────────────────┤                                              │
+│  └──────────────────────────┘     │                                              │
+│               ▲                   │                                              │
+│  Prometheus   │                   │                                              │
+│  scrapes      │                   ▼                                              │
+│  /metrics     │   ┌─────────────────────┐                                        │
+│  (via         │   │  OTel Collector     │  traces   ┌─────────────────┐           │
+│  ServiceMonitor)  │  :4317 (gRPC)       │──────────▶│  Tempo          │           │
+│               │   │  :4318 (HTTP)       │           │  :3200          │           │
+│               │   │                     │  metrics  ├─────────────────┤           │
+│               │   │  Receives OTLP      │──────────▶│  Prometheus     │◀──────────│
+│               │   │  from data plane    │           │  :9090          │           │
+│               │   │  + operator traces  │           │  (Prom Operator │           │
+│               │   └─────────────────────┘           │   managed)      │           │
+│               │                                     └────────┬────────┘           │
+│               │                                              │                    │
+│  ┌────────────│──────┐                   ┌───────────────────▼──────────┐         │
+│  │  multiorch │      │  OTLP (all signals)         Grafana :3000        │         │
+│  │  multipooler      │─────────────────▶ │  Dashboards + Explore       │         │
+│  │  multigateway     │  (traces+metrics) └─────────────────────────────┘         │
+│  │  (data plane)     │                                                            │
+│  └───────────────────┘                                                            │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
