@@ -1,0 +1,107 @@
+---
+# ConfigMap: OTel Collector configuration
+# Routes incoming OTLP signals: traces → Tempo, metrics → Prometheus.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    exporters:
+      otlp/tempo:
+        endpoint: tempo:4317
+        tls:
+          insecure: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+      otlphttp/prometheus:
+        endpoint: http://prometheus:9090/api/v1/otlp
+        tls:
+          insecure: true
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    service:
+      extensions: [health_check]
+      telemetry:
+        logs:
+          level: warn
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [otlp/tempo]
+        metrics:
+          receivers: [otlp]
+          exporters: [otlphttp/prometheus]
+---
+# Deployment: OTel Collector
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.120.0
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/etc/otel/config.yaml"]
+          ports:
+            - containerPort: 4318
+              name: otlp-http
+            - containerPort: 4317
+              name: otlp-grpc
+          startupProbe:
+            httpGet:
+              path: /
+              port: 13133
+            failureThreshold: 30
+            periodSeconds: 2
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+# Service: OTel Collector
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - port: 4318
+      targetPort: 4318
+      name: otlp-http
+    - port: 4317
+      targetPort: 4317
+      name: otlp-grpc
+  type: ClusterIP

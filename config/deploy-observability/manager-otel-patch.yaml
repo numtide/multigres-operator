@@ -13,7 +13,7 @@ spec:
         - name: manager
           env:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://observability.multigres-operator.svc:4318"
+              value: "http://otel-collector.multigres-operator.svc:4318"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
               value: "http/protobuf"
             - name: OTEL_TRACES_EXPORTER

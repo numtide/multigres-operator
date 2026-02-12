@@ -3,4 +3,12 @@ kind: Kustomization
 
 resources:
   - prometheus-rules.yaml
-  - grafana-dashboards.yaml
+
+configMapGenerator:
+  - name: grafana-dashboard-multigres
+    files:
+      - operator-overview.json=grafana-dashboard-operator.json
+      - cluster-health.json=grafana-dashboard-cluster.json
+      - data-plane.json=grafana-dashboard-data-plane.json
+    options:
+      disableNameSuffixHash: true

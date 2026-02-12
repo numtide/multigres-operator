@@ -1,0 +1,108 @@
+---
+# ServiceAccount for the Prometheus instance managed by the Prometheus Operator.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+# ClusterRole: Allow Prometheus to discover scrape targets via ServiceMonitors.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/metrics, services, endpoints, pods]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - nonResourceURLs: [/metrics]
+    verbs: [get]
+---
+# ClusterRoleBinding: Bind prometheus SA to discovery role.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: multigres-operator
+---
+# ClusterRoleBinding: Allow prometheus SA to read the operator's /metrics endpoint.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: multigres-operator-metrics-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: multigres-operator-metrics-reader
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: multigres-operator
+---
+# Prometheus: Managed instance — the Prometheus Operator creates a StatefulSet from this.
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: multigres
+spec:
+  serviceAccountName: prometheus
+  replicas: 1
+  enableFeatures:
+    - exemplar-storage
+    - native-histograms
+  enableOTLPReceiver: true
+  serviceMonitorSelector:
+    matchLabels:
+      app.kubernetes.io/name: multigres-operator
+  ruleSelector:
+    matchLabels:
+      app.kubernetes.io/name: multigres-operator
+  resources:
+    requests:
+      memory: 200Mi
+      cpu: 100m
+  retention: 12h
+---
+# ServiceMonitor: Tell Prometheus to scrape the operator's metrics endpoint.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: multigres-operator
+  labels:
+    app.kubernetes.io/name: multigres-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: multigres-operator
+  endpoints:
+    - port: https
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+---
+# Service: ClusterIP service for the managed Prometheus pods.
+# The operator creates a headless "prometheus-operated" service; this provides
+# a stable ClusterIP for port-forwarding and inter-service communication.
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+spec:
+  selector:
+    app.kubernetes.io/name: prometheus
+    prometheus: multigres
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: http
+  type: ClusterIP
