@@ -3,11 +3,11 @@ module github.com/numtide/multigres-operator/pkg/cluster-handler
 go 1.25.2
 
 require (
-	github.com/numtide/multigres-operator/api v0.0.0-20260211114702-4eddcd600a98
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260211114702-4eddcd600a98
-	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260211114702-4eddcd600a98
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260211114702-4eddcd600a98
-	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260211114702-4eddcd600a98
+	github.com/numtide/multigres-operator/api v0.0.0-20260212204230-52a7f10a1e00
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260212204230-52a7f10a1e00
+	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260212204230-52a7f10a1e00
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260212204230-52a7f10a1e00
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260212204230-52a7f10a1e00
 	go.opentelemetry.io/otel/trace v1.40.0
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
