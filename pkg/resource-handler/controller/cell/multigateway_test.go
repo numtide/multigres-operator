@@ -116,6 +116,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
 											HTTPGet: &corev1.HTTPGetAction{
@@ -123,8 +133,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 10,
 									},
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
@@ -133,8 +142,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 5,
 									},
 								},
 							},
@@ -236,6 +244,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
 											HTTPGet: &corev1.HTTPGetAction{
@@ -243,8 +261,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 10,
 									},
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
@@ -253,8 +270,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 5,
 									},
 								},
 							},
@@ -356,6 +372,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
 											HTTPGet: &corev1.HTTPGetAction{
@@ -363,8 +389,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 10,
 									},
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
@@ -373,8 +398,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 5,
 									},
 								},
 							},
@@ -492,6 +516,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
 											HTTPGet: &corev1.HTTPGetAction{
@@ -499,8 +533,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 10,
 									},
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
@@ -509,8 +542,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 5,
 									},
 								},
 							},
@@ -647,6 +679,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
 											HTTPGet: &corev1.HTTPGetAction{
@@ -654,8 +696,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 10,
 									},
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
@@ -664,8 +705,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 5,
 									},
 								},
 							},
@@ -770,6 +810,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
 											HTTPGet: &corev1.HTTPGetAction{
@@ -777,8 +827,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 10,
 									},
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
@@ -787,8 +836,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 												Port: intstr.FromInt32(MultiGatewayHTTPPort),
 											},
 										},
-										InitialDelaySeconds: 60,
-										PeriodSeconds:       10,
+										PeriodSeconds: 5,
 									},
 								},
 							},

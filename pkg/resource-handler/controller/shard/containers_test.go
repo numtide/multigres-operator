@@ -288,6 +288,16 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
 				},
+				StartupProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path: "/ready",
+							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
+						},
+					},
+					PeriodSeconds:    5,
+					FailureThreshold: 30,
+				},
 				LivenessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
@@ -295,8 +305,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 10,
 				},
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -305,8 +314,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 5,
 				},
 				Env: []corev1.EnvVar{
 					{
@@ -383,6 +391,16 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
 				},
+				StartupProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path: "/ready",
+							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
+						},
+					},
+					PeriodSeconds:    5,
+					FailureThreshold: 30,
+				},
 				LivenessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
@@ -390,8 +408,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 10,
 				},
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -400,8 +417,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 5,
 				},
 				Env: []corev1.EnvVar{
 					{
@@ -496,6 +512,16 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
 				},
+				StartupProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path: "/ready",
+							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
+						},
+					},
+					PeriodSeconds:    5,
+					FailureThreshold: 30,
+				},
 				LivenessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
@@ -503,8 +529,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 10,
 				},
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -513,8 +538,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 5,
 				},
 				Env: []corev1.EnvVar{
 					{
@@ -626,6 +650,16 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 				},
 				Ports:     buildMultiOrchContainerPorts(),
 				Resources: corev1.ResourceRequirements{},
+				StartupProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path: "/ready",
+							Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
+						},
+					},
+					PeriodSeconds:    5,
+					FailureThreshold: 30,
+				},
 				LivenessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
@@ -633,8 +667,7 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 10,
 				},
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -643,8 +676,7 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 							Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
 						},
 					},
-					InitialDelaySeconds: 60,
-					PeriodSeconds:       10,
+					PeriodSeconds: 5,
 				},
 			},
 		},
