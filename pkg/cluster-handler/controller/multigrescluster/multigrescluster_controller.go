@@ -235,7 +235,11 @@ func (r *MultigresClusterReconciler) handleDeletion(
 	for i := range cells.Items {
 		if cells.Items[i].DeletionTimestamp.IsZero() {
 			if err := r.Delete(ctx, &cells.Items[i]); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to delete cell %q: %w", cells.Items[i].Name, err)
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to delete cell %q: %w",
+					cells.Items[i].Name,
+					err,
+				)
 			}
 			l.Info("Initiated cell deletion", "cell", cells.Items[i].Name)
 		}
@@ -249,7 +253,11 @@ func (r *MultigresClusterReconciler) handleDeletion(
 	for i := range tableGroups.Items {
 		if tableGroups.Items[i].DeletionTimestamp.IsZero() {
 			if err := r.Delete(ctx, &tableGroups.Items[i]); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to delete tablegroup %q: %w", tableGroups.Items[i].Name, err)
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to delete tablegroup %q: %w",
+					tableGroups.Items[i].Name,
+					err,
+				)
 			}
 			l.Info("Initiated tablegroup deletion", "tablegroup", tableGroups.Items[i].Name)
 		}

@@ -363,10 +363,16 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 		// Verify selector targets all multigateways for this cluster (no cell label)
 		selector := got.Spec.Selector
 		if selector["app.kubernetes.io/component"] != "multigateway" {
-			t.Errorf("Selector component = %v, want multigateway", selector["app.kubernetes.io/component"])
+			t.Errorf(
+				"Selector component = %v, want multigateway",
+				selector["app.kubernetes.io/component"],
+			)
 		}
 		if selector["app.kubernetes.io/instance"] != "my-cluster" {
-			t.Errorf("Selector instance = %v, want my-cluster", selector["app.kubernetes.io/instance"])
+			t.Errorf(
+				"Selector instance = %v, want my-cluster",
+				selector["app.kubernetes.io/instance"],
+			)
 		}
 		if _, hasCell := selector["multigres.com/cell"]; hasCell {
 			t.Error("Selector must NOT contain cell label to match all cells")
