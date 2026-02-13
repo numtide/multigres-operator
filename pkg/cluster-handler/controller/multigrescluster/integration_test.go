@@ -360,7 +360,8 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										},
 										Resources: resolver.DefaultResourcesAdminWeb(),
 										Env: []corev1.EnvVar{
-											{Name: "POSTGRES_HOST", Value: "multigateway"},
+											{Name: "MULTIADMIN_API_URL", Value: "http://" + clusterName + "-multiadmin:18000"},
+											{Name: "POSTGRES_HOST", Value: clusterName + "-multigateway"},
 											{Name: "POSTGRES_PORT", Value: "15432"},
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
@@ -643,7 +644,8 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										},
 										Resources: resolver.DefaultResourcesAdminWeb(),
 										Env: []corev1.EnvVar{
-											{Name: "POSTGRES_HOST", Value: "multigateway"},
+											{Name: "MULTIADMIN_API_URL", Value: "http://minimal-cluster-multiadmin:18000"},
+											{Name: "POSTGRES_HOST", Value: "minimal-cluster-multigateway"},
 											{Name: "POSTGRES_PORT", Value: "15432"},
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
@@ -923,7 +925,8 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 										},
 										Resources: resolver.DefaultResourcesAdminWeb(),
 										Env: []corev1.EnvVar{
-											{Name: "POSTGRES_HOST", Value: "multigateway"},
+											{Name: "MULTIADMIN_API_URL", Value: "http://lazy-cluster-multiadmin:18000"},
+											{Name: "POSTGRES_HOST", Value: "lazy-cluster-multigateway"},
 											{Name: "POSTGRES_PORT", Value: "15432"},
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},

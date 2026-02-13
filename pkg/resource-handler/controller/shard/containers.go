@@ -302,6 +302,16 @@ func buildMultiPoolerSidecar(
 			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
 		},
+		StartupProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ready",
+					Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
+				},
+			},
+			PeriodSeconds:    5,
+			FailureThreshold: 30,
+		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -309,8 +319,7 @@ func buildMultiPoolerSidecar(
 					Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 				},
 			},
-			InitialDelaySeconds: 60,
-			PeriodSeconds:       10,
+			PeriodSeconds: 10,
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -319,8 +328,7 @@ func buildMultiPoolerSidecar(
 					Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 				},
 			},
-			InitialDelaySeconds: 60,
-			PeriodSeconds:       10,
+			PeriodSeconds: 5,
 		},
 		Env: []corev1.EnvVar{
 			{
@@ -407,6 +415,16 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		Args:      args,
 		Ports:     buildMultiOrchContainerPorts(),
 		Resources: shard.Spec.MultiOrch.Resources,
+		StartupProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/ready",
+					Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
+				},
+			},
+			PeriodSeconds:    5,
+			FailureThreshold: 30,
+		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -414,8 +432,7 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 					Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
 				},
 			},
-			InitialDelaySeconds: 60,
-			PeriodSeconds:       10,
+			PeriodSeconds: 10,
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -424,8 +441,7 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 					Port: intstr.FromInt32(DefaultMultiOrchHTTPPort),
 				},
 			},
-			InitialDelaySeconds: 60,
-			PeriodSeconds:       10,
+			PeriodSeconds: 5,
 		},
 	}
 	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {

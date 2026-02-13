@@ -385,6 +385,42 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 			t.Errorf("Expected 'service patch error', got %v", err)
 		}
 	})
+
+	t.Run("Error: Patch MultiGateway Global Service Failed", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		}
+
+		patchCount := 0
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(ctx context.Context, cli client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				if _, ok := obj.(*corev1.Service); ok {
+					patchCount++
+					// First Service patch is multiadmin-web, second is multigateway
+					if patchCount == 2 {
+						return errors.New("gw service patch error")
+					}
+				}
+				return cli.Patch(ctx, obj, patch, opts...)
+			},
+		}).WithObjects(cluster).Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		err := r.reconcileMultiAdminWeb(
+			context.Background(),
+			cluster,
+			resolver.NewResolver(c, "default"),
+		)
+		if err == nil ||
+			err.Error() != "failed to apply global multigateway service: gw service patch error" {
+			t.Errorf("Expected 'gw service patch error', got %v", err)
+		}
+	})
 }
 
 func TestReconcile_Global(t *testing.T) {
@@ -445,6 +481,15 @@ func TestReconcile_Global(t *testing.T) {
 				// Default replicas is 1
 				if got, want := *webDeploy.Spec.Replicas, int32(1); got != want {
 					t.Errorf("MultiAdminWeb replicas mismatch got %d, want %d", got, want)
+				}
+
+				// Verify global multigateway Service exists
+				gwSvc := &corev1.Service{}
+				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multigateway", Namespace: namespace}, gwSvc); err != nil {
+					t.Fatalf("Expected global multigateway Service to exist: %v", err)
+				}
+				if gwSvc.Spec.Selector["app.kubernetes.io/component"] != "multigateway" {
+					t.Errorf("Global multigateway Service selector component = %v, want multigateway", gwSvc.Spec.Selector["app.kubernetes.io/component"])
 				}
 			},
 		},
@@ -688,6 +733,18 @@ func TestReconcile_Global(t *testing.T) {
 			},
 			wantErrMsg: "failed to apply multiadmin-web service",
 		},
+		"Error: Reconcile Global MultiGateway Service Failed": {
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: func(obj client.Object) error {
+					if obj.GetName() == clusterName+"-multigateway" &&
+						obj.GetObjectKind().GroupVersionKind().Kind == "Service" {
+						return errSimulated
+					}
+					return nil
+				},
+			},
+			wantErrMsg: "failed to apply global multigateway service",
+		},
 		"Error: Build MultiAdmin Deployment Failed (Scheme)": {
 			// Bypass Global Topo builder by using External spec
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -843,6 +900,39 @@ func TestReconcile_Global_BuilderErrors(t *testing.T) {
 			t.Error("Expected error, got nil")
 		} else if !strings.Contains(err.Error(), "failed to build multiadmin-web service") {
 			t.Errorf("Expected 'failed to build multiadmin-web service', got: %v", err)
+		}
+	})
+
+	t.Run("Error: Build MultiGateway Global Service Failed (Mock)", func(t *testing.T) {
+		originalBuild := buildMultiGatewayGlobalService
+		defer func() { buildMultiGatewayGlobalService = originalBuild }()
+
+		buildMultiGatewayGlobalService = func(_ *multigresv1alpha1.MultigresCluster, _ *runtime.Scheme) (*corev1.Service, error) {
+			return nil, errors.New("mocked builder error")
+		}
+
+		clientBuilder := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{})
+		c := clientBuilder.Build()
+
+		if err := c.Create(t.Context(), coreTpl.DeepCopy()); err != nil {
+			t.Fatalf("Failed to create CoreTemplate: %v", err)
+		}
+
+		reconciler := &MultigresClusterReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		res := resolver.NewResolver(c, baseCluster.Namespace)
+		err := reconciler.reconcileMultiAdminWeb(t.Context(), cluster, res)
+		if err == nil {
+			t.Error("Expected error, got nil")
+		} else if !strings.Contains(err.Error(), "failed to build global multigateway service") {
+			t.Errorf("Expected 'failed to build global multigateway service', got: %v", err)
 		}
 	})
 }

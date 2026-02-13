@@ -256,8 +256,12 @@ func BuildMultiAdminWebDeployment(
 							Image: string(cluster.Spec.Images.MultiAdminWeb),
 							Env: []corev1.EnvVar{
 								{
+									Name:  "MULTIADMIN_API_URL",
+									Value: fmt.Sprintf("http://%s-multiadmin:18000", cluster.Name),
+								},
+								{
 									Name:  "POSTGRES_HOST",
-									Value: "multigateway",
+									Value: fmt.Sprintf("%s-multigateway", cluster.Name),
 								},
 								{
 									Name:  "POSTGRES_PORT",
@@ -337,6 +341,51 @@ func BuildMultiAdminWebService(
 					Name:       "http",
 					Port:       18100,
 					TargetPort: intstr.FromInt(18100),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, svc, scheme); err != nil {
+		return nil, err
+	}
+
+	return svc, nil
+}
+
+// BuildMultiGatewayGlobalService constructs a cluster-level Service that selects
+// all multigateway pods across all cells. This provides a stable DNS name for
+// multiadmin-web to connect to PostgreSQL via any available multigateway,
+// regardless of which cells exist.
+func BuildMultiGatewayGlobalService(
+	cluster *multigresv1alpha1.MultigresCluster,
+	scheme *runtime.Scheme,
+) (*corev1.Service, error) {
+	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiGateway)
+	metadata.AddClusterLabel(labels, cluster.Name)
+
+	// The selector intentionally omits the cell label so it matches
+	// multigateway pods from all cells in this cluster.
+	selector := map[string]string{
+		metadata.LabelAppComponent: metadata.ComponentMultiGateway,
+		metadata.LabelAppInstance:  cluster.Name,
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-multigateway", cluster.Name),
+			Namespace: cluster.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: selector,
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "postgres",
+					Port:       15432,
+					TargetPort: intstr.FromString("postgres"),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
