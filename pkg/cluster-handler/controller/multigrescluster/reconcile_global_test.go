@@ -489,7 +489,10 @@ func TestReconcile_Global(t *testing.T) {
 					t.Fatalf("Expected global multigateway Service to exist: %v", err)
 				}
 				if gwSvc.Spec.Selector["app.kubernetes.io/component"] != "multigateway" {
-					t.Errorf("Global multigateway Service selector component = %v, want multigateway", gwSvc.Spec.Selector["app.kubernetes.io/component"])
+					t.Errorf(
+						"Global multigateway Service selector component = %v, want multigateway",
+						gwSvc.Spec.Selector["app.kubernetes.io/component"],
+					)
 				}
 			},
 		},
