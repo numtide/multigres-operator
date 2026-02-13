@@ -47,6 +47,9 @@ const (
 	// ComponentMultiAdminWeb identifies the multiadmin-web component.
 	ComponentMultiAdminWeb = "multiadmin-web"
 
+	// ComponentMultiGateway identifies the multigateway component.
+	ComponentMultiGateway = "multigateway"
+
 	// ComponentGlobalTopo identifies the global-topo component.
 	ComponentGlobalTopo = "global-topo"
 

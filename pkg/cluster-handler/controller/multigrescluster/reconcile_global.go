@@ -14,9 +14,10 @@ import (
 
 // Builder function variables to allow mocking in tests
 var (
-	buildMultiAdminService       = BuildMultiAdminService
-	buildMultiAdminWebDeployment = BuildMultiAdminWebDeployment
-	buildMultiAdminWebService    = BuildMultiAdminWebService
+	buildMultiAdminService         = BuildMultiAdminService
+	buildMultiAdminWebDeployment   = BuildMultiAdminWebDeployment
+	buildMultiAdminWebService      = BuildMultiAdminWebService
+	buildMultiGatewayGlobalService = BuildMultiGatewayGlobalService
 )
 
 func (r *MultigresClusterReconciler) reconcileGlobalComponents(
@@ -229,6 +230,23 @@ func (r *MultigresClusterReconciler) reconcileMultiAdminWeb(
 		client.FieldOwner("multigres-operator"),
 	); err != nil {
 		return fmt.Errorf("failed to apply multiadmin-web service: %w", err)
+	}
+
+	// 3. Reconcile global multigateway Service
+	desiredGwSvc, err := buildMultiGatewayGlobalService(cluster, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build global multigateway service: %w", err)
+	}
+
+	desiredGwSvc.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
+		ctx,
+		desiredGwSvc,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply global multigateway service: %w", err)
 	}
 
 	return nil

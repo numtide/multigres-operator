@@ -17,7 +17,7 @@ import (
 
 const (
 	// MultiGatewayComponentName is the component label value for MultiGateway resources
-	MultiGatewayComponentName = "multigateway"
+	MultiGatewayComponentName = metadata.ComponentMultiGateway
 
 	// DefaultMultiGatewayReplicas is the default number of MultiGateway replicas
 	DefaultMultiGatewayReplicas int32 = 2

@@ -1,6 +1,7 @@
 package multigrescluster
 
 import (
+	"fmt"
 	"testing"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -209,6 +210,31 @@ func TestBuildMultiAdminWebDeployment(t *testing.T) {
 			}
 		}
 
+		// Verify env vars
+		envVars := got.Spec.Template.Spec.Containers[0].Env
+		wantEnv := map[string]string{
+			"MULTIADMIN_API_URL": fmt.Sprintf("http://%s-multiadmin:18000", cluster.Name),
+			"POSTGRES_HOST":      fmt.Sprintf("%s-multigateway", cluster.Name),
+			"POSTGRES_PORT":      "15432",
+			"POSTGRES_DATABASE":  "postgres",
+			"POSTGRES_USER":      "postgres",
+		}
+		for wantName, wantValue := range wantEnv {
+			found := false
+			for _, ev := range envVars {
+				if ev.Name == wantName {
+					found = true
+					if ev.Value != wantValue {
+						t.Errorf("Env %s = %q, want %q", wantName, ev.Value, wantValue)
+					}
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Missing env var %s", wantName)
+			}
+		}
+
 		// Verify Selector does NOT contain mutable labels
 		selector := got.Spec.Selector.MatchLabels
 		if _, ok := selector["app.kubernetes.io/name"]; ok {
@@ -305,6 +331,67 @@ func TestBuildMultiAdminService(t *testing.T) {
 	t.Run("ControllerRefError", func(t *testing.T) {
 		emptyScheme := runtime.NewScheme()
 		_, err := BuildMultiAdminService(cluster, emptyScheme)
+		if err == nil {
+			t.Error("Expected error due to missing scheme types, got nil")
+		}
+	})
+}
+
+func TestBuildMultiGatewayGlobalService(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+			UID:       "cluster-uid",
+		},
+	}
+
+	t.Run("Success", func(t *testing.T) {
+		got, err := BuildMultiGatewayGlobalService(cluster, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiGatewayGlobalService() error = %v", err)
+		}
+
+		if got.Name != "my-cluster-multigateway" {
+			t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multigateway")
+		}
+
+		// Verify selector targets all multigateways for this cluster (no cell label)
+		selector := got.Spec.Selector
+		if selector["app.kubernetes.io/component"] != "multigateway" {
+			t.Errorf("Selector component = %v, want multigateway", selector["app.kubernetes.io/component"])
+		}
+		if selector["app.kubernetes.io/instance"] != "my-cluster" {
+			t.Errorf("Selector instance = %v, want my-cluster", selector["app.kubernetes.io/instance"])
+		}
+		if _, hasCell := selector["multigres.com/cell"]; hasCell {
+			t.Error("Selector must NOT contain cell label to match all cells")
+		}
+
+		// Verify port
+		if len(got.Spec.Ports) != 1 {
+			t.Fatalf("Ports count = %d, want 1", len(got.Spec.Ports))
+		}
+		if got.Spec.Ports[0].Port != 15432 {
+			t.Errorf("Port = %d, want 15432", got.Spec.Ports[0].Port)
+		}
+		if got.Spec.Ports[0].Name != "postgres" {
+			t.Errorf("Port name = %v, want postgres", got.Spec.Ports[0].Name)
+		}
+
+		// Verify OwnerReference
+		if len(got.OwnerReferences) != 1 {
+			t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))
+		}
+	})
+
+	t.Run("ControllerRefError", func(t *testing.T) {
+		emptyScheme := runtime.NewScheme()
+		_, err := BuildMultiGatewayGlobalService(cluster, emptyScheme)
 		if err == nil {
 			t.Error("Expected error due to missing scheme types, got nil")
 		}
