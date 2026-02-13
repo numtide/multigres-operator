@@ -3,6 +3,7 @@ package multigrescluster
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,7 +24,10 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
+
+const finalizerName = "multigres.com/cluster-cleanup"
 
 // MultigresClusterReconciler reconciles a MultigresCluster object.
 type MultigresClusterReconciler struct {
@@ -40,6 +44,7 @@ type MultigresClusterReconciler struct {
 // +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters/finalizers,verbs=update
 // +kubebuilder:rbac:groups=multigres.com,resources=coretemplates;celltemplates;shardtemplates,verbs=get;list;watch
 // +kubebuilder:rbac:groups=multigres.com,resources=cells;tablegroups;toposervers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 func (r *MultigresClusterReconciler) Reconcile(
 	ctx context.Context,
@@ -107,9 +112,19 @@ func (r *MultigresClusterReconciler) Reconcile(
 		}
 	}
 
-	// If being deleted, let Kubernetes GC handle cleanup
+	// Add finalizer on first reconcile to guarantee ordered deletion.
+	// We do not return early here because GenerationChangedPredicate would
+	// filter out the metadata-only update, preventing child resource creation.
+	if !slices.Contains(cluster.Finalizers, finalizerName) {
+		cluster.Finalizers = append(cluster.Finalizers, finalizerName)
+		if err := r.Update(ctx, cluster); err != nil {
+			l.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
 	if !cluster.DeletionTimestamp.IsZero() {
-		return ctrl.Result{}, nil
+		return r.handleDeletion(ctx, cluster)
 	}
 
 	{
@@ -196,6 +211,75 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 	l.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(cluster, "Normal", "Synced", "Successfully reconciled MultigresCluster")
+	return ctrl.Result{}, nil
+}
+
+// handleDeletion orchestrates phased deletion of the MultigresCluster.
+// It deletes Cells and TableGroups first so their data-handler finalizers
+// can run against the still-live topo servers. Once all Cells and Shards
+// are fully removed, it removes our finalizer, allowing Kubernetes GC
+// to clean up the remaining resources (topo servers, deployments).
+func (r *MultigresClusterReconciler) handleDeletion(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) (ctrl.Result, error) {
+	l := log.FromContext(ctx)
+	clusterLabels := client.MatchingLabels{metadata.LabelMultigresCluster: cluster.Name}
+	ns := client.InNamespace(cluster.Namespace)
+
+	// Delete all Cells owned by this cluster.
+	cells := &multigresv1alpha1.CellList{}
+	if err := r.List(ctx, cells, ns, clusterLabels); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list cells: %w", err)
+	}
+	for i := range cells.Items {
+		if cells.Items[i].DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, &cells.Items[i]); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete cell %q: %w", cells.Items[i].Name, err)
+			}
+			l.Info("Initiated cell deletion", "cell", cells.Items[i].Name)
+		}
+	}
+
+	// Delete all TableGroups owned by this cluster (cascades to Shards).
+	tableGroups := &multigresv1alpha1.TableGroupList{}
+	if err := r.List(ctx, tableGroups, ns, clusterLabels); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list tablegroups: %w", err)
+	}
+	for i := range tableGroups.Items {
+		if tableGroups.Items[i].DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, &tableGroups.Items[i]); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete tablegroup %q: %w", tableGroups.Items[i].Name, err)
+			}
+			l.Info("Initiated tablegroup deletion", "tablegroup", tableGroups.Items[i].Name)
+		}
+	}
+
+	// Check if any Cells or Shards still exist (waiting for data-handler finalizer processing).
+	shards := &multigresv1alpha1.ShardList{}
+	if err := r.List(ctx, shards, ns, clusterLabels); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list shards: %w", err)
+	}
+
+	remaining := len(cells.Items) + len(shards.Items)
+	if remaining > 0 {
+		l.Info("Waiting for data-handler finalizers",
+			"remainingCells", len(cells.Items),
+			"remainingShards", len(shards.Items),
+		)
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	}
+
+	// All Cells and Shards are gone — safe to remove our finalizer.
+	cluster.Finalizers = slices.DeleteFunc(cluster.Finalizers, func(s string) bool {
+		return s == finalizerName
+	})
+	if err := r.Update(ctx, cluster); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
+	}
+
+	l.Info("Cluster cleanup complete, finalizer removed")
+	r.Recorder.Event(cluster, "Normal", "CleanupComplete", "All data-handler resources cleaned up")
 	return ctrl.Result{}, nil
 }
 
