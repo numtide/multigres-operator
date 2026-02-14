@@ -121,6 +121,7 @@ func (r *TableGroupReconciler) Reconcile(
 		"multigres.com/database":   string(tg.Spec.DatabaseName),
 		"multigres.com/tablegroup": string(tg.Spec.TableGroupName),
 	}); err != nil {
+		l.Error(err, "Failed to list shards for pruning")
 		r.Recorder.Eventf(
 			tg,
 			"Warning",
@@ -134,6 +135,7 @@ func (r *TableGroupReconciler) Reconcile(
 	for _, s := range existingShards.Items {
 		if !activeShardNames[s.Name] {
 			if err := r.Delete(ctx, &s); err != nil {
+				l.Error(err, "Failed to delete orphan shard", "shard", s.Name)
 				r.Recorder.Eventf(
 					tg,
 					"Warning",
@@ -162,6 +164,7 @@ func (r *TableGroupReconciler) Reconcile(
 		"multigres.com/database":   string(tg.Spec.DatabaseName),
 		"multigres.com/tablegroup": string(tg.Spec.TableGroupName),
 	}); err != nil {
+		l.Error(err, "Failed to list shards for status")
 		r.Recorder.Eventf(
 			tg,
 			"Warning",
@@ -257,6 +260,7 @@ func (r *TableGroupReconciler) Reconcile(
 		client.FieldOwner("multigres-operator"),
 		client.ForceOwnership,
 	); err != nil {
+		l.Error(err, "Failed to patch status")
 		r.Recorder.Eventf(tg, "Warning", "StatusError", "Failed to patch status: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to patch status: %w", err)
 	}

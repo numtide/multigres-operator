@@ -84,6 +84,7 @@ func (r *ShardReconciler) Reconcile(
 		if err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
+			logger.Error(err, "Failed to determine MultiOrch cells")
 			r.Recorder.Eventf(
 				shard,
 				"Warning",
@@ -161,6 +162,7 @@ func (r *ShardReconciler) Reconcile(
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
 			logger.Error(err, "Failed to update status")
+			r.Recorder.Eventf(shard, "Warning", "StatusError", "Failed to update status: %v", err)
 			return ctrl.Result{}, err
 		}
 		childSpan.End()
