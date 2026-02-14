@@ -6,7 +6,24 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 1,
-    "links": [],
+    "links": [
+        {
+            "asDropdown": false,
+            "icon": "external link",
+            "tags": [],
+            "title": "Operator Overview",
+            "type": "link",
+            "url": "/d/multigres-operator-overview"
+        },
+        {
+            "asDropdown": false,
+            "icon": "external link",
+            "tags": [],
+            "title": "Data Plane",
+            "type": "link",
+            "url": "/d/multigres-data-plane"
+        }
+    ],
     "panels": [
         {
             "collapsed": false,
@@ -15,6 +32,247 @@
                 "w": 24,
                 "x": 0,
                 "y": 0
+            },
+            "id": 50,
+            "title": "At a Glance",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-uid"
+            },
+            "description": "Number of MultigresCluster resources currently managed.",
+            "fieldConfig": {
+                "defaults": {
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 0,
+                "y": 1
+            },
+            "id": 51,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus-uid"
+                    },
+                    "expr": "count(multigres_operator_cluster_info)",
+                    "legendFormat": "Clusters"
+                }
+            ],
+            "title": "Total Clusters",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-uid"
+            },
+            "description": "Total number of cells across all clusters.",
+            "fieldConfig": {
+                "defaults": {
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 6,
+                "y": 1
+            },
+            "id": 52,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus-uid"
+                    },
+                    "expr": "sum(multigres_operator_cluster_cells_total)",
+                    "legendFormat": "Cells"
+                }
+            ],
+            "title": "Total Cells",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-uid"
+            },
+            "description": "Total number of shards across all clusters.",
+            "fieldConfig": {
+                "defaults": {
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 12,
+                "y": 1
+            },
+            "id": 53,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus-uid"
+                    },
+                    "expr": "sum(multigres_operator_cluster_shards_total)",
+                    "legendFormat": "Shards"
+                }
+            ],
+            "title": "Total Shards",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-uid"
+            },
+            "description": "Number of clusters currently in Error phase.",
+            "fieldConfig": {
+                "defaults": {
+                    "mappings": [],
+                    "noValue": "0",
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 1
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 6,
+                "x": 18,
+                "y": 1
+            },
+            "id": 54,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus-uid"
+                    },
+                    "expr": "count(multigres_operator_cluster_info{phase=\"Error\"}) or vector(0)",
+                    "legendFormat": "Errors"
+                }
+            ],
+            "title": "Clusters in Error",
+            "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 5
             },
             "id": 100,
             "title": "Cluster Overview",
@@ -107,7 +365,7 @@
                 "h": 6,
                 "w": 24,
                 "x": 0,
-                "y": 1
+                "y": 6
             },
             "id": 1,
             "options": {
@@ -177,7 +435,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 7
+                "y": 12
             },
             "id": 2,
             "options": {
@@ -237,7 +495,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 12,
-                "y": 7
+                "y": 12
             },
             "id": 3,
             "options": {
@@ -272,7 +530,7 @@
                 "h": 1,
                 "w": 24,
                 "x": 0,
-                "y": 15
+                "y": 20
             },
             "id": 101,
             "title": "Cell Gateways",
@@ -329,7 +587,7 @@
                 "h": 8,
                 "w": 24,
                 "x": 0,
-                "y": 16
+                "y": 21
             },
             "id": 4,
             "options": {
@@ -372,7 +630,7 @@
                 "h": 1,
                 "w": 24,
                 "x": 0,
-                "y": 24
+                "y": 29
             },
             "id": 102,
             "title": "Shard Pools",
@@ -429,7 +687,7 @@
                 "h": 8,
                 "w": 24,
                 "x": 0,
-                "y": 25
+                "y": 30
             },
             "id": 5,
             "options": {
@@ -472,7 +730,7 @@
                 "h": 1,
                 "w": 24,
                 "x": 0,
-                "y": 33
+                "y": 38
             },
             "id": 103,
             "title": "TopoServer",
@@ -529,7 +787,7 @@
                 "h": 8,
                 "w": 24,
                 "x": 0,
-                "y": 34
+                "y": 39
             },
             "id": 6,
             "options": {
@@ -567,6 +825,7 @@
             ]
         }
     ],
+    "refresh": "10s",
     "schemaVersion": 39,
     "tags": [
         "multigres",
