@@ -150,6 +150,13 @@ func (r *ShardReconciler) handleDeletion(
 		})
 		if err := r.Update(ctx, shard); err != nil {
 			logger.Error(err, "Failed to remove finalizer")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"FinalizerFailed",
+				"Failed to remove finalizer: %v",
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 	}

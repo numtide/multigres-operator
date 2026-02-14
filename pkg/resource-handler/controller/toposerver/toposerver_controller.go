@@ -131,6 +131,13 @@ func (r *TopoServerReconciler) Reconcile(
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
 			logger.Error(err, "Failed to update status")
+			r.Recorder.Eventf(
+				toposerver,
+				"Warning",
+				"StatusError",
+				"Failed to update status: %v",
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 		childSpan.End()

@@ -158,6 +158,13 @@ func (r *CellReconciler) handleDeletion(
 		})
 		if err := r.Update(ctx, cell); err != nil {
 			logger.Error(err, "Failed to remove finalizer")
+			r.Recorder.Eventf(
+				cell,
+				"Warning",
+				"FinalizerFailed",
+				"Failed to remove finalizer: %v",
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 	}

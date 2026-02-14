@@ -103,6 +103,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
 			l.Error(err, "Failed to populate cluster defaults")
+			r.Recorder.Eventf(
+				cluster,
+				"Warning",
+				"FailedApply",
+				"Failed to populate cluster defaults: %v",
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 		childSpan.End()
@@ -119,6 +126,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 		cluster.Finalizers = append(cluster.Finalizers, finalizerName)
 		if err := r.Update(ctx, cluster); err != nil {
 			l.Error(err, "Failed to add finalizer")
+			r.Recorder.Eventf(
+				cluster,
+				"Warning",
+				"FinalizerFailed",
+				"Failed to add finalizer: %v",
+				err,
+			)
 			return ctrl.Result{}, err
 		}
 	}
