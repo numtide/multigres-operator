@@ -78,6 +78,12 @@ const (
 
 	// PgHbaTemplatePath is the full path to the pg_hba template file
 	PgHbaTemplatePath = PgHbaMountPath + "/pg_hba_template.conf"
+
+	// PostgresPasswordSecretName is the name of the Secret containing the PostgreSQL password
+	PostgresPasswordSecretName = "postgres-password"
+
+	// PostgresPasswordSecretKey is the key within the Secret that holds the password
+	PostgresPasswordSecretKey = "password"
 )
 
 // buildSocketDirVolume creates the shared emptyDir volume for unix sockets.
@@ -145,6 +151,7 @@ func buildPostgresContainer(
 				Name:  "PGDATA",
 				Value: PgDataPath,
 			},
+			pgPasswordEnvVar(),
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:    ptr.To(int64(999)), // Must match postgres:17 image UID for file access
@@ -222,6 +229,7 @@ func buildPgctldContainer(
 				Name:  "PGDATA",
 				Value: PgDataPath,
 			},
+			pgPasswordEnvVar(),
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:    ptr.To(int64(999)),
@@ -270,7 +278,7 @@ func buildMultiPoolerSidecar(
 
 	// TODO: Add remaining command line arguments:
 	// --grpc-socket-file, --log-level, --log-output, --hostname
-	// --pgbackrest-stanza, --connpool-admin-password
+	// --pgbackrest-stanza
 
 	args := []string{
 		"multipooler", // Subcommand
@@ -288,6 +296,7 @@ func buildMultiPoolerSidecar(
 		"--service-id=$(POD_NAME)", // Use pod name as unique service ID
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
+		"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)", // Resolved from env var below
 	}
 
 	c := corev1.Container{
@@ -339,6 +348,7 @@ func buildMultiPoolerSidecar(
 					},
 				},
 			},
+			connpoolAdminPasswordEnvVar(),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -483,6 +493,39 @@ func buildBackupVolume(shard *multigresv1alpha1.Shard, poolName, cellName string
 		VolumeSource: corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: claimName,
+			},
+		},
+	}
+}
+
+// pgPasswordEnvVar returns a PGPASSWORD env var sourced from the postgres-password Secret.
+// pgctld reads this during initdb to set the superuser password.
+func pgPasswordEnvVar() corev1.EnvVar {
+	return corev1.EnvVar{
+		Name: "PGPASSWORD",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: PostgresPasswordSecretName,
+				},
+				Key: PostgresPasswordSecretKey,
+			},
+		},
+	}
+}
+
+// connpoolAdminPasswordEnvVar returns a CONNPOOL_ADMIN_PASSWORD env var sourced
+// from the postgres-password Secret. Multipooler uses this to authenticate
+// with PostgreSQL for connection pool administration.
+func connpoolAdminPasswordEnvVar() corev1.EnvVar {
+	return corev1.EnvVar{
+		Name: "CONNPOOL_ADMIN_PASSWORD",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: PostgresPasswordSecretName,
+				},
+				Key: PostgresPasswordSecretKey,
 			},
 		},
 	}
