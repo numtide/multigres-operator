@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +23,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
@@ -307,6 +313,9 @@ func parseQty(s string) resource.Quantity {
 // ============================================================================
 
 func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
+	// Enable W3C trace context propagation so ExtractTraceContext can parse traceparent annotations.
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
 	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, _ := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
@@ -558,6 +567,240 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			// Expect NO event (returns early)
 			expectedEvents: []string{},
 			wantErrMsg:     "",
+		},
+		"Success: Deletion Cleans Up Cells and TableGroups": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cluster-zone-a",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cluster-db1-tg1",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			expectedEvents: []string{},
+			wantErrMsg:     "",
+		},
+		"Success: Deletion Requeues With Remaining Shards": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cluster-shard",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			expectedEvents: []string{},
+			wantErrMsg:     "",
+		},
+		"Error: Deletion List Cells Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnList: testutil.FailObjListAfterNCalls(0, errSimulated),
+			},
+			wantErrMsg: "failed to list cells",
+		},
+		"Error: Deletion Delete Cell Failed": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.Cell{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cluster-zone-a",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName("test-cluster-zone-a", errSimulated),
+			},
+			wantErrMsg: "failed to delete cell",
+		},
+		"Error: Deletion List TableGroups Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnList: testutil.FailObjListAfterNCalls(1, errSimulated),
+			},
+			wantErrMsg: "failed to list tablegroups",
+		},
+		"Error: Deletion Delete TableGroup Failed": {
+			existingObjects: []client.Object{
+				coreTpl, cellTpl, shardTpl,
+				&multigresv1alpha1.TableGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cluster-db1-tg1",
+						Namespace: namespace,
+						Labels:    map[string]string{"multigres.com/cluster": clusterName},
+					},
+				},
+			},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnDelete: testutil.FailOnObjectName("test-cluster-db1-tg1", errSimulated),
+			},
+			wantErrMsg: "failed to delete tablegroup",
+		},
+		"Error: Deletion List Shards Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnList: testutil.FailObjListAfterNCalls(2, errSimulated),
+			},
+			wantErrMsg: "failed to list shards",
+		},
+		"Error: Deletion Add Finalizer Update Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: testutil.FailOnObjectName(clusterName, errSimulated),
+			},
+			// The first Update is the finalizer add, which fails with the raw error.
+			wantErrMsg: "simulated error",
+		},
+		"Error: Deletion Finalizer Removal Failed": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				now := metav1.Now()
+				c.DeletionTimestamp = &now
+				c.Finalizers = []string{
+					"multigres.com/finalizer",
+					"test.finalizer",
+				}
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnUpdate: func() func(client.Object) error {
+					var calls atomic.Int32
+					return func(obj client.Object) error {
+						if obj.GetName() != clusterName {
+							return nil
+						}
+						// Skip the first Update (adds finalizer), fail subsequent ones (removes finalizer).
+						if calls.Add(1) > 1 {
+							return errSimulated
+						}
+						return nil
+					}
+				}(),
+			},
+			wantErrMsg: "failed to remove finalizer",
+		},
+		"Success: Reconcile With Fresh Trace Context": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Annotations = map[string]string{
+					"multigres.com/traceparent":    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+					"multigres.com/traceparent-ts": strconv.FormatInt(time.Now().Unix(), 10),
+				}
+			},
+			expectedEvents: []string{"Normal Synced Successfully reconciled MultigresCluster"},
+		},
+		"Success: Reconcile With Stale Trace Context": {
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Annotations = map[string]string{
+					"multigres.com/traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+					"multigres.com/traceparent-ts": strconv.FormatInt(
+						time.Now().Add(-20*time.Minute).Unix(),
+						10,
+					),
+				}
+			},
+			expectedEvents: []string{"Normal Synced Successfully reconciled MultigresCluster"},
+		},
+		"Success: External Implementation Override": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					External: &multigresv1alpha1.ExternalTopoServerSpec{
+						Endpoints:      []multigresv1alpha1.EndpointUrl{"http://external:2379"},
+						Implementation: "consul",
+					},
+				}
+			},
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			expectedEvents:  []string{"Normal Synced Successfully reconciled MultigresCluster"},
+		},
+		"Success: Etcd RootPath Override": {
+			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
+				c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+					TemplateRef: "default-core",
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						RootPath: "/custom/etcd/root",
+					},
+				}
+			},
+			existingObjects: []client.Object{coreTpl, cellTpl, shardTpl},
+			expectedEvents:  []string{"Normal Synced Successfully reconciled MultigresCluster"},
 		},
 	}
 
