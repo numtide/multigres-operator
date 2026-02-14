@@ -6,7 +6,24 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "tags": [],
+      "title": "Operator Overview",
+      "type": "link",
+      "url": "/d/multigres-operator-overview"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "tags": [],
+      "title": "Cluster Health",
+      "type": "link",
+      "url": "/d/multigres-cluster-health"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,
