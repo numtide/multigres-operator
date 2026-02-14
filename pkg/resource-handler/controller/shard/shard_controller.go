@@ -77,6 +77,20 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile postgres password Secret (required by pgctld and multipooler)
+	if err := r.reconcilePostgresPasswordSecret(ctx, shard); err != nil {
+		monitoring.RecordSpanError(span, err)
+		logger.Error(err, "Failed to reconcile postgres password Secret")
+		r.Recorder.Eventf(
+			shard,
+			"Warning",
+			"ConfigError",
+			"Failed to generate postgres password Secret: %v",
+			err,
+		)
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileMultiOrch")
@@ -229,6 +243,41 @@ func (r *ShardReconciler) reconcilePgHbaConfigMap(
 		client.FieldOwner("multigres-operator"),
 	); err != nil {
 		return fmt.Errorf("failed to apply pg_hba ConfigMap: %w", err)
+	}
+
+	r.Recorder.Eventf(
+		shard,
+		"Normal",
+		"Applied",
+		"Applied %s %s",
+		desired.GroupVersionKind().Kind,
+		desired.Name,
+	)
+
+	return nil
+}
+
+// reconcilePostgresPasswordSecret creates or updates the postgres password Secret for a shard.
+// This Secret is shared across all pools and provides credentials to pgctld and multipooler.
+func (r *ShardReconciler) reconcilePostgresPasswordSecret(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	desired, err := BuildPostgresPasswordSecret(shard, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build postgres password Secret: %w", err)
+	}
+
+	// Server Side Apply
+	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
+	if err := r.Patch(
+		ctx,
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply postgres password Secret: %w", err)
 	}
 
 	r.Recorder.Eventf(
@@ -692,6 +741,7 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Secret{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		WithOptions(controllerOpts).
 		Complete(r)

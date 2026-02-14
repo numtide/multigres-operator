@@ -47,6 +47,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "PGDATA",
 						Value: PgDataPath,
 					},
+					pgPasswordEnvVar(),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsUser:    ptr.To(int64(999)),
@@ -110,6 +111,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "PGDATA",
 						Value: PgDataPath,
 					},
+					pgPasswordEnvVar(),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsUser:    ptr.To(int64(999)),
@@ -191,6 +193,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "PGDATA",
 						Value: PgDataPath,
 					},
+					pgPasswordEnvVar(),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsUser:    ptr.To(int64(999)),
@@ -279,6 +282,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--service-id=$(POD_NAME)",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
+					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 				},
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
@@ -325,6 +329,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							},
 						},
 					},
+					connpoolAdminPasswordEnvVar(),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -382,6 +387,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--service-id=$(POD_NAME)",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
+					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 				},
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
@@ -428,6 +434,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							},
 						},
 					},
+					connpoolAdminPasswordEnvVar(),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -494,6 +501,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--service-id=$(POD_NAME)",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
+					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 				},
 				Ports: buildMultiPoolerContainerPorts(),
 				Resources: corev1.ResourceRequirements{
@@ -549,6 +557,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							},
 						},
 					},
+					connpoolAdminPasswordEnvVar(),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{

@@ -337,6 +337,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--service-id=$(POD_NAME)",
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
+											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 										},
 										Ports:         multipoolerPorts(t),
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
@@ -383,6 +384,17 @@ func TestShardReconciliation(t *testing.T) {
 													},
 												},
 											},
+											{
+												Name: "CONNPOOL_ADMIN_PASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
@@ -411,6 +423,17 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
+											{
+												Name: "PGPASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										SecurityContext: &corev1.SecurityContext{
 											RunAsUser:    ptr.To(int64(999)),
@@ -681,6 +704,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--service-id=$(POD_NAME)",
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
+											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 										},
 										Ports:         multipoolerPorts(t),
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
@@ -727,6 +751,17 @@ func TestShardReconciliation(t *testing.T) {
 													},
 												},
 											},
+											{
+												Name: "CONNPOOL_ADMIN_PASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
@@ -755,6 +790,17 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
+											{
+												Name: "PGPASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										SecurityContext: &corev1.SecurityContext{
 											RunAsUser:    ptr.To(int64(999)),
@@ -1133,6 +1179,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--service-id=$(POD_NAME)",
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
+											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15200),
@@ -1183,6 +1230,17 @@ func TestShardReconciliation(t *testing.T) {
 													},
 												},
 											},
+											{
+												Name: "CONNPOOL_ADMIN_PASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
@@ -1211,6 +1269,17 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
+											{
+												Name: "PGPASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										SecurityContext: &corev1.SecurityContext{
 											RunAsUser:    ptr.To(int64(999)),
@@ -1350,6 +1419,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--service-id=$(POD_NAME)",
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
+											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15200),
@@ -1400,6 +1470,17 @@ func TestShardReconciliation(t *testing.T) {
 													},
 												},
 											},
+											{
+												Name: "CONNPOOL_ADMIN_PASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
@@ -1428,6 +1509,17 @@ func TestShardReconciliation(t *testing.T) {
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
+											{
+												Name: "PGPASSWORD",
+												ValueFrom: &corev1.EnvVarSource{
+													SecretKeyRef: &corev1.SecretKeySelector{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: shardcontroller.PostgresPasswordSecretName,
+														},
+														Key: shardcontroller.PostgresPasswordSecretKey,
+													},
+												},
+											},
 										},
 										SecurityContext: &corev1.SecurityContext{
 											RunAsUser:    ptr.To(int64(999)),

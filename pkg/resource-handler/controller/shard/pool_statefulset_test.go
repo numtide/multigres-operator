@@ -157,6 +157,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
+										pgPasswordEnvVar(),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
@@ -369,6 +370,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
+										pgPasswordEnvVar(),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
@@ -574,6 +576,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
+										pgPasswordEnvVar(),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
@@ -814,6 +817,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
+										pgPasswordEnvVar(),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
