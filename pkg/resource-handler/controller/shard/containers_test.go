@@ -716,3 +716,79 @@ func TestBuildPgctldVolume(t *testing.T) {
 		t.Errorf("buildPgctldVolume() mismatch (-want +got):\n%s", diff)
 	}
 }
+
+// otelShard returns a Shard with observability configured for testing the
+// OTEL env var injection branch in each container builder.
+func otelShard() *multigresv1alpha1.Shard {
+	return &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{Name: "otel-shard"},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			ShardName:      "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        "global-topo:2379",
+				RootPath:       "/multigres/global",
+				Implementation: "etcd",
+			},
+			Observability: &multigresv1alpha1.ObservabilityConfig{
+				OTLPEndpoint: "http://tempo:4318",
+			},
+		},
+	}
+}
+
+func TestBuildPostgresContainer_WithObservability(t *testing.T) {
+	c := buildPostgresContainer(otelShard(), multigresv1alpha1.PoolSpec{})
+	assertContainsOTELEnvVar(t, c.Env, "buildPostgresContainer")
+}
+
+func TestBuildPgctldContainer(t *testing.T) {
+	t.Run("default image", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{Spec: multigresv1alpha1.ShardSpec{}}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		if c.Image != DefaultPgctldImage {
+			t.Errorf("Image = %q, want %q", c.Image, DefaultPgctldImage)
+		}
+		if c.Command[0] != "/usr/local/bin/pgctld" {
+			t.Errorf("Command = %v, want /usr/local/bin/pgctld", c.Command)
+		}
+	})
+
+	t.Run("custom image", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Images: multigresv1alpha1.ShardImages{Postgres: "custom/pgctld:v1"},
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		if c.Image != "custom/pgctld:v1" {
+			t.Errorf("Image = %q, want %q", c.Image, "custom/pgctld:v1")
+		}
+	})
+
+	t.Run("with observability", func(t *testing.T) {
+		c := buildPgctldContainer(otelShard(), multigresv1alpha1.PoolSpec{})
+		assertContainsOTELEnvVar(t, c.Env, "buildPgctldContainer")
+	})
+}
+
+func TestBuildMultiPoolerSidecar_WithObservability(t *testing.T) {
+	c := buildMultiPoolerSidecar(otelShard(), multigresv1alpha1.PoolSpec{}, "primary", "zone1")
+	assertContainsOTELEnvVar(t, c.Env, "buildMultiPoolerSidecar")
+}
+
+func TestBuildMultiOrchContainer_WithObservability(t *testing.T) {
+	c := buildMultiOrchContainer(otelShard(), "zone1")
+	assertContainsOTELEnvVar(t, c.Env, "buildMultiOrchContainer")
+}
+
+func assertContainsOTELEnvVar(t *testing.T, envVars []corev1.EnvVar, fnName string) {
+	t.Helper()
+	for _, e := range envVars {
+		if e.Name == "OTEL_EXPORTER_OTLP_ENDPOINT" {
+			return
+		}
+	}
+	t.Errorf("%s: expected OTEL_EXPORTER_OTLP_ENDPOINT env var, got none", fnName)
+}

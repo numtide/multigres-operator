@@ -2,6 +2,8 @@ package shard
 
 import (
 	"context"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -277,6 +279,19 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				return r.reconcilePoolBackupPVC(ctx, shard, "pool1", "cell1", poolSpec)
 			},
 		},
+		"PostgresPasswordSecret": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+				}
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				return r.reconcilePostgresPasswordSecret(ctx, shard)
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -439,6 +454,46 @@ func TestReconcile_PatchError(t *testing.T) {
 				return r.reconcilePoolHeadlessService(ctx, shard, "pool1", "cell1", poolSpec)
 			},
 		},
+		"PostgresPasswordSecret": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+					Spec: multigresv1alpha1.ShardSpec{
+						DatabaseName:   "testdb",
+						TableGroupName: "default",
+					},
+				}
+			},
+			getFailObj: func(_ *multigresv1alpha1.Shard) string {
+				return PostgresPasswordSecretName
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				return r.reconcilePostgresPasswordSecret(ctx, shard)
+			},
+		},
+		"PgHbaConfigMap": {
+			setupShard: func() *multigresv1alpha1.Shard {
+				return &multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard",
+						Namespace: "default",
+					},
+					Spec: multigresv1alpha1.ShardSpec{
+						DatabaseName:   "testdb",
+						TableGroupName: "default",
+					},
+				}
+			},
+			getFailObj: func(_ *multigresv1alpha1.Shard) string {
+				return PgHbaConfigMapName
+			},
+			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
+				return r.reconcilePgHbaConfigMap(ctx, shard)
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -477,6 +532,66 @@ func TestReconcile_PatchError(t *testing.T) {
 				t.Errorf("reconcile function should error on Patch failure")
 			}
 		})
+	}
+}
+
+// TestReconcile_PostgresSecretError verifies the error path in Reconcile when
+// reconcilePostgresPasswordSecret fails (lines 81-92 of shard_controller.go).
+func TestReconcile_PostgresSecretError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {
+					ReplicasPerCell: ptr.To(int32(1)),
+					Cells:           []multigresv1alpha1.CellName{"cell1"},
+				},
+			},
+		},
+	}
+
+	baseClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shard).
+		Build()
+
+	// Fail on the second Patch (first is pg_hba ConfigMap, second is postgres-password Secret).
+	var patchCount atomic.Int32
+	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+		OnPatch: func(obj client.Object) error {
+			if patchCount.Add(1) == 2 {
+				return testutil.ErrNetworkTimeout
+			}
+			return nil
+		},
+	})
+
+	reconciler := &ShardReconciler{
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(100),
+	}
+
+	req := ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(shard),
+	}
+
+	_, err := reconciler.Reconcile(t.Context(), req)
+	if err == nil {
+		t.Fatal("Reconcile should return an error when reconcilePostgresPasswordSecret fails")
+	}
+	if !strings.Contains(err.Error(), "failed to apply postgres password Secret") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

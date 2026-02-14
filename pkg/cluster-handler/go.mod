@@ -8,6 +8,7 @@ require (
 	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260214121526-bf90fcb4c005
 	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260214121526-bf90fcb4c005
 	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260214121526-bf90fcb4c005
+	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
@@ -61,7 +62,6 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/bridges/prometheus v0.65.0 // indirect
 	go.opentelemetry.io/contrib/exporters/autoexport v0.65.0 // indirect
-	go.opentelemetry.io/otel v1.40.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.16.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.16.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.40.0 // indirect

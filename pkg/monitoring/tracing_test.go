@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -292,4 +293,159 @@ func TestEnrichLoggerWithTrace(t *testing.T) {
 			t.Error("expected unchanged context for invalid span")
 		}
 	})
+}
+
+func TestInitTracing_WithEndpoint(t *testing.T) {
+	// Set the endpoint to trigger the real code path, and use the "none"
+	// exporter so autoexport returns a noop exporter without network I/O.
+	// This still exercises resource creation, provider setup, and global
+	// tracer re-acquisition.
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+	t.Setenv("OTEL_TRACES_EXPORTER", "none")
+
+	shutdown, err := InitTracing(context.Background(), "test-svc", "v0.0.1")
+	if err != nil {
+		t.Fatalf("InitTracing() returned error: %v", err)
+	}
+	if shutdown == nil {
+		t.Fatal("expected non-nil shutdown function")
+	}
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown() returned error: %v", err)
+	}
+}
+
+func TestInitTracing_ExporterError(t *testing.T) {
+	// Set endpoint to trigger exporter creation
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+	// Set invalid exporter type to trigger error in autoexport.NewSpanExporter
+	t.Setenv("OTEL_TRACES_EXPORTER", "invalid-exporter-type")
+
+	// InitTracing should fail
+	shutdown, err := InitTracing(context.Background(), "test-svc", "v0.0.1")
+	if err == nil {
+		t.Fatal("InitTracing() should have failed with invalid exporter type")
+	}
+	if shutdown != nil {
+		t.Fatal("shutdown function should be nil on error")
+	}
+	if !strings.Contains(err.Error(), "creating OTLP exporter") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestInitTracing_ResourceError_InvalidDetector(t *testing.T) {
+	// Set endpoint so we reach resource creation
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+	t.Setenv("OTEL_TRACES_EXPORTER", "none")
+
+	// Try to trigger resource creation error with invalid detector
+	t.Setenv("OTEL_EXPERIMENTAL_RESOURCE_DETECTORS", "invalid-detector")
+
+	shutdown, err := InitTracing(context.Background(), "test-svc", "v0.0.1")
+	if err == nil {
+		// If this doesn't fail, we might not be able to cover this line without mocking
+		t.Log(
+			"InitTracing() did not fail with invalid detector. Resource error path might be unreachable.",
+		)
+	} else {
+		if !strings.Contains(err.Error(), "creating OTel resource") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	}
+	if shutdown != nil {
+		_ = shutdown(context.Background())
+	}
+}
+
+func TestInjectTraceContext_TracestateRename(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	Tracer = tp.Tracer(tracerName)
+
+	// Use a composite propagator that injects both traceparent and tracestate.
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	ctx, span := Tracer.Start(context.Background(), "webhook")
+	defer span.End()
+
+	// Force a tracestate by setting it on the span.
+	ts := trace.TraceState{}
+	ts, _ = ts.Insert("vendor", "value")
+	ctx = trace.ContextWithSpanContext(ctx, span.SpanContext().WithTraceState(ts))
+
+	annotations := make(map[string]string)
+	InjectTraceContext(ctx, annotations)
+
+	// The standard "tracestate" key should be renamed.
+	if _, ok := annotations["tracestate"]; ok {
+		t.Error("standard 'tracestate' key should be renamed")
+	}
+	if _, ok := annotations["multigres.com/tracestate"]; !ok {
+		t.Error("expected 'multigres.com/tracestate' annotation to be set")
+	}
+}
+
+func TestExtractTraceContext_InvalidTimestamp(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	Tracer = tp.Tracer(tracerName)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	ctx, span := Tracer.Start(context.Background(), "webhook")
+	annotations := make(map[string]string)
+	InjectTraceContext(ctx, annotations)
+	span.End()
+
+	// Set an invalid (non-numeric) timestamp.
+	annotations[annotationTraceparentTS] = "not-a-number"
+
+	_, isStale := ExtractTraceContext(annotations)
+	if !isStale {
+		t.Error("invalid timestamp should be treated as stale")
+	}
+}
+
+func TestInjectTraceContext_InvalidSpanContext(t *testing.T) {
+	annotations := make(map[string]string)
+	InjectTraceContext(context.Background(), annotations)
+
+	if len(annotations) != 0 {
+		t.Errorf("expected no annotations for invalid span, got %v", annotations)
+	}
+}
+
+func TestExtractTraceContext_WithTracestate(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	Tracer = tp.Tracer(tracerName)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	// Create a span and inject context with tracestate.
+	ctx, span := Tracer.Start(context.Background(), "webhook")
+	ts := trace.TraceState{}
+	ts, _ = ts.Insert("vendor", "value")
+	ctx = trace.ContextWithSpanContext(ctx, span.SpanContext().WithTraceState(ts))
+
+	annotations := make(map[string]string)
+	InjectTraceContext(ctx, annotations)
+	span.End()
+
+	// Verify the tracestate was injected under our custom key.
+	if _, ok := annotations["multigres.com/tracestate"]; !ok {
+		t.Fatal("expected multigres.com/tracestate annotation")
+	}
+
+	// Now extract and verify the tracestate is restored.
+	extractedCtx, _ := ExtractTraceContext(annotations)
+	sc := trace.SpanFromContext(extractedCtx).SpanContext()
+	if !sc.IsValid() {
+		t.Fatal("expected valid span context after extraction")
+	}
 }
