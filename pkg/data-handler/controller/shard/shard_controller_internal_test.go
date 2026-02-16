@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
@@ -306,9 +307,10 @@ func TestReconcile_ErrorRegisteringDatabase(t *testing.T) {
 
 	shard := &multigresv1alpha1.Shard{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "test-shard",
-			Namespace:  "default",
-			Finalizers: []string{"shard.data-handler.multigres.com/finalizer"},
+			Name:              "test-shard",
+			Namespace:         "default",
+			Finalizers:        []string{"shard.data-handler.multigres.com/finalizer"},
+			CreationTimestamp: metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
 			DatabaseName:   "postgres",
@@ -413,5 +415,28 @@ func TestReconcile_ErrorDeletingDatabase(t *testing.T) {
 	_, err := reconciler.Reconcile(context.Background(), req)
 	if err == nil {
 		t.Error("Reconcile() should error when database deletion fails")
+	}
+}
+
+func TestIsTopoUnavailable(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"nil error":           {err: nil, want: false},
+		"UNAVAILABLE error":   {err: errors.New("Code: UNAVAILABLE"), want: true},
+		"no connection error": {err: errors.New("no connection available"), want: true},
+		"unrelated error":     {err: errors.New("permission denied"), want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := isTopoUnavailable(tc.err); got != tc.want {
+				t.Errorf("isTopoUnavailable(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
 	}
 }

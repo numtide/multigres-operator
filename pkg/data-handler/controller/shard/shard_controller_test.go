@@ -2,8 +2,10 @@ package shard_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -42,6 +44,7 @@ func TestReconcile(t *testing.T) {
 		failureConfig       *testutil.FailureConfig
 		topoSetup           func(t *testing.T, store topoclient.Store)
 		wantErr             bool
+		wantRequeue         bool // Expect RequeueAfter > 0
 		assertFunc          func(t *testing.T, c client.Client, shardObj *multigresv1alpha1.Shard, store topoclient.Store)
 	}{
 		"adds finalizer on first reconcile": {
@@ -352,9 +355,10 @@ func TestReconcile(t *testing.T) {
 		"error creating topology store during registration": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-shard",
-					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Name:              "test-shard",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "postgres",
@@ -373,6 +377,62 @@ func TestReconcile(t *testing.T) {
 			},
 			customTopoStoreFunc: func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
 				return nil, testutil.ErrInjected
+			},
+			wantErr: true,
+		},
+		"requeues when topo unavailable during grace period": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-shard",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					CreationTimestamp: metav1.NewTime(time.Now()),
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "postgres",
+					TableGroupName: "default",
+					ShardName:      "0",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:  "localhost:2379",
+						RootPath: "/test",
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells: []multigresv1alpha1.CellName{"zone-a"},
+						},
+					},
+				},
+			},
+			customTopoStoreFunc: func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+			wantRequeue: true,
+		},
+		"errors when topo unavailable after grace period": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-shard",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "postgres",
+					TableGroupName: "default",
+					ShardName:      "0",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:  "localhost:2379",
+						RootPath: "/test",
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells: []multigresv1alpha1.CellName{"zone-a"},
+						},
+					},
+				},
+			},
+			customTopoStoreFunc: func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
 			},
 			wantErr: true,
 		},
@@ -469,7 +529,14 @@ func TestReconcile(t *testing.T) {
 				return
 			}
 
-			if result.RequeueAfter > 0 {
+			// Verify RequeueAfter matches expectations
+			if tc.wantRequeue {
+				if result.RequeueAfter == 0 {
+					t.Error(
+						"Reconcile() should set RequeueAfter during topo unavailable grace period",
+					)
+				}
+			} else if result.RequeueAfter > 0 {
 				t.Errorf(
 					"Reconcile() should not set RequeueAfter, controller-runtime watch will trigger re-reconciliation, got %v",
 					result.RequeueAfter,

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
+	"go.opentelemetry.io/otel/attribute"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -24,6 +26,16 @@ import (
 
 const (
 	finalizerName = "shard.data-handler.multigres.com/finalizer"
+
+	// topoUnavailableGracePeriod is the duration after resource creation during
+	// which topology UNAVAILABLE errors are silently requeued instead of being
+	// reported as reconcile errors. This prevents noisy error metrics during
+	// normal cluster startup while the toposerver is still initializing.
+	topoUnavailableGracePeriod = 2 * time.Minute
+
+	// topoUnavailableRequeueDelay is the delay before retrying when the topology
+	// server is unavailable during the grace period.
+	topoUnavailableRequeueDelay = 5 * time.Second
 )
 
 // ShardReconciler reconciles Shard data plane operations.
@@ -102,6 +114,26 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	{
 		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.RegisterDatabaseInTopology")
 		if err := r.registerDatabaseInTopology(ctx, shard); err != nil {
+			// During cluster startup the toposerver may not be ready yet.
+			// Silently requeue during the grace period to avoid noisy error metrics.
+			resourceAge := time.Since(shard.CreationTimestamp.Time)
+			if isTopoUnavailable(err) && resourceAge < topoUnavailableGracePeriod {
+				childSpan.SetAttributes(attribute.Bool("topo.unavailable_grace", true))
+				childSpan.End()
+				logger.V(1).Info("Topology server not available yet, requeueing",
+					"resourceAge", resourceAge.Round(time.Second).String(),
+					"gracePeriod", topoUnavailableGracePeriod.String(),
+				)
+				r.Recorder.Eventf(
+					shard,
+					"Normal",
+					"TopologyWaiting",
+					"Topology server not available yet (age %s), will retry",
+					resourceAge.Round(time.Second),
+				)
+				return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
+			}
+
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
 			r.Recorder.Eventf(
@@ -337,6 +369,17 @@ func (r *ShardReconciler) SetCreateTopoStore(
 	f func(*multigresv1alpha1.Shard) (topoclient.Store, error),
 ) {
 	r.createTopoStore = f
+}
+
+// isTopoUnavailable returns true if the error indicates the topology server
+// is not reachable (e.g., gRPC UNAVAILABLE during startup).
+func isTopoUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNAVAILABLE") ||
+		strings.Contains(msg, "no connection available")
 }
 
 // SetupWithManager sets up the controller with the Manager.
