@@ -73,6 +73,21 @@ KIND_CLUSTER_E2E ?= multigres-operator-test-e2e
 # Local kubeconfig for kind cluster (doesn't modify user's ~/.kube/config)
 KIND_KUBECONFIG ?= $(shell pwd)/kubeconfig.yaml
 
+# Upstream images used by MultigresCluster data plane components.
+# Pre-pulled to local Docker cache and loaded into kind to avoid slow pulls
+# inside the cluster on every kind-deploy cycle.
+MULTIGRES_IMAGES ?= \
+	ghcr.io/multigres/multigres:main \
+	ghcr.io/multigres/pgctld:main \
+	ghcr.io/multigres/multiadmin-web:main \
+	gcr.io/etcd-development/etcd:v3.6.7
+
+# Observability stack images, pre-loaded only for kind-deploy-observability.
+OBSERVABILITY_IMAGES ?= \
+	grafana/grafana:11.4.0 \
+	grafana/tempo:2.7.2 \
+	otel/opentelemetry-collector-contrib:0.120.0
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -421,8 +436,36 @@ kind-load: container ## Build and load image into kind cluster
 	@echo "==> Loading image $(IMG) into kind cluster..."
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER)
 
+.PHONY: kind-load-images
+kind-load-images: ## Pull latest upstream images and load into kind (incremental, skips unchanged)
+	@echo "==> Pulling latest upstream images (only downloads changes)..."
+	@for img in $(MULTIGRES_IMAGES); do \
+		echo "  Pulling $$img..."; \
+		$(CONTAINER_TOOL) pull $$img; \
+	done
+	@echo "==> Loading upstream images into kind cluster..."
+	@for img in $(MULTIGRES_IMAGES); do \
+		echo "  Loading $$img..."; \
+		$(KIND) load docker-image $$img --name $(KIND_CLUSTER); \
+	done
+	@echo "==> All upstream images loaded"
+
+.PHONY: kind-load-observability-images
+kind-load-observability-images: ## Pull and load observability stack images into kind
+	@echo "==> Pulling observability images..."
+	@for img in $(OBSERVABILITY_IMAGES); do \
+		echo "  Pulling $$img..."; \
+		$(CONTAINER_TOOL) pull $$img; \
+	done
+	@echo "==> Loading observability images into kind cluster..."
+	@for img in $(OBSERVABILITY_IMAGES); do \
+		echo "  Loading $$img..."; \
+		$(KIND) load docker-image $$img --name $(KIND_CLUSTER); \
+	done
+	@echo "==> All observability images loaded"
+
 .PHONY: kind-deploy
-kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cluster using webhook with self-signed certificates
+kind-deploy: kind-up manifests kustomize kind-load kind-load-images ## Deploy operator to kind cluster using webhook with self-signed certificates
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator..."
@@ -433,7 +476,7 @@ kind-deploy: kind-up manifests kustomize kind-load ## Deploy operator to kind cl
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
 .PHONY: kind-deploy-certmanager
-kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-load ## Deploy operator to kind cluster using cert manager
+kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-load kind-load-images ## Deploy operator to kind cluster using cert manager
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
@@ -446,7 +489,7 @@ kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-lo
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
 .PHONY: kind-deploy-no-webhook
-kind-deploy-no-webhook: kind-up manifests kustomize kind-load ## Deploy controller to Kind without the webhook enabled.
+kind-deploy-no-webhook: kind-up manifests kustomize kind-load kind-load-images ## Deploy controller to Kind without the webhook enabled.
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
 	@echo "==> Deploying operator..."
@@ -457,7 +500,7 @@ kind-deploy-no-webhook: kind-up manifests kustomize kind-load ## Deploy controll
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
 
 .PHONY: kind-deploy-observability
-kind-deploy-observability: kind-up manifests kustomize kind-load ## Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana)
+kind-deploy-observability: kind-up manifests kustomize kind-load kind-load-images kind-load-observability-images ## Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana)
 	@echo "==> Installing CRDs..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
