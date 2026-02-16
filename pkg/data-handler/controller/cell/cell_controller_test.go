@@ -2,8 +2,10 @@ package cell_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -35,13 +37,15 @@ func TestReconcile(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
 	tests := map[string]struct {
-		cell            *multigresv1alpha1.Cell
-		existingObjects []client.Object
-		skipAddCell     bool // Don't add tc.cell to fake client (for testing NotFound)
-		failureConfig   *testutil.FailureConfig
-		topoSetup       func(t *testing.T, store topoclient.Store)
-		wantErr         bool
-		assertFunc      func(t *testing.T, c client.Client, cellObj *multigresv1alpha1.Cell, store topoclient.Store)
+		cell                *multigresv1alpha1.Cell
+		existingObjects     []client.Object
+		skipAddCell         bool // Don't add tc.cell to fake client (for testing NotFound)
+		customTopoStoreFunc func(*multigresv1alpha1.Cell) (topoclient.Store, error)
+		failureConfig       *testutil.FailureConfig
+		topoSetup           func(t *testing.T, store topoclient.Store)
+		wantErr             bool
+		wantRequeue         bool // Expect RequeueAfter > 0
+		assertFunc          func(t *testing.T, c client.Client, cellObj *multigresv1alpha1.Cell, store topoclient.Store)
 	}{
 		"adds finalizer on first reconcile": {
 			cell: &multigresv1alpha1.Cell{
@@ -308,9 +312,10 @@ func TestReconcile(t *testing.T) {
 		"error registering cell in topology": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-cell",
-					Namespace:  "default",
-					Finalizers: []string{finalizerName},
+					Name:              "test-cell",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone-a",
@@ -323,6 +328,56 @@ func TestReconcile(t *testing.T) {
 						RegisterCell: true,
 					},
 				},
+			},
+			wantErr: true,
+		},
+		"requeues when topo unavailable during grace period": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-cell",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					CreationTimestamp: metav1.NewTime(time.Now()),
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-a",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "localhost:2379",
+						RootPath:       "/test",
+						Implementation: "memory",
+					},
+					TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+						RegisterCell: true,
+					},
+				},
+			},
+			customTopoStoreFunc: func(c *multigresv1alpha1.Cell) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+			wantRequeue: true,
+		},
+		"errors when topo unavailable after grace period": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-cell",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-a",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "localhost:2379",
+						RootPath:       "/test",
+						Implementation: "memory",
+					},
+					TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
+						RegisterCell: true,
+					},
+				},
+			},
+			customTopoStoreFunc: func(c *multigresv1alpha1.Cell) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
 			},
 			wantErr: true,
 		},
@@ -412,8 +467,10 @@ func TestReconcile(t *testing.T) {
 				Recorder: record.NewFakeRecorder(10),
 			}
 
-			// Override createTopoStore for valid implementations
-			if tc.cell.Spec.GlobalTopoServer.Implementation != "invalid-impl" {
+			// Override createTopoStore
+			if tc.customTopoStoreFunc != nil {
+				reconciler.SetCreateTopoStore(tc.customTopoStoreFunc)
+			} else if tc.cell.Spec.GlobalTopoServer.Implementation != "invalid-impl" {
 				reconciler.SetCreateTopoStore(
 					func(cellObj *multigresv1alpha1.Cell) (topoclient.Store, error) {
 						return topoclient.NewWithFactory(
@@ -444,8 +501,14 @@ func TestReconcile(t *testing.T) {
 				return
 			}
 
-			// Verify no requeue after is set (controller-runtime watch handles re-reconciliation)
-			if result.RequeueAfter > 0 {
+			// Verify RequeueAfter matches expectations
+			if tc.wantRequeue {
+				if result.RequeueAfter == 0 {
+					t.Error(
+						"Reconcile() should set RequeueAfter during topo unavailable grace period",
+					)
+				}
+			} else if result.RequeueAfter > 0 {
 				t.Errorf(
 					"Reconcile() should not set RequeueAfter, controller-runtime watch will trigger re-reconciliation, got %v",
 					result.RequeueAfter,

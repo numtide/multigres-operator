@@ -2,6 +2,7 @@ package cell
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -596,4 +597,27 @@ func (m *mockTopoStoreWrapper) DeleteCell(ctx context.Context, cellName string, 
 		return m.deleteCellFunc(ctx, cellName, force)
 	}
 	return m.Store.DeleteCell(ctx, cellName, force)
+}
+
+func TestIsTopoUnavailable(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"nil error":           {err: nil, want: false},
+		"UNAVAILABLE error":   {err: errors.New("Code: UNAVAILABLE"), want: true},
+		"no connection error": {err: errors.New("no connection available"), want: true},
+		"unrelated error":     {err: errors.New("permission denied"), want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := isTopoUnavailable(tc.err); got != tc.want {
+				t.Errorf("isTopoUnavailable(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
 }

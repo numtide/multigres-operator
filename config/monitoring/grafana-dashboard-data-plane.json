@@ -65,7 +65,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (http_response_status_code, http_request_method) (histogram_count(rate(http_server_request_duration_seconds{job=~\"multigateway|multiadmin\"}[$__rate_interval])))",
+          "expr": "sum by (http_response_status_code, http_request_method) (rate(http_server_request_duration_seconds_count{job=~\"multigateway|multiadmin\"}[$__rate_interval]))",
           "legendFormat": "{{http_request_method}} [{{http_response_status_code}}]",
           "range": true,
           "refId": "A"
@@ -101,7 +101,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (http_request_method) (rate(http_server_request_duration_seconds{job=~\"multigateway|multiadmin\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (http_request_method, le) (rate(http_server_request_duration_seconds_bucket{job=~\"multigateway|multiadmin\"}[$__rate_interval])))",
           "legendFormat": "p95 - {{http_request_method}}",
           "range": true,
           "refId": "A"
@@ -113,7 +113,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (http_request_method) (rate(http_server_request_duration_seconds{job=~\"multigateway|multiadmin\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (http_request_method, le) (rate(http_server_request_duration_seconds_bucket{job=~\"multigateway|multiadmin\"}[$__rate_interval])))",
           "legendFormat": "p50 - {{http_request_method}}",
           "range": true,
           "refId": "B"
@@ -149,7 +149,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (rpc_service, rpc_method, rpc_grpc_status_code) (histogram_count(rate(rpc_client_duration_milliseconds{job=~\"multigateway|multiadmin\"}[$__rate_interval])))",
+          "expr": "sum by (rpc_service, rpc_method, rpc_grpc_status_code) (rate(rpc_client_duration_milliseconds_count{job=~\"multigateway|multiadmin\"}[$__rate_interval]))",
           "legendFormat": "{{rpc_service}}.{{rpc_method}} [{{rpc_grpc_status_code}}]",
           "range": true,
           "refId": "A"
@@ -185,7 +185,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (rpc_service, rpc_method) (rate(rpc_client_duration_milliseconds{job=~\"multigateway|multiadmin\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.95, sum by (rpc_service, rpc_method, le) (rate(rpc_client_duration_milliseconds_bucket{job=~\"multigateway|multiadmin\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p95 - {{rpc_service}}.{{rpc_method}}",
           "range": true,
           "refId": "A"
@@ -197,7 +197,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (rpc_service, rpc_method) (rate(rpc_client_duration_milliseconds{job=~\"multigateway|multiadmin\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.50, sum by (rpc_service, rpc_method, le) (rate(rpc_client_duration_milliseconds_bucket{job=~\"multigateway|multiadmin\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p50 - {{rpc_service}}.{{rpc_method}}",
           "range": true,
           "refId": "B"
@@ -246,7 +246,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (rpc_method, rpc_grpc_status_code) (histogram_count(rate(rpc_server_duration_milliseconds{job=\"multipooler\"}[$__rate_interval])))",
+          "expr": "sum by (rpc_method, rpc_grpc_status_code) (rate(rpc_server_duration_milliseconds_count{job=\"multipooler\"}[$__rate_interval]))",
           "legendFormat": "{{rpc_method}} [{{rpc_grpc_status_code}}]",
           "range": true,
           "refId": "A"
@@ -282,7 +282,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (rpc_method) (rate(rpc_server_duration_milliseconds{job=\"multipooler\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.95, sum by (rpc_method, le) (rate(rpc_server_duration_milliseconds_bucket{job=\"multipooler\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p95 - {{rpc_method}}",
           "range": true,
           "refId": "A"
@@ -294,7 +294,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (rpc_method) (rate(rpc_server_duration_milliseconds{job=\"multipooler\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.50, sum by (rpc_method, le) (rate(rpc_server_duration_milliseconds_bucket{job=\"multipooler\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p50 - {{rpc_method}}",
           "range": true,
           "refId": "B"
@@ -330,7 +330,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (rpc_service, rpc_method, rpc_grpc_status_code) (histogram_count(rate(rpc_client_duration_milliseconds{job=\"multipooler\"}[$__rate_interval])))",
+          "expr": "sum by (rpc_service, rpc_method, rpc_grpc_status_code) (rate(rpc_client_duration_milliseconds_count{job=\"multipooler\"}[$__rate_interval]))",
           "legendFormat": "{{rpc_service}}.{{rpc_method}} [{{rpc_grpc_status_code}}]",
           "range": true,
           "refId": "A"
@@ -366,7 +366,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (rpc_service, rpc_method) (rate(rpc_client_duration_milliseconds{job=\"multipooler\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.95, sum by (rpc_service, rpc_method, le) (rate(rpc_client_duration_milliseconds_bucket{job=\"multipooler\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p95 - {{rpc_service}}.{{rpc_method}}",
           "range": true,
           "refId": "A"
@@ -378,7 +378,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (rpc_service, rpc_method) (rate(rpc_client_duration_milliseconds{job=\"multipooler\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.50, sum by (rpc_service, rpc_method, le) (rate(rpc_client_duration_milliseconds_bucket{job=\"multipooler\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p50 - {{rpc_service}}.{{rpc_method}}",
           "range": true,
           "refId": "B"
@@ -537,7 +537,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (path) (rate(rpcclient_connection_dial_duration_seconds[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (path, le) (rate(rpcclient_connection_dial_duration_seconds_bucket[$__rate_interval])))",
           "legendFormat": "p95 - {{path}}",
           "range": true,
           "refId": "A"
@@ -549,7 +549,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (path) (rate(rpcclient_connection_dial_duration_seconds[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (path, le) (rate(rpcclient_connection_dial_duration_seconds_bucket[$__rate_interval])))",
           "legendFormat": "p50 - {{path}}",
           "range": true,
           "refId": "B"
@@ -598,7 +598,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (rpc_service, rpc_method, rpc_grpc_status_code) (histogram_count(rate(rpc_client_duration_milliseconds{job=\"multiorch\"}[$__rate_interval])))",
+          "expr": "sum by (rpc_service, rpc_method, rpc_grpc_status_code) (rate(rpc_client_duration_milliseconds_count{job=\"multiorch\"}[$__rate_interval]))",
           "legendFormat": "{{rpc_service}}.{{rpc_method}} [{{rpc_grpc_status_code}}]",
           "range": true,
           "refId": "A"
@@ -634,7 +634,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (rpc_service, rpc_method) (rate(rpc_client_duration_milliseconds{job=\"multiorch\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.95, sum by (rpc_service, rpc_method, le) (rate(rpc_client_duration_milliseconds_bucket{job=\"multiorch\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p95 - {{rpc_service}}.{{rpc_method}}",
           "range": true,
           "refId": "A"
@@ -646,7 +646,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (rpc_service, rpc_method) (rate(rpc_client_duration_milliseconds{job=\"multiorch\"}[$__rate_interval]))) / 1000",
+          "expr": "histogram_quantile(0.50, sum by (rpc_service, rpc_method, le) (rate(rpc_client_duration_milliseconds_bucket{job=\"multiorch\"}[$__rate_interval]))) / 1000",
           "legendFormat": "p50 - {{rpc_service}}.{{rpc_method}}",
           "range": true,
           "refId": "B"
@@ -682,7 +682,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (action, status) (histogram_count(rate(multiorch_recovery_action_duration_milliseconds{job=\"multiorch\"}[$__rate_interval])))",
+          "expr": "sum by (action, status) (rate(multiorch_recovery_action_duration_milliseconds_count{job=\"multiorch\"}[$__rate_interval]))",
           "legendFormat": "{{action}} [{{status}}]",
           "range": true,
           "refId": "A"
@@ -718,7 +718,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (action) (rate(multiorch_recovery_action_duration_milliseconds{job=\"multiorch\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (action, le) (rate(multiorch_recovery_action_duration_milliseconds_bucket{job=\"multiorch\"}[$__rate_interval])))",
           "legendFormat": "p95 - {{action}}",
           "range": true,
           "refId": "A"
@@ -730,7 +730,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (action) (rate(multiorch_recovery_action_duration_milliseconds{job=\"multiorch\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (action, le) (rate(multiorch_recovery_action_duration_milliseconds_bucket{job=\"multiorch\"}[$__rate_interval])))",
           "legendFormat": "p50 - {{action}}",
           "range": true,
           "refId": "B"
@@ -801,7 +801,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (db_namespace, status) (rate(multiorch_recovery_pooler_poll_duration_seconds{job=\"multiorch\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (db_namespace, status, le) (rate(multiorch_recovery_pooler_poll_duration_seconds_bucket{job=\"multiorch\"}[$__rate_interval])))",
           "legendFormat": "p95 - {{db_namespace}} [{{status}}]",
           "range": true,
           "refId": "A"
@@ -813,7 +813,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (db_namespace, status) (rate(multiorch_recovery_pooler_poll_duration_seconds{job=\"multiorch\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (db_namespace, status, le) (rate(multiorch_recovery_pooler_poll_duration_seconds_bucket{job=\"multiorch\"}[$__rate_interval])))",
           "legendFormat": "p50 - {{db_namespace}} [{{status}}]",
           "range": true,
           "refId": "B"
@@ -909,7 +909,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, rate(multiorch_recovery_cluster_metadata_refresh_duration_seconds{job=\"multiorch\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(multiorch_recovery_cluster_metadata_refresh_duration_seconds_bucket{job=\"multiorch\"}[$__rate_interval])))",
           "legendFormat": "p95",
           "range": true,
           "refId": "A"
@@ -921,7 +921,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, rate(multiorch_recovery_cluster_metadata_refresh_duration_seconds{job=\"multiorch\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(multiorch_recovery_cluster_metadata_refresh_duration_seconds_bucket{job=\"multiorch\"}[$__rate_interval])))",
           "legendFormat": "p50",
           "range": true,
           "refId": "B"
@@ -970,7 +970,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (operation, result, resource_type) (histogram_count(rate(topoclient_lock_duration_seconds[$__rate_interval])))",
+          "expr": "sum by (operation, result, resource_type) (rate(topoclient_lock_duration_seconds_count[$__rate_interval]))",
           "legendFormat": "{{operation}} on {{resource_type}} [{{result}}]",
           "range": true,
           "refId": "A"
@@ -1023,7 +1023,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (operation, resource_type) (rate(topoclient_lock_duration_seconds[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (operation, resource_type, le) (rate(topoclient_lock_duration_seconds_bucket[$__rate_interval])))",
           "legendFormat": "p95 - {{operation}} on {{resource_type}}",
           "range": true,
           "refId": "A"
@@ -1035,7 +1035,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.50, sum by (operation, resource_type) (rate(topoclient_lock_duration_seconds[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (operation, resource_type, le) (rate(topoclient_lock_duration_seconds_bucket[$__rate_interval])))",
           "legendFormat": "p50 - {{operation}} on {{resource_type}}",
           "range": true,
           "refId": "B"
