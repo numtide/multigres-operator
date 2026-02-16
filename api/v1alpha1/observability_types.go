@@ -67,6 +67,14 @@ type ObservabilityConfig struct {
 	// +kubebuilder:validation:Enum=cumulative;delta
 	MetricsTemporality string `json:"metricsTemporality,omitempty"`
 
+	// HistogramAggregation selects the default histogram aggregation.
+	// Maps to OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION.
+	// Use "base2_exponential_bucket_histogram" for native/exponential histograms
+	// which are more compact and accurate than explicit bucket histograms.
+	// +optional
+	// +kubebuilder:validation:Enum=base2_exponential_bucket_histogram;explicit_bucket_histogram
+	HistogramAggregation string `json:"histogramAggregation,omitempty"`
+
 	// TracesSampler selects the sampler.
 	// Maps to OTEL_TRACES_SAMPLER.
 	// Standard values: always_on, always_off, parentbased_traceidratio.
