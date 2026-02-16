@@ -1155,6 +1155,16 @@ spec:
                   Observability configures OpenTelemetry for shard-level data-plane components.
                   Inherited from MultigresCluster.Spec.Observability by the resolver.
                 properties:
+                  histogramAggregation:
+                    description: |-
+                      HistogramAggregation selects the default histogram aggregation.
+                      Maps to OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION.
+                      Use "base2_exponential_bucket_histogram" for native/exponential histograms
+                      which are more compact and accurate than explicit bucket histograms.
+                    enum:
+                    - base2_exponential_bucket_histogram
+                    - explicit_bucket_histogram
+                    type: string
                   logsExporter:
                     description: |-
                       LogsExporter selects the logs exporter.

@@ -32,6 +32,7 @@ func TestBuildOTELEnvVars(t *testing.T) {
 		"OTEL_LOGS_EXPORTER",
 		"OTEL_METRIC_EXPORT_INTERVAL",
 		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
+		"OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION",
 		"OTEL_TRACES_SAMPLER",
 	}
 	for _, env := range otelEnvVars {
@@ -71,6 +72,7 @@ func TestBuildOTELEnvVars(t *testing.T) {
 				LogsExporter:         "otlp",
 				MetricExportInterval: "30s",
 				MetricsTemporality:   "cumulative",
+				HistogramAggregation: "base2_exponential_bucket_histogram",
 				TracesSampler:        "always_on",
 			},
 			want: []corev1.EnvVar{
@@ -81,6 +83,10 @@ func TestBuildOTELEnvVars(t *testing.T) {
 				{Name: "OTEL_LOGS_EXPORTER", Value: "otlp"},
 				{Name: "OTEL_METRIC_EXPORT_INTERVAL", Value: "30s"},
 				{Name: "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE", Value: "cumulative"},
+				{
+					Name:  "OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION",
+					Value: "base2_exponential_bucket_histogram",
+				},
 				{Name: "OTEL_TRACES_SAMPLER", Value: "always_on"},
 			},
 		},

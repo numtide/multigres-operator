@@ -56,7 +56,7 @@ func BuildOTELEnvVars(cfg *ObservabilityConfig) []corev1.EnvVar {
 		}
 	}
 
-	var proto, traces, metrics, logs, interval, temporality, sampler string
+	var proto, traces, metrics, logs, interval, temporality, histogramAgg, sampler string
 	if cfg != nil {
 		proto = cfg.OTLPProtocol
 		traces = cfg.TracesExporter
@@ -64,6 +64,7 @@ func BuildOTELEnvVars(cfg *ObservabilityConfig) []corev1.EnvVar {
 		logs = cfg.LogsExporter
 		interval = cfg.MetricExportInterval
 		temporality = cfg.MetricsTemporality
+		histogramAgg = cfg.HistogramAggregation
 		sampler = cfg.TracesSampler
 	}
 
@@ -76,6 +77,11 @@ func BuildOTELEnvVars(cfg *ObservabilityConfig) []corev1.EnvVar {
 		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
 		temporality,
 		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
+	)
+	appendIfSet(
+		"OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION",
+		histogramAgg,
+		"OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION",
 	)
 	appendIfSet("OTEL_TRACES_SAMPLER", sampler, "OTEL_TRACES_SAMPLER")
 

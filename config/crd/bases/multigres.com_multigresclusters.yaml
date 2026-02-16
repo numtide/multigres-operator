@@ -9470,6 +9470,16 @@ spec:
                   When nil, data-plane pods inherit the operator's own OTEL environment
                   variables at reconcile time. Set fields to override or disable.
                 properties:
+                  histogramAggregation:
+                    description: |-
+                      HistogramAggregation selects the default histogram aggregation.
+                      Maps to OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION.
+                      Use "base2_exponential_bucket_histogram" for native/exponential histograms
+                      which are more compact and accurate than explicit bucket histograms.
+                    enum:
+                    - base2_exponential_bucket_histogram
+                    - explicit_bucket_histogram
+                    type: string
                   logsExporter:
                     description: |-
                       LogsExporter selects the logs exporter.
