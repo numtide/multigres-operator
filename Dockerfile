@@ -35,7 +35,7 @@ RUN CGO_ENABLED=0 \
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 
-LABEL org.opencontainers.image.source = "https://github.com/numtide/multigres-operator"
+LABEL org.opencontainers.image.source="https://github.com/numtide/multigres-operator"
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
