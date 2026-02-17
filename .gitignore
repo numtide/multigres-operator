@@ -5,7 +5,7 @@
 result
 result-*
 
-# generic
+# distribution files are added to github releases
 dist/
 
 # Go

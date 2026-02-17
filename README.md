@@ -16,32 +16,62 @@ The **[Multigres](https://github.com/multigres/multigres) Operator** is a Kubern
 
 ### Prerequisites
 - Kubernetes v1.25+
-- `cert-manager` (Optional, if using external certificate management)
 
 ### Quick Start
-To install the operator with default settings:
+
+Install the operator with built-in self-signed certificate management:
 
 ```bash
-# Install CRDs
-make install
-
-# Deploy Operator to the cluster (uses your current kubeconfig context)
-make deploy
+kubectl apply --server-side -f \
+  https://github.com/numtide/multigres-operator/releases/latest/download/install.yaml
 ```
 
-#### Local Development (Kind)
-For local testing using Kind, we provide several helper commands:
+This deploys the operator into the `multigres-operator` namespace with:
+- All CRDs (MultigresCluster, Cell, Shard, TableGroup, TopoServer, and templates)
+- RBAC roles and bindings
+- Mutating and Validating webhooks with self-signed certificates (auto-rotated)
+- The operator Deployment
+- Metrics endpoint
 
-| Command | Description |
-| :--- | :--- |
-| `make kind-deploy` | Deploy operator to local Kind cluster using self-signed certs (Default). |
-| `make kind-deploy-certmanager` | Deploy operator to Kind, installing `cert-manager` for certificate handling. |
-| `make kind-deploy-no-webhook` | Deploy operator to Kind with the webhook fully disabled. |
-| `make kind-deploy-observability` | Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana). |
-| `make kind-portforward` | Port-forward Grafana (3000), Prometheus (9090), Tempo (3200) to localhost. Re-run if connection drops. |
+### With cert-manager
 
-### Using Sample Configurations
-We provide a set of samples to get you started quickly:
+If you prefer external certificate management via [cert-manager](https://cert-manager.io/):
+
+```bash
+# 1. Install cert-manager (if not already present)
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=120s
+
+# 2. Install the operator
+kubectl apply --server-side -f \
+  https://github.com/numtide/multigres-operator/releases/latest/download/install-certmanager.yaml
+```
+
+### With observability stack
+
+Install the operator alongside Prometheus, OpenTelemetry Collector, Tempo, and Grafana for metrics, tracing, and dashboards:
+
+```bash
+# 1. Install the Prometheus Operator (if not already present)
+kubectl apply --server-side -f \
+  https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.80.0/bundle.yaml
+kubectl wait --for=condition=Available deployment/prometheus-operator -n default --timeout=120s
+
+# 2. Install the operator with observability
+kubectl apply --server-side -f \
+  https://github.com/numtide/multigres-operator/releases/latest/download/install-observability.yaml
+```
+
+> [!NOTE]
+> The bundled Prometheus, Tempo, Grafana, and OTel Collector are single-replica deployments with sane defaults intended for **evaluation and development**. They do not include HA, persistent storage, or authentication. For production observability, integrate the operator's metrics and traces with your existing monitoring infrastructure.
+
+### Applying samples
+
+Once the operator is running, try a sample cluster:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/numtide/multigres-operator/main/config/samples/minimal.yaml
+```
 
 | Sample | Description |
 | :--- | :--- |
@@ -53,10 +83,17 @@ We provide a set of samples to get you started quickly:
 | `config/samples/no-templates.yaml` | A verbose example where all configuration is defined inline. |
 | `config/samples/external-etcd.yaml` | Connecting to an existing external Etcd cluster. |
 
-To apply a sample:
-```bash
-kubectl apply -f config/samples/minimal.yaml
-```
+### Local Development (Kind)
+
+For local testing using Kind, we provide several helper commands:
+
+| Command | Description |
+| :--- | :--- |
+| `make kind-deploy` | Deploy operator to local Kind cluster using self-signed certs (Default). |
+| `make kind-deploy-certmanager` | Deploy operator to Kind, installing `cert-manager` for certificate handling. |
+| `make kind-deploy-no-webhook` | Deploy operator to Kind with the webhook fully disabled. |
+| `make kind-deploy-observability` | Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana). |
+| `make kind-portforward` | Port-forward Grafana (3000), Prometheus (9090), Tempo (3200) to localhost. Re-run if connection drops. |
 
 ---
 
