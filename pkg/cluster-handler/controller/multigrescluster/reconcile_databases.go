@@ -16,7 +16,12 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 	res *resolver.Resolver,
 ) error {
 	existingTGs := &multigresv1alpha1.TableGroupList{}
-	if err := r.List(ctx, existingTGs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
+	if err := r.List(
+		ctx,
+		existingTGs,
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{"multigres.com/cluster": cluster.Name},
+	); err != nil {
 		return fmt.Errorf("failed to list existing tablegroups: %w", err)
 	}
 

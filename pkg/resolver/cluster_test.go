@@ -375,7 +375,12 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 				t.Fatalf("PopulateClusterDefaults failed: %v", err)
 			}
 
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.want,
+				got,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Diff (-want +got):\n%s", diff)
 			}
 		})
@@ -628,7 +633,12 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.want,
+				got,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Diff (-want +got):\n%s", diff)
 			}
 		})
@@ -713,7 +723,12 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.want,
+				got,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Diff (-want +got):\n%s", diff)
 			}
 		})
@@ -852,7 +867,12 @@ func TestResolver_ResolveMultiAdminWeb(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-			if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.want,
+				got,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Diff (-want +got):\n%s", diff)
 			}
 		})

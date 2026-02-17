@@ -109,10 +109,16 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					"shard-0",
 				)
 				shard := &multigresv1alpha1.Shard{}
-				if err := c.Get(ctx, types.NamespacedName{Name: shardNameFull, Namespace: namespace}, shard); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: shardNameFull, Namespace: namespace},
+					shard,
+				); err != nil {
 					t.Fatalf("Shard %s not created: %v", shardNameFull, err)
 				}
-				if got, want := shard.Spec.DatabaseName, multigresv1alpha1.DatabaseName(dbName); got != want {
+				if got, want := shard.Spec.DatabaseName, multigresv1alpha1.DatabaseName(
+					dbName,
+				); got != want {
 					t.Errorf("Shard DB name mismatch got %q, want %q", got, want)
 				}
 			},
@@ -156,7 +162,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			},
 			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					updatedTG,
+				); err != nil {
 					t.Fatalf("failed to get tablegroup: %v", err)
 				}
 				if got, want := updatedTG.Status.ReadyShards, int32(1); got != want {
@@ -183,7 +193,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			},
 			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					updatedTG,
+				); err != nil {
 					t.Fatalf("failed to get tablegroup: %v", err)
 				}
 				if got, want := updatedTG.Status.ReadyShards, int32(0); got != want {
@@ -224,7 +238,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			},
 			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					updatedTG,
+				); err != nil {
 					t.Fatalf("failed to get tablegroup: %v", err)
 				}
 				if got, want := updatedTG.Status.ReadyShards, int32(0); got != want {
@@ -259,7 +277,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			},
 			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					updatedTG,
+				); err != nil {
 					t.Fatalf("failed to get tablegroup: %v", err)
 				}
 				if got, want := updatedTG.Status.Phase, multigresv1alpha1.PhaseDegraded; got != want {
@@ -275,7 +297,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{},
 			validate: func(t testing.TB, c client.Client) {
 				updatedTG := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: tgName, Namespace: namespace}, updatedTG); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					updatedTG,
+				); err != nil {
 					t.Fatalf("failed to get tablegroup: %v", err)
 				}
 				if !meta.IsStatusConditionTrue(updatedTG.Status.Conditions, "Available") {
@@ -324,7 +350,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					tgLabelName,
 					"shard-0",
 				)
-				if err := c.Get(t.Context(), types.NamespacedName{Name: shardName, Namespace: namespace}, shard); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: shardName, Namespace: namespace},
+					shard,
+				); err != nil {
 					t.Fatal(err)
 				}
 				if *shard.Spec.MultiOrch.Replicas != 5 {
@@ -346,7 +376,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				// Verify Shard is NOT created because checks are skipped
 				shardNameFull := fmt.Sprintf("%s-%s", tgName, "shard-0")
 				shard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: shardNameFull, Namespace: namespace}, shard); !apierrors.IsNotFound(
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: shardNameFull, Namespace: namespace},
+					shard,
+				); !apierrors.IsNotFound(
 					err,
 				) {
 					t.Errorf("Expected Shard %s to NOT be created", shardNameFull)
@@ -392,7 +426,11 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					"shard-0",
 				)
 				shard := &multigresv1alpha1.Shard{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: shardName, Namespace: namespace}, shard); !apierrors.IsNotFound(
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: shardName, Namespace: namespace},
+					shard,
+				); !apierrors.IsNotFound(
 					err,
 				) {
 					t.Errorf("Expected Shard %s to be deleted", shardName)

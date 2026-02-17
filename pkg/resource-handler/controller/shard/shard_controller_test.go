@@ -959,7 +959,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 								)
 								obj.SetName(hashed)
 							} else if strings.Contains(name, "backup-data") {
-								hashed := buildHashedBackupPVCName(tc.shard, string(poolName), string(cell))
+								hashed := buildHashedBackupPVCName(
+									tc.shard,
+									string(poolName),
+									string(cell),
+								)
 								obj.SetName(hashed)
 							} else {
 								// StatefulSet or Service (if not headless - wait, pool service IS headless)
@@ -973,8 +977,13 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 								// The tests create: "test-shard-pool-primary-zone1-headless".
 
 								// What about "pool-primary-zone1" (StatefulSet)?
-								hashed := buildHashedPoolName(tc.shard, string(poolName), string(cell))
-								if !strings.Contains(name, "headless") && !strings.Contains(name, "backup-data") {
+								hashed := buildHashedPoolName(
+									tc.shard,
+									string(poolName),
+									string(cell),
+								)
+								if !strings.Contains(name, "headless") &&
+									!strings.Contains(name, "backup-data") {
 									obj.SetName(hashed)
 									if sts, ok := obj.(*appsv1.StatefulSet); ok {
 										if sts.Labels != nil {
@@ -985,7 +994,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 										}
 										// ServiceName in STS must match Headless Service Name!
 										// We need to update sts.Spec.ServiceName to hashed headless name.
-										headlessName := buildHashedPoolHeadlessServiceName(tc.shard, string(poolName), string(cell))
+										headlessName := buildHashedPoolHeadlessServiceName(
+											tc.shard,
+											string(poolName),
+											string(cell),
+										)
 										sts.Spec.ServiceName = headlessName
 									}
 								}
@@ -1198,7 +1211,11 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		}
 
 		updatedShard := &multigresv1alpha1.Shard{}
-		if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(shard), updatedShard); err != nil {
+		if err := fakeClient.Get(
+			context.Background(),
+			client.ObjectKeyFromObject(shard),
+			updatedShard,
+		); err != nil {
 			t.Fatalf("Failed to get Shard: %v", err)
 		}
 
@@ -1284,7 +1301,11 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		}
 
 		updatedShard := &multigresv1alpha1.Shard{}
-		if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(shard), updatedShard); err != nil {
+		if err := fakeClient.Get(
+			context.Background(),
+			client.ObjectKeyFromObject(shard),
+			updatedShard,
+		); err != nil {
 			t.Fatalf("Failed to get Shard: %v", err)
 		}
 

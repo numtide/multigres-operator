@@ -23,7 +23,12 @@ func (r *MultigresClusterReconciler) updateStatus(
 	)
 
 	cells := &multigresv1alpha1.CellList{}
-	if err := r.List(ctx, cells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
+	if err := r.List(
+		ctx,
+		cells,
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{"multigres.com/cluster": cluster.Name},
+	); err != nil {
 		return fmt.Errorf("failed to list cells for status: %w", err)
 	}
 
@@ -43,7 +48,12 @@ func (r *MultigresClusterReconciler) updateStatus(
 	}
 
 	tgs := &multigresv1alpha1.TableGroupList{}
-	if err := r.List(ctx, tgs, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
+	if err := r.List(
+		ctx,
+		tgs,
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{"multigres.com/cluster": cluster.Name},
+	); err != nil {
 		return fmt.Errorf("failed to list tablegroups for status: %w", err)
 	}
 

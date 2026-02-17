@@ -578,7 +578,11 @@ func TestMultigresClusterValidator(t *testing.T) {
 							}
 						}
 						if !found {
-							t.Errorf("Expected warning containing '%s', got warnings: %v", want, warnings)
+							t.Errorf(
+								"Expected warning containing '%s', got warnings: %v",
+								want,
+								warnings,
+							)
 						}
 					}
 				}

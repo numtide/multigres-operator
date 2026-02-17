@@ -359,7 +359,13 @@ func (r *ShardReconciler) reconcilePool(
 		}
 
 		// Reconcile pool headless Service for this cell
-		if err := r.reconcilePoolHeadlessService(ctx, shard, poolName, cellName, poolSpec); err != nil {
+		if err := r.reconcilePoolHeadlessService(
+			ctx,
+			shard,
+			poolName,
+			cellName,
+			poolSpec,
+		); err != nil {
 			return fmt.Errorf(
 				"failed to reconcile pool headless Service for cell %s: %w",
 				cellName,
@@ -513,7 +519,11 @@ func (r *ShardReconciler) updateStatus(
 		shard.Status.Message = "Ready"
 	} else {
 		shard.Status.Phase = multigresv1alpha1.PhaseProgressing
-		shard.Status.Message = fmt.Sprintf("PoolsReady: %v, OrchReady: %v", shard.Status.PoolsReady, shard.Status.OrchReady)
+		shard.Status.Message = fmt.Sprintf(
+			"PoolsReady: %v, OrchReady: %v",
+			shard.Status.PoolsReady,
+			shard.Status.OrchReady,
+		)
 	}
 
 	// Update conditions

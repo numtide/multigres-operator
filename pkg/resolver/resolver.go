@@ -272,27 +272,42 @@ func (r *Resolver) ValidateClusterIntegrity(
 	cluster *multigresv1alpha1.MultigresCluster,
 ) error {
 	// 1. Validate Core Templates
-	if err := r.ValidateCoreTemplateReference(ctx, cluster.Spec.TemplateDefaults.CoreTemplate); err != nil {
+	if err := r.ValidateCoreTemplateReference(
+		ctx,
+		cluster.Spec.TemplateDefaults.CoreTemplate,
+	); err != nil {
 		return err
 	}
 	if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef != "" {
-		if err := r.ValidateCoreTemplateReference(ctx, cluster.Spec.MultiAdmin.TemplateRef); err != nil {
+		if err := r.ValidateCoreTemplateReference(
+			ctx,
+			cluster.Spec.MultiAdmin.TemplateRef,
+		); err != nil {
 			return err
 		}
 	}
 	if cluster.Spec.GlobalTopoServer != nil && cluster.Spec.GlobalTopoServer.TemplateRef != "" {
-		if err := r.ValidateCoreTemplateReference(ctx, cluster.Spec.GlobalTopoServer.TemplateRef); err != nil {
+		if err := r.ValidateCoreTemplateReference(
+			ctx,
+			cluster.Spec.GlobalTopoServer.TemplateRef,
+		); err != nil {
 			return err
 		}
 	}
 	if cluster.Spec.MultiAdminWeb != nil && cluster.Spec.MultiAdminWeb.TemplateRef != "" {
-		if err := r.ValidateCoreTemplateReference(ctx, cluster.Spec.MultiAdminWeb.TemplateRef); err != nil {
+		if err := r.ValidateCoreTemplateReference(
+			ctx,
+			cluster.Spec.MultiAdminWeb.TemplateRef,
+		); err != nil {
 			return err
 		}
 	}
 
 	// 2. Validate Cell Templates
-	if err := r.ValidateCellTemplateReference(ctx, cluster.Spec.TemplateDefaults.CellTemplate); err != nil {
+	if err := r.ValidateCellTemplateReference(
+		ctx,
+		cluster.Spec.TemplateDefaults.CellTemplate,
+	); err != nil {
 		return err
 	}
 	for _, cell := range cluster.Spec.Cells {
@@ -302,7 +317,10 @@ func (r *Resolver) ValidateClusterIntegrity(
 	}
 
 	// 3. Validate Shard Templates
-	if err := r.ValidateShardTemplateReference(ctx, cluster.Spec.TemplateDefaults.ShardTemplate); err != nil {
+	if err := r.ValidateShardTemplateReference(
+		ctx,
+		cluster.Spec.TemplateDefaults.ShardTemplate,
+	); err != nil {
 		return err
 	}
 	for _, db := range cluster.Spec.Databases {

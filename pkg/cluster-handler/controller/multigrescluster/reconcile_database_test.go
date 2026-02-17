@@ -40,7 +40,11 @@ func TestReconcile_Databases(t *testing.T) {
 					"default",
 				)
 				tg := &multigresv1alpha1.TableGroup{}
-				if err := c.Get(ctx, types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					tg,
+				); err != nil {
 					t.Fatalf("System Catalog TableGroup not found: %v", err)
 				}
 
@@ -126,7 +130,11 @@ func TestReconcile_Databases(t *testing.T) {
 					"db1",
 					"tg1",
 				)
-				if err := c.Get(ctx, types.NamespacedName{Name: tgName, Namespace: namespace}, tg); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					tg,
+				); err != nil {
 					t.Fatal(err)
 				}
 				cells := tg.Spec.Shards[0].MultiOrch.Cells

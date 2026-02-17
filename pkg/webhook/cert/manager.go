@@ -124,7 +124,11 @@ func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
 		},
 	}
 
-	if err := m.Client.Get(ctx, types.NamespacedName{Name: CASecretName, Namespace: m.Options.Namespace}, secret); err != nil {
+	if err := m.Client.Get(
+		ctx,
+		types.NamespacedName{Name: CASecretName, Namespace: m.Options.Namespace},
+		secret,
+	); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to get CA secret: %w", err)
 		}
@@ -187,7 +191,11 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 		fmt.Sprintf("%s.%s.svc.cluster.local", m.Options.ServiceName, m.Options.Namespace),
 	}
 
-	if err := m.Client.Get(ctx, types.NamespacedName{Name: ServerSecretName, Namespace: m.Options.Namespace}, secret); err != nil {
+	if err := m.Client.Get(
+		ctx,
+		types.NamespacedName{Name: ServerSecretName, Namespace: m.Options.Namespace},
+		secret,
+	); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to get server cert secret: %w", err)
 		}
@@ -309,7 +317,12 @@ func (m *CertRotator) findOperatorDeployment(ctx context.Context) (*appsv1.Deplo
 	// 1. Try by label selector
 	if len(m.Options.OperatorLabelSelector) > 0 {
 		list := &appsv1.DeploymentList{}
-		if err := m.Client.List(ctx, list, client.InNamespace(m.Options.Namespace), client.MatchingLabels(m.Options.OperatorLabelSelector)); err != nil {
+		if err := m.Client.List(
+			ctx,
+			list,
+			client.InNamespace(m.Options.Namespace),
+			client.MatchingLabels(m.Options.OperatorLabelSelector),
+		); err != nil {
 			return nil, fmt.Errorf("failed to list deployments by labels: %w", err)
 		}
 		if len(list.Items) > 1 {
@@ -323,7 +336,14 @@ func (m *CertRotator) findOperatorDeployment(ctx context.Context) (*appsv1.Deplo
 	// 2. Try by explicit name
 	if m.Options.OperatorDeployment != "" {
 		dep := &appsv1.Deployment{}
-		if err := m.Client.Get(ctx, types.NamespacedName{Name: m.Options.OperatorDeployment, Namespace: m.Options.Namespace}, dep); err != nil {
+		if err := m.Client.Get(
+			ctx,
+			types.NamespacedName{
+				Name:      m.Options.OperatorDeployment,
+				Namespace: m.Options.Namespace,
+			},
+			dep,
+		); err != nil {
 			if errors.IsNotFound(err) {
 				return nil, nil
 			}

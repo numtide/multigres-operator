@@ -729,7 +729,11 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 			// For non-error cases, verify OrchReady status
 			if !tc.expectError {
 				updatedShard := &multigresv1alpha1.Shard{}
-				if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(shard), updatedShard); err != nil {
+				if err := fakeClient.Get(
+					context.Background(),
+					client.ObjectKeyFromObject(shard),
+					updatedShard,
+				); err != nil {
 					t.Fatalf("Failed to get shard: %v", err)
 				}
 
