@@ -78,7 +78,10 @@ func TestGenerator_Logic(t *testing.T) {
 				if got, want := cert.Subject.CommonName, "test-svc.ns.svc"; got != want {
 					tb.Errorf("CN mismatch: got %q, want %q", got, want)
 				}
-				if diff := cmp.Diff(cert.DNSNames, []string{"test-svc", "test-svc.ns.svc"}); diff != "" {
+				if diff := cmp.Diff(
+					cert.DNSNames,
+					[]string{"test-svc", "test-svc.ns.svc"},
+				); diff != "" {
 					tb.Errorf("DNSNames mismatch (-got +want):\n%s", diff)
 				}
 				// Verify chain

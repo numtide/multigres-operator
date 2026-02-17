@@ -158,9 +158,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateDatabase(context.Background(), "postgres", &clustermetadata.Database{
-					Name: "postgres",
-				}); err != nil {
+				if err := store.CreateDatabase(
+					context.Background(),
+					"postgres",
+					&clustermetadata.Database{
+						Name: "postgres",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
@@ -195,9 +199,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateDatabase(context.Background(), "postgres", &clustermetadata.Database{
-					Name: "postgres",
-				}); err != nil {
+				if err := store.CreateDatabase(
+					context.Background(),
+					"postgres",
+					&clustermetadata.Database{
+						Name: "postgres",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 				// Verify database exists before deletion
@@ -341,9 +349,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateDatabase(context.Background(), "postgres", &clustermetadata.Database{
-					Name: "postgres",
-				}); err != nil {
+				if err := store.CreateDatabase(
+					context.Background(),
+					"postgres",
+					&clustermetadata.Database{
+						Name: "postgres",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
@@ -506,9 +518,16 @@ func TestReconcile(t *testing.T) {
 			if tc.customTopoStoreFunc != nil {
 				reconciler.SetCreateTopoStore(tc.customTopoStoreFunc)
 			} else {
-				reconciler.SetCreateTopoStore(func(shardObj *multigresv1alpha1.Shard) (topoclient.Store, error) {
-					return topoclient.NewWithFactory(factory, shardObj.Spec.GlobalTopoServer.RootPath, nil, nil), nil
-				})
+				reconciler.SetCreateTopoStore(
+					func(shardObj *multigresv1alpha1.Shard) (topoclient.Store, error) {
+						return topoclient.NewWithFactory(
+							factory,
+							shardObj.Spec.GlobalTopoServer.RootPath,
+							nil,
+							nil,
+						), nil
+					},
+				)
 			}
 
 			req := ctrl.Request{

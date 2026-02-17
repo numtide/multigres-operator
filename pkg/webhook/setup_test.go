@@ -226,7 +226,10 @@ func TestSetup(t *testing.T) {
 				if err == nil {
 					t.Fatalf("Expected error containing %q, got nil", tc.expectError)
 				}
-				if diff := cmp.Diff(true, strings.Contains(err.Error(), tc.expectError)); diff != "" {
+				if diff := cmp.Diff(
+					true,
+					strings.Contains(err.Error(), tc.expectError),
+				); diff != "" {
 					t.Errorf(
 						"Error message mismatch (-got +want matching check):\n%s\nGot error: %v",
 						diff,

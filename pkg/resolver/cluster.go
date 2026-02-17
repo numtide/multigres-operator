@@ -73,7 +73,10 @@ func (r *Resolver) PopulateClusterDefaults(
 			shouldInjectDefaults = false
 		} else {
 			shouldInjectDefaults = true
-			decisions = append(decisions, "Implicitly injected default 'readWrite' pool configuration using the 'default' ShardTemplate")
+			decisions = append(
+				decisions,
+				"Implicitly injected default 'readWrite' pool configuration using the 'default' ShardTemplate",
+			)
 		}
 	}
 

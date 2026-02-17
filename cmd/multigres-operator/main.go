@@ -225,7 +225,9 @@ func main() {
 			)
 			useInternalCerts = true
 		} else {
-			setupLog.Info("webhook certificates found on disk; using external certificate management")
+			setupLog.Info(
+				"webhook certificates found on disk; using external certificate management",
+			)
 		}
 	}
 

@@ -16,7 +16,12 @@ func (r *MultigresClusterReconciler) reconcileCells(
 	res *resolver.Resolver,
 ) error {
 	existingCells := &multigresv1alpha1.CellList{}
-	if err := r.List(ctx, existingCells, client.InNamespace(cluster.Namespace), client.MatchingLabels{"multigres.com/cluster": cluster.Name}); err != nil {
+	if err := r.List(
+		ctx,
+		existingCells,
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{"multigres.com/cluster": cluster.Name},
+	); err != nil {
 		return fmt.Errorf("failed to list existing cells: %w", err)
 	}
 

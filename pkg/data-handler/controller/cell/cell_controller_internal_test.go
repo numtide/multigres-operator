@@ -64,11 +64,15 @@ func TestRegisterCellInTopology(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateCell(context.Background(), "zone-existing", &clustermetadata.Cell{
-					Name:            "zone-existing",
-					ServerAddresses: []string{"localhost:2379"},
-					Root:            "/test",
-				}); err != nil {
+				if err := store.CreateCell(
+					context.Background(),
+					"zone-existing",
+					&clustermetadata.Cell{
+						Name:            "zone-existing",
+						ServerAddresses: []string{"localhost:2379"},
+						Root:            "/test",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
@@ -148,7 +152,12 @@ func TestRegisterCellInTopology(t *testing.T) {
 			} else if !tc.useDefaultCreate {
 				// Use memory topo (for happy path testing)
 				reconciler.createTopoStore = func(cellObj *multigresv1alpha1.Cell) (topoclient.Store, error) {
-					return topoclient.NewWithFactory(factory, cellObj.Spec.GlobalTopoServer.RootPath, nil, nil), nil
+					return topoclient.NewWithFactory(
+						factory,
+						cellObj.Spec.GlobalTopoServer.RootPath,
+						nil,
+						nil,
+					), nil
 				}
 			}
 			// If useDefaultCreate is true, leave createTopoStore nil to use defaultCreateTopoStore
@@ -210,9 +219,13 @@ func TestUnregisterCellFromTopology(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateCell(context.Background(), "zone-delete", &clustermetadata.Cell{
-					Name: "zone-delete",
-				}); err != nil {
+				if err := store.CreateCell(
+					context.Background(),
+					"zone-delete",
+					&clustermetadata.Cell{
+						Name: "zone-delete",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
@@ -302,7 +315,12 @@ func TestUnregisterCellFromTopology(t *testing.T) {
 			} else if !tc.useDefaultCreate {
 				// Use memory topo (for happy path testing)
 				reconciler.createTopoStore = func(cellObj *multigresv1alpha1.Cell) (topoclient.Store, error) {
-					return topoclient.NewWithFactory(factory, cellObj.Spec.GlobalTopoServer.RootPath, nil, nil), nil
+					return topoclient.NewWithFactory(
+						factory,
+						cellObj.Spec.GlobalTopoServer.RootPath,
+						nil,
+						nil,
+					), nil
 				}
 			}
 			// If useDefaultCreate is true, leave createTopoStore nil to use defaultCreateTopoStore
@@ -404,9 +422,13 @@ func TestHandleDeletion(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateCell(context.Background(), "zone-delete", &clustermetadata.Cell{
-					Name: "zone-delete",
-				}); err != nil {
+				if err := store.CreateCell(
+					context.Background(),
+					"zone-delete",
+					&clustermetadata.Cell{
+						Name: "zone-delete",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
@@ -432,9 +454,13 @@ func TestHandleDeletion(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateCell(context.Background(), "zone-delete", &clustermetadata.Cell{
-					Name: "zone-delete",
-				}); err != nil {
+				if err := store.CreateCell(
+					context.Background(),
+					"zone-delete",
+					&clustermetadata.Cell{
+						Name: "zone-delete",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},

@@ -185,10 +185,20 @@ func TestResolver_ResolveShard(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.wantOrch,
+				orch,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Orch Diff (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.wantPools, pools, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.wantPools,
+				pools,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Pools Diff (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.wantPVCPolicy, pvcPolicy); diff != "" {
@@ -526,10 +536,19 @@ func TestMergeShardConfig(t *testing.T) {
 			t.Parallel()
 			orch, pools, _ := mergeShardConfig(tc.tpl, tc.overrides, tc.inline)
 
-			if diff := cmp.Diff(tc.wantOrch, orch, cmpopts.IgnoreUnexported(resource.Quantity{})); diff != "" {
+			if diff := cmp.Diff(
+				tc.wantOrch,
+				orch,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+			); diff != "" {
 				t.Errorf("Orch mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.wantPools, pools, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.wantPools,
+				pools,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Pools mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -613,7 +632,8 @@ func TestResolveShard_PVCDeletionPolicy(t *testing.T) {
 		if p, ok := pools["custom-pool"]; !ok {
 			t.Fatal("Expected custom-pool to exist")
 		} else {
-			if p.PVCDeletionPolicy == nil || p.PVCDeletionPolicy.WhenDeleted != multigresv1alpha1.RetainPVCRetentionPolicy {
+			if p.PVCDeletionPolicy == nil ||
+				p.PVCDeletionPolicy.WhenDeleted != multigresv1alpha1.RetainPVCRetentionPolicy {
 				t.Errorf("Expected Pool PVCDeletionPolicy=Retain, got %v", p.PVCDeletionPolicy)
 			}
 		}

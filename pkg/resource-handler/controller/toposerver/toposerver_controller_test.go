@@ -457,7 +457,11 @@ func TestTopoServerReconciler_UpdateStatus(t *testing.T) {
 		}
 
 		updatedTopoServer := &multigresv1alpha1.TopoServer{}
-		if err := fakeClient.Get(t.Context(), client.ObjectKeyFromObject(toposerver), updatedTopoServer); err != nil {
+		if err := fakeClient.Get(
+			t.Context(),
+			client.ObjectKeyFromObject(toposerver),
+			updatedTopoServer,
+		); err != nil {
 			t.Fatalf("Failed to get TopoServer: %v", err)
 		}
 

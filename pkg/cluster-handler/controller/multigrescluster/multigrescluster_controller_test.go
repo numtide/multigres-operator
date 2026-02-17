@@ -110,13 +110,21 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 
 					if shouldDelete {
 						// Simulate deletion workflow
-						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
+						if err := baseClient.Get(
+							t.Context(),
+							types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+							cluster,
+						); err != nil {
 							t.Fatalf("failed to refresh cluster before delete: %v", err)
 						}
 						if err := baseClient.Delete(t.Context(), cluster); err != nil {
 							t.Fatalf("failed to set deletion timestamp: %v", err)
 						}
-						if err := baseClient.Get(t.Context(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cluster); err != nil {
+						if err := baseClient.Get(
+							t.Context(),
+							types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace},
+							cluster,
+						); err != nil {
 							t.Fatalf("failed to refresh cluster after deletion: %v", err)
 						}
 					}
@@ -151,7 +159,11 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 				if err == nil {
 					t.Error("Expected error from Reconcile, got nil")
 				} else if !strings.Contains(err.Error(), tc.wantErrMsg) {
-					t.Errorf("Error mismatch. Expected substring %q, got %q", tc.wantErrMsg, err.Error())
+					t.Errorf(
+						"Error mismatch. Expected substring %q, got %q",
+						tc.wantErrMsg,
+						err.Error(),
+					)
 				}
 			} else if err != nil {
 				t.Errorf("Unexpected error from Reconcile: %v", err)
@@ -331,10 +343,16 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					clusterName,
 					"zone-a",
 				)
-				if err := c.Get(ctx, types.NamespacedName{Name: cellName, Namespace: namespace}, cell); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: cellName, Namespace: namespace},
+					cell,
+				); err != nil {
 					t.Fatalf("Expected Cell %s to exist: %v", cellName, err)
 				}
-				if got, want := cell.Spec.Images.MultiGateway, multigresv1alpha1.ImageRef("gateway:latest"); got != want {
+				if got, want := cell.Spec.Images.MultiGateway, multigresv1alpha1.ImageRef(
+					"gateway:latest",
+				); got != want {
 					t.Errorf("Cell image mismatch got %q, want %q", got, want)
 				}
 			},
@@ -538,7 +556,11 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					clusterName,
 					"zone-a",
 				)
-				if err := c.Get(t.Context(), types.NamespacedName{Name: cellName, Namespace: namespace}, cell); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: cellName, Namespace: namespace},
+					cell,
+				); err != nil {
 					t.Fatalf("Expected Cell %s to exist: %v", cellName, err)
 				}
 				if cell.Spec.GlobalTopoServer.Address != "http://external:2379" {

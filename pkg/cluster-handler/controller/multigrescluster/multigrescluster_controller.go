@@ -77,7 +77,9 @@ func (r *MultigresClusterReconciler) Reconcile(
 	// Bridge the async webhook → reconcile trace gap.
 	// If the webhook injected a traceparent into the cluster's annotations,
 	// restart the span under that parent context (or link if stale).
-	if parentCtx, isStale := monitoring.ExtractTraceContext(cluster.GetAnnotations()); trace.SpanFromContext(parentCtx).
+	if parentCtx, isStale := monitoring.ExtractTraceContext(
+		cluster.GetAnnotations(),
+	); trace.SpanFromContext(parentCtx).
 		SpanContext().
 		IsValid() {
 		span.End() // End the initial orphan span.
@@ -86,7 +88,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 				trace.WithLinks(trace.LinkFromContext(parentCtx)),
 			)
 		} else {
-			ctx, span = monitoring.StartReconcileSpan(parentCtx, "MultigresCluster.Reconcile", req.Name, req.Namespace, "MultigresCluster")
+			ctx, span = monitoring.StartReconcileSpan(
+				parentCtx,
+				"MultigresCluster.Reconcile",
+				req.Name,
+				req.Namespace,
+				"MultigresCluster",
+			)
 		}
 		defer span.End()
 		ctx = monitoring.EnrichLoggerWithTrace(ctx)

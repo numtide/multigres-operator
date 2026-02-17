@@ -106,10 +106,20 @@ func TestResolver_ResolveCell(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.wantGw,
+				gw,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Gateway Diff (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tc.wantTopo, topo, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.wantTopo,
+				topo,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Topo Diff (-want +got):\n%s", diff)
 			}
 		})
@@ -339,7 +349,12 @@ func TestMergeCellConfig(t *testing.T) {
 			t.Parallel()
 			gw, topo := mergeCellConfig(tc.tpl, tc.overrides, tc.inline)
 
-			if diff := cmp.Diff(tc.wantGw, gw, cmpopts.IgnoreUnexported(resource.Quantity{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(
+				tc.wantGw,
+				gw,
+				cmpopts.IgnoreUnexported(resource.Quantity{}),
+				cmpopts.EquateEmpty(),
+			); diff != "" {
 				t.Errorf("Gateway mismatch (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.wantTopo, topo); diff != "" {

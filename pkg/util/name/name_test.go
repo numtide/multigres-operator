@@ -24,7 +24,12 @@ import (
 // TestJoin checks determinism and uniqueness.
 func TestJoin(t *testing.T) {
 	// Check that it starts with the parts joined by '-'.
-	if got, want := JoinWithConstraints(DefaultConstraints, "one", "two", "three"), "one-two-three-"; !strings.HasPrefix(
+	if got, want := JoinWithConstraints(
+		DefaultConstraints,
+		"one",
+		"two",
+		"three",
+	), "one-two-three-"; !strings.HasPrefix(
 		got,
 		want,
 	) {
@@ -69,7 +74,11 @@ func TestJoin(t *testing.T) {
 		},
 	}
 	for _, test := range table {
-		if got := JoinWithConstraints(DefaultConstraints, test.a...) == JoinWithConstraints(DefaultConstraints, test.b...); got != test.shouldEqual {
+		if got := JoinWithConstraints(
+			DefaultConstraints,
+			test.a...) == JoinWithConstraints(
+			DefaultConstraints,
+			test.b...); got != test.shouldEqual {
 			t.Errorf("JoinWithConstraints: %s: got %v; want %v", test.name, got, test.shouldEqual)
 		}
 	}

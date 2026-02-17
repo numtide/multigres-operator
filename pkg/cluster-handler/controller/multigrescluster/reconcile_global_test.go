@@ -459,15 +459,25 @@ func TestReconcile_Global(t *testing.T) {
 				ctx := t.Context()
 
 				ts := &multigresv1alpha1.TopoServer{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace},
+					ts,
+				); err != nil {
 					t.Fatal(err)
 				}
-				if got, want := ts.Spec.Etcd.Image, multigresv1alpha1.ImageRef("etcd:topo"); got != want {
+				if got, want := ts.Spec.Etcd.Image, multigresv1alpha1.ImageRef(
+					"etcd:topo",
+				); got != want {
 					t.Errorf("TopoServer image mismatch got %q, want %q", got, want)
 				}
 
 				deploy := &appsv1.Deployment{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace},
+					deploy,
+				); err != nil {
 					t.Fatal(err)
 				}
 				if got, want := *deploy.Spec.Replicas, int32(5); got != want {
@@ -475,7 +485,14 @@ func TestReconcile_Global(t *testing.T) {
 				}
 
 				webDeploy := &appsv1.Deployment{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multiadmin-web", Namespace: namespace}, webDeploy); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{
+						Name:      clusterName + "-multiadmin-web",
+						Namespace: namespace,
+					},
+					webDeploy,
+				); err != nil {
 					t.Fatal(err)
 				}
 				// Default replicas is 1
@@ -485,7 +502,11 @@ func TestReconcile_Global(t *testing.T) {
 
 				// Verify global multigateway Service exists
 				gwSvc := &corev1.Service{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-multigateway", Namespace: namespace}, gwSvc); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: clusterName + "-multigateway", Namespace: namespace},
+					gwSvc,
+				); err != nil {
 					t.Fatalf("Expected global multigateway Service to exist: %v", err)
 				}
 				if gwSvc.Spec.Selector["app.kubernetes.io/component"] != "multigateway" {
@@ -510,7 +531,11 @@ func TestReconcile_Global(t *testing.T) {
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				ts := &multigresv1alpha1.TopoServer{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace},
+					ts,
+				); err != nil {
 					t.Fatal(err)
 				}
 				if got, want := ts.Spec.Etcd.RootPath, "/custom/root"; got != want {
@@ -531,7 +556,11 @@ func TestReconcile_Global(t *testing.T) {
 			validate: func(t testing.TB, c client.Client) {
 				ctx := t.Context()
 				ts := &multigresv1alpha1.TopoServer{}
-				if err := c.Get(ctx, types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); !apierrors.IsNotFound(
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace},
+					ts,
+				); !apierrors.IsNotFound(
 					err,
 				) {
 					t.Fatal("Global TopoServer should NOT be created for External mode")
@@ -543,7 +572,11 @@ func TestReconcile_Global(t *testing.T) {
 					clusterName,
 					"zone-a",
 				)
-				if err := c.Get(ctx, types.NamespacedName{Name: cellName, Namespace: namespace}, cell); err != nil {
+				if err := c.Get(
+					ctx,
+					types.NamespacedName{Name: cellName, Namespace: namespace},
+					cell,
+				); err != nil {
 					t.Fatalf("Expected Cell %s to exist: %v", cellName, err)
 				}
 				if got, want := cell.Spec.GlobalTopoServer.Address, "http://external-etcd:2379"; got != want {
@@ -638,14 +671,22 @@ func TestReconcile_Global(t *testing.T) {
 			},
 			validate: func(t testing.TB, c client.Client) {
 				ts := &multigresv1alpha1.TopoServer{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace}, ts); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: clusterName + "-global-topo", Namespace: namespace},
+					ts,
+				); err != nil {
 					t.Fatal(err)
 				}
 				if ts.Spec.Etcd.Image != "new-etcd" {
 					t.Errorf("TopoServer not updated")
 				}
 				deploy := &appsv1.Deployment{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace}, deploy); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: clusterName + "-multiadmin", Namespace: namespace},
+					deploy,
+				); err != nil {
 					t.Fatal(err)
 				}
 				if *deploy.Spec.Replicas != 3 {
@@ -653,7 +694,14 @@ func TestReconcile_Global(t *testing.T) {
 				}
 
 				webDeploy := &appsv1.Deployment{}
-				if err := c.Get(t.Context(), types.NamespacedName{Name: clusterName + "-multiadmin-web", Namespace: namespace}, webDeploy); err != nil {
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{
+						Name:      clusterName + "-multiadmin-web",
+						Namespace: namespace,
+					},
+					webDeploy,
+				); err != nil {
 					t.Fatal(err)
 				}
 				if *webDeploy.Spec.Replicas != 2 {

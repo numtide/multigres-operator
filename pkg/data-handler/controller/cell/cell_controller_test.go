@@ -160,9 +160,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateCell(context.Background(), "zone-existing", &clustermetadata.Cell{
-					Name: "zone-existing",
-				}); err != nil {
+				if err := store.CreateCell(
+					context.Background(),
+					"zone-existing",
+					&clustermetadata.Cell{
+						Name: "zone-existing",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
@@ -191,9 +195,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateCell(context.Background(), "zone-delete", &clustermetadata.Cell{
-					Name: "zone-delete",
-				}); err != nil {
+				if err := store.CreateCell(
+					context.Background(),
+					"zone-delete",
+					&clustermetadata.Cell{
+						Name: "zone-delete",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
@@ -418,9 +426,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			topoSetup: func(t *testing.T, store topoclient.Store) {
-				if err := store.CreateCell(context.Background(), "zone-delete", &clustermetadata.Cell{
-					Name: "zone-delete",
-				}); err != nil {
+				if err := store.CreateCell(
+					context.Background(),
+					"zone-delete",
+					&clustermetadata.Cell{
+						Name: "zone-delete",
+					},
+				); err != nil {
 					t.Fatalf("Failed to setup topology: %v", err)
 				}
 			},
