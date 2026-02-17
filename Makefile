@@ -270,7 +270,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # Use docker-buildx target or pass --platform to docker build for multi-arch images.
 .PHONY: container
 container: ## Build container image
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build \
+		--build-arg VERSION=$$(git rev-parse --short HEAD) \
+		--build-arg GIT_COMMIT=$$(git rev-parse HEAD) \
+		--build-arg BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		-t ${IMG} .
 
 .PHONY: minikube-load
 minikube-load:
@@ -286,7 +290,11 @@ PLATFORMS ?= linux/arm64,linux/amd64
 docker-buildx: ## Build and push docker image for cross-platform support
 	- $(CONTAINER_TOOL) buildx create --name multigres-operator-builder
 	$(CONTAINER_TOOL) buildx use multigres-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) \
+		--build-arg VERSION=$$(git rev-parse --short HEAD) \
+		--build-arg GIT_COMMIT=$$(git rev-parse HEAD) \
+		--build-arg BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		--tag ${IMG} .
 	- $(CONTAINER_TOOL) buildx rm multigres-operator-builder
 
 .PHONY: build-installer

@@ -8,6 +8,12 @@ FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine3.23 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
+# Version metadata injected at build time via --build-arg.
+# Defaults ensure a plain `docker build .` still works.
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
@@ -26,7 +32,10 @@ RUN CGO_ENABLED=0 \
 	GOOS=${TARGETOS:-linux} \
 	GOARCH=${TARGETARCH} \
 	go build \
-	-ldflags '-s -w -buildid=' \
+	-ldflags "-s -w -buildid= \
+	-X main.version=${VERSION} \
+	-X main.gitCommit=${GIT_COMMIT} \
+	-X main.buildDate=${BUILD_DATE}" \
 	-trimpath -mod=readonly \
 	-a -o manager \
 	cmd/multigres-operator/main.go
