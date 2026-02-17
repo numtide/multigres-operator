@@ -13,11 +13,6 @@ on:
         default: false
         required: false
         type: boolean
-      create-release:
-        description: Whether to create a Github release and attach the artifacts to it
-        default: false
-        required: false
-        type: boolean
 
 permissions:
   contents: write
@@ -120,15 +115,9 @@ jobs:
           jq '.runs[0].results | map(select(.level == "error"))' grype.sarif
           exit 1
 
-      - name: Push to registry (proper)
+      - name: Push to registry (latest)
         if: ${{ inputs.push-container-image }}
         run: |
           IMAGE="ghcr.io/${{ github.repository }}"
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:latest"
-            docker push "$IMAGE:latest"
-          fi
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:${{ github.ref_name }}"
-            docker push "$IMAGE:${{ github.ref_name }}"
-          fi
+          docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:latest"
+          docker push "$IMAGE:latest"

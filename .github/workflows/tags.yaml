@@ -11,11 +11,65 @@ on:
 permissions:
   contents: write
   packages: write
-  security-events: write
 
 jobs:
-  run:
-    uses: ./.github/workflows/build-and-release.yaml
-    with:
-      push-container-image: true
-      create-release: true
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on main
+        run: |
+          if ! git merge-base --is-ancestor ${{ github.sha }} origin/main; then
+            echo "::error::Tag must point to a commit on the main branch"
+            exit 1
+          fi
+
+      - name: Verify main workflow passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking if 'Build main' workflow passed for commit ${{ github.sha }}..."
+          RESULT=$(gh run list \
+            --commit ${{ github.sha }} \
+            --workflow main.yaml \
+            --json conclusion \
+            --jq '.[0].conclusion')
+
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::Main workflow has not passed for this commit (status: ${RESULT:-not found})"
+            exit 1
+          fi
+          echo "Main workflow passed ✅"
+
+      - name: Log into registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Retag existing image with version
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}"
+          SHA_TAG="${{ github.sha }}"
+          VERSION_TAG="${{ github.ref_name }}"
+
+          echo "Retagging $IMAGE:$SHA_TAG → $IMAGE:$VERSION_TAG"
+          docker buildx imagetools create \
+            --tag "$IMAGE:$VERSION_TAG" \
+            "$IMAGE:$SHA_TAG"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --generate-notes \
+            --verify-tag
