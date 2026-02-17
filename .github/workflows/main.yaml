@@ -14,6 +14,13 @@ permissions:
   security-events: write
 
 jobs:
+  scan:
+    name: Security Scan
+    uses: ./.github/workflows/_reusable-scan.yaml
+    permissions:
+      contents: read
+      security-events: write
+
   build:
     name: Build
     uses: ./.github/workflows/_reusable-build-changed.yaml
