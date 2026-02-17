@@ -66,10 +66,23 @@ jobs:
             --tag "$IMAGE:$VERSION_TAG" \
             "$IMAGE:$SHA_TAG"
 
+      - name: Install Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Generate install manifests
+        run: |
+          make build-installer \
+            IMG="ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ github.ref_name }}" \
             --generate-notes \
-            --verify-tag
+            --verify-tag \
+            dist/install.yaml \
+            dist/install-certmanager.yaml \
+            dist/install-observability.yaml

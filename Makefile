@@ -298,11 +298,13 @@ docker-buildx: ## Build and push docker image for cross-platform support
 	- $(CONTAINER_TOOL) buildx rm multigres-operator-builder
 
 .PHONY: build-installer
-build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+build-installer: manifests generate kustomize ## Generate consolidated install YAMLs under dist/.
 	mkdir -p dist
 	# kustomize has no build-time image override, so we mutate then restore.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
+	$(KUSTOMIZE) build config/deploy-certmanager > dist/install-certmanager.yaml
+	$(KUSTOMIZE) build config/deploy-observability > dist/install-observability.yaml
 	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 
 ##@ Test
