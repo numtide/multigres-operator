@@ -9,14 +9,17 @@ on:
 permissions:
   contents: write
   packages: write
-  security-events: write
 
 jobs:
-  scan:
-    name: Security Scan
-    uses: ./.github/workflows/_reusable-scan.yaml
+  scan-dependencies:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - uses: actions/dependency-review-action@40c09b7dc99638e5ddb0bfd91c1673effc064d8a # v4.8.1
   build:
     name: Build
     uses: ./.github/workflows/_reusable-build-changed.yaml
