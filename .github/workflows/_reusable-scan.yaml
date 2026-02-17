@@ -5,7 +5,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   scan-dependencies:
@@ -18,33 +17,3 @@ jobs:
         # this action requires a base and head
         # ensure that trunk changes require pull request checks to pass
         if: ${{ github.event_name == 'pull_request' }}
-
-  scan-codeql:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - uses: github/codeql-action/init@16140ae1a102900babc80a33c44059580f687047 # v4.30.9
-        with:
-          languages: actions,go
-      - uses: github/codeql-action/analyze@16140ae1a102900babc80a33c44059580f687047 # v4.30.9
-        with:
-          output: codeql-sarif
-      - name: Check success or failure
-        # github/codeql-action/analyze doesn't fail the pipeline when it finds vulnerabilities
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(codeql-sarif/*.sarif)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No SARIF files produced by CodeQL analyze."
-            exit 1
-          fi
-          # Count non-note results across all SARIF files
-          count="$(jq -s 'map(.runs[].results // []) | flatten | map(select(.level != "note")) | length' "${files[@]}")"
-          echo "Non-note CodeQL results: ${count}"
-          if [ "${count}" -gt 0 ]; then
-            echo "::error::CodeQL produced ${count} alerts (warning/error)."
-            exit 1
-          fi

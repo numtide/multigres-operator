@@ -19,7 +19,6 @@ jobs:
     uses: ./.github/workflows/_reusable-scan.yaml
     permissions:
       contents: read
-      security-events: write
 
   build:
     name: Build

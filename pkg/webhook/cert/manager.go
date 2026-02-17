@@ -25,9 +25,9 @@ import (
 
 const (
 	// CASecretName stores the Authority. NEVER mounted to the pod.
-	CASecretName = "multigres-operator-ca-secret"
+	CASecretName = "multigres-operator-ca-secret" //nolint:gosec // K8s resource name, not a credential
 	// ServerSecretName stores the Leaf certs. Mounted to the pod.
-	ServerSecretName = "multigres-webhook-certs"
+	ServerSecretName = "multigres-webhook-certs" //nolint:gosec // K8s resource name, not a credential
 
 	CertFileName = "tls.crt"
 	KeyFileName  = "tls.key"
@@ -64,7 +64,7 @@ func (m *CertRotator) Bootstrap(ctx context.Context) error {
 	logger := log.FromContext(ctx)
 	logger.Info("bootstrapping PKI")
 
-	if err := os.MkdirAll(m.Options.CertDir, 0o755); err != nil {
+	if err := os.MkdirAll(m.Options.CertDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create cert directory: %w", err)
 	}
 
@@ -273,7 +273,7 @@ func (m *CertRotator) waitForKubelet(ctx context.Context, expectedCertPEM []byte
 		true,
 		func(ctx context.Context) (bool, error) {
 			certPath := filepath.Join(m.Options.CertDir, CertFileName)
-			diskBytes, err := os.ReadFile(certPath)
+			diskBytes, err := os.ReadFile(certPath) //nolint:gosec // path is from trusted config
 			if err != nil {
 				// File might not exist yet if pod is just starting
 				logger.V(1).Info("Waiting for certificate file", "path", certPath, "err", err)

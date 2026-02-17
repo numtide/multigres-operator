@@ -331,7 +331,7 @@ func createEnvtestDir(t testing.TB, baseDir string) string {
 func writeKubeconfigFile(t testing.TB, kubeconfigPath string, kubeconfig []byte) {
 	t.Helper()
 
-	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0o644); err != nil {
+	if err := os.WriteFile(kubeconfigPath, kubeconfig, 0o600); err != nil {
 		t.Fatalf("Failed to write kubeconfig file: %v", err)
 	}
 }

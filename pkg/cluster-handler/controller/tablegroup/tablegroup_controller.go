@@ -155,7 +155,7 @@ func (r *TableGroupReconciler) Reconcile(
 	}
 
 	// Update Status
-	total := int32(len(tg.Spec.Shards))
+	total := int32(len(tg.Spec.Shards)) //nolint:gosec // bounded by K8s object size limits
 	ready := int32(0)
 
 	// Re-list to check status

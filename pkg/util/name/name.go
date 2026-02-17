@@ -95,12 +95,12 @@ var (
 func Hash(parts []string) string {
 	h := fnv.New32a()
 	for _, part := range parts {
-		h.Write([]byte(part))
+		h.Write([]byte(part)) //nolint:gosec // hash.Write never returns an error
 		// It doesn't matter if the parts have nulls in them somehow.
 		// The important thing is that this separator is not the same as '-'.
 		// To collide, both the "hyphen-joined-string" and the hash must match,
 		// but you can't mimic two different separators at the same time.
-		h.Write([]byte{0})
+		h.Write([]byte{0}) //nolint:gosec // hash.Write never returns an error
 	}
 	sum := h.Sum(nil)
 	// FNV-1a 32-bit produces exactly 4 bytes, which hex-encodes to 8 characters.

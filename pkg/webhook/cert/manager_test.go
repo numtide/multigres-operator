@@ -673,7 +673,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 						_ = os.WriteFile(
 							filepath.Join(certDir, CertFileName),
 							s.Data["tls.crt"],
-							0o644,
+							0o600,
 						)
 						_ = os.WriteFile(
 							filepath.Join(certDir, KeyFileName),
@@ -808,7 +808,7 @@ func (m *mockKubeletClient) Patch(
 
 func (m *mockKubeletClient) syncToDisk(obj client.Object) {
 	if secret, ok := obj.(*corev1.Secret); ok && secret.Name == ServerSecretName {
-		_ = os.WriteFile(filepath.Join(m.CertDir, CertFileName), secret.Data["tls.crt"], 0o644)
+		_ = os.WriteFile(filepath.Join(m.CertDir, CertFileName), secret.Data["tls.crt"], 0o600)
 		_ = os.WriteFile(filepath.Join(m.CertDir, KeyFileName), secret.Data["tls.key"], 0o600)
 	}
 }
@@ -934,7 +934,7 @@ func TestManager_Misc(t *testing.T) {
 	t.Run("waitForKubelet: mismatch log", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		_ = os.WriteFile(filepath.Join(dir, CertFileName), []byte("wrong"), 0o644)
+		_ = os.WriteFile(filepath.Join(dir, CertFileName), []byte("wrong"), 0o600)
 
 		mgr := NewManager(cl, nil, Options{
 			Namespace: namespace,
