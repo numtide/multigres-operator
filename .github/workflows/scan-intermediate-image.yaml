@@ -21,7 +21,7 @@ jobs:
         continue-on-error: true
         with:
           cache-db: true
-          image: "golang:1.25.6-alpine3.22" # sync this with Dockerfile
+          image: "golang:1.25.7-alpine3.23" # sync this with Dockerfile
           output-file: grype.sarif
           severity-cutoff: high
       - name: Upload SARIF file
