@@ -166,7 +166,7 @@ func TestWriteKubeconfigFile(t *testing.T) {
 				dir := t.TempDir()
 				path := filepath.Join(dir, "kubeconfig")
 				// Pre-create the file
-				os.WriteFile(path, []byte("old content"), 0o644)
+				os.WriteFile(path, []byte("old content"), 0o600)
 				return path
 			},
 			content:   []byte("new content"),
@@ -212,7 +212,7 @@ func TestWriteKubeconfigFile(t *testing.T) {
 					t.Fatalf("Failed to stat file: %v", err)
 				}
 
-				expectedMode := os.FileMode(0o644)
+				expectedMode := os.FileMode(0o600)
 				if info.Mode().Perm() != expectedMode {
 					t.Errorf("File permissions = %o, want %o", info.Mode().Perm(), expectedMode)
 				}
