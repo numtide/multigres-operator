@@ -3,7 +3,7 @@
 # Github workflow step anchore/scan-action scans only the final image
 # sync this intermediate FROM reference with:
 #   scan-intermediate-image.yaml
-FROM golang:1.25.7-alpine3.23 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine3.23 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -19,11 +19,9 @@ RUN go mod download
 # Copy the Go source (relies on .dockerignore to filter)
 COPY . .
 
-# Build
-# the GOARCH has no default value to allow the binary to be built according to the host where the command
-# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
-# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
-# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
+# Build using Go's native cross-compiler (CGO_ENABLED=0).
+# --platform=$BUILDPLATFORM on the FROM makes this stage run on the host arch
+# (amd64) even when targeting arm64, avoiding slow QEMU emulation.
 RUN CGO_ENABLED=0 \
 	GOOS=${TARGETOS:-linux} \
 	GOARCH=${TARGETARCH} \
