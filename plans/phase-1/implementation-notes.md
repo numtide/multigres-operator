@@ -137,11 +137,11 @@ The operator includes a generic, consumer-agnostic TLS certificate lifecycle man
 │                                                     │
 │    CertRotator (Bootstrap + Background Loop)        │
 │    ┌─────────────┐      ┌──────────────────┐        │
-│    │ CA Secret    │──signs──▸ Server Secret │        │
-│    │ (ca.crt/key) │      │ (tls.crt/key)   │        │
+│    │ CA Secret   │──signs──▸ Server Secret │        │
+│    │ (ca.crt/key)│      │ (tls.crt/key)    │        │
 │    └─────────────┘      └──────────────────┘        │
 │          │                       │                  │
-│          │       PostReconcileHook(caBundle)         │
+│          │       PostReconcileHook(caBundle)        │
 │          │              │                           │
 └──────────┼──────────────┼───────────────────────────┘
            │              │
