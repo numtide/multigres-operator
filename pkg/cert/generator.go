@@ -36,9 +36,9 @@ type ServerArtifacts struct {
 	KeyPEM  []byte
 }
 
-// serverCertConfig holds the resolved configuration for server cert generation.
 type serverCertConfig struct {
 	extKeyUsages []x509.ExtKeyUsage
+	organization string
 }
 
 // ServerCertOption configures optional behavior for GenerateServerCert.
@@ -54,6 +54,13 @@ func WithExtKeyUsages(usages ...x509.ExtKeyUsage) ServerCertOption {
 	}
 }
 
+// WithOrganization overrides the default certificate Organization field.
+func WithOrganization(org string) ServerCertOption {
+	return func(cfg *serverCertConfig) {
+		cfg.organization = org
+	}
+}
+
 // internal variables for mocking in tests
 var (
 	marshalECPrivateKey = x509.MarshalECPrivateKey
@@ -61,7 +68,12 @@ var (
 )
 
 // GenerateCA creates a new self-signed Root CA using ECDSA P-256.
-func GenerateCA() (*CAArtifacts, error) {
+// If organization is empty, the package-level Organization constant is used.
+func GenerateCA(organization string) (*CAArtifacts, error) {
+	if organization == "" {
+		organization = Organization
+	}
+
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate CA private key: %w", err)
@@ -70,8 +82,8 @@ func GenerateCA() (*CAArtifacts, error) {
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName:   "Multigres Operator CA",
-			Organization: []string{Organization},
+			CommonName:   organization + " CA",
+			Organization: []string{organization},
 		},
 		NotBefore: time.Now().Add(-1 * time.Hour),
 		NotAfter:  time.Now().Add(CAValidityDuration),
@@ -131,6 +143,7 @@ func GenerateServerCert(
 
 	cfg := serverCertConfig{
 		extKeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		organization: Organization,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -150,7 +163,7 @@ func GenerateServerCert(
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName:   commonName,
-			Organization: []string{Organization},
+			Organization: []string{cfg.organization},
 		},
 		DNSNames:    dnsNames,
 		NotBefore:   time.Now().Add(-1 * time.Hour),

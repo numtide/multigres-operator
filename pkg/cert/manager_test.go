@@ -82,7 +82,7 @@ func TestManager_EnsureCerts(t *testing.T) {
 		[]string{expectedDNSName},
 	)
 
-	otherCA, _ := GenerateCA()
+	otherCA, _ := GenerateCA("")
 	signedByOtherCACert := generateSignedCertPEM(
 		t,
 		otherCA,
@@ -370,7 +370,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(testServerSecretName, errors.New("delete fail")),
+				OnDelete: testutil.FailOnObjectName(
+					testServerSecretName,
+					errors.New("delete fail"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to delete corrupt server cert secret",
@@ -386,7 +389,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(testServerSecretName, errors.New("delete fail")),
+				OnDelete: testutil.FailOnObjectName(
+					testServerSecretName,
+					errors.New("delete fail"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to delete corrupt server cert secret",
@@ -409,7 +415,10 @@ func TestManager_EnsureCerts(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(testServerSecretName, errors.New("delete fail")),
+				OnDelete: testutil.FailOnObjectName(
+					testServerSecretName,
+					errors.New("delete fail"),
+				),
 			},
 			wantErr:     true,
 			errContains: "failed to delete unparseable server cert secret",
@@ -614,7 +623,7 @@ func (b *badSchemeClient) Scheme() *runtime.Scheme {
 
 func generateCAPEM(tb testing.TB) ([]byte, []byte) {
 	tb.Helper()
-	ca, err := GenerateCA()
+	ca, err := GenerateCA("")
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -848,6 +857,42 @@ func TestManager_OwnerRef(t *testing.T) {
 			t.Errorf("Expected controller ref error, got %v", err)
 		}
 	})
+
+	t.Run("Owner with Bad Scheme: SetControllerReference Fails on Server Cert", func(t *testing.T) {
+		t.Parallel()
+
+		validCABytes, validCAKeyBytes := generateCAPEM(t)
+
+		owner := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-operator",
+				Namespace: "test-ns",
+				UID:       "test-uid-456",
+			},
+		}
+
+		// Pre-create CA secret so ensureCA finds it and skips setOwner.
+		caSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: testCASecretName, Namespace: "test-ns"},
+			Data:       map[string][]byte{"ca.crt": validCABytes, "ca.key": validCAKeyBytes},
+		}
+
+		realCl := fake.NewClientBuilder().WithScheme(s).WithObjects(caSecret).Build()
+		cl := &badSchemeClient{Client: realCl}
+		opts := Options{
+			Namespace:        "test-ns",
+			CASecretName:     testCASecretName,
+			ServerSecretName: testServerSecretName,
+			ServiceName:      "test-svc",
+			Owner:            owner,
+		}
+
+		mgr := NewManager(cl, record.NewFakeRecorder(10), opts)
+		err := mgr.Bootstrap(t.Context())
+		if err == nil || !strings.Contains(err.Error(), "failed to set owner for server cert secret") {
+			t.Errorf("Expected server cert owner error, got %v", err)
+		}
+	})
 }
 
 func TestManager_WaitForProjection(t *testing.T) {
@@ -897,6 +942,50 @@ func TestManager_WaitForProjection(t *testing.T) {
 		// and test it directly
 		_ = mgr.waitForProjection(ctx, []byte("expected"))
 	})
+
+	t.Run("Enabled: File Not Found Retries", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		// No cert file on disk — waitForProjection should retry until timeout
+		cl := fake.NewClientBuilder().WithScheme(s).Build()
+		mgr := NewManager(cl, nil, Options{
+			Namespace:         "test-ns",
+			CASecretName:      testCASecretName,
+			ServerSecretName:  testServerSecretName,
+			ServiceName:       "test-svc",
+			CertDir:           dir,
+			WaitForProjection: true,
+		})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		defer cancel()
+
+		err := mgr.waitForProjection(ctx, []byte("expected"))
+		if err == nil {
+			t.Error("Expected timeout error for missing file")
+		}
+	})
+
+	t.Run("Enabled: File Matches Immediately", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		expected := []byte("matching-cert-content")
+		_ = os.WriteFile(filepath.Join(dir, CertFileName), expected, 0o600)
+
+		cl := fake.NewClientBuilder().WithScheme(s).Build()
+		mgr := NewManager(cl, nil, Options{
+			Namespace:         "test-ns",
+			CASecretName:      testCASecretName,
+			ServerSecretName:  testServerSecretName,
+			ServiceName:       "test-svc",
+			CertDir:           dir,
+			WaitForProjection: true,
+		})
+
+		if err := mgr.waitForProjection(t.Context(), expected); err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+	})
 }
 
 func TestManager_ExtKeyUsages(t *testing.T) {
@@ -914,7 +1003,10 @@ func TestManager_ExtKeyUsages(t *testing.T) {
 			CASecretName:     testCASecretName,
 			ServerSecretName: testServerSecretName,
 			ServiceName:      "test-svc",
-			ExtKeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+			ExtKeyUsages: []x509.ExtKeyUsage{
+				x509.ExtKeyUsageServerAuth,
+				x509.ExtKeyUsageClientAuth,
+			},
 		}
 
 		mgr := NewManager(cl, record.NewFakeRecorder(10), opts)
@@ -1025,6 +1117,36 @@ func TestManager_Misc(t *testing.T) {
 		_ = mgr.Start(timeoutCtx)
 	})
 
+	t.Run("Start Loop: ReconcilePKI Error Logged", func(t *testing.T) {
+		t.Parallel()
+
+		// Use a failing client so reconcilePKI fails on tick
+		failClient := testutil.NewFakeClientWithFailures(
+			fake.NewClientBuilder().WithScheme(s).Build(),
+			&testutil.FailureConfig{
+				OnGet: func(_ types.NamespacedName) error {
+					return errors.New("forced get failure")
+				},
+			},
+		)
+
+		timeoutCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer cancel()
+
+		mgr := NewManager(failClient, nil, Options{
+			Namespace:        "default",
+			CASecretName:     testCASecretName,
+			ServerSecretName: testServerSecretName,
+			ServiceName:      "test-svc",
+			RotationInterval: 10 * time.Millisecond,
+		})
+
+		// Start should not return an error — it logs reconcile failures
+		if err := mgr.Start(timeoutCtx); err != nil {
+			t.Fatalf("Start should only return nil, got %v", err)
+		}
+	})
+
 	t.Run("ComponentName Default", func(t *testing.T) {
 		t.Parallel()
 		opts := Options{}
@@ -1047,6 +1169,22 @@ func TestManager_Misc(t *testing.T) {
 		usages := opts.extKeyUsages()
 		if len(usages) != 1 || usages[0] != x509.ExtKeyUsageServerAuth {
 			t.Errorf("Expected default [ServerAuth], got %v", usages)
+		}
+	})
+
+	t.Run("Organization Default", func(t *testing.T) {
+		t.Parallel()
+		opts := Options{}
+		if got := opts.organization(); got != Organization {
+			t.Errorf("Expected default organization %q, got %q", Organization, got)
+		}
+	})
+
+	t.Run("Organization Custom", func(t *testing.T) {
+		t.Parallel()
+		opts := Options{Organization: "Acme Corp"}
+		if got := opts.organization(); got != "Acme Corp" {
+			t.Errorf("Expected organization 'Acme Corp', got %q", got)
 		}
 	})
 
@@ -1096,7 +1234,7 @@ func TestManager_EntropyFailures(t *testing.T) {
 
 	t.Run("ensureServerCert: GenerateServerCert Failure (Creation)", func(t *testing.T) {
 		rand.Reader = oldReader
-		caArt, _ := GenerateCA()
+		caArt, _ := GenerateCA("")
 		caSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: testCASecretName, Namespace: namespace},
 			Data:       map[string][]byte{"ca.crt": caArt.CertPEM, "ca.key": caArt.KeyPEM},
@@ -1123,7 +1261,7 @@ func TestManager_EntropyFailures(t *testing.T) {
 
 	t.Run("ensureServerCert: GenerateServerCert Failure (Rotation)", func(t *testing.T) {
 		rand.Reader = oldReader
-		caArt, _ := GenerateCA()
+		caArt, _ := GenerateCA("")
 
 		priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 		tmpl := x509.Certificate{

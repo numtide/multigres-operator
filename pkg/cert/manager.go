@@ -55,6 +55,14 @@ type Options struct {
 	// Defaults to "cert".
 	ComponentName string
 
+	// Organization overrides the certificate Organization field.
+	// Defaults to the package-level Organization constant ("Multigres Operator").
+	Organization string
+
+	// AdditionalDNSNames are extra DNS SANs appended to the auto-generated
+	// service DNS names (<svc>.<ns>.svc, <svc>.<ns>.svc.cluster.local).
+	AdditionalDNSNames []string
+
 	// ExtKeyUsages overrides the extended key usages for generated server certificates.
 	// Defaults to [x509.ExtKeyUsageServerAuth].
 	ExtKeyUsages []x509.ExtKeyUsage
@@ -76,6 +84,13 @@ func (o *Options) componentName() string {
 		return o.ComponentName
 	}
 	return "cert"
+}
+
+func (o *Options) organization() string {
+	if o.Organization != "" {
+		return o.Organization
+	}
+	return Organization
 }
 
 func (o *Options) extKeyUsages() []x509.ExtKeyUsage {
@@ -190,7 +205,7 @@ func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
 			return nil, fmt.Errorf("failed to get CA secret: %w", err)
 		}
 
-		artifacts, err := GenerateCA()
+		artifacts, err := GenerateCA(m.Options.organization())
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate CA: %w", err)
 		}
@@ -248,6 +263,7 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 		fmt.Sprintf("%s.%s.svc", m.Options.ServiceName, m.Options.Namespace),
 		fmt.Sprintf("%s.%s.svc.cluster.local", m.Options.ServiceName, m.Options.Namespace),
 	}
+	dnsNames = append(dnsNames, m.Options.AdditionalDNSNames...)
 
 	if err := m.Client.Get(
 		ctx,
@@ -259,7 +275,8 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 		}
 
 		artifacts, err := GenerateServerCert(ca, m.Options.ServiceName, dnsNames,
-			WithExtKeyUsages(m.Options.extKeyUsages()...))
+			WithExtKeyUsages(m.Options.extKeyUsages()...),
+			WithOrganization(m.Options.organization()))
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate server cert: %w", err)
 		}
@@ -313,7 +330,8 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 
 	if needsRotation {
 		srv, err := GenerateServerCert(ca, m.Options.ServiceName, dnsNames,
-			WithExtKeyUsages(m.Options.extKeyUsages()...))
+			WithExtKeyUsages(m.Options.extKeyUsages()...),
+			WithOrganization(m.Options.organization()))
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate new server cert: %w", err)
 		}
@@ -362,7 +380,11 @@ func (m *CertRotator) setOwner(secret *corev1.Secret) error {
 		return nil
 	}
 
-	if err := controllerutil.SetControllerReference(m.Options.Owner, secret, m.Client.Scheme()); err != nil {
+	if err := controllerutil.SetControllerReference(
+		m.Options.Owner,
+		secret,
+		m.Client.Scheme(),
+	); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 	return nil

@@ -36,6 +36,7 @@ limitations under the License.
 //
 // # TLS Certificates
 //
-// Certificate management is handled by the pkg/webhook/cert package, which
-// supports both self-signed (auto-bootstrap) and external (cert-manager) modes.
+// Certificate management is handled by the generic pkg/cert module. This package
+// provides webhook-specific helpers (PatchWebhookCABundle, FindOperatorDeployment)
+// that are wired into the cert module's hooks by main.go.
 package webhook
