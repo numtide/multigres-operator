@@ -439,40 +439,19 @@ spec:
 The operator includes a Mutating and Validating Webhook to enforce defaults and data integrity.
 
 ### Automatic Certificate Management (Default)
-By default, the operator manages its own certificates.
-1.  **Bootstrap**: On startup, it checks the directory `/var/run/secrets/webhook` for existing `tls.crt` and `tls.key` files.
-2.  **Generation**: If none are found, it generates a Self-Signed CA and a Server Certificate.
-3.  **Patching**: It automatically patches the `MutatingWebhookConfiguration` and `ValidatingWebhookConfiguration` in the cluster with the new CA Bundle.
-4.  **Rotation**: Certificates are automatically rotated (default: every 30 days) without downtime.
+By default, the operator manages its own TLS certificates using the generic `pkg/cert` module. This implements a **Split-Secret PKI** architecture:
+
+1.  **Bootstrap**: On startup, the cert rotator generates a self-signed Root CA (ECDSA P-256) and a Server Certificate, storing them in two separate Kubernetes Secrets.
+2.  **CA Bundle Injection**: A post-reconcile hook automatically patches the `MutatingWebhookConfiguration` and `ValidatingWebhookConfiguration` with the CA bundle.
+3.  **Rotation**: A background loop checks certificates hourly. Certs nearing expiry (or signed by a rotated CA) are automatically renewed without downtime.
+4.  **Owner References**: Both secrets are owned by the operator Deployment, so they are garbage-collected on uninstall.
 
 ### Using external Cert-Manager
-If you prefer to use `cert-manager` or another external tool, you must mount the certificates to the operator pod.
+If you prefer to use `cert-manager` or another external tool, deploy using the cert-manager overlay (`install-certmanager.yaml`). This overlay:
 
-1.  **Configuration**: Mount a secret containing `tls.crt` and `tls.key` to `/var/run/secrets/webhook`.
-2.  **Behavior**: The operator detects the files on disk and **disables** its internal rotation logic.
-
-**Example Patch to Mount External Certs:**
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: multigres-operator-controller-manager
-  namespace: multigres-system
-spec:
-  template:
-    spec:
-      containers:
-      - name: manager
-        volumeMounts:
-        - mountPath: /var/run/secrets/webhook
-          name: cert-volume
-          readOnly: true
-      volumes:
-      - name: cert-volume
-        secret:
-          defaultMode: 420
-          secretName: my-cert-manager-secret # Your secret name
-```
+1.  Disables the internal cert rotator via the `--webhook-use-internal-certs=false` flag.
+2.  Creates a `Certificate` and `ClusterIssuer` resource for cert-manager to manage.
+3.  Mounts the cert-manager-provisioned secret to `/var/run/secrets/webhook`.
 
 ---
 
