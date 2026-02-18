@@ -889,7 +889,8 @@ func TestManager_OwnerRef(t *testing.T) {
 
 		mgr := NewManager(cl, record.NewFakeRecorder(10), opts)
 		err := mgr.Bootstrap(t.Context())
-		if err == nil || !strings.Contains(err.Error(), "failed to set owner for server cert secret") {
+		if err == nil ||
+			!strings.Contains(err.Error(), "failed to set owner for server cert secret") {
 			t.Errorf("Expected server cert owner error, got %v", err)
 		}
 	})
