@@ -35,7 +35,7 @@ func TestGenerator_Logic(t *testing.T) {
 	}
 
 	// Fixtures
-	caArtifacts, err := GenerateCA()
+	caArtifacts, err := GenerateCA("")
 	if err != nil {
 		t.Fatalf("setup failed: GenerateCA error = %v", err)
 	}
@@ -122,10 +122,16 @@ func TestGenerator_Logic(t *testing.T) {
 					tb.Fatalf("Expected 2 ExtKeyUsages, got %d", len(cert.ExtKeyUsage))
 				}
 				if cert.ExtKeyUsage[0] != x509.ExtKeyUsageServerAuth {
-					tb.Errorf("Expected first ExtKeyUsage to be ServerAuth, got %v", cert.ExtKeyUsage[0])
+					tb.Errorf(
+						"Expected first ExtKeyUsage to be ServerAuth, got %v",
+						cert.ExtKeyUsage[0],
+					)
 				}
 				if cert.ExtKeyUsage[1] != x509.ExtKeyUsageClientAuth {
-					tb.Errorf("Expected second ExtKeyUsage to be ClientAuth, got %v", cert.ExtKeyUsage[1])
+					tb.Errorf(
+						"Expected second ExtKeyUsage to be ClientAuth, got %v",
+						cert.ExtKeyUsage[1],
+					)
 				}
 			},
 		},
@@ -163,7 +169,11 @@ func TestGenerator_Logic(t *testing.T) {
 				return
 			}
 
-			arts, err := GenerateServerCert(tc.input.ca, tc.input.commonName, tc.input.dnsNames, tc.input.opts...)
+			arts, err := GenerateServerCert(
+				tc.input.ca,
+				tc.input.commonName,
+				tc.input.dnsNames,
+				tc.input.opts...)
 			if tc.wantErr {
 				if err == nil {
 					t.Error("Expected error, got nil")
@@ -184,7 +194,7 @@ func TestGenerator_Logic(t *testing.T) {
 func TestParseCA_Logic(t *testing.T) {
 	t.Parallel()
 
-	ca, _ := GenerateCA()
+	ca, _ := GenerateCA("")
 
 	tests := map[string]struct {
 		certBytes []byte
@@ -299,7 +309,7 @@ func TestGenerator_EntropyFailures(t *testing.T) {
 
 	t.Run("GenerateCA Key Failure", func(t *testing.T) {
 		rand.Reader = errorReader{}
-		_, err := GenerateCA()
+		_, err := GenerateCA("")
 		if err == nil || !strings.Contains(err.Error(), "failed to generate CA private key") {
 			t.Errorf("Expected key gen error, got %v", err)
 		}
@@ -307,7 +317,7 @@ func TestGenerator_EntropyFailures(t *testing.T) {
 
 	t.Run("GenerateServerCert Key Failure", func(t *testing.T) {
 		rand.Reader = oldReader // Need valid reader for CA gen
-		ca, _ := GenerateCA()
+		ca, _ := GenerateCA("")
 
 		rand.Reader = errorReader{}
 		_, err := GenerateServerCert(ca, "foo", nil)
@@ -321,7 +331,7 @@ func TestGenerator_EntropyFailures(t *testing.T) {
 			failOnCaller: "x509.CreateCertificate",
 			delegate:     oldReader,
 		}
-		_, err := GenerateCA()
+		_, err := GenerateCA("")
 		if err == nil || !strings.Contains(err.Error(), "failed to create CA certificate") {
 			t.Errorf("Expected cert creation error, got %v", err)
 		}
@@ -329,7 +339,7 @@ func TestGenerator_EntropyFailures(t *testing.T) {
 
 	t.Run("GenerateServerCert: failure (cert)", func(t *testing.T) {
 		rand.Reader = oldReader
-		ca, _ := GenerateCA()
+		ca, _ := GenerateCA("")
 
 		rand.Reader = &functionTargetedReader{
 			failOnCaller: "x509.CreateCertificate",
@@ -354,7 +364,7 @@ func TestGenerator_MockFailures(t *testing.T) {
 			return nil, fmt.Errorf("mock parse error")
 		}
 
-		_, err := GenerateCA()
+		_, err := GenerateCA("")
 		if err == nil || !strings.Contains(err.Error(), "failed to parse generated CA") {
 			t.Errorf("Expected parse error, got %v", err)
 		}
@@ -366,7 +376,7 @@ func TestGenerator_MockFailures(t *testing.T) {
 			return nil, fmt.Errorf("mock marshal error")
 		}
 
-		_, err := GenerateCA()
+		_, err := GenerateCA("")
 		if err == nil || !strings.Contains(err.Error(), "failed to marshal CA key") {
 			t.Errorf("Expected marshal error, got %v", err)
 		}
@@ -380,7 +390,7 @@ func TestGenerator_MockFailures_ServerCert(t *testing.T) {
 
 	// Setup valid CA with REAL functions
 	marshalECPrivateKey = x509.MarshalECPrivateKey
-	ca, _ := GenerateCA()
+	ca, _ := GenerateCA("")
 
 	t.Run("GenerateServerCert: Marshal Key Failure", func(t *testing.T) {
 		marshalECPrivateKey = func(key *ecdsa.PrivateKey) ([]byte, error) {

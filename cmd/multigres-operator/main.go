@@ -60,7 +60,8 @@ import (
 	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	multigreswebhook "github.com/numtide/multigres-operator/pkg/webhook"
-	cert "github.com/numtide/multigres-operator/pkg/webhook/cert"
+
+	gencert "github.com/numtide/multigres-operator/pkg/cert"
 
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 )
@@ -342,17 +343,32 @@ func main() {
 			os.Exit(1)
 		}
 
-		rotator := cert.NewManager(
+		// Resolve owner deployment for cert secret garbage collection
+		operatorLabels := map[string]string{
+			"app.kubernetes.io/name": "multigres-operator",
+		}
+		ownerDep, err := multigreswebhook.FindOperatorDeployment(
+			context.Background(), tmpClient, webhookServiceNamespace, operatorLabels, "",
+		)
+		if err != nil {
+			setupLog.Error(err, "failed to find operator deployment for owner reference")
+			os.Exit(1)
+		}
+
+		rotator := gencert.NewManager(
 			tmpClient,
 			mgr.GetEventRecorderFor("cert-rotator"),
-			cert.Options{
-				Namespace:   webhookServiceNamespace,
-				ServiceName: webhookServiceName,
-				CertDir:     webhookCertDir,
-				// Use Label Selector to find our own deployment for OwnerRefs
-				// This works even if the deployment name is changed by Kustomize/Helm.
-				OperatorLabelSelector: map[string]string{
-					"app.kubernetes.io/name": "multigres-operator",
+			gencert.Options{
+				Namespace:         webhookServiceNamespace,
+				CASecretName:      multigreswebhook.CASecretName,
+				ServerSecretName:  multigreswebhook.ServerSecretName,
+				ServiceName:       webhookServiceName,
+				CertDir:           webhookCertDir,
+				Owner:             ownerDep,
+				WaitForProjection: true,
+				ComponentName:     "webhook",
+				PostReconcileHook: func(ctx context.Context, caBundle []byte) error {
+					return multigreswebhook.PatchWebhookCABundle(ctx, tmpClient, caBundle)
 				},
 			},
 		)
