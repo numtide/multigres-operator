@@ -118,7 +118,7 @@ Multigres manages its own cluster state through an **etcd topology store**. Each
 > [!WARNING]
 > **Headless service is still needed for hostname resolution.** While multigateway discovers poolers via etcd (not K8s DNS), it connects using the `Hostname:GRPCPort` from the topology. The `Hostname` value comes from multipooler's `FullyQualifiedHostname()`, which resolves via DNS: `os.Hostname()` → `net.LookupHost()` → `net.LookupAddr()` → FQDN. With a headless service, this produces a resolvable FQDN (e.g., `pod-0.headless-svc.ns.svc.cluster.local`). Without it, the hostname may not be DNS-resolvable from other pods.
 >
-> **Options**: (a) Keep a headless service for pod-to-pod DNS resolution, or (b) have the operator set `--hostname=$(POD_IP)` so the multipooler registers its IP address instead of a DNS name. Option (b) is simpler (removes the headless service) but means etcd entries contain IPs that become stale if pods get new IPs.
+> **Decision**: Keep the headless service. Using `--hostname=$(POD_IP)` to register IP addresses instead of DNS names is not viable — Kubernetes recycles IP addresses, so stale etcd entries would point to the wrong pod after rescheduling.
 
 ---
 
