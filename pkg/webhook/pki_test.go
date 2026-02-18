@@ -75,20 +75,36 @@ func TestPatchWebhookCABundle(t *testing.T) {
 
 		// Verify mutating
 		got := &admissionregistrationv1.MutatingWebhookConfiguration{}
-		if err := cl.Get(context.Background(), client.ObjectKeyFromObject(mutating), got); err != nil {
+		if err := cl.Get(
+			context.Background(),
+			client.ObjectKeyFromObject(mutating),
+			got,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if string(got.Webhooks[0].ClientConfig.CABundle) != string(caBundle) {
-			t.Errorf("mutating CABundle = %q, want %q", got.Webhooks[0].ClientConfig.CABundle, caBundle)
+			t.Errorf(
+				"mutating CABundle = %q, want %q",
+				got.Webhooks[0].ClientConfig.CABundle,
+				caBundle,
+			)
 		}
 
 		// Verify validating
 		gotV := &admissionregistrationv1.ValidatingWebhookConfiguration{}
-		if err := cl.Get(context.Background(), client.ObjectKeyFromObject(validating), gotV); err != nil {
+		if err := cl.Get(
+			context.Background(),
+			client.ObjectKeyFromObject(validating),
+			gotV,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if string(gotV.Webhooks[0].ClientConfig.CABundle) != string(caBundle) {
-			t.Errorf("validating CABundle = %q, want %q", gotV.Webhooks[0].ClientConfig.CABundle, caBundle)
+			t.Errorf(
+				"validating CABundle = %q, want %q",
+				gotV.Webhooks[0].ClientConfig.CABundle,
+				caBundle,
+			)
 		}
 	})
 
@@ -155,7 +171,8 @@ func TestPatchWebhookCABundle(t *testing.T) {
 			Build()
 
 		err := PatchWebhookCABundle(context.Background(), cl, caBundle)
-		if err == nil || !strings.Contains(err.Error(), "failed to update mutating webhook config") {
+		if err == nil ||
+			!strings.Contains(err.Error(), "failed to update mutating webhook config") {
 			t.Errorf("expected update error, got: %v", err)
 		}
 	})
@@ -213,7 +230,8 @@ func TestPatchWebhookCABundle(t *testing.T) {
 			Build()
 
 		err := PatchWebhookCABundle(context.Background(), cl, caBundle)
-		if err == nil || !strings.Contains(err.Error(), "failed to update validating webhook config") {
+		if err == nil ||
+			!strings.Contains(err.Error(), "failed to update validating webhook config") {
 			t.Errorf("expected update error, got: %v", err)
 		}
 	})
@@ -257,7 +275,13 @@ func TestFindOperatorDeployment(t *testing.T) {
 		}
 
 		cl := fake.NewClientBuilder().WithScheme(pkiScheme(t)).WithObjects(dep).Build()
-		got, err := FindOperatorDeployment(context.Background(), cl, namespace, nil, "explicit-name")
+		got, err := FindOperatorDeployment(
+			context.Background(),
+			cl,
+			namespace,
+			nil,
+			"explicit-name",
+		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -340,7 +364,8 @@ func TestFindOperatorDeployment(t *testing.T) {
 			Build()
 
 		_, err := FindOperatorDeployment(context.Background(), cl, namespace, nil, "some-name")
-		if err == nil || !strings.Contains(err.Error(), "failed to get operator deployment by name") {
+		if err == nil ||
+			!strings.Contains(err.Error(), "failed to get operator deployment by name") {
 			t.Errorf("expected get error, got: %v", err)
 		}
 	})

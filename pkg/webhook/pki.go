@@ -46,7 +46,11 @@ func PatchWebhookCABundle(ctx context.Context, c client.Client, caBundle []byte)
 
 	// Validating
 	validating := &admissionregistrationv1.ValidatingWebhookConfiguration{}
-	if err := c.Get(ctx, types.NamespacedName{Name: ValidatingWebhookName}, validating); err != nil {
+	if err := c.Get(
+		ctx,
+		types.NamespacedName{Name: ValidatingWebhookName},
+		validating,
+	); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to get validating webhook config: %w", err)
 		}
