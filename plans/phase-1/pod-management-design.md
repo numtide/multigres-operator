@@ -487,6 +487,16 @@ When scaling down, the operator must choose which pod to delete. The selection a
 > [!WARNING]
 > The operator must avoid deleting the primary pod during scale-down. Since multigres determines primary/replica roles internally, the operator must query the etcd topology to identify the current primary before choosing which pod to delete. If the operator accidentally deletes the primary, multiorch will handle failover automatically (see §7.3), but this causes unnecessary downtime.
 
+### DRAINED Pooler Replacement
+
+Multiorch may mark a pooler as `DRAINED` in etcd independently of the operator (e.g., during internal recovery or rebalancing). When this happens, the operator must:
+
+1. **Detect the DRAINED pooler** by reading etcd topology during reconciliation and comparing `PoolerType` for each pod's `service-id`
+2. **Create a replacement pod** to maintain the `replicasPerCell` count — the DRAINED pod no longer participates in quorum, so a new replica is needed
+3. **Clean up the DRAINED pod** using the drain state machine from [§6](#graceful-scale-down-sequence) — since the pooler is already DRAINED, it can skip straight to removing from `synchronous_standby_names` (if still listed) and then deleting the pod and PVC
+
+The key insight is that the operator's reconcile loop compares the **desired healthy replica count** (`replicasPerCell`) against the **actual healthy count** (pods whose etcd entry is PRIMARY or REPLICA, not DRAINED). A DRAINED pod counts as a deficit, triggering both scale-up (create replacement) and cleanup (remove the drained pod).
+
 ---
 
 ## 9. Rolling Updates
