@@ -83,11 +83,6 @@ type PoolSpec struct {
 	// +optional
 	Storage StorageSpec `json:"storage,omitempty"`
 
-	// BackupStorage defines the storage configuration for backup volumes.
-	// Shared across all pods in a pool. Defaults to same as Storage if not specified.
-	// +optional
-	BackupStorage StorageSpec `json:"backupStorage,omitempty"`
-
 	// Postgres container configuration.
 	// +optional
 	Postgres ContainerConfig `json:"postgres,omitempty"`
@@ -147,6 +142,11 @@ type ShardSpec struct {
 	// Inherited from MultigresCluster.Spec.Observability by the resolver.
 	// +optional
 	Observability *ObservabilityConfig `json:"observability,omitempty"`
+
+	// Backup is the fully resolved backup configuration for this shard.
+	// Inherited from MultigresCluster.Spec.Backup by the resolver.
+	// +optional
+	Backup *BackupConfig `json:"backup,omitempty"`
 }
 
 // ShardImages defines the images required for a Shard.

@@ -105,7 +105,7 @@ func BuildPoolStatefulSet(
 					},
 					Volumes: []corev1.Volume{
 						// buildPgctldVolume(),
-						buildBackupVolume(shard, poolName, cellName),
+						buildSharedBackupVolume(shard, cellName),
 						buildSocketDirVolume(),
 						buildPgHbaVolume(),
 					},
@@ -153,11 +153,11 @@ func buildPoolVolumeClaimTemplates(
 // This PVC is created independently of the StatefulSet and referenced by all pods.
 // For single-node clusters (kind, minikube), uses ReadWriteOnce (all pods on same node).
 // For multi-node production, configure BackupStorage.Class to a storage class supporting ReadWriteMany.
-func BuildBackupPVC(
+// BuildSharedBackupPVC creates a shared PVC for backup storage in a specific cell.
+// This PVC is shared by all pools in the shard within that cell.
+func BuildSharedBackupPVC(
 	shard *multigresv1alpha1.Shard,
-	poolName string,
 	cellName string,
-	poolSpec multigresv1alpha1.PoolSpec,
 	scheme *runtime.Scheme,
 ) (*corev1.PersistentVolumeClaim, error) {
 	clusterName := shard.Labels["multigres.com/cluster"]
@@ -168,33 +168,36 @@ func BuildBackupPVC(
 		string(shard.Spec.DatabaseName),
 		string(shard.Spec.TableGroupName),
 		string(shard.Spec.ShardName),
-		"pool",
-		poolName,
 		cellName,
 	)
-	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
 
-	// Use BackupStorage if specified, otherwise inherit from Storage
+	labels := metadata.BuildStandardLabels(clusterName, PoolComponentName)
+	metadata.AddClusterLabel(labels, clusterName)
+	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
+	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
+	metadata.AddCellLabel(labels, multigresv1alpha1.CellName(cellName))
+
 	var storageClass *string
 	storageSize := "10Gi" // Default backup storage size
+	accessModes := []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 
-	if poolSpec.BackupStorage.Class != "" {
-		storageClass = &poolSpec.BackupStorage.Class
-	} else if poolSpec.Storage.Class != "" {
-		storageClass = &poolSpec.Storage.Class
+	// Logic: Use Shard.Spec.Backup
+	// If Backup is nil or not Filesystem, we do NOT create a shared PVC.
+	if shard.Spec.Backup == nil || shard.Spec.Backup.Type != multigresv1alpha1.BackupTypeFilesystem {
+		return nil, nil
 	}
 
-	if poolSpec.BackupStorage.Size != "" {
-		storageSize = poolSpec.BackupStorage.Size
-	}
-
-	// Default to ReadWriteOnce for single-node clusters.
-	accessModes := []corev1.PersistentVolumeAccessMode{
-		corev1.ReadWriteOnce,
-	}
-
-	if len(poolSpec.BackupStorage.AccessModes) > 0 {
-		accessModes = poolSpec.BackupStorage.AccessModes
+	if shard.Spec.Backup.Filesystem != nil {
+		fsConfig := shard.Spec.Backup.Filesystem
+		if fsConfig.Storage.Class != "" {
+			storageClass = &fsConfig.Storage.Class
+		}
+		if fsConfig.Storage.Size != "" {
+			storageSize = fsConfig.Storage.Size
+		}
+		if len(fsConfig.Storage.AccessModes) > 0 {
+			accessModes = fsConfig.Storage.AccessModes
+		}
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{

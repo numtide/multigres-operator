@@ -147,7 +147,43 @@ func (r *ShardReconciler) Reconcile(
 		childSpan.End()
 	}
 
-	// Reconcile each pool
+	// Reconcile Shared Backup PVCs (one per cell)
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileBackupPVCs")
+		// Determine all cells where pools are running (or multiorch)
+		// We can reuse getMultiOrchCells logic or just iterate pools?
+		// getMultiOrchCells returns explicit MultiOrch cells OR union of pool cells.
+		// This serves as a good proxy for "active cells".
+		cells, err := getMultiOrchCells(shard)
+		if err != nil {
+			// If we can't determine cells, we can't create PVCs.
+			// But getMultiOrchCells errors if NO cells found.
+			// Try to proceed if possible? No, consume error.
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			return ctrl.Result{}, err
+		}
+
+		for _, cell := range cells {
+			cellName := string(cell)
+			if err := r.reconcileSharedBackupPVC(ctx, shard, cellName); err != nil {
+				monitoring.RecordSpanError(childSpan, err)
+				childSpan.End()
+				logger.Error(err, "Failed to reconcile shared backup PVC", "cell", cellName)
+				r.Recorder.Eventf(
+					shard,
+					"Warning",
+					"FailedApply",
+					"Failed to reconcile shared backup PVC for cell %s: %v",
+					cellName,
+					err,
+				)
+				return ctrl.Result{}, err
+			}
+		}
+		childSpan.End()
+	}
+
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePools")
 		for poolName, pool := range shard.Spec.Pools {
@@ -348,11 +384,6 @@ func (r *ShardReconciler) reconcilePool(
 	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
 
-		// Reconcile backup PVC before StatefulSet (PVC must exist first)
-		if err := r.reconcilePoolBackupPVC(ctx, shard, poolName, cellName, poolSpec); err != nil {
-			return fmt.Errorf("failed to reconcile backup PVC for cell %s: %w", cellName, err)
-		}
-
 		// Reconcile pool StatefulSet for this cell
 		if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, cellName, poolSpec); err != nil {
 			return fmt.Errorf("failed to reconcile pool StatefulSet for cell %s: %w", cellName, err)
@@ -414,17 +445,18 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 	return nil
 }
 
-// reconcilePoolBackupPVC creates or updates the shared backup PVC for a pool in a specific cell.
-func (r *ShardReconciler) reconcilePoolBackupPVC(
+// reconcileSharedBackupPVC creates or updates the shared backup PVC for a specific cell.
+func (r *ShardReconciler) reconcileSharedBackupPVC(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
-	poolName string,
 	cellName string,
-	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	desired, err := BuildBackupPVC(shard, poolName, cellName, poolSpec, r.Scheme)
+	desired, err := BuildSharedBackupPVC(shard, cellName, r.Scheme)
 	if err != nil {
-		return fmt.Errorf("failed to build backup PVC: %w", err)
+		return fmt.Errorf("failed to build shared backup PVC: %w", err)
+	}
+	if desired == nil {
+		return nil
 	}
 
 	// Server Side Apply
@@ -436,7 +468,7 @@ func (r *ShardReconciler) reconcilePoolBackupPVC(
 		client.ForceOwnership,
 		client.FieldOwner("multigres-operator"),
 	); err != nil {
-		return fmt.Errorf("failed to apply backup PVC: %w", err)
+		return fmt.Errorf("failed to apply shared backup PVC: %w", err)
 	}
 
 	r.Recorder.Eventf(

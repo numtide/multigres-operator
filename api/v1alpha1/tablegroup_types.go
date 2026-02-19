@@ -73,6 +73,10 @@ type TableGroupSpec struct {
 	// Inherited from MultigresCluster.Spec.Observability.
 	// +optional
 	Observability *ObservabilityConfig `json:"observability,omitempty"`
+
+	// Backup is the backup configuration inherited from MultigresCluster -> Database -> TableGroup.
+	// +optional
+	Backup *BackupConfig `json:"backup,omitempty"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,
@@ -94,6 +98,10 @@ type ShardResolvedSpec struct {
 	// Overrides TableGroup and MultigresCluster settings.
 	// +optional
 	PVCDeletionPolicy *PVCDeletionPolicy `json:"pvcDeletionPolicy,omitempty"`
+
+	// Backup is the backup configuration inherited from MultigresCluster.
+	// +optional
+	Backup *BackupConfig `json:"backup,omitempty"`
 }
 
 // ============================================================================

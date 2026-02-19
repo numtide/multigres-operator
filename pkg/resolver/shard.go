@@ -17,19 +17,27 @@ func (r *Resolver) ResolveShard(
 	ctx context.Context,
 	shardSpec *multigresv1alpha1.ShardConfig,
 	allCellNames []multigresv1alpha1.CellName,
-) (*multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, *multigresv1alpha1.PVCDeletionPolicy, error) {
+	inheritedBackup *multigresv1alpha1.BackupConfig,
+) (*multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, *multigresv1alpha1.PVCDeletionPolicy, *multigresv1alpha1.BackupConfig, error) {
 	// 1. Fetch Template
 	templateName := shardSpec.ShardTemplate
 	tpl, err := r.ResolveShardTemplate(ctx, templateName)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// 2. Merge Logic
-	multiOrch, pools, pvcPolicy := mergeShardConfig(tpl, shardSpec.Overrides, shardSpec.Spec)
+	multiOrch, pools, pvcPolicy, backupCfg := mergeShardConfig(tpl, shardSpec.Overrides, shardSpec.Spec, shardSpec.Backup, inheritedBackup)
 
 	// 3. Apply Deep Defaults (Level 4)
 	defaultStatelessSpec(&multiOrch.StatelessSpec, DefaultResourcesOrch(), 1)
+
+	if backupCfg == nil {
+		backupCfg = &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+		}
+	}
+	defaultBackupConfig(backupCfg)
 
 	// Contextual Defaulting: Lazy Cell Injection
 	// If the resolved configuration has no cells defined, it means "run everywhere".
@@ -69,7 +77,7 @@ func (r *Resolver) ResolveShard(
 		pools[name] = p
 	}
 
-	return &multiOrch, pools, pvcPolicy, nil
+	return &multiOrch, pools, pvcPolicy, backupCfg, nil
 }
 
 // ResolveShardTemplate fetches and resolves a ShardTemplate by name.
@@ -112,11 +120,18 @@ func mergeShardConfig(
 	template *multigresv1alpha1.ShardTemplate,
 	overrides *multigresv1alpha1.ShardOverrides,
 	inline *multigresv1alpha1.ShardInlineSpec,
-) (multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, *multigresv1alpha1.PVCDeletionPolicy) {
+	backupOverride *multigresv1alpha1.BackupConfig,
+	inheritedBackup *multigresv1alpha1.BackupConfig,
+) (multigresv1alpha1.MultiOrchSpec, map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec, *multigresv1alpha1.PVCDeletionPolicy, *multigresv1alpha1.BackupConfig) {
 	// 1. Start with Template (Base)
 	var multiOrch multigresv1alpha1.MultiOrchSpec
 	pools := make(map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec)
 	var pvcPolicy *multigresv1alpha1.PVCDeletionPolicy
+	// Start with inherited backup as base
+	var backupCfg *multigresv1alpha1.BackupConfig
+	if inheritedBackup != nil {
+		backupCfg = inheritedBackup.DeepCopy()
+	}
 
 	if template != nil {
 		if template.Spec.MultiOrch != nil {
@@ -163,7 +178,13 @@ func mergeShardConfig(
 		}
 	}
 
-	return multiOrch, pools, pvcPolicy
+	// 4. Apply Backup Override (from ShardConfig.Backup)
+	// We use MergeBackupConfig so that ShardConfig overrides inherited config
+	if backupOverride != nil {
+		backupCfg = multigresv1alpha1.MergeBackupConfig(backupOverride, backupCfg)
+	}
+
+	return multiOrch, pools, pvcPolicy, backupCfg
 }
 
 func mergeMultiOrchSpec(
@@ -226,5 +247,25 @@ func defaultPoolSpec(spec *multigresv1alpha1.PoolSpec) {
 	}
 	if isResourcesZero(spec.Multipooler.Resources) {
 		spec.Multipooler.Resources = DefaultResourcesPooler()
+	}
+}
+
+func defaultBackupConfig(cfg *multigresv1alpha1.BackupConfig) {
+	if cfg.Type == "" {
+		cfg.Type = multigresv1alpha1.BackupTypeFilesystem
+	}
+
+	if cfg.Type == multigresv1alpha1.BackupTypeFilesystem {
+		if cfg.Filesystem == nil {
+			cfg.Filesystem = &multigresv1alpha1.FilesystemBackupConfig{}
+		}
+		if cfg.Filesystem.Path == "" {
+			cfg.Filesystem.Path = DefaultBackupPath
+		}
+		// Ensure Storage struct is initialized if completely empty?
+		// StorageSpec is a struct value, so accessing fields is safe.
+		if cfg.Filesystem.Storage.Size == "" {
+			cfg.Filesystem.Storage.Size = DefaultBackupStorageSize
+		}
 	}
 }

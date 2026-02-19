@@ -1,0 +1,24 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: backup-s3-test
+  namespace: default
+spec:
+  backup:
+    type: s3
+    s3:
+      bucket: "my-test-bucket"
+      region: "us-east-1"
+      endpoint: "http://minio:9000"
+      useEnvCredentials: true
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"
+  databases:
+    - name: postgres
+      default: true
+      tablegroups:
+        - name: default
+          default: true
+          shards:
+            - name: "0-inf"

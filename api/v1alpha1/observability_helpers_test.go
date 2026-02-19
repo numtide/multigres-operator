@@ -188,3 +188,164 @@ func TestEnvOrCRD(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeBackupConfig(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		child  *BackupConfig
+		parent *BackupConfig
+		want   *BackupConfig
+	}{
+		"both nil": {
+			child:  nil,
+			parent: nil,
+			want:   nil,
+		},
+		"child nil inherits parent": {
+			child: nil,
+			parent: &BackupConfig{
+				Type:       BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{Path: "/parent"},
+			},
+			want: &BackupConfig{
+				Type:       BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{Path: "/parent"},
+			},
+		},
+		"parent nil uses child": {
+			child: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{Bucket: "child-bucket", Region: "us-east-1"},
+			},
+			parent: nil,
+			want: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{Bucket: "child-bucket", Region: "us-east-1"},
+			},
+		},
+		"child overrides parent path for filesystem": {
+			child: &BackupConfig{
+				Type:       BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{Path: "/child-path"},
+			},
+			parent: &BackupConfig{
+				Type: BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{
+					Path:    "/parent-path",
+					Storage: StorageSpec{Size: "10Gi"},
+				},
+			},
+			want: &BackupConfig{
+				Type: BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{
+					Path:    "/child-path",
+					Storage: StorageSpec{Size: "10Gi"},
+				},
+			},
+		},
+		"child type change fully replaces parent": {
+			child: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{Bucket: "my-bucket", Region: "eu-west-1"},
+			},
+			parent: &BackupConfig{
+				Type:       BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{Path: "/old-backups"},
+			},
+			want: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{Bucket: "my-bucket", Region: "eu-west-1"},
+			},
+		},
+		"child merges S3 fields": {
+			child: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{Endpoint: "https://custom.s3.local"},
+			},
+			parent: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{Bucket: "parent-bucket", Region: "us-west-2"},
+			},
+			want: &BackupConfig{
+				Type: BackupTypeS3,
+				S3: &S3BackupConfig{
+					Bucket:   "parent-bucket",
+					Region:   "us-west-2",
+					Endpoint: "https://custom.s3.local",
+				},
+			},
+		},
+		"child overrides storage size": {
+			child: &BackupConfig{
+				Type:       BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{Storage: StorageSpec{Size: "50Gi"}},
+			},
+			parent: &BackupConfig{
+				Type: BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{
+					Path:    "/backups",
+					Storage: StorageSpec{Size: "10Gi"},
+				},
+			},
+			want: &BackupConfig{
+				Type: BackupTypeFilesystem,
+				Filesystem: &FilesystemBackupConfig{
+					Path:    "/backups",
+					Storage: StorageSpec{Size: "50Gi"},
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := MergeBackupConfig(tc.child, tc.parent)
+			if tc.want == nil {
+				if got != nil {
+					t.Errorf("MergeBackupConfig() = %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("MergeBackupConfig() = nil, want %+v", tc.want)
+			}
+			if got.Type != tc.want.Type {
+				t.Errorf("Type = %q, want %q", got.Type, tc.want.Type)
+			}
+			if tc.want.Filesystem != nil {
+				if got.Filesystem == nil {
+					t.Fatal("Filesystem = nil, want non-nil")
+				}
+				if got.Filesystem.Path != tc.want.Filesystem.Path {
+					t.Errorf(
+						"Filesystem.Path = %q, want %q",
+						got.Filesystem.Path,
+						tc.want.Filesystem.Path,
+					)
+				}
+				if got.Filesystem.Storage.Size != tc.want.Filesystem.Storage.Size {
+					t.Errorf(
+						"Filesystem.Storage.Size = %q, want %q",
+						got.Filesystem.Storage.Size,
+						tc.want.Filesystem.Storage.Size,
+					)
+				}
+			}
+			if tc.want.S3 != nil {
+				if got.S3 == nil {
+					t.Fatal("S3 = nil, want non-nil")
+				}
+				if got.S3.Bucket != tc.want.S3.Bucket {
+					t.Errorf("S3.Bucket = %q, want %q", got.S3.Bucket, tc.want.S3.Bucket)
+				}
+				if got.S3.Region != tc.want.S3.Region {
+					t.Errorf("S3.Region = %q, want %q", got.S3.Region, tc.want.S3.Region)
+				}
+				if got.S3.Endpoint != tc.want.S3.Endpoint {
+					t.Errorf("S3.Endpoint = %q, want %q", got.S3.Endpoint, tc.want.S3.Endpoint)
+				}
+			}
+		})
+	}
+}

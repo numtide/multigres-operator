@@ -98,6 +98,10 @@ func TestShardReconciliation(t *testing.T) {
 							},
 						},
 					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type:       multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: "/backups", Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"}},
+					},
 				},
 			},
 			wantResources: []client.Object{
@@ -420,6 +424,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--log-level=info",
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+											"--backup-type=filesystem",
+											"--backup-path=/backups",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -565,6 +571,10 @@ func TestShardReconciliation(t *testing.T) {
 								Size: "1Gi",
 							},
 						},
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type:       multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: "/backups", Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"}},
 					},
 				},
 			},
@@ -787,6 +797,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--log-level=info",
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+											"--backup-type=filesystem",
+											"--backup-path=/backups",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -917,6 +929,10 @@ func TestShardReconciliation(t *testing.T) {
 								Size: "10Gi",
 							},
 						},
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type:       multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: "/backups", Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"}},
 					},
 				},
 			},
@@ -1266,6 +1282,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--log-level=info",
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+											"--backup-type=filesystem",
+											"--backup-path=/backups",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -1506,6 +1524,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--log-level=info",
 											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
+											"--backup-type=filesystem",
+											"--backup-path=/backups",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -1708,8 +1728,6 @@ func TestShardReconciliation(t *testing.T) {
 							string(tc.shard.Spec.DatabaseName),
 							string(tc.shard.Spec.TableGroupName),
 							string(tc.shard.Spec.ShardName),
-							"pool",
-							poolName,
 							cellName,
 						)
 						for i, vol := range ss.Spec.Template.Spec.Volumes {
@@ -1865,6 +1883,10 @@ func TestReconcileDeletions(t *testing.T) {
 						Size: "10Gi",
 					},
 				},
+			},
+			Backup: &multigresv1alpha1.BackupConfig{
+				Type:       multigresv1alpha1.BackupTypeFilesystem,
+				Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: "/backups", Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"}},
 			},
 		},
 	}

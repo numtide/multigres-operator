@@ -771,6 +771,76 @@ func TestBuildPgctldContainer(t *testing.T) {
 		c := buildPgctldContainer(otelShard(), multigresv1alpha1.PoolSpec{})
 		assertContainsOTELEnvVar(t, c.Env, "buildPgctldContainer")
 	})
+
+	t.Run("with backup filesystem", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+					Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+						Path: "/custom-backups",
+					},
+				},
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertContainsFlag(t, c.Args, "--backup-type=filesystem")
+		assertContainsFlag(t, c.Args, "--backup-path=/custom-backups")
+	})
+
+	t.Run("with backup s3", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeS3,
+					S3: &multigresv1alpha1.S3BackupConfig{
+						Bucket: "my-bucket",
+						Region: "us-west-2",
+					},
+				},
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertContainsFlag(t, c.Args, "--backup-type=s3")
+		assertContainsFlag(t, c.Args, "--backup-path=/backups") // always required by upstream
+		assertContainsFlag(t, c.Args, "--backup-bucket=my-bucket")
+		assertContainsFlag(t, c.Args, "--backup-region=us-west-2")
+	})
+
+	t.Run("with backup s3 all flags", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeS3,
+					S3: &multigresv1alpha1.S3BackupConfig{
+						Bucket:            "my-bucket",
+						Region:            "us-west-2",
+						Endpoint:          "https://minio.local:9000",
+						KeyPrefix:         "prod/backups",
+						UseEnvCredentials: true,
+					},
+				},
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertContainsFlag(t, c.Args, "--backup-type=s3")
+		assertContainsFlag(t, c.Args, "--backup-path=/backups")
+		assertContainsFlag(t, c.Args, "--backup-bucket=my-bucket")
+		assertContainsFlag(t, c.Args, "--backup-region=us-west-2")
+		assertContainsFlag(t, c.Args, "--backup-endpoint=https://minio.local:9000")
+		assertContainsFlag(t, c.Args, "--backup-key-prefix=prod/backups")
+		assertContainsFlag(t, c.Args, "--backup-use-env-credentials")
+	})
+}
+
+func assertContainsFlag(t *testing.T, args []string, want string) {
+	t.Helper()
+	for _, arg := range args {
+		if arg == want {
+			return
+		}
+	}
+	t.Errorf("args %v does not contain flag %q", args, want)
 }
 
 func TestBuildMultiPoolerSidecar_WithObservability(t *testing.T) {

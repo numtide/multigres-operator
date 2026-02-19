@@ -174,7 +174,7 @@ func TestResolver_ResolveShard(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
 			r := NewResolver(c, ns)
 
-			orch, pools, pvcPolicy, err := r.ResolveShard(t.Context(), tc.config, tc.allCellNames)
+			orch, pools, pvcPolicy, _, err := r.ResolveShard(t.Context(), tc.config, tc.allCellNames, nil)
 			if tc.wantErr {
 				if err == nil {
 					t.Error("Expected error")
@@ -534,7 +534,7 @@ func TestMergeShardConfig(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			orch, pools, _ := mergeShardConfig(tc.tpl, tc.overrides, tc.inline)
+			orch, pools, _, _ := mergeShardConfig(tc.tpl, tc.overrides, tc.inline, nil, nil)
 
 			if diff := cmp.Diff(
 				tc.wantOrch,
@@ -596,9 +596,9 @@ func TestResolveShard_PVCDeletionPolicy(t *testing.T) {
 			ShardTemplateCache: make(map[string]*multigresv1alpha1.ShardTemplate),
 		}
 
-		_, _, policy, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
+		_, _, policy, _, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
 			ShardTemplate: "tpl-pvc",
-		}, nil)
+		}, nil, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -614,7 +614,7 @@ func TestResolveShard_PVCDeletionPolicy(t *testing.T) {
 			ShardTemplateCache: make(map[string]*multigresv1alpha1.ShardTemplate),
 		}
 
-		_, pools, _, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
+		_, pools, _, _, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
 			Spec: &multigresv1alpha1.ShardInlineSpec{
 				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 					"custom-pool": {
@@ -625,7 +625,7 @@ func TestResolveShard_PVCDeletionPolicy(t *testing.T) {
 					},
 				},
 			},
-		}, nil)
+		}, nil, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -636,6 +636,178 @@ func TestResolveShard_PVCDeletionPolicy(t *testing.T) {
 				p.PVCDeletionPolicy.WhenDeleted != multigresv1alpha1.RetainPVCRetentionPolicy {
 				t.Errorf("Expected Pool PVCDeletionPolicy=Retain, got %v", p.PVCDeletionPolicy)
 			}
+		}
+	})
+}
+
+func TestDefaultBackupConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sets default backup path", func(t *testing.T) {
+		t.Parallel()
+		cfg := &multigresv1alpha1.BackupConfig{
+			Type:       multigresv1alpha1.BackupTypeFilesystem,
+			Filesystem: &multigresv1alpha1.FilesystemBackupConfig{},
+		}
+		defaultBackupConfig(cfg)
+		if cfg.Filesystem.Path != DefaultBackupPath {
+			t.Errorf("Path = %q, want %q", cfg.Filesystem.Path, DefaultBackupPath)
+		}
+	})
+
+	t.Run("sets default storage size", func(t *testing.T) {
+		t.Parallel()
+		cfg := &multigresv1alpha1.BackupConfig{
+			Type:       multigresv1alpha1.BackupTypeFilesystem,
+			Filesystem: &multigresv1alpha1.FilesystemBackupConfig{},
+		}
+		defaultBackupConfig(cfg)
+		if cfg.Filesystem.Storage.Size != DefaultBackupStorageSize {
+			t.Errorf("Storage.Size = %q, want %q", cfg.Filesystem.Storage.Size, DefaultBackupStorageSize)
+		}
+	})
+
+	t.Run("does not override existing values", func(t *testing.T) {
+		t.Parallel()
+		cfg := &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+			Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+				Path:    "/custom",
+				Storage: multigresv1alpha1.StorageSpec{Size: "50Gi"},
+			},
+		}
+		defaultBackupConfig(cfg)
+		if cfg.Filesystem.Path != "/custom" {
+			t.Errorf("Path = %q, want /custom", cfg.Filesystem.Path)
+		}
+		if cfg.Filesystem.Storage.Size != "50Gi" {
+			t.Errorf("Storage.Size = %q, want 50Gi", cfg.Filesystem.Storage.Size)
+		}
+	})
+
+	t.Run("creates filesystem struct if nil", func(t *testing.T) {
+		t.Parallel()
+		cfg := &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+		}
+		defaultBackupConfig(cfg)
+		if cfg.Filesystem == nil {
+			t.Fatal("Filesystem = nil, want non-nil")
+		}
+		if cfg.Filesystem.Path != DefaultBackupPath {
+			t.Errorf("Path = %q, want %q", cfg.Filesystem.Path, DefaultBackupPath)
+		}
+	})
+
+	t.Run("does not touch s3 config", func(t *testing.T) {
+		t.Parallel()
+		cfg := &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3:   &multigresv1alpha1.S3BackupConfig{Bucket: "my-bucket"},
+		}
+		defaultBackupConfig(cfg)
+		// Should not create Filesystem struct for S3 type
+		if cfg.Filesystem != nil {
+			t.Errorf("Filesystem should be nil for S3 type, got %+v", cfg.Filesystem)
+		}
+	})
+}
+
+func TestResolveShard_InheritedBackup(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	t.Run("inherited backup propagates to resolved config", func(t *testing.T) {
+		t.Parallel()
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := NewResolver(c, "default")
+
+		inherited := &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+			Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+				Path:    "/inherited-path",
+				Storage: multigresv1alpha1.StorageSpec{Size: "20Gi"},
+			},
+		}
+
+		_, _, _, backupCfg, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
+			Spec: &multigresv1alpha1.ShardInlineSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"default": {Type: "readWrite"},
+				},
+			},
+		}, nil, inherited)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if backupCfg == nil {
+			t.Fatal("backup config should not be nil")
+		}
+		if backupCfg.Type != multigresv1alpha1.BackupTypeFilesystem {
+			t.Errorf("Type = %q, want filesystem", backupCfg.Type)
+		}
+		if backupCfg.Filesystem.Path != "/inherited-path" {
+			t.Errorf("Path = %q, want /inherited-path", backupCfg.Filesystem.Path)
+		}
+	})
+
+	t.Run("shard backup overrides inherited", func(t *testing.T) {
+		t.Parallel()
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := NewResolver(c, "default")
+
+		inherited := &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+			Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+				Path: "/parent-path",
+			},
+		}
+
+		_, _, _, backupCfg, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
+			Spec: &multigresv1alpha1.ShardInlineSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"default": {Type: "readWrite"},
+				},
+			},
+			Backup: &multigresv1alpha1.BackupConfig{
+				Type: multigresv1alpha1.BackupTypeFilesystem,
+				Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+					Path: "/shard-override",
+				},
+			},
+		}, nil, inherited)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if backupCfg.Filesystem.Path != "/shard-override" {
+			t.Errorf("Path = %q, want /shard-override", backupCfg.Filesystem.Path)
+		}
+	})
+
+	t.Run("nil inherited gets filesystem default", func(t *testing.T) {
+		t.Parallel()
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := NewResolver(c, "default")
+
+		_, _, _, backupCfg, err := r.ResolveShard(t.Context(), &multigresv1alpha1.ShardConfig{
+			Spec: &multigresv1alpha1.ShardInlineSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"default": {Type: "readWrite"},
+				},
+			},
+		}, nil, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if backupCfg == nil {
+			t.Fatal("backup config should not be nil (should get defaults)")
+		}
+		if backupCfg.Type != multigresv1alpha1.BackupTypeFilesystem {
+			t.Errorf("Type = %q, want filesystem", backupCfg.Type)
+		}
+		if backupCfg.Filesystem.Path != DefaultBackupPath {
+			t.Errorf("Path = %q, want %q", backupCfg.Filesystem.Path, DefaultBackupPath)
 		}
 	})
 }

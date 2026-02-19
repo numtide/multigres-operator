@@ -186,7 +186,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								},
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(
+								buildSharedBackupVolume(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{
 											Name:      "test-shard",
@@ -201,7 +201,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									"primary",
 									"zone1",
 								),
 								buildSocketDirVolume(),
@@ -399,7 +398,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								},
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(
+								buildSharedBackupVolume(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{
 											Name:      "shard-001",
@@ -414,7 +413,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									"replica",
 									"zone-west",
 								),
 								buildSocketDirVolume(),
@@ -605,7 +603,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								},
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(
+								buildSharedBackupVolume(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{
 											Name:      "shard-002",
@@ -620,7 +618,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									"readOnly",
 									"zone1",
 								),
 								buildSocketDirVolume(),
@@ -846,7 +843,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 								},
 							},
 							Volumes: []corev1.Volume{
-								buildBackupVolume(
+								buildSharedBackupVolume(
 									&multigresv1alpha1.Shard{
 										ObjectMeta: metav1.ObjectMeta{
 											Name:      "shard-affinity",
@@ -861,7 +858,6 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											TableGroupName: "default",
 										},
 									},
-									"primary",
 									"zone1",
 								),
 								buildSocketDirVolume(),
@@ -932,7 +928,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 			if tc.want != nil {
 				hashedName := buildHashedPoolName(tc.shard, tc.poolName, tc.cellName)
 				hashedSvcName := buildPoolHeadlessServiceName(tc.shard, tc.poolName, tc.cellName)
-				hashedBackupPVC := buildHashedBackupPVCName(tc.shard, tc.poolName, tc.cellName)
+				hashedBackupPVC := buildHashedBackupPVCName(tc.shard, tc.cellName)
 
 				tc.want.Name = hashedName
 				tc.want.Spec.ServiceName = hashedSvcName
@@ -1064,7 +1060,7 @@ func TestBuildPoolVolumeClaimTemplates(t *testing.T) {
 	}
 }
 
-func TestBuildBackupPVC(t *testing.T) {
+func TestBuildSharedBackupPVC(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
@@ -1075,17 +1071,24 @@ func TestBuildBackupPVC(t *testing.T) {
 			UID:       "test-uid",
 			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			Backup: &multigresv1alpha1.BackupConfig{
+				Type: multigresv1alpha1.BackupTypeFilesystem,
+			},
+		},
 	}
 
 	tests := map[string]struct {
-		poolSpec multigresv1alpha1.PoolSpec
-		want     *corev1.PersistentVolumeClaim
+		shard *multigresv1alpha1.Shard
+		want  *corev1.PersistentVolumeClaim
 	}{
 		"defaults": {
-			poolSpec: multigresv1alpha1.PoolSpec{},
+			shard: shard,
 			want: &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "backup-data-test-shard-pool-primary-zone1",
+					Name:      "backup-data-test-cluster-testdb-default--zone1",
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
@@ -1094,8 +1097,8 @@ func TestBuildBackupPVC(t *testing.T) {
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/cell":           "zone1",
-						"multigres.com/database":       "",
-						"multigres.com/tablegroup":     "",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
 						"multigres.com/cluster":        "test-cluster",
 					},
 					OwnerReferences: []metav1.OwnerReference{
@@ -1119,155 +1122,53 @@ func TestBuildBackupPVC(t *testing.T) {
 				},
 			},
 		},
-		"inherit storage class": {
-			poolSpec: multigresv1alpha1.PoolSpec{
-				Storage: multigresv1alpha1.StorageSpec{
-					Class: "fast-ssd",
-				},
-			},
-			want: &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "backup-data-test-shard-pool-primary-zone1",
-					Namespace: "default",
-					Labels: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  PoolComponentName,
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
-						"multigres.com/database":       "",
-						"multigres.com/tablegroup":     "",
-						"multigres.com/cluster":        "test-cluster",
-					},
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion:         "multigres.com/v1alpha1",
-							Kind:               "Shard",
-							Name:               "test-shard",
-							UID:                "test-uid",
-							Controller:         ptr.To(true),
-							BlockOwnerDeletion: ptr.To(true),
-						},
-					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					StorageClassName: ptr.To("fast-ssd"),
-					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("10Gi"),
-						},
-					},
-				},
-			},
-		},
-		"override backup storage": {
-			poolSpec: multigresv1alpha1.PoolSpec{
-				Storage: multigresv1alpha1.StorageSpec{
-					Class: "fast-ssd",
-				},
-				BackupStorage: multigresv1alpha1.StorageSpec{
-					Class:       "backup-nfs",
-					Size:        "100Gi",
-					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
-				},
-			},
-			want: &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "backup-data-test-shard-pool-primary-zone1",
-					Namespace: "default",
-					Labels: map[string]string{
-						"app.kubernetes.io/name":       "multigres",
-						"app.kubernetes.io/instance":   "test-cluster",
-						"app.kubernetes.io/component":  PoolComponentName,
-						"app.kubernetes.io/part-of":    "multigres",
-						"app.kubernetes.io/managed-by": "multigres-operator",
-						"multigres.com/cell":           "zone1",
-						"multigres.com/database":       "",
-						"multigres.com/tablegroup":     "",
-						"multigres.com/cluster":        "test-cluster",
-					},
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion:         "multigres.com/v1alpha1",
-							Kind:               "Shard",
-							Name:               "test-shard",
-							UID:                "test-uid",
-							Controller:         ptr.To(true),
-							BlockOwnerDeletion: ptr.To(true),
-						},
-					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					StorageClassName: ptr.To("backup-nfs"),
-					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("100Gi"),
-						},
-					},
-				},
-			},
-		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			if tc.want != nil {
-				hashedPVCName := buildHashedBackupPVCName(shard, "primary", "zone1")
+				hashedPVCName := buildHashedBackupPVCName(tc.shard, "zone1")
 				tc.want.Name = hashedPVCName
-				if tc.want.Labels != nil {
-					tc.want.Labels["multigres.com/pool"] = "primary"
-				}
 			}
 
 			testScheme := scheme
-			if name == "error on controller reference" {
-				testScheme = runtime.NewScheme() // Empty scheme triggers SetControllerReference error
-			}
 
-			got, err := BuildBackupPVC(
-				shard,
-				"primary",
+			got, err := BuildSharedBackupPVC(
+				tc.shard,
 				"zone1",
-				tc.poolSpec,
 				testScheme,
 			)
 
-			if name == "error on controller reference" {
-				if err == nil {
-					t.Error("BuildBackupPVC() expected error, got nil")
-				}
-				return
-			}
-
 			if err != nil {
-				t.Errorf("BuildBackupPVC() error = %v", err)
+				t.Errorf("BuildSharedBackupPVC() error = %v", err)
 				return
 			}
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("BuildBackupPVC() mismatch (-want +got):\n%s", diff)
+				t.Errorf("BuildSharedBackupPVC() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
 
-func TestBuildBackupPVC_Error(t *testing.T) {
+func TestBuildSharedBackupPVC_Error(t *testing.T) {
 	// Separate test for error case to avoid messing with table driven test logic too much
 	shard := &multigresv1alpha1.Shard{
 		ObjectMeta: metav1.ObjectMeta{Name: "test"},
+		Spec: multigresv1alpha1.ShardSpec{
+			Backup: &multigresv1alpha1.BackupConfig{
+				Type:       multigresv1alpha1.BackupTypeFilesystem,
+				Filesystem: &multigresv1alpha1.FilesystemBackupConfig{},
+			},
+		},
 	}
 	// Empty scheme causes SetControllerReference to fail
-	_, err := BuildBackupPVC(
+	_, err := BuildSharedBackupPVC(
 		shard,
-		"pool",
 		"cell",
-		multigresv1alpha1.PoolSpec{},
 		runtime.NewScheme(),
 	)
 	if err == nil {
-		t.Error("BuildBackupPVC() expected error with empty scheme, got nil")
+		t.Error("BuildSharedBackupPVC() expected error with empty scheme, got nil")
 	}
 }

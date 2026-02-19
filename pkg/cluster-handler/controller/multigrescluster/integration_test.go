@@ -478,6 +478,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									},
 								},
 								PVCDeletionPolicy: nil, // Shard-level policy is nil (inherited)
+								Backup: &multigresv1alpha1.BackupConfig{
+									Type:       multigresv1alpha1.BackupTypeFilesystem,
+									Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: resolver.DefaultBackupPath, Storage: multigresv1alpha1.StorageSpec{Size: resolver.DefaultBackupStorageSize}},
+								},
 							},
 						},
 						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
@@ -764,6 +768,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									},
 								},
 								PVCDeletionPolicy: nil, // Shard-level is nil
+								Backup: &multigresv1alpha1.BackupConfig{
+									Type:       multigresv1alpha1.BackupTypeFilesystem,
+									Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: resolver.DefaultBackupPath, Storage: multigresv1alpha1.StorageSpec{Size: resolver.DefaultBackupStorageSize}},
+								},
 							},
 						},
 						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
@@ -1045,6 +1053,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 									},
 								},
 								PVCDeletionPolicy: nil,
+								Backup: &multigresv1alpha1.BackupConfig{
+									Type:       multigresv1alpha1.BackupTypeFilesystem,
+									Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: resolver.DefaultBackupPath, Storage: multigresv1alpha1.StorageSpec{Size: resolver.DefaultBackupStorageSize}},
+								},
 							},
 						},
 						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{

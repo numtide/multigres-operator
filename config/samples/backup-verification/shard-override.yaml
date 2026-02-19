@@ -1,0 +1,40 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: backup-shard-ovr
+  namespace: default
+spec:
+  # Cluster level: /cluster-backups
+  backup:
+    type: filesystem
+    filesystem:
+      path: "/cluster-backups"
+      storage:
+        size: "1Gi"
+
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"
+  databases:
+    - name: postgres
+      default: true
+      # Database level: /db-backups (overrides cluster)
+      backup:
+        type: filesystem
+        filesystem:
+          path: "/db-backups"
+      tablegroups:
+        - name: default
+          default: true
+          # TableGroup level: /tg-backups (overrides db)
+          backup:
+            type: filesystem
+            filesystem:
+              path: "/tg-backups"
+          shards:
+            - name: "0-inf"
+              # Shard level: /shard-backups (overrides tg)
+              backup:
+                type: filesystem
+                filesystem:
+                  path: "/shard-backups"

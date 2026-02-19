@@ -423,7 +423,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.PersistentVolumeClaim{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "backup-data-existing-shard-pool-primary-zone1",
+						Name:      "backup-data-test-cluster-testdb-default--zone1",
 						Namespace: "default",
 					},
 				},
@@ -770,10 +770,15 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type:       multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{},
+					},
 					MultiOrch: multigresv1alpha1.MultiOrchSpec{
 						Cells: []multigresv1alpha1.CellName{"zone1"},
 					},
@@ -792,7 +797,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(pvc.Name, "backup-data") {
+						strings.Contains(pvc.Name, "backup-data-test-cluster-testdb-default--zone1") {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -961,7 +966,6 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 							} else if strings.Contains(name, "backup-data") {
 								hashed := buildHashedBackupPVCName(
 									tc.shard,
-									string(poolName),
 									string(cell),
 								)
 								obj.SetName(hashed)

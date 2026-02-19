@@ -59,6 +59,12 @@ const (
 
 	// DefaultEtcdStorageSize is the default PVC size for the managed Etcd cluster if not specified.
 	DefaultEtcdStorageSize = "1Gi"
+
+	// DefaultBackupPath is the default filesystem path for backups.
+	DefaultBackupPath = "/backups"
+
+	// DefaultBackupStorageSize is the default PVC size for backup storage.
+	DefaultBackupStorageSize = "10Gi"
 )
 
 // DefaultResourcesAdmin returns the default resource requests and limits for the MultiAdmin deployment.

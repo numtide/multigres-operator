@@ -1,0 +1,23 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: backup-fs-test
+  namespace: default
+spec:
+  backup:
+    type: filesystem
+    filesystem:
+      path: "/custom-backups"
+      storage:
+        size: "1Gi"
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"
+  databases:
+    - name: postgres
+      default: true
+      tablegroups:
+        - name: default
+          default: true
+          shards:
+            - name: "0-inf"
