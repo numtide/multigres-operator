@@ -965,10 +965,10 @@ func TestBuildSharedBackupVolume_S3(t *testing.T) {
 	if vol.Name != BackupVolumeName {
 		t.Errorf("volume name = %q, want %q", vol.Name, BackupVolumeName)
 	}
-	if vol.VolumeSource.EmptyDir == nil {
+	if vol.EmptyDir == nil {
 		t.Error("S3 backup volume should use EmptyDir, got PVC or other source")
 	}
-	if vol.VolumeSource.PersistentVolumeClaim != nil {
+	if vol.PersistentVolumeClaim != nil {
 		t.Error("S3 backup volume should NOT use PersistentVolumeClaim")
 	}
 }
