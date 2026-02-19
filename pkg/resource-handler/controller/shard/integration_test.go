@@ -342,6 +342,9 @@ func TestShardReconciliation(t *testing.T) {
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
 											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
+											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
+											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
+											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
 										},
 										Ports:         multipoolerPorts(t),
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
@@ -404,6 +407,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
@@ -426,6 +430,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
 											"--backup-type=filesystem",
 											"--backup-path=/backups",
+											"--pgbackrest-cert-dir=/certs/pgbackrest",
+											"--pgbackrest-port=8432",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -453,6 +459,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
@@ -486,6 +493,37 @@ func TestShardReconciliation(t *testing.T) {
 													Name: "pg-hba-template",
 												},
 												DefaultMode: ptr.To(int32(420)),
+											},
+										},
+									},
+									{
+										Name: "pgbackrest-certs",
+										VolumeSource: corev1.VolumeSource{
+											Projected: &corev1.ProjectedVolumeSource{
+												DefaultMode: ptr.To(int32(288)),
+												Sources: []corev1.VolumeProjection{
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "test-shard-pgbackrest-ca",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "ca.crt", Path: "ca.crt"},
+															},
+														},
+													},
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "test-shard-pgbackrest-tls",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "tls.crt", Path: "pgbackrest.crt"},
+																{Key: "tls.key", Path: "pgbackrest.key"},
+															},
+														},
+													},
+												},
 											},
 										},
 									},
@@ -715,6 +753,9 @@ func TestShardReconciliation(t *testing.T) {
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
 											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
+											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
+											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
+											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
 										},
 										Ports:         multipoolerPorts(t),
 										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
@@ -777,6 +818,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
@@ -799,6 +841,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
 											"--backup-type=filesystem",
 											"--backup-path=/backups",
+											"--pgbackrest-cert-dir=/certs/pgbackrest",
+											"--pgbackrest-port=8432",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -826,6 +870,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
@@ -852,6 +897,37 @@ func TestShardReconciliation(t *testing.T) {
 													Name: "pg-hba-template",
 												},
 												DefaultMode: ptr.To(int32(420)),
+											},
+										},
+									},
+									{
+										Name: "pgbackrest-certs",
+										VolumeSource: corev1.VolumeSource{
+											Projected: &corev1.ProjectedVolumeSource{
+												DefaultMode: ptr.To(int32(288)),
+												Sources: []corev1.VolumeProjection{
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "delete-policy-shard-pgbackrest-ca",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "ca.crt", Path: "ca.crt"},
+															},
+														},
+													},
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "delete-policy-shard-pgbackrest-tls",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "tls.crt", Path: "pgbackrest.crt"},
+																{Key: "tls.key", Path: "pgbackrest.key"},
+															},
+														},
+													},
+												},
 											},
 										},
 									},
@@ -1174,6 +1250,37 @@ func TestShardReconciliation(t *testing.T) {
 											},
 										},
 									},
+									{
+										Name: "pgbackrest-certs",
+										VolumeSource: corev1.VolumeSource{
+											Projected: &corev1.ProjectedVolumeSource{
+												DefaultMode: ptr.To(int32(288)),
+												Sources: []corev1.VolumeProjection{
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "multi-cell-shard-pgbackrest-ca",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "ca.crt", Path: "ca.crt"},
+															},
+														},
+													},
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "multi-cell-shard-pgbackrest-tls",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "tls.crt", Path: "pgbackrest.crt"},
+																{Key: "tls.key", Path: "pgbackrest.key"},
+															},
+														},
+													},
+												},
+											},
+										},
+									},
 								},
 								InitContainers: []corev1.Container{
 									{
@@ -1196,6 +1303,9 @@ func TestShardReconciliation(t *testing.T) {
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
 											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
+											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
+											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
+											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15200),
@@ -1262,6 +1372,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
@@ -1284,6 +1395,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
 											"--backup-type=filesystem",
 											"--backup-path=/backups",
+											"--pgbackrest-cert-dir=/certs/pgbackrest",
+											"--pgbackrest-port=8432",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -1311,6 +1424,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
@@ -1416,6 +1530,37 @@ func TestShardReconciliation(t *testing.T) {
 											},
 										},
 									},
+									{
+										Name: "pgbackrest-certs",
+										VolumeSource: corev1.VolumeSource{
+											Projected: &corev1.ProjectedVolumeSource{
+												DefaultMode: ptr.To(int32(288)),
+												Sources: []corev1.VolumeProjection{
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "multi-cell-shard-pgbackrest-ca",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "ca.crt", Path: "ca.crt"},
+															},
+														},
+													},
+													{
+														Secret: &corev1.SecretProjection{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "multi-cell-shard-pgbackrest-tls",
+															},
+															Items: []corev1.KeyToPath{
+																{Key: "tls.crt", Path: "pgbackrest.crt"},
+																{Key: "tls.key", Path: "pgbackrest.key"},
+															},
+														},
+													},
+												},
+											},
+										},
+									},
 								},
 								InitContainers: []corev1.Container{
 									{
@@ -1438,6 +1583,9 @@ func TestShardReconciliation(t *testing.T) {
 											"--pgctld-addr=localhost:15470",
 											"--pg-port=5432",
 											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
+											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
+											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
+											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15200),
@@ -1504,6 +1652,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "pgdata", MountPath: "/var/lib/pooler"},
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
@@ -1526,6 +1675,8 @@ func TestShardReconciliation(t *testing.T) {
 											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
 											"--backup-type=filesystem",
 											"--backup-path=/backups",
+											"--pgbackrest-cert-dir=/certs/pgbackrest",
+											"--pgbackrest-port=8432",
 										},
 										Env: []corev1.EnvVar{
 											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
@@ -1553,6 +1704,7 @@ func TestShardReconciliation(t *testing.T) {
 											{Name: "backup-data", MountPath: "/backups"},
 											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
 											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
+											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
 										},
 									},
 								},
