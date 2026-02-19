@@ -163,6 +163,10 @@ type S3BackupConfig struct {
 	Endpoint          string `json:"endpoint,omitempty"`
 	KeyPrefix         string `json:"keyPrefix,omitempty"`
 	UseEnvCredentials bool   `json:"useEnvCredentials,omitempty"`
+
+	// CredentialsSecret is the name of the Secret containing AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+	// +optional
+	CredentialsSecret string `json:"credentialsSecret,omitempty"`
 }
 
 // ============================================================================

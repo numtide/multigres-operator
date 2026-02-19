@@ -257,19 +257,25 @@ func buildPgctldContainer(
 		}
 	}
 
-	c := corev1.Container{
+	env := []corev1.EnvVar{
+		{
+			Name:  "PGDATA",
+			Value: PgDataPath,
+		},
+		pgPasswordEnvVar(),
+	}
+	env = append(env, s3EnvVars(shard.Spec.Backup)...)
+	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
+		env = append(env, otelVars...)
+	}
+
+	return corev1.Container{
 		Name:      "postgres",
 		Image:     image,
 		Command:   []string{"/usr/local/bin/pgctld"},
 		Args:      args,
 		Resources: pool.Postgres.Resources,
-		Env: []corev1.EnvVar{
-			{
-				Name:  "PGDATA",
-				Value: PgDataPath,
-			},
-			pgPasswordEnvVar(),
-		},
+		Env:       env,
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:    ptr.To(int64(999)),
 			RunAsGroup:   ptr.To(int64(999)),
@@ -295,10 +301,6 @@ func buildPgctldContainer(
 			},
 		},
 	}
-	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
-		c.Env = append(c.Env, envVars...)
-	}
-	return c
 }
 
 // buildMultiPoolerSidecar creates the multipooler sidecar container spec.
@@ -378,34 +380,38 @@ func buildMultiPoolerSidecar(
 			},
 			PeriodSeconds: 5,
 		},
-		Env: []corev1.EnvVar{
-			{
-				Name: "POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
+	}
+
+	env := []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
 				},
 			},
-			connpoolAdminPasswordEnvVar(),
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      DataVolumeName, // Shares PVC with postgres for pgbackrest configs and sockets
-				MountPath: PoolerDirMountPath,
-			},
-			{
-				Name:      BackupVolumeName,
-				MountPath: BackupMountPath,
-			},
-			{
-				Name:      SocketDirVolumeName,
-				MountPath: SocketDirMountPath,
-			},
-		},
+		connpoolAdminPasswordEnvVar(),
 	}
-	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
-		c.Env = append(c.Env, envVars...)
+	env = append(env, s3EnvVars(shard.Spec.Backup)...)
+	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
+		env = append(env, otelVars...)
+	}
+	c.Env = env
+
+	c.VolumeMounts = []corev1.VolumeMount{
+		{
+			Name:      DataVolumeName, // Shares PVC with postgres for pgbackrest configs and sockets
+			MountPath: PoolerDirMountPath,
+		},
+		{
+			Name:      BackupVolumeName,
+			MountPath: BackupMountPath,
+		},
+		{
+			Name:      SocketDirVolumeName,
+			MountPath: SocketDirMountPath,
+		},
 	}
 	return c
 }
@@ -575,4 +581,50 @@ func connpoolAdminPasswordEnvVar() corev1.EnvVar {
 			},
 		},
 	}
+}
+
+// s3EnvVars returns the AWS environment variables needed for S3 backup.
+// Returns nil if backup is not configured for S3.
+func s3EnvVars(backup *multigresv1alpha1.BackupConfig) []corev1.EnvVar {
+	if backup == nil ||
+		backup.Type != multigresv1alpha1.BackupTypeS3 ||
+		backup.S3 == nil {
+		return nil
+	}
+
+	var envs []corev1.EnvVar
+
+	if backup.S3.Region != "" {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "AWS_REGION",
+			Value: backup.S3.Region,
+		})
+	}
+
+	if backup.S3.CredentialsSecret != "" {
+		envs = append(envs, corev1.EnvVar{
+			Name: "AWS_ACCESS_KEY_ID",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: backup.S3.CredentialsSecret,
+					},
+					Key: "AWS_ACCESS_KEY_ID",
+				},
+			},
+		})
+		envs = append(envs, corev1.EnvVar{
+			Name: "AWS_SECRET_ACCESS_KEY",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: backup.S3.CredentialsSecret,
+					},
+					Key: "AWS_SECRET_ACCESS_KEY",
+				},
+			},
+		})
+	}
+
+	return envs
 }
