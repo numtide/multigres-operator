@@ -379,7 +379,11 @@ func (r *ShardReconciler) reconcilePgBackRestCerts(
 		}
 		for _, key := range []string{"ca.crt", "tls.crt", "tls.key"} {
 			if _, ok := secret.Data[key]; !ok {
-				return fmt.Errorf("pgbackrest TLS secret %q missing required key %q", secretName, key)
+				return fmt.Errorf(
+					"pgbackrest TLS secret %q missing required key %q",
+					secretName,
+					key,
+				)
 			}
 		}
 		return nil
