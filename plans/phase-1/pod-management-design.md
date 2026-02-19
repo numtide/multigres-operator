@@ -202,7 +202,7 @@ These operations are **not supported by the operator** and should be documented 
 | Multiple cells/zones | ✅ | ✅ |
 | Multiple pools | ✅ | ✅ (append-only) |
 | Resharding | ❌ (not in current roadmap) | ❌ |
-| Backup to S3 | ✅ (recently added) | ❌ (filesystem only, see [§10](#10-pgbackrest--backup-infrastructure)) |
+| Backup to S3 | ✅ (recently added) | ✅ (via `credentialsSecret` or `useEnvCredentials`) |
 | Backup to filesystem | ✅ | ✅ (via shared PVC) |
 | Failover (auto) | ✅ (via multiorch) | ✅ (handled by multiorch) |
 | pgBackRest TLS certs | ✅ (via cert-manager in demo) | ⚠️ `pkg/cert` ready, shard wiring pending ([§7.7](#gap-7-pgbackrest-tls-certificate-handling)) |
@@ -449,7 +449,7 @@ When the operator wants to scale down and the target IS the primary:
 5. **Result: full cluster re-bootstrap, data loss depends on backup PVC survival**
 
 > [!CAUTION]
-> The shared backup PVC is critical for disaster recovery. If using filesystem-based backups (current implementation), losing the backup PVC means total data loss. S3-based backups (see [§10](#10-pgbackrest--backup-infrastructure)) eliminate this single point of failure.
+> The shared backup PVC is critical for disaster recovery when using filesystem-based backups. Losing the backup PVC means total data loss. S3-based backups eliminate this single point of failure and are the recommended production choice (see [§10](#10-pgbackrest--backup-infrastructure)).
 
 ---
 
@@ -589,10 +589,10 @@ The operator's `BackupConfig` API (v1alpha1) supports two storage backends:
 -   **Cons**: Single point of failure; performance bottlenecks; requires RWX storage.
 
 #### B. S3 (Object Storage)
--   **Mechanism**: All pods connect directly to an S3 bucket.
--   **Requirement**: AWS credentials (env vars or IRSA) and internet/VPC connectivity to S3.
+-   **Mechanism**: All pods connect directly to an S3 bucket. The backup volume uses `EmptyDir` instead of a PVC.
+-   **Requirement**: AWS credentials via `credentialsSecret` (K8s Secret with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) or `useEnvCredentials` (for IRSA/pod-level creds). Requires internet/VPC connectivity to S3.
 -   **Pros**: No shared volume required; works across zones/regions; highly durable; standard production choice.
--   **Cons**: Requires external service setup.
+-   **Cons**: Requires external service setup (S3 bucket + credentials).
 
 ### 10.3 Configuration API
 
@@ -610,7 +610,10 @@ spec:
     s3:
       bucket: "my-backups"
       region: "us-east-1"
-      keyPrefix: "my-cluster"
+      endpoint: "http://minio:9000"  # optional, for S3-compatible stores
+      keyPrefix: "my-cluster"        # optional
+      useEnvCredentials: true         # optional, for IRSA/pod-level creds
+      credentialsSecret: "aws-creds" # optional, K8s Secret with AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 ```
 
 This configuration is propagated to:
@@ -910,22 +913,16 @@ We recommend **option 2 (controller timer)**. Here is a comparison:
 
 ---
 
-### Gap 3: S3 Backup Support in the Operator
+### Gap 3: S3 Backup Support in the Operator — ✅ Resolved
 
-**Problem**: Multigres upstream supports S3-based backups (`BackupLocation_S3`). The operator has added the API (`BackupConfig`) in v1alpha1, but the controller (data-handler) still hardcodes `BackupLocation_Filesystem`.
+**Status**: Fully implemented and verified with end-to-end Kind deployment.
 
-**Recommended owner**: **Operator** (Integration Pending)
+All three required changes are complete:
+1.  ✅ **`registerDatabaseInTopology`** in data-handler `shard_controller.go` now writes `BackupLocation_S3{Bucket, Region, Endpoint, KeyPrefix, UseEnvCredentials}` to etcd when backup type is S3.
+2.  ✅ **AWS credentials injected** via the `s3EnvVars()` helper in resource-handler `containers.go`. Both `postgres` and `multipooler` containers receive `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` (from a referenced K8s Secret via `credentialsSecret`, or from pod-level env via `useEnvCredentials`).
+3.  ✅ **Shared backup PVC skipped** for S3 — `reconcileSharedBackupPVC` returns early, and `buildSharedBackupVolume` uses `EmptyDir` instead of a PVC claim.
 
-**Status**:
-- **API**: ✅ Implemented (v1alpha1 `BackupConfig`)
-- **Controller**: ❌ Pending (needs to write S3 location to etcd and inject env vars)
-
-**Rationale**: No multigres changes are needed — the upstream code already handles S3 transparently. The operator needs to:
-1.  **Change `registerDatabaseInTopology`** — write `BackupLocation_S3{...}` to etcd instead of `BackupLocation_Filesystem` (currently hardcoded in `shard_controller.go`)
-2.  **Inject AWS credentials as env vars** — either from a K8s Secret or via IRSA (IAM Roles for Service Accounts)
-3.  **Stop creating the shared backup PVC** when S3 is configured
-
-**Multigres team input needed**: Is S3 a prerequisite for multi-zone deployments, or can we ship filesystem-only first and add S3 later? Ryota is currently working on this, so it may be ready before we start implementing this.
+**API additions**: `S3BackupConfig` now includes `credentialsSecret` (name of a K8s Secret containing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`).
 
 ---
 
@@ -1054,7 +1051,7 @@ The generic `pkg/cert` module (previously `pkg/webhook/cert/`) is now fully oper
    })
    ```
 
-   Since `tls-server-auth=pgbackrest=*` matches by CN, one shared Secret per shard is sufficient. All pods in the shard's StatefulSet mount the same Secret.
+   Since `tls-server-auth=pgbackrest=*` matches by CN, one shared Secret per shard is sufficient. All pods in the shard mount the same Secret.
 
 2. **Mount the certs into the pod template**: The shard resource-handler adds volumes and volume mounts for the pgBackRest TLS Secret into the multipooler container. The mount path must match what pgctld's `PgBackRestConfig` expects:
 
@@ -1131,7 +1128,7 @@ Once multigres exposes PITR via gRPC, the operator could surface it as a `Multig
 |---|---|---|---|---|
 | 1 | WAL archiving failure detection | Multigres | **High** | No, but risks silent data loss |
 | 2 | Scheduled base backups | Operator (using multigres `Backup` RPC) | **High** | No, but restore times grow unboundedly |
-| 3 | S3 backup support in operator | Operator | **High** | Yes for multi-zone — filesystem PVC requires ReadWriteMany |
+| 3 | ~~S3 backup support in operator~~ | Operator | ✅ **Done** | Resolved — API, data handler, and resource handler fully wired |
 | 4 | Standby stuck without backup (not surfaced) | Multigres | **Medium** | No, but blocks scale-up silently |
 | 5 | Etcd cleanup on scale-down | Multigres | **Medium** | No — 4-hour stale window is acceptable |
 | 6 | Backup health reporting | Multigres | **Medium** | No, but the operator flies blind on backup state |
