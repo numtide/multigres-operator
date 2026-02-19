@@ -557,15 +557,65 @@ The operator should update **at most one pod per reconcile loop** per pool. Afte
 
 ## 10. pgBackRest & Backup Infrastructure
 
-### Current State (Filesystem-Based)
+### 10.1 Backup Architecture: Per-Shard & MultiAdmin Appointed
 
-The operator currently uses a **shared PVC** (`backup-data-<name>`) mounted at `/backups` on all pods in a cell. pgBackRest writes backups to this PVC and reads from it during replica initialization.
+Backups in Multigres are **per-shard**. Each shard has its own pgBackRest "stanza" (configuration section) and repository.
 
-The backup location is written to etcd by the data-handler controller as `BackupLocation{filesystem: "/backups"}` (hardcoded in `shard_controller.go:getBackupLocation()`).
+**How a backup is triggered and executed:**
 
-This works for single-node clusters (kind) because all pods share the same node and use `ReadWriteOnce`. For multi-node production clusters, this requires either:
-- A storage class that supports `ReadWriteMany` (NFS, EFS, etc.)
-- Switching to S3-based backups
+1.  **Trigger**: MultiAdmin receives a backup request (via CLI, API, or future scheduler).
+2.  **Appointment**: MultiAdmin **selects a specific pod** to perform the backup.
+    -   It iterates through all pods in the shard.
+    -   It prefers a **REPLICA** to offload the backup overhead from the primary.
+    -   If no replica is available (or `forcePrimary=true`), it selects the PRIMARY.
+    -   *Logic location*: `go/services/multiadmin/backup.go:findPoolerForBackup`
+3.  **Execution**: MultiAdmin sends a gRPC `Backup` request to the selected pooler's `multipooler` process.
+4.  **Action**: The `multipooler` runs `pgbackrest backup` locally.
+    -   It uses the shard-specific stanza name.
+    -   It connects to the repository (Filesystem PVC or S3).
+    -   If running on a replica, it connects to the primary's Postgres (via `pg2-host`) to fetch WAL files if needed.
+
+> [!NOTE]
+> **One pod does the work.** The backup does not run on all pods simultaneously. MultiAdmin orchestrates this uniqueness by appointing a single executor for each backup job.
+
+### 10.2 Backup Storage Backends
+
+The operator's `BackupConfig` API (v1alpha1) supports two storage backends:
+
+#### A. Filesystem (Shared PVC)
+-   **Mechanism**: A single PersistentVolumeClaim is mounted to `/backups` on **all pods** in the shard.
+-   **Requirement**: The underlying storage class must support **ReadWriteMany (RWX)** if pods are scheduled on different nodes.
+-   **Pros**: Simple for single-node testing (Kind) or NFS-backed clusters.
+-   **Cons**: Single point of failure; performance bottlenecks; requires RWX storage.
+
+#### B. S3 (Object Storage)
+-   **Mechanism**: All pods connect directly to an S3 bucket.
+-   **Requirement**: AWS credentials (env vars or IRSA) and internet/VPC connectivity to S3.
+-   **Pros**: No shared volume required; works across zones/regions; highly durable; standard production choice.
+-   **Cons**: Requires external service setup.
+
+### 10.3 Configuration API
+
+The `MultigresCluster` CRD now includes a `spec.backup` section used to configure the backend:
+
+```yaml
+spec:
+  backup:
+    type: "filesystem" # or "s3"
+    filesystem:
+      path: "/backups"
+      storage:
+        size: "10Gi"
+        class: "standard-rwx"
+    s3:
+      bucket: "my-backups"
+      region: "us-east-1"
+      keyPrefix: "my-cluster"
+```
+
+This configuration is propagated to:
+1.  **Etcd Topology**: The operator writes the backup configuration (S3 credentials, paths) into the `ClusterMetadata` or `ShardMetadata` in etcd.
+2.  **PgBackRest Config**: The `multipooler` generates `pgbackrest.conf` based on the topology data.
 
 ### Understanding the pgBackRest Repository
 
@@ -759,29 +809,7 @@ Neither use case is currently automatable through multigres. Future versions cou
 4. Scale-up is effectively **blocked**: new pods are created but never become functional replicas
 5. The operator should detect this condition (pods stuck without PGDATA for extended periods) and surface it as a cluster health warning
 
-### Future: S3-Based Backups
 
-Multigres upstream recently added S3 support (commit `62e1d94`). The `BackupLocation` protobuf supports `S3Backup{bucket, region, endpoint, keyPrefix, useEnvCredentials}`. The multipooler's `backup.Config` generates the correct pgBackRest config for either filesystem or S3 automatically.
-
-To enable S3 in the operator:
-
-1. **Add backup config to the CRD** — new fields under `PoolSpec` or at the cluster level for S3 bucket, region, optional endpoint, and credentials secret reference
-2. **Change `registerDatabaseInTopology`** — write `BackupLocation_S3{...}` to etcd instead of `BackupLocation_Filesystem`
-3. **Inject AWS credentials as env vars** — either from a K8s Secret or via IRSA (IAM Roles for Service Accounts) with `key-type=auto`
-4. **Remove the shared backup PVC** — not needed with S3
-5. **No changes to upstream multigres** — the existing `initPgBackRest`, `backupLocked`, and `restoreFromBackupLocked` functions handle S3 transparently
-
-### Why S3 Matters for Pod Management
-
-With filesystem backups, the shared backup PVC is a single point of failure and imposes ReadWriteMany requirements. With S3:
-- Pods can be on any node in any zone
-- Backup data survives complete cluster destruction
-- Replica initialization works across zones/regions
-- No shared storage dependency
-
-**Recommendation**: S3 support should be a high-priority follow-up.
-
----
 
 ## 11. Rename Prevention
 
@@ -884,17 +912,18 @@ We recommend **option 2 (controller timer)**. Here is a comparison:
 
 ### Gap 3: S3 Backup Support in the Operator
 
-**Problem**: Multigres upstream already supports S3-based backups (`BackupLocation_S3` in the protobuf, `config.go:PgBackRestConfig()` generates the correct pgBackRest settings). However, the operator currently hardcodes `BackupLocation_Filesystem` and creates a shared backup PVC. This introduces two issues:
-- The shared backup PVC requires `ReadWriteMany` for multi-node deployments, which limits storage class options
-- The backup PVC is a single point of failure — losing it means losing all backups and WAL archives
+**Problem**: Multigres upstream supports S3-based backups (`BackupLocation_S3`). The operator has added the API (`BackupConfig`) in v1alpha1, but the controller (data-handler) still hardcodes `BackupLocation_Filesystem`.
 
-**Recommended owner**: **Operator**
+**Recommended owner**: **Operator** (Integration Pending)
+
+**Status**:
+- **API**: ✅ Implemented (v1alpha1 `BackupConfig`)
+- **Controller**: ❌ Pending (needs to write S3 location to etcd and inject env vars)
 
 **Rationale**: No multigres changes are needed — the upstream code already handles S3 transparently. The operator needs to:
-1. Add backup configuration fields to the CRD (S3 bucket, region, optional endpoint, credentials secret reference)
-2. Change `registerDatabaseInTopology` to write `BackupLocation_S3{...}` to etcd instead of `BackupLocation_Filesystem`
-3. Inject AWS credentials as environment variables (from a K8s Secret or via IRSA)
-4. Stop creating the shared backup PVC when S3 is configured
+1.  **Change `registerDatabaseInTopology`** — write `BackupLocation_S3{...}` to etcd instead of `BackupLocation_Filesystem` (currently hardcoded in `shard_controller.go`)
+2.  **Inject AWS credentials as env vars** — either from a K8s Secret or via IRSA (IAM Roles for Service Accounts)
+3.  **Stop creating the shared backup PVC** when S3 is configured
 
 **Multigres team input needed**: Is S3 a prerequisite for multi-zone deployments, or can we ship filesystem-only first and add S3 later? Ryota is currently working on this, so it may be ready before we start implementing this.
 
