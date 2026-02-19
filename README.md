@@ -348,6 +348,48 @@ spec:
         storageClassName: "nfs-client" # Requires RWX support
 ```
 
+### pgBackRest TLS Certificates
+
+pgBackRest uses TLS for secure inter-node communication between replicas in a shard. The operator supports two modes for certificate provisioning:
+
+#### Auto-Generated Certificates (Default)
+
+When no `pgbackrestTLS` configuration is specified, the operator automatically generates and rotates a CA and server certificate per Shard using the built-in `pkg/cert` module. No user action is required.
+
+#### User-Provided Certificates (cert-manager)
+
+To use certificates from [cert-manager](https://cert-manager.io/) or any external PKI, provide the Secret name in the backup configuration:
+
+```yaml
+spec:
+  backup:
+    type: filesystem
+    filesystem:
+      path: /backups
+      storage:
+        size: 10Gi
+    pgbackrestTLS:
+      secretName: my-pgbackrest-certs  # Must contain ca.crt, tls.crt, tls.key
+```
+
+The referenced Secret must contain three keys: `ca.crt`, `tls.crt`, and `tls.key`. This is directly compatible with cert-manager's default Certificate output:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: pgbackrest-tls
+spec:
+  secretName: my-pgbackrest-certs
+  commonName: pgbackrest
+  usages: [server auth, client auth]
+  issuerRef:
+    name: my-issuer
+    kind: Issuer
+```
+
+> [!NOTE]
+> The operator internally renames `tls.crt` → `pgbackrest.crt` and `tls.key` → `pgbackrest.key` via projected volumes to match upstream pgBackRest expectations. Users do not need to perform any manual key renaming.
 
 ## Observability
 

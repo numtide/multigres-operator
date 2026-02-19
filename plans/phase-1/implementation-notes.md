@@ -195,9 +195,9 @@ mgr := gencert.NewManager(cl, recorder, gencert.Options{
 
 ### Reusing for Other TLS Use Cases
 
-The `pkg/cert` module is intentionally generic and can be reused for any component that needs self-signed TLS within the operator. Potential use cases:
+The `pkg/cert` module is intentionally generic and can be reused for any component that needs self-signed TLS within the operator. Current and potential use cases:
 
-1. **pgBackRest TLS**: Generate client/server certs for pgBackRest repository connections.
+1. **pgBackRest TLS** *(implemented)*: Generates client/server certs for pgBackRest inter-node backup communication. See below.
 2. **Etcd mTLS**: Generate client certificates for etcd authentication.
 3. **Inter-component mTLS**: Secure traffic between operator-managed pods.
 
@@ -206,6 +206,18 @@ To add a new consumer:
 1. Create a new `Options` with a unique `CASecretName`/`ServerSecretName` pair and appropriate `ExtKeyUsages` (e.g. `ClientAuth` for mTLS).
 2. Implement a `PostReconcileHook` for any consumer-specific logic (e.g. restarting pods when certs rotate).
 3. Call `NewManager()` and add it as a `Runnable` to the controller-runtime manager.
+
+### pgBackRest TLS Implementation
+
+pgBackRest requires TLS for its inter-node communication protocol. The shard controller (`reconcilePgBackRestCerts`) supports two modes:
+
+**Auto-generated (default):** Uses `pkg/cert` to create a CA Secret (`{shard}-pgbackrest-ca`) and a server cert Secret (`{shard}-pgbackrest-tls`), both owned by the Shard resource.
+
+**User-provided:** Accepts a user-specified Secret (e.g., from cert-manager) via `spec.backup.pgbackrestTLS.secretName`. The operator validates the Secret exists and contains the required keys (`ca.crt`, `tls.crt`, `tls.key`).
+
+**Projected volume with key renaming:** Both modes mount certificates via a projected volume that renames `tls.crt` → `pgbackrest.crt` and `tls.key` → `pgbackrest.key` to match upstream pgctld/multipooler expectations. This makes user-provided mode directly compatible with cert-manager's standard Secret output without any manual key renaming.
+
+**APIReader for external Secret validation:** User-provided Secrets (e.g., from cert-manager) lack the `app.kubernetes.io/managed-by: multigres-operator` label and are therefore invisible to the informer cache (see *Controller Caching Strategy* above). The shard controller uses `r.APIReader.Get()` (uncached, direct API server call) to validate these Secrets. This is the `Option B` approach documented in the *Developer Guide: Reading Secrets* section.
 
 ---
 

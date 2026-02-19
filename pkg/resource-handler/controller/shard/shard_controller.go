@@ -2,6 +2,7 @@ package shard
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"slices"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/cert"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
@@ -31,6 +34,12 @@ type ShardReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	// APIReader is an uncached client that reads directly from the API server.
+	// The default cached client (r.Get) only sees Secrets labeled with
+	// "app.kubernetes.io/managed-by: multigres-operator" due to the informer
+	// cache's label filter. External Secrets (e.g., cert-manager) lack this
+	// label, so we need APIReader to validate user-provided pgBackRest TLS Secrets.
+	APIReader client.Reader
 }
 
 // Reconcile handles Shard resource reconciliation.
@@ -86,6 +95,20 @@ func (r *ShardReconciler) Reconcile(
 			"Warning",
 			"ConfigError",
 			"Failed to generate postgres password Secret: %v",
+			err,
+		)
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile pgBackRest TLS certificates (required for inter-node backup communication)
+	if err := r.reconcilePgBackRestCerts(ctx, shard); err != nil {
+		monitoring.RecordSpanError(span, err)
+		logger.Error(err, "Failed to reconcile pgBackRest TLS certificates")
+		r.Recorder.Eventf(
+			shard,
+			"Warning",
+			"CertError",
+			"Failed to reconcile pgBackRest TLS certificates: %v",
 			err,
 		)
 		return ctrl.Result{}, err
@@ -326,6 +349,56 @@ func (r *ShardReconciler) reconcilePostgresPasswordSecret(
 	)
 
 	return nil
+}
+
+// reconcilePgBackRestCerts ensures pgBackRest TLS certificates are available.
+// For user-provided certs, validates the Secret exists and has the required keys
+// using an uncached API reader (the informer cache filters by managed-by label).
+// For auto-generated certs, uses pkg/cert to create and rotate CA + server Secrets.
+func (r *ShardReconciler) reconcilePgBackRestCerts(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	if shard.Spec.Backup == nil {
+		return nil
+	}
+
+	// User-provided Secret: validate via uncached API reader.
+	// We use APIReader instead of the cached client because the informer cache
+	// only stores operator-labeled Secrets, making external Secrets (e.g.,
+	// cert-manager) invisible to the cached r.Get().
+	if shard.Spec.Backup.PgBackRestTLS != nil &&
+		shard.Spec.Backup.PgBackRestTLS.SecretName != "" {
+		secretName := shard.Spec.Backup.PgBackRestTLS.SecretName
+		secret := &corev1.Secret{}
+		if err := r.APIReader.Get(ctx, types.NamespacedName{
+			Name:      secretName,
+			Namespace: shard.Namespace,
+		}, secret); err != nil {
+			return fmt.Errorf("pgbackrest TLS secret %q not found: %w", secretName, err)
+		}
+		for _, key := range []string{"ca.crt", "tls.crt", "tls.key"} {
+			if _, ok := secret.Data[key]; !ok {
+				return fmt.Errorf("pgbackrest TLS secret %q missing required key %q", secretName, key)
+			}
+		}
+		return nil
+	}
+
+	// Auto-generate: use pkg/cert to create CA + server cert Secrets.
+	rotator := cert.NewManager(r.Client, r.Recorder, cert.Options{
+		Namespace:        shard.Namespace,
+		CASecretName:     shard.Name + "-pgbackrest-ca",
+		ServerSecretName: shard.Name + "-pgbackrest-tls",
+		ServiceName:      "pgbackrest",
+		ExtKeyUsages: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth,
+		},
+		Organization:  "Multigres",
+		Owner:         shard,
+		ComponentName: "pgbackrest",
+	})
+	return rotator.Bootstrap(ctx)
 }
 
 // reconcileMultiOrchService creates or updates the MultiOrch Service for a specific cell.

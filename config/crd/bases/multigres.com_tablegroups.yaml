@@ -86,6 +86,21 @@ spec:
                             type: string
                         type: object
                     type: object
+                  pgbackrestTLS:
+                    description: |-
+                      PgBackRestTLS configures TLS certificates for pgBackRest inter-node communication.
+                      Required for multi-replica shards where standbys connect to the primary's
+                      pgBackRest server. When SecretName is set, the operator mounts that Secret directly.
+                      When SecretName is empty, the operator auto-generates and rotates certificates.
+                    properties:
+                      secretName:
+                        description: |-
+                          SecretName is the name of an existing Secret containing pgBackRest TLS certificates.
+                          The Secret must contain three keys: ca.crt, tls.crt, tls.key.
+                          This is directly compatible with cert-manager Certificate resources.
+                          When empty, the operator generates and rotates certificates automatically.
+                        type: string
+                    type: object
                   s3:
                     description: |-
                       S3 defines the S3-compatible storage configuration.
@@ -380,6 +395,21 @@ spec:
                                   pattern: ^([0-9]+)(.+)$
                                   type: string
                               type: object
+                          type: object
+                        pgbackrestTLS:
+                          description: |-
+                            PgBackRestTLS configures TLS certificates for pgBackRest inter-node communication.
+                            Required for multi-replica shards where standbys connect to the primary's
+                            pgBackRest server. When SecretName is set, the operator mounts that Secret directly.
+                            When SecretName is empty, the operator auto-generates and rotates certificates.
+                          properties:
+                            secretName:
+                              description: |-
+                                SecretName is the name of an existing Secret containing pgBackRest TLS certificates.
+                                The Secret must contain three keys: ca.crt, tls.crt, tls.key.
+                                This is directly compatible with cert-manager Certificate resources.
+                                When empty, the operator generates and rotates certificates automatically.
+                              type: string
                           type: object
                         s3:
                           description: |-

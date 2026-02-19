@@ -141,6 +141,13 @@ type BackupConfig struct {
 	// Required when type is "s3".
 	// +optional
 	S3 *S3BackupConfig `json:"s3,omitempty"`
+
+	// PgBackRestTLS configures TLS certificates for pgBackRest inter-node communication.
+	// Required for multi-replica shards where standbys connect to the primary's
+	// pgBackRest server. When SecretName is set, the operator mounts that Secret directly.
+	// When SecretName is empty, the operator auto-generates and rotates certificates.
+	// +optional
+	PgBackRestTLS *PgBackRestTLSConfig `json:"pgbackrestTLS,omitempty"`
 }
 
 // FilesystemBackupConfig defines settings for filesystem-based backups.
@@ -167,6 +174,16 @@ type S3BackupConfig struct {
 	// CredentialsSecret is the name of the Secret containing AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
 	// +optional
 	CredentialsSecret string `json:"credentialsSecret,omitempty"`
+}
+
+// PgBackRestTLSConfig configures TLS for pgBackRest inter-node communication.
+type PgBackRestTLSConfig struct {
+	// SecretName is the name of an existing Secret containing pgBackRest TLS certificates.
+	// The Secret must contain three keys: ca.crt, tls.crt, tls.key.
+	// This is directly compatible with cert-manager Certificate resources.
+	// When empty, the operator generates and rotates certificates automatically.
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
 }
 
 // ============================================================================
