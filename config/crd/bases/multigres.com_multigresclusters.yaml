@@ -96,6 +96,10 @@ spec:
                     properties:
                       bucket:
                         type: string
+                      credentialsSecret:
+                        description: CredentialsSecret is the name of the Secret containing
+                          AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+                        type: string
                       endpoint:
                         type: string
                       keyPrefix:
@@ -2462,6 +2466,10 @@ spec:
                           properties:
                             bucket:
                               type: string
+                            credentialsSecret:
+                              description: CredentialsSecret is the name of the Secret
+                                containing AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+                              type: string
                             endpoint:
                               type: string
                             keyPrefix:
@@ -2548,6 +2556,11 @@ spec:
                                   Required when type is "s3".
                                 properties:
                                   bucket:
+                                    type: string
+                                  credentialsSecret:
+                                    description: CredentialsSecret is the name of
+                                      the Secret containing AWS_ACCESS_KEY_ID and
+                                      AWS_SECRET_ACCESS_KEY.
                                     type: string
                                   endpoint:
                                     type: string
@@ -2663,6 +2676,11 @@ spec:
                                         Required when type is "s3".
                                       properties:
                                         bucket:
+                                          type: string
+                                        credentialsSecret:
+                                          description: CredentialsSecret is the name
+                                            of the Secret containing AWS_ACCESS_KEY_ID
+                                            and AWS_SECRET_ACCESS_KEY.
                                           type: string
                                         endpoint:
                                           type: string

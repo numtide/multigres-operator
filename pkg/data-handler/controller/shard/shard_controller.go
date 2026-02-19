@@ -228,14 +228,8 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 
 	// Build database metadata
 	dbMetadata := &clustermetadata.Database{
-		Name: dbName,
-		BackupLocation: &clustermetadata.BackupLocation{
-			Location: &clustermetadata.BackupLocation_Filesystem{
-				Filesystem: &clustermetadata.FilesystemBackup{
-					Path: r.getBackupLocation(shard),
-				},
-			},
-		},
+		Name:             dbName,
+		BackupLocation:   r.getBackupLocation(shard),
 		DurabilityPolicy: r.getDurabilityPolicy(shard),
 		Cells:            cells,
 	}
@@ -317,10 +311,41 @@ func (r *ShardReconciler) unregisterDatabaseFromTopology(
 }
 
 // getBackupLocation extracts the backup location from the shard config.
-// TODO: This should come from a field in the Shard spec once available.
-func (r *ShardReconciler) getBackupLocation(shard *multigresv1alpha1.Shard) string {
-	// Default value matching the demo setup
-	return "/backups"
+func (r *ShardReconciler) getBackupLocation(
+	shard *multigresv1alpha1.Shard,
+) *clustermetadata.BackupLocation {
+	if shard.Spec.Backup != nil &&
+		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 &&
+		shard.Spec.Backup.S3 != nil {
+		return &clustermetadata.BackupLocation{
+			Location: &clustermetadata.BackupLocation_S3{
+				S3: &clustermetadata.S3Backup{
+					Bucket:            shard.Spec.Backup.S3.Bucket,
+					Region:            shard.Spec.Backup.S3.Region,
+					Endpoint:          shard.Spec.Backup.S3.Endpoint,
+					KeyPrefix:         shard.Spec.Backup.S3.KeyPrefix,
+					UseEnvCredentials: shard.Spec.Backup.S3.UseEnvCredentials,
+				},
+			},
+		}
+	}
+
+	// Default to filesystem
+	path := "/backups"
+	if shard.Spec.Backup != nil &&
+		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem &&
+		shard.Spec.Backup.Filesystem != nil &&
+		shard.Spec.Backup.Filesystem.Path != "" {
+		path = shard.Spec.Backup.Filesystem.Path
+	}
+
+	return &clustermetadata.BackupLocation{
+		Location: &clustermetadata.BackupLocation_Filesystem{
+			Filesystem: &clustermetadata.FilesystemBackup{
+				Path: path,
+			},
+		},
+	}
 }
 
 // getDurabilityPolicy extracts the durability policy from the shard config.

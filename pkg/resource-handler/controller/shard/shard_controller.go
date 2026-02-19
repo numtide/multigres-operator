@@ -451,6 +451,12 @@ func (r *ShardReconciler) reconcileSharedBackupPVC(
 	shard *multigresv1alpha1.Shard,
 	cellName string,
 ) error {
+	// S3 backups use object storage; no shared PVC is needed.
+	// TODO: Consider cleaning up orphaned backup PVCs when migrating from filesystem to S3.
+	if shard.Spec.Backup != nil && shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 {
+		return nil
+	}
+
 	desired, err := BuildSharedBackupPVC(shard, cellName, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build shared backup PVC: %w", err)

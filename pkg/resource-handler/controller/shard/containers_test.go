@@ -831,6 +831,146 @@ func TestBuildPgctldContainer(t *testing.T) {
 		assertContainsFlag(t, c.Args, "--backup-key-prefix=prod/backups")
 		assertContainsFlag(t, c.Args, "--backup-use-env-credentials")
 	})
+
+	t.Run("s3 credentials secret injects AWS env vars", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeS3,
+					S3: &multigresv1alpha1.S3BackupConfig{
+						Bucket:            "my-bucket",
+						Region:            "us-west-2",
+						CredentialsSecret: "aws-creds",
+					},
+				},
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertContainsEnvVar(t, c.Env, "AWS_REGION")
+		assertContainsEnvVar(t, c.Env, "AWS_ACCESS_KEY_ID")
+		assertContainsEnvVar(t, c.Env, "AWS_SECRET_ACCESS_KEY")
+	})
+
+	t.Run("filesystem backup does not inject AWS env vars", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+				},
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertNotContainsEnvVar(t, c.Env, "AWS_REGION")
+		assertNotContainsEnvVar(t, c.Env, "AWS_ACCESS_KEY_ID")
+	})
+}
+
+func TestS3EnvVars(t *testing.T) {
+	t.Run("nil backup returns nil", func(t *testing.T) {
+		got := s3EnvVars(nil)
+		if got != nil {
+			t.Errorf("s3EnvVars(nil) = %v, want nil", got)
+		}
+	})
+
+	t.Run("filesystem backup returns nil", func(t *testing.T) {
+		got := s3EnvVars(&multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+		})
+		if got != nil {
+			t.Errorf("s3EnvVars(filesystem) = %v, want nil", got)
+		}
+	})
+
+	t.Run("s3 with region only", func(t *testing.T) {
+		got := s3EnvVars(&multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3: &multigresv1alpha1.S3BackupConfig{
+				Bucket: "b",
+				Region: "eu-west-1",
+			},
+		})
+		if len(got) != 1 || got[0].Name != "AWS_REGION" || got[0].Value != "eu-west-1" {
+			t.Errorf("s3EnvVars(region-only) = %v, want [{AWS_REGION eu-west-1}]", got)
+		}
+	})
+
+	t.Run("s3 with credentials secret", func(t *testing.T) {
+		got := s3EnvVars(&multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3: &multigresv1alpha1.S3BackupConfig{
+				Bucket:            "b",
+				Region:            "us-east-1",
+				CredentialsSecret: "my-secret",
+			},
+		})
+		if len(got) != 3 {
+			t.Fatalf("s3EnvVars(full) returned %d vars, want 3", len(got))
+		}
+		assertContainsEnvVar(t, got, "AWS_REGION")
+		assertContainsEnvVar(t, got, "AWS_ACCESS_KEY_ID")
+		assertContainsEnvVar(t, got, "AWS_SECRET_ACCESS_KEY")
+
+		// Verify it references the correct secret
+		for _, e := range got {
+			if e.Name == "AWS_ACCESS_KEY_ID" {
+				if e.ValueFrom == nil || e.ValueFrom.SecretKeyRef == nil {
+					t.Fatal("AWS_ACCESS_KEY_ID missing SecretKeyRef")
+				}
+				if e.ValueFrom.SecretKeyRef.Name != "my-secret" {
+					t.Errorf("AWS_ACCESS_KEY_ID secret = %q, want %q",
+						e.ValueFrom.SecretKeyRef.Name, "my-secret")
+				}
+			}
+		}
+	})
+
+	t.Run("s3 with no region", func(t *testing.T) {
+		got := s3EnvVars(&multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3: &multigresv1alpha1.S3BackupConfig{
+				Bucket:            "b",
+				CredentialsSecret: "my-secret",
+			},
+		})
+		// Should have 2 vars: KEY_ID and SECRET_KEY, but no REGION
+		if len(got) != 2 {
+			t.Fatalf("s3EnvVars(no-region) returned %d vars, want 2", len(got))
+		}
+		assertNotContainsEnvVar(t, got, "AWS_REGION")
+		assertContainsEnvVar(t, got, "AWS_ACCESS_KEY_ID")
+	})
+}
+
+func TestBuildSharedBackupVolume_S3(t *testing.T) {
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "postgres",
+			TableGroupName: "default",
+			ShardName:      "0-inf",
+			Backup: &multigresv1alpha1.BackupConfig{
+				Type: multigresv1alpha1.BackupTypeS3,
+				S3: &multigresv1alpha1.S3BackupConfig{
+					Bucket: "my-bucket",
+					Region: "us-east-1",
+				},
+			},
+		},
+	}
+	vol := buildSharedBackupVolume(shard, "zone-1")
+
+	if vol.Name != BackupVolumeName {
+		t.Errorf("volume name = %q, want %q", vol.Name, BackupVolumeName)
+	}
+	if vol.VolumeSource.EmptyDir == nil {
+		t.Error("S3 backup volume should use EmptyDir, got PVC or other source")
+	}
+	if vol.VolumeSource.PersistentVolumeClaim != nil {
+		t.Error("S3 backup volume should NOT use PersistentVolumeClaim")
+	}
 }
 
 func assertContainsFlag(t *testing.T, args []string, want string) {
@@ -861,4 +1001,24 @@ func assertContainsOTELEnvVar(t *testing.T, envVars []corev1.EnvVar, fnName stri
 		}
 	}
 	t.Errorf("%s: expected OTEL_EXPORTER_OTLP_ENDPOINT env var, got none", fnName)
+}
+
+func assertContainsEnvVar(t *testing.T, envVars []corev1.EnvVar, name string) {
+	t.Helper()
+	for _, e := range envVars {
+		if e.Name == name {
+			return
+		}
+	}
+	t.Errorf("expected env var %q, got none", name)
+}
+
+func assertNotContainsEnvVar(t *testing.T, envVars []corev1.EnvVar, name string) {
+	t.Helper()
+	for _, e := range envVars {
+		if e.Name == name {
+			t.Errorf("unexpected env var %q found", name)
+			return
+		}
+	}
 }
