@@ -27,7 +27,13 @@ func (r *Resolver) ResolveShard(
 	}
 
 	// 2. Merge Logic
-	multiOrch, pools, pvcPolicy, backupCfg := mergeShardConfig(tpl, shardSpec.Overrides, shardSpec.Spec, shardSpec.Backup, inheritedBackup)
+	multiOrch, pools, pvcPolicy, backupCfg := mergeShardConfig(
+		tpl,
+		shardSpec.Overrides,
+		shardSpec.Spec,
+		shardSpec.Backup,
+		inheritedBackup,
+	)
 
 	// 3. Apply Deep Defaults (Level 4)
 	defaultStatelessSpec(&multiOrch.StatelessSpec, DefaultResourcesOrch(), 1)

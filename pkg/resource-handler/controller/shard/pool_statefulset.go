@@ -183,7 +183,8 @@ func BuildSharedBackupPVC(
 
 	// Logic: Use Shard.Spec.Backup
 	// If Backup is nil or not Filesystem, we do NOT create a shared PVC.
-	if shard.Spec.Backup == nil || shard.Spec.Backup.Type != multigresv1alpha1.BackupTypeFilesystem {
+	if shard.Spec.Backup == nil ||
+		shard.Spec.Backup.Type != multigresv1alpha1.BackupTypeFilesystem {
 		return nil, nil
 	}
 

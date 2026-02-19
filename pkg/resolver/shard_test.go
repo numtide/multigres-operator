@@ -174,7 +174,12 @@ func TestResolver_ResolveShard(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
 			r := NewResolver(c, ns)
 
-			orch, pools, pvcPolicy, _, err := r.ResolveShard(t.Context(), tc.config, tc.allCellNames, nil)
+			orch, pools, pvcPolicy, _, err := r.ResolveShard(
+				t.Context(),
+				tc.config,
+				tc.allCellNames,
+				nil,
+			)
 			if tc.wantErr {
 				if err == nil {
 					t.Error("Expected error")
@@ -663,7 +668,11 @@ func TestDefaultBackupConfig(t *testing.T) {
 		}
 		defaultBackupConfig(cfg)
 		if cfg.Filesystem.Storage.Size != DefaultBackupStorageSize {
-			t.Errorf("Storage.Size = %q, want %q", cfg.Filesystem.Storage.Size, DefaultBackupStorageSize)
+			t.Errorf(
+				"Storage.Size = %q, want %q",
+				cfg.Filesystem.Storage.Size,
+				DefaultBackupStorageSize,
+			)
 		}
 	})
 

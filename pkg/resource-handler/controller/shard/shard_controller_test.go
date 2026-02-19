@@ -797,7 +797,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: func(obj client.Object) error {
 					if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok &&
-						strings.Contains(pvc.Name, "backup-data-test-cluster-testdb-default--zone1") {
+						strings.Contains(
+							pvc.Name,
+							"backup-data-test-cluster-testdb-default--zone1",
+						) {
 						return testutil.ErrPermissionError
 					}
 					return nil

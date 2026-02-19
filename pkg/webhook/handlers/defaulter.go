@@ -195,9 +195,15 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	hasImplicitShard, _ := scopedResolver.ShardTemplateExists(ctx, resolver.FallbackShardTemplate)
 
 	for i := range cluster.Spec.Databases {
-		dbBackup := multigresv1alpha1.MergeBackupConfig(cluster.Spec.Databases[i].Backup, cluster.Spec.Backup)
+		dbBackup := multigresv1alpha1.MergeBackupConfig(
+			cluster.Spec.Databases[i].Backup,
+			cluster.Spec.Backup,
+		)
 		for j := range cluster.Spec.Databases[i].TableGroups {
-			tgBackup := multigresv1alpha1.MergeBackupConfig(cluster.Spec.Databases[i].TableGroups[j].Backup, dbBackup)
+			tgBackup := multigresv1alpha1.MergeBackupConfig(
+				cluster.Spec.Databases[i].TableGroups[j].Backup,
+				dbBackup,
+			)
 			for k := range cluster.Spec.Databases[i].TableGroups[j].Shards {
 				shard := &cluster.Spec.Databases[i].TableGroups[j].Shards[k]
 				hasInline := shard.ShardTemplate != ""
