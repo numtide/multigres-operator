@@ -146,8 +146,13 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 												},
 											},
 											Backup: &multigresv1alpha1.BackupConfig{
-												Type:       multigresv1alpha1.BackupTypeFilesystem,
-												Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: resolver.DefaultBackupPath, Storage: multigresv1alpha1.StorageSpec{Size: resolver.DefaultBackupStorageSize}},
+												Type: multigresv1alpha1.BackupTypeFilesystem,
+												Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+													Path: resolver.DefaultBackupPath,
+													Storage: multigresv1alpha1.StorageSpec{
+														Size: resolver.DefaultBackupStorageSize,
+													},
+												},
 											},
 										},
 									},
@@ -419,8 +424,13 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 											},
 										},
 										Backup: &multigresv1alpha1.BackupConfig{
-											Type:       multigresv1alpha1.BackupTypeFilesystem,
-											Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: resolver.DefaultBackupPath, Storage: multigresv1alpha1.StorageSpec{Size: resolver.DefaultBackupStorageSize}},
+											Type: multigresv1alpha1.BackupTypeFilesystem,
+											Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+												Path: resolver.DefaultBackupPath,
+												Storage: multigresv1alpha1.StorageSpec{
+													Size: resolver.DefaultBackupStorageSize,
+												},
+											},
 										},
 									}},
 								}},

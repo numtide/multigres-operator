@@ -456,7 +456,8 @@ func (r *Resolver) ValidateClusterLogic(
 					// Check if any pool has >1 replicas and we are using RWO
 					isRWO := true // Default is RWO
 
-					if backupCfg.Filesystem != nil && len(backupCfg.Filesystem.Storage.AccessModes) > 0 {
+					if backupCfg.Filesystem != nil &&
+						len(backupCfg.Filesystem.Storage.AccessModes) > 0 {
 						for _, mode := range backupCfg.Filesystem.Storage.AccessModes {
 							if mode == corev1.ReadWriteMany {
 								isRWO = false

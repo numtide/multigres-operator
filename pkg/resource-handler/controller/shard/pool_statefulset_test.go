@@ -1138,7 +1138,6 @@ func TestBuildSharedBackupPVC(t *testing.T) {
 				"zone1",
 				testScheme,
 			)
-
 			if err != nil {
 				t.Errorf("BuildSharedBackupPVC() error = %v", err)
 				return
