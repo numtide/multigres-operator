@@ -205,7 +205,7 @@ These operations are **not supported by the operator** and should be documented 
 | Backup to S3 | ✅ (recently added) | ✅ (via `credentialsSecret` or `useEnvCredentials`) |
 | Backup to filesystem | ✅ | ✅ (via shared PVC) |
 | Failover (auto) | ✅ (via multiorch) | ✅ (handled by multiorch) |
-| pgBackRest TLS certs | ✅ (via cert-manager in demo) | ⚠️ `pkg/cert` ready, shard wiring pending ([§7.7](#gap-7-pgbackrest-tls-certificate-handling)) |
+| pgBackRest TLS certs | ✅ (via cert-manager in demo) | ✅ (via auto-generated or user-provided Secret) |
 
 ---
 
@@ -1033,57 +1033,29 @@ The generic `pkg/cert` module (previously `pkg/webhook/cert/`) is now fully oper
 - **ExtKeyUsage**: `ServerAuth + ClientAuth` (line 127 of upstream `tls.go`). Both sides (pgctld server on primary, multipooler client on standby) use the same cert for mutual TLS.
 - **Command-line flags**: multipooler accepts `--pgbackrest-cert-file`, `--pgbackrest-key-file`, `--pgbackrest-ca-file`; pgctld reads from `CertDir` config.
 
-**Implementation plan**:
+**Current state: ✅ Fully Implemented**
 
-1. **Create a per-shard pgBackRest cert Secret** in the shard `resource-handler`:
+The operator now fully supports pgBackRest TLS certificates with a dual-mode design:
 
-   ```go
-   rotator := cert.NewManager(cl, recorder, cert.Options{
-       Namespace:        shard.Namespace,
-       CASecretName:     fmt.Sprintf("%s-pgbackrest-ca", shard.Name),
-       ServerSecretName: fmt.Sprintf("%s-pgbackrest-tls", shard.Name),
-       ServiceName:      "pgbackrest",   // CN = pgbackrest, matching tls-server-auth
-       ExtKeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-       Organization:     "Multigres",
-       Owner:            &shard,          // GC'd when Shard is deleted
-       // No PostReconcileHook needed
-       // No WaitForProjection needed (pods mount the Secret directly)
-   })
-   ```
+1. **Auto-Generated Certificates (Default Mode)**
+   - Uses the built-in `pkg/cert` module to generate a per-shard CA Secret (`{shard}-pgbackrest-ca`) and server TLS Secret (`{shard}-pgbackrest-tls`).
+   - The certificates use `ExtKeyUsages: ServerAuth + ClientAuth` (mutual TLS) and Common Name `pgbackrest` (matching upstream `tls-server-auth=pgbackrest=*`).
+   - Certificates are automatically rotated by the operator before expiration.
 
-   Since `tls-server-auth=pgbackrest=*` matches by CN, one shared Secret per shard is sufficient. All pods in the shard mount the same Secret.
+2. **User-Provided Certificates (cert-manager compatible)**
+   - Users can provide an existing Secret via `spec.backup.pgbackrestTLS.secretName`.
+   - The operator validates the Secret contains `ca.crt`, `tls.crt`, and `tls.key`.
+   - **Crucial Detail**: Because external Secrets (like those created by cert-manager) lack the `app.kubernetes.io/managed-by: multigres-operator` label, they are invisible to the operator's default filtered informer cache. The shard controller uses an uncached `APIReader` to fetch and validate these Secrets directly from the API server.
 
-2. **Mount the certs into the pod template**: The shard resource-handler adds volumes and volume mounts for the pgBackRest TLS Secret into the multipooler container. The mount path must match what pgctld's `PgBackRestConfig` expects:
+**Volume Mounting Engine (Projected Volumes)**
 
-   ```
-   /certs/pgbackrest.crt  →  tls.crt from Secret (renamed via subPath or projected volume)
-   /certs/pgbackrest.key  →  tls.key from Secret
-   /certs/ca.crt          →  ca.crt from CA Secret
-   ```
+Both modes use a unified volume mounting strategy:
+- The operator creates a `projected` volume referencing the CA Secret and the TLS Secret.
+- The TLS Secret items (`tls.crt` and `tls.key`) are explicitly renamed in the projection to `pgbackrest.crt` and `pgbackrest.key`.
+- This renaming is necessary because pgctld strictly expects these specific filenames, while cert-manager outputs `tls.crt`/`tls.key`. By using projected volumes, the operator provides seamless cert-manager compatibility without requiring users to manually rename keys.
 
-   Note: The server cert and the CA cert live in different Secrets (`<shard>-pgbackrest-tls` and `<shard>-pgbackrest-ca`). Both need to be mounted. This can be done with two Volumes, or a single projected Volume combining both.
-
-3. **Pass cert paths via container args**: The multipooler container already accepts `--pgbackrest-cert-file`, `--pgbackrest-key-file`, `--pgbackrest-ca-file` flags. The resource-handler sets these to the mounted paths.
-
-4. **Support dual-mode (auto-generate or user-provided)**:
-   - **Auto-generate (default)**: If no `pgbackrestTLSSecretRef` is set in the Shard spec, the operator calls `cert.NewManager().Bootstrap()` to create the Secrets, then mounts them.
-   - **User-provided**: If `pgbackrestTLSSecretRef` is set, the operator skips `cert.NewManager()` entirely and mounts the user-referenced Secret as-is. This supports cert-manager `Certificate` CRs or any pre-provisioned certs.
-
-**Key differences from the webhook cert setup**:
-
-| Aspect | Webhook Certs | pgBackRest Certs |
-|---|---|---|
-| **Where certs are mounted** | Operator pod (single instance) | Data plane pods (multiple per shard) |
-| **Secret scope** | One global Secret pair | Per-shard Secret pair |
-| **CN / DNS SANs** | `<webhook-svc>.<ns>.svc.cluster.local` | `pgbackrest` (CN only — all pods share same cert) |
-| **ExtKeyUsage** | `ServerAuth` only | `ServerAuth + ClientAuth` (mutual TLS) |
-| **PostReconcileHook** | Patches `MutatingWebhookConfiguration` CA bundle | Not needed |
-| **Kubelet wait** | Must wait for projected volume mount | Not needed — Secret is mounted via pod spec |
-| **Cert rotation** | Background loop in operator | `Bootstrap()` at reconcile time; rotation is transparent because pods mount Secrets directly (Kubelet updates projected files) |
-| **Owner (GC)** | Operator Deployment | Shard CR |
-
-**CRD additions**:
-- `spec.pgbackrest.tlsSecretRef` (optional) — reference to a user-provided TLS Secret. If unset, operator auto-generates.
+**CRD Additions**:
+- `spec.backup.pgbackrestTLS.secretName` (optional) — reference to a user-provided TLS Secret. If unset, operator auto-generates.
 
 ---
 
@@ -1132,6 +1104,6 @@ Once multigres exposes PITR via gRPC, the operator could surface it as a `Multig
 | 4 | Standby stuck without backup (not surfaced) | Multigres | **Medium** | No, but blocks scale-up silently |
 | 5 | Etcd cleanup on scale-down | Multigres | **Medium** | No — 4-hour stale window is acceptable |
 | 6 | Backup health reporting | Multigres | **Medium** | No, but the operator flies blind on backup state |
-| 7 | pgBackRest TLS certificate handling | Operator | **Medium** | Yes for multi-node — `pkg/cert` infra ready, shard wiring pending |
+| 7 | ~~pgBackRest TLS certificate handling~~ | Operator | ✅ **Done** | Resolved — `pkg/cert` infra, volume builder, and APIReader fully wired |
 | 8 | Graceful decommission RPC | Multigres | Low | No — drain state machine works without it |
 | 9 | Point-in-Time Recovery | Multigres | Low | No — advanced feature for later |
