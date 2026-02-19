@@ -1022,3 +1022,276 @@ func assertNotContainsEnvVar(t *testing.T, envVars []corev1.EnvVar, name string)
 		}
 	}
 }
+
+func assertNotContainsFlag(t *testing.T, args []string, prefix string) {
+	t.Helper()
+	for _, arg := range args {
+		if len(arg) >= len(prefix) && arg[:len(prefix)] == prefix {
+			t.Errorf("args should not contain flag starting with %q, but found %q", prefix, arg)
+			return
+		}
+	}
+}
+
+func assertContainsVolumeMount(t *testing.T, mounts []corev1.VolumeMount, name string) {
+	t.Helper()
+	for _, m := range mounts {
+		if m.Name == name {
+			return
+		}
+	}
+	t.Errorf("volume mounts %v does not contain mount %q", mounts, name)
+}
+
+func assertNotContainsVolumeMount(t *testing.T, mounts []corev1.VolumeMount, name string) {
+	t.Helper()
+	for _, m := range mounts {
+		if m.Name == name {
+			t.Errorf("volume mounts should not contain mount %q", name)
+			return
+		}
+	}
+}
+
+func TestBuildPgBackRestCertVolume(t *testing.T) {
+	t.Run("nil when no backup", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{Spec: multigresv1alpha1.ShardSpec{}}
+		vol := buildPgBackRestCertVolume(shard)
+		if vol != nil {
+			t.Fatalf("expected nil volume when no backup, got %+v", vol)
+		}
+	})
+
+	t.Run("auto-generated projected volume", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+				},
+			},
+		}
+		vol := buildPgBackRestCertVolume(shard)
+		if vol == nil {
+			t.Fatal("expected non-nil volume for auto-generated certs")
+		}
+		if vol.Name != PgBackRestCertVolumeName {
+			t.Errorf("volume name = %q, want %q", vol.Name, PgBackRestCertVolumeName)
+		}
+		if vol.Projected == nil {
+			t.Fatal("expected projected volume source for auto-generated certs")
+		}
+		if len(vol.Projected.Sources) != 2 {
+			t.Fatalf("expected 2 projection sources, got %d", len(vol.Projected.Sources))
+		}
+
+		// Verify CA source
+		caSource := vol.Projected.Sources[0]
+		if caSource.Secret.Name != "test-shard-pgbackrest-ca" {
+			t.Errorf("CA secret name = %q, want %q", caSource.Secret.Name, "test-shard-pgbackrest-ca")
+		}
+		if len(caSource.Secret.Items) != 1 || caSource.Secret.Items[0].Key != "ca.crt" {
+			t.Errorf("CA items = %+v, want [{Key:ca.crt Path:ca.crt}]", caSource.Secret.Items)
+		}
+
+		// Verify TLS source (key renaming)
+		tlsSource := vol.Projected.Sources[1]
+		if tlsSource.Secret.Name != "test-shard-pgbackrest-tls" {
+			t.Errorf("TLS secret name = %q, want %q", tlsSource.Secret.Name, "test-shard-pgbackrest-tls")
+		}
+		if len(tlsSource.Secret.Items) != 2 {
+			t.Fatalf("expected 2 TLS items, got %d", len(tlsSource.Secret.Items))
+		}
+		if tlsSource.Secret.Items[0].Key != "tls.crt" || tlsSource.Secret.Items[0].Path != "pgbackrest.crt" {
+			t.Errorf("TLS item[0] = %+v, want {Key:tls.crt Path:pgbackrest.crt}", tlsSource.Secret.Items[0])
+		}
+		if tlsSource.Secret.Items[1].Key != "tls.key" || tlsSource.Secret.Items[1].Path != "pgbackrest.key" {
+			t.Errorf("TLS item[1] = %+v, want {Key:tls.key Path:pgbackrest.key}", tlsSource.Secret.Items[1])
+		}
+	})
+
+	t.Run("user-provided Secret volume", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeS3,
+					S3: &multigresv1alpha1.S3BackupConfig{
+						Bucket: "b", Region: "r",
+					},
+					PgBackRestTLS: &multigresv1alpha1.PgBackRestTLSConfig{
+						SecretName: "my-custom-certs",
+					},
+				},
+			},
+		}
+		vol := buildPgBackRestCertVolume(shard)
+		if vol == nil {
+			t.Fatal("expected non-nil volume for user-provided certs")
+		}
+		if vol.Projected == nil {
+			t.Fatal("expected projected volume for user-provided certs (key renaming for cert-manager compat)")
+		}
+		if len(vol.Projected.Sources) != 1 {
+			t.Fatalf("expected 1 projection source for user-provided, got %d", len(vol.Projected.Sources))
+		}
+		src := vol.Projected.Sources[0]
+		if src.Secret.Name != "my-custom-certs" {
+			t.Errorf("secret name = %q, want %q", src.Secret.Name, "my-custom-certs")
+		}
+		if len(src.Secret.Items) != 3 {
+			t.Fatalf("expected 3 items (ca.crt, tls.crt→pgbackrest.crt, tls.key→pgbackrest.key), got %d", len(src.Secret.Items))
+		}
+	})
+
+	t.Run("auto-generated when PgBackRestTLS is nil", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "shard1"},
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type:          multigresv1alpha1.BackupTypeFilesystem,
+					PgBackRestTLS: nil,
+				},
+			},
+		}
+		vol := buildPgBackRestCertVolume(shard)
+		if vol == nil {
+			t.Fatal("expected non-nil volume when PgBackRestTLS is nil (auto-generated)")
+		}
+		if vol.Projected == nil {
+			t.Error("expected projected volume for auto-generated fallback")
+		}
+	})
+
+	t.Run("auto-generated when SecretName is empty", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "shard1"},
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+					PgBackRestTLS: &multigresv1alpha1.PgBackRestTLSConfig{
+						SecretName: "",
+					},
+				},
+			},
+		}
+		vol := buildPgBackRestCertVolume(shard)
+		if vol == nil {
+			t.Fatal("expected non-nil volume when SecretName is empty (auto-generated)")
+		}
+		if vol.Projected == nil {
+			t.Error("expected projected volume for auto-generated fallback")
+		}
+	})
+}
+
+func TestPgctldContainer_PgBackRestCertArgs(t *testing.T) {
+	t.Run("cert args present when backup configured", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+				},
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertContainsFlag(t, c.Args, "--pgbackrest-cert-dir=/certs/pgbackrest")
+		assertContainsFlag(t, c.Args, "--pgbackrest-port=8432")
+		assertContainsVolumeMount(t, c.VolumeMounts, PgBackRestCertVolumeName)
+
+		// Verify volume mount is read-only
+		for _, m := range c.VolumeMounts {
+			if m.Name == PgBackRestCertVolumeName && !m.ReadOnly {
+				t.Error("pgbackrest cert volume mount should be read-only")
+			}
+		}
+	})
+
+	t.Run("no cert args when no backup", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{Spec: multigresv1alpha1.ShardSpec{}}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertNotContainsFlag(t, c.Args, "--pgbackrest-cert-dir")
+		assertNotContainsFlag(t, c.Args, "--pgbackrest-port")
+		assertNotContainsVolumeMount(t, c.VolumeMounts, PgBackRestCertVolumeName)
+	})
+}
+
+func TestMultiPoolerSidecar_PgBackRestCertArgs(t *testing.T) {
+	baseShard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"multigres.com/cluster": "test"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:  "topo:2379",
+				RootPath: "/multigres/global",
+			},
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+		},
+	}
+
+	t.Run("cert args present when backup configured", func(t *testing.T) {
+		shard := baseShard.DeepCopy()
+		shard.Spec.Backup = &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3:   &multigresv1alpha1.S3BackupConfig{Bucket: "b", Region: "r"},
+		}
+		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1")
+		assertContainsFlag(t, c.Args, "--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt")
+		assertContainsFlag(t, c.Args, "--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key")
+		assertContainsFlag(t, c.Args, "--pgbackrest-ca-file=/certs/pgbackrest/ca.crt")
+		assertContainsVolumeMount(t, c.VolumeMounts, PgBackRestCertVolumeName)
+	})
+
+	t.Run("no cert args when no backup", func(t *testing.T) {
+		shard := baseShard.DeepCopy()
+		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1")
+		assertNotContainsFlag(t, c.Args, "--pgbackrest-cert-file")
+		assertNotContainsFlag(t, c.Args, "--pgbackrest-key-file")
+		assertNotContainsFlag(t, c.Args, "--pgbackrest-ca-file")
+		assertNotContainsVolumeMount(t, c.VolumeMounts, PgBackRestCertVolumeName)
+	})
+}
+
+func TestBuildPoolVolumes_CertVolumePresence(t *testing.T) {
+	t.Run("cert volume present when backup configured", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "test-shard",
+				Labels: map[string]string{"multigres.com/cluster": "test"},
+			},
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+				},
+			},
+		}
+		volumes := buildPoolVolumes(shard, "zone1")
+		found := false
+		for _, v := range volumes {
+			if v.Name == PgBackRestCertVolumeName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected pgbackrest-certs volume when backup configured")
+		}
+	})
+
+	t.Run("no cert volume when no backup", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{"multigres.com/cluster": "test"},
+			},
+			Spec: multigresv1alpha1.ShardSpec{},
+		}
+		volumes := buildPoolVolumes(shard, "zone1")
+		for _, v := range volumes {
+			if v.Name == PgBackRestCertVolumeName {
+				t.Error("cert volume should not be present when no backup configured")
+			}
+		}
+	})
+}

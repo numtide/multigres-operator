@@ -86,6 +86,15 @@ const (
 
 	// PostgresPasswordSecretKey is the key within the Secret that holds the password
 	PostgresPasswordSecretKey = "password"
+
+	// PgBackRestCertVolumeName is the name of the volume for pgBackRest TLS certificates
+	PgBackRestCertVolumeName = "pgbackrest-certs"
+
+	// PgBackRestCertMountPath is where pgBackRest TLS certificates are mounted
+	PgBackRestCertMountPath = "/certs/pgbackrest"
+
+	// PgBackRestPort is the port for the pgBackRest TLS server
+	PgBackRestPort = 8432
 )
 
 // buildSocketDirVolume creates the shared emptyDir volume for unix sockets.
@@ -255,6 +264,12 @@ func buildPgctldContainer(
 				args = append(args, "--backup-use-env-credentials")
 			}
 		}
+
+		// pgBackRest TLS cert dir and port (enables the pgBackRest TLS server)
+		args = append(args,
+			fmt.Sprintf("--pgbackrest-cert-dir=%s", PgBackRestCertMountPath),
+			fmt.Sprintf("--pgbackrest-port=%d", PgBackRestPort),
+		)
 	}
 
 	env := []corev1.EnvVar{
@@ -269,6 +284,33 @@ func buildPgctldContainer(
 		env = append(env, otelVars...)
 	}
 
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      DataVolumeName,
+			MountPath: DataMountPath,
+		},
+		{
+			Name:      BackupVolumeName,
+			MountPath: BackupMountPath,
+		},
+		{
+			Name:      SocketDirVolumeName,
+			MountPath: SocketDirMountPath,
+		},
+		{
+			Name:      PgHbaVolumeName,
+			MountPath: PgHbaMountPath,
+			ReadOnly:  true,
+		},
+	}
+	if shard.Spec.Backup != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      PgBackRestCertVolumeName,
+			MountPath: PgBackRestCertMountPath,
+			ReadOnly:  true,
+		})
+	}
+
 	return corev1.Container{
 		Name:      "postgres",
 		Image:     image,
@@ -281,25 +323,7 @@ func buildPgctldContainer(
 			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      DataVolumeName,
-				MountPath: DataMountPath,
-			},
-			{
-				Name:      BackupVolumeName,
-				MountPath: BackupMountPath,
-			},
-			{
-				Name:      SocketDirVolumeName,
-				MountPath: SocketDirMountPath,
-			},
-			{
-				Name:      PgHbaVolumeName,
-				MountPath: PgHbaMountPath,
-				ReadOnly:  true,
-			},
-		},
+		VolumeMounts: volumeMounts,
 	}
 }
 
@@ -338,6 +362,14 @@ func buildMultiPoolerSidecar(
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
 		"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)", // Resolved from env var below
+	}
+
+	if shard.Spec.Backup != nil {
+		args = append(args,
+			"--pgbackrest-cert-file="+PgBackRestCertMountPath+"/pgbackrest.crt",
+			"--pgbackrest-key-file="+PgBackRestCertMountPath+"/pgbackrest.key",
+			"--pgbackrest-ca-file="+PgBackRestCertMountPath+"/ca.crt",
+		)
 	}
 
 	c := corev1.Container{
@@ -412,6 +444,13 @@ func buildMultiPoolerSidecar(
 			Name:      SocketDirVolumeName,
 			MountPath: SocketDirMountPath,
 		},
+	}
+	if shard.Spec.Backup != nil {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      PgBackRestCertVolumeName,
+			MountPath: PgBackRestCertMountPath,
+			ReadOnly:  true,
+		})
 	}
 	return c
 }
@@ -505,6 +544,21 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 	return c
 }
 
+// buildPoolVolumes assembles the complete list of volumes for a pool pod.
+// Conditionally includes the pgBackRest cert volume when backup is configured.
+func buildPoolVolumes(shard *multigresv1alpha1.Shard, cellName string) []corev1.Volume {
+	volumes := []corev1.Volume{
+		// buildPgctldVolume(),
+		buildSharedBackupVolume(shard, cellName),
+		buildSocketDirVolume(),
+		buildPgHbaVolume(),
+	}
+	if certVol := buildPgBackRestCertVolume(shard); certVol != nil {
+		volumes = append(volumes, *certVol)
+	}
+	return volumes
+}
+
 // buildPgctldVolume creates the shared emptyDir volume for pgctld and pgbackrest binaries.
 // Used with buildPgctldInitContainer() and buildPostgresContainer().
 func buildPgctldVolume() corev1.Volume {
@@ -547,6 +601,88 @@ func buildSharedBackupVolume(shard *multigresv1alpha1.Shard, cellName string) co
 	return corev1.Volume{
 		Name:         BackupVolumeName,
 		VolumeSource: source,
+	}
+}
+
+// buildPgBackRestCertVolume creates the volume for pgBackRest TLS certificates.
+// Returns nil if backup is not configured.
+//
+// Both modes use a projected volume to rename tls.crt → pgbackrest.crt and
+// tls.key → pgbackrest.key, matching upstream pgctld/multipooler expectations.
+// This makes the user-provided mode directly compatible with cert-manager's
+// standard Secret output (ca.crt, tls.crt, tls.key).
+//
+//   - User-provided: projects from the single Secret specified in PgBackRestTLS.SecretName.
+//   - Auto-generated: projects from two operator-managed Secrets
+//     ({shard}-pgbackrest-ca and {shard}-pgbackrest-tls).
+func buildPgBackRestCertVolume(shard *multigresv1alpha1.Shard) *corev1.Volume {
+	if shard.Spec.Backup == nil {
+		return nil
+	}
+
+	defaultMode := int32(0o440)
+
+	// User-provided Secret: project with key renaming for cert-manager compatibility.
+	// Cert-manager outputs ca.crt, tls.crt, tls.key — we rename to match upstream.
+	if shard.Spec.Backup.PgBackRestTLS != nil &&
+		shard.Spec.Backup.PgBackRestTLS.SecretName != "" {
+		secretName := shard.Spec.Backup.PgBackRestTLS.SecretName
+		return &corev1.Volume{
+			Name: PgBackRestCertVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					DefaultMode: &defaultMode,
+					Sources: []corev1.VolumeProjection{
+						{
+							Secret: &corev1.SecretProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: secretName,
+								},
+								Items: []corev1.KeyToPath{
+									{Key: "ca.crt", Path: "ca.crt"},
+									{Key: "tls.crt", Path: "pgbackrest.crt"},
+									{Key: "tls.key", Path: "pgbackrest.key"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	// Auto-generated: projected volume combining CA and server cert Secrets.
+	// Renames tls.crt → pgbackrest.crt and tls.key → pgbackrest.key to match upstream.
+	return &corev1.Volume{
+		Name: PgBackRestCertVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Projected: &corev1.ProjectedVolumeSource{
+				DefaultMode: &defaultMode,
+				Sources: []corev1.VolumeProjection{
+					{
+						Secret: &corev1.SecretProjection{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: shard.Name + "-pgbackrest-ca",
+							},
+							Items: []corev1.KeyToPath{
+								{Key: "ca.crt", Path: "ca.crt"},
+							},
+						},
+					},
+					{
+						Secret: &corev1.SecretProjection{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: shard.Name + "-pgbackrest-tls",
+							},
+							Items: []corev1.KeyToPath{
+								{Key: "tls.crt", Path: "pgbackrest.crt"},
+								{Key: "tls.key", Path: "pgbackrest.key"},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

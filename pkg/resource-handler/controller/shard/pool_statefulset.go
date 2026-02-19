@@ -103,12 +103,7 @@ func BuildPoolStatefulSet(
 						buildPgctldContainer(shard, poolSpec),
 						// buildPostgresContainer(shard, poolSpec),
 					},
-					Volumes: []corev1.Volume{
-						// buildPgctldVolume(),
-						buildSharedBackupVolume(shard, cellName),
-						buildSocketDirVolume(),
-						buildPgHbaVolume(),
-					},
+					Volumes:  buildPoolVolumes(shard, cellName),
 					Affinity: poolSpec.Affinity,
 				},
 			},
