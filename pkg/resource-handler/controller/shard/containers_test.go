@@ -1088,7 +1088,11 @@ func TestBuildPgBackRestCertVolume(t *testing.T) {
 		// Verify CA source
 		caSource := vol.Projected.Sources[0]
 		if caSource.Secret.Name != "test-shard-pgbackrest-ca" {
-			t.Errorf("CA secret name = %q, want %q", caSource.Secret.Name, "test-shard-pgbackrest-ca")
+			t.Errorf(
+				"CA secret name = %q, want %q",
+				caSource.Secret.Name,
+				"test-shard-pgbackrest-ca",
+			)
 		}
 		if len(caSource.Secret.Items) != 1 || caSource.Secret.Items[0].Key != "ca.crt" {
 			t.Errorf("CA items = %+v, want [{Key:ca.crt Path:ca.crt}]", caSource.Secret.Items)
@@ -1097,16 +1101,28 @@ func TestBuildPgBackRestCertVolume(t *testing.T) {
 		// Verify TLS source (key renaming)
 		tlsSource := vol.Projected.Sources[1]
 		if tlsSource.Secret.Name != "test-shard-pgbackrest-tls" {
-			t.Errorf("TLS secret name = %q, want %q", tlsSource.Secret.Name, "test-shard-pgbackrest-tls")
+			t.Errorf(
+				"TLS secret name = %q, want %q",
+				tlsSource.Secret.Name,
+				"test-shard-pgbackrest-tls",
+			)
 		}
 		if len(tlsSource.Secret.Items) != 2 {
 			t.Fatalf("expected 2 TLS items, got %d", len(tlsSource.Secret.Items))
 		}
-		if tlsSource.Secret.Items[0].Key != "tls.crt" || tlsSource.Secret.Items[0].Path != "pgbackrest.crt" {
-			t.Errorf("TLS item[0] = %+v, want {Key:tls.crt Path:pgbackrest.crt}", tlsSource.Secret.Items[0])
+		if tlsSource.Secret.Items[0].Key != "tls.crt" ||
+			tlsSource.Secret.Items[0].Path != "pgbackrest.crt" {
+			t.Errorf(
+				"TLS item[0] = %+v, want {Key:tls.crt Path:pgbackrest.crt}",
+				tlsSource.Secret.Items[0],
+			)
 		}
-		if tlsSource.Secret.Items[1].Key != "tls.key" || tlsSource.Secret.Items[1].Path != "pgbackrest.key" {
-			t.Errorf("TLS item[1] = %+v, want {Key:tls.key Path:pgbackrest.key}", tlsSource.Secret.Items[1])
+		if tlsSource.Secret.Items[1].Key != "tls.key" ||
+			tlsSource.Secret.Items[1].Path != "pgbackrest.key" {
+			t.Errorf(
+				"TLS item[1] = %+v, want {Key:tls.key Path:pgbackrest.key}",
+				tlsSource.Secret.Items[1],
+			)
 		}
 	})
 
@@ -1129,17 +1145,25 @@ func TestBuildPgBackRestCertVolume(t *testing.T) {
 			t.Fatal("expected non-nil volume for user-provided certs")
 		}
 		if vol.Projected == nil {
-			t.Fatal("expected projected volume for user-provided certs (key renaming for cert-manager compat)")
+			t.Fatal(
+				"expected projected volume for user-provided certs (key renaming for cert-manager compat)",
+			)
 		}
 		if len(vol.Projected.Sources) != 1 {
-			t.Fatalf("expected 1 projection source for user-provided, got %d", len(vol.Projected.Sources))
+			t.Fatalf(
+				"expected 1 projection source for user-provided, got %d",
+				len(vol.Projected.Sources),
+			)
 		}
 		src := vol.Projected.Sources[0]
 		if src.Secret.Name != "my-custom-certs" {
 			t.Errorf("secret name = %q, want %q", src.Secret.Name, "my-custom-certs")
 		}
 		if len(src.Secret.Items) != 3 {
-			t.Fatalf("expected 3 items (ca.crt, tls.crt→pgbackrest.crt, tls.key→pgbackrest.key), got %d", len(src.Secret.Items))
+			t.Fatalf(
+				"expected 3 items (ca.crt, tls.crt→pgbackrest.crt, tls.key→pgbackrest.key), got %d",
+				len(src.Secret.Items),
+			)
 		}
 	})
 
