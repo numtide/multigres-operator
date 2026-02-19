@@ -1,0 +1,33 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: backup-overrides-test
+  namespace: default
+spec:
+  # Cluster internal default: Filesystem
+  backup:
+    type: filesystem
+    filesystem:
+      path: "/cluster-backups"
+
+  cells:
+    - name: "zone-a"
+      zone: "us-east-1a"
+  databases:
+    - name: postgres
+      default: true
+      # Database level: Filesystem override
+      backup:
+        type: filesystem
+        filesystem:
+          path: "/db-backups"
+      tablegroups:
+        - name: default
+          default: true
+          # TableGroup level: Partial override or specific
+          backup:
+             type: filesystem
+             filesystem:
+               path: "/tg-backups"
+          shards:
+            - name: "0-inf"

@@ -62,7 +62,7 @@ func buildHashedPoolHeadlessServiceName(
 	)
 }
 
-func buildHashedBackupPVCName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
+func buildHashedBackupPVCName(shard *multigresv1alpha1.Shard, cellName string) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
 	return name.JoinWithConstraints(
 		name.ServiceConstraints,
@@ -71,8 +71,6 @@ func buildHashedBackupPVCName(shard *multigresv1alpha1.Shard, poolName, cellName
 		string(shard.Spec.DatabaseName),
 		string(shard.Spec.TableGroupName),
 		string(shard.Spec.ShardName),
-		"pool",
-		poolName,
 		cellName,
 	)
 }
@@ -263,20 +261,23 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				return r.reconcilePoolHeadlessService(ctx, shard, "pool1", "", poolSpec)
 			},
 		},
-		"PoolBackupPVC": {
+		"SharedBackupPVC": {
 			setupShard: func() *multigresv1alpha1.Shard {
 				return &multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-shard",
 						Namespace: "default",
 					},
+					Spec: multigresv1alpha1.ShardSpec{
+						Backup: &multigresv1alpha1.BackupConfig{
+							Type:       multigresv1alpha1.BackupTypeFilesystem,
+							Filesystem: &multigresv1alpha1.FilesystemBackupConfig{},
+						},
+					},
 				}
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
-				poolSpec := multigresv1alpha1.PoolSpec{
-					Cells: []multigresv1alpha1.CellName{"cell1"},
-				}
-				return r.reconcilePoolBackupPVC(ctx, shard, "pool1", "cell1", poolSpec)
+				return r.reconcileSharedBackupPVC(ctx, shard, "cell1")
 			},
 		},
 		"PostgresPasswordSecret": {

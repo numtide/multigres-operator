@@ -1,6 +1,8 @@
 package shard
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -206,23 +208,53 @@ func buildPgctldContainer(
 		image = string(shard.Spec.Images.Postgres)
 	}
 
+	args := []string{
+		"server",
+		"--pooler-dir=" + PoolerDirMountPath,
+		"--grpc-port=15470",
+		"--pg-port=5432",
+		"--pg-listen-addresses=*",
+		"--pg-database=postgres",
+		"--pg-user=postgres",
+		"--timeout=30",
+		"--log-level=info",
+		"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
+		"--pg-hba-template=" + PgHbaTemplatePath,
+	}
+
+	if shard.Spec.Backup != nil {
+		args = append(args, fmt.Sprintf("--backup-type=%s", shard.Spec.Backup.Type))
+
+		// --backup-path is always required by upstream pgctld regardless of type.
+		// For filesystem it's the repo directory; for S3 it's the local spool path.
+		backupPath := BackupMountPath
+		if shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem && shard.Spec.Backup.Filesystem != nil {
+			if shard.Spec.Backup.Filesystem.Path != "" {
+				backupPath = shard.Spec.Backup.Filesystem.Path
+			}
+		}
+		args = append(args, fmt.Sprintf("--backup-path=%s", backupPath))
+
+		if shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 && shard.Spec.Backup.S3 != nil {
+			args = append(args, fmt.Sprintf("--backup-bucket=%s", shard.Spec.Backup.S3.Bucket))
+			args = append(args, fmt.Sprintf("--backup-region=%s", shard.Spec.Backup.S3.Region))
+			if shard.Spec.Backup.S3.Endpoint != "" {
+				args = append(args, fmt.Sprintf("--backup-endpoint=%s", shard.Spec.Backup.S3.Endpoint))
+			}
+			if shard.Spec.Backup.S3.KeyPrefix != "" {
+				args = append(args, fmt.Sprintf("--backup-key-prefix=%s", shard.Spec.Backup.S3.KeyPrefix))
+			}
+			if shard.Spec.Backup.S3.UseEnvCredentials {
+				args = append(args, "--backup-use-env-credentials")
+			}
+		}
+	}
+
 	c := corev1.Container{
-		Name:    "postgres",
-		Image:   image,
-		Command: []string{"/usr/local/bin/pgctld"},
-		Args: []string{
-			"server",
-			"--pooler-dir=" + PoolerDirMountPath,
-			"--grpc-port=15470",
-			"--pg-port=5432",
-			"--pg-listen-addresses=*",
-			"--pg-database=postgres",
-			"--pg-user=postgres",
-			"--timeout=30",
-			"--log-level=info",
-			"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
-			"--pg-hba-template=" + PgHbaTemplatePath,
-		},
+		Name:      "postgres",
+		Image:     image,
+		Command:   []string{"/usr/local/bin/pgctld"},
+		Args:      args,
 		Resources: pool.Postgres.Resources,
 		Env: []corev1.EnvVar{
 			{
@@ -471,30 +503,36 @@ func buildPgctldVolume() corev1.Volume {
 	}
 }
 
-// buildBackupVolume creates the backup volume for pgbackrest.
-// References a PVC that is created separately and shared across all pods in a pool.
-// For single-node clusters (kind), ReadWriteOnce works since all pods are on the same node.
-func buildBackupVolume(shard *multigresv1alpha1.Shard, poolName, cellName string) corev1.Volume {
-	clusterName := shard.Labels["multigres.com/cluster"]
-	claimName := name.JoinWithConstraints(
-		name.ServiceConstraints,
-		"backup-data",
-		clusterName,
-		string(shard.Spec.DatabaseName),
-		string(shard.Spec.TableGroupName),
-		string(shard.Spec.ShardName),
-		"pool",
-		poolName,
-		cellName,
-	)
+// buildSharedBackupVolume creates the backup volume for pgbackrest.
+// If type is Filesystem, references the shared PVC (per-cell).
+// If type is S3 (or nil), uses an emptyDir for local scratch/spool.
+func buildSharedBackupVolume(shard *multigresv1alpha1.Shard, cellName string) corev1.Volume {
+	// Default to EmptyDir (for S3 or no backup config)
+	source := corev1.VolumeSource{
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	}
 
-	return corev1.Volume{
-		Name: BackupVolumeName,
-		VolumeSource: corev1.VolumeSource{
+	if shard.Spec.Backup != nil && shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem {
+		clusterName := shard.Labels["multigres.com/cluster"]
+		claimName := name.JoinWithConstraints(
+			name.ServiceConstraints,
+			"backup-data",
+			clusterName,
+			string(shard.Spec.DatabaseName),
+			string(shard.Spec.TableGroupName),
+			string(shard.Spec.ShardName),
+			cellName,
+		)
+		source = corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: claimName,
 			},
-		},
+		}
+	}
+
+	return corev1.Volume{
+		Name:         BackupVolumeName,
+		VolumeSource: source,
 	}
 }
 

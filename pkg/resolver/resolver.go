@@ -356,7 +356,9 @@ func (r *Resolver) ValidateClusterLogic(
 
 	// Iterate through every Shard and "Simulate" Resolution
 	for _, db := range cluster.Spec.Databases {
+		dbBackup := multigresv1alpha1.MergeBackupConfig(db.Backup, cluster.Spec.Backup)
 		for _, tg := range db.TableGroups {
+			tgBackup := multigresv1alpha1.MergeBackupConfig(tg.Backup, dbBackup)
 			for _, shard := range tg.Shards {
 				// ------------------------------------------------------------------
 				// 1. Orphan Override Check
@@ -393,7 +395,7 @@ func (r *Resolver) ValidateClusterLogic(
 				// ------------------------------------------------------------------
 				// Dry-Run Resolution
 				// We pass allCellNames just like the Reconciler would, to simulate the final state
-				orch, pools, _, err := r.ResolveShard(ctx, &shard, cellNames)
+				orch, pools, _, backupCfg, err := r.ResolveShard(ctx, &shard, cellNames, tgBackup)
 				if err != nil {
 					return nil, fmt.Errorf(
 						"validation failed: cannot resolve shard '%s': %w",
@@ -443,6 +445,42 @@ func (r *Resolver) ValidateClusterLogic(
 								shard.Name,
 								c,
 							)
+						}
+					}
+				}
+
+				// ------------------------------------------------------------------
+				// 3. Backup Validation
+				// ------------------------------------------------------------------
+				if backupCfg != nil && backupCfg.Type == multigresv1alpha1.BackupTypeFilesystem {
+					// Check if any pool has >1 replicas and we are using RWO
+					isRWO := true // Default is RWO
+
+					if backupCfg.Filesystem != nil && len(backupCfg.Filesystem.Storage.AccessModes) > 0 {
+						for _, mode := range backupCfg.Filesystem.Storage.AccessModes {
+							if mode == corev1.ReadWriteMany {
+								isRWO = false
+								break
+							}
+						}
+					}
+
+					if isRWO {
+						for poolName, pool := range pools {
+							replicas := int32(1)
+							if pool.ReplicasPerCell != nil {
+								replicas = *pool.ReplicasPerCell
+							}
+							if replicas > 1 {
+								warnings = append(warnings, fmt.Sprintf(
+									"Shard '%s' uses filesystem backups with ReadWriteOnce (RWO) storage but pool '%s' has %d replicas per cell. "+
+										"This configuration may fail if pods are scheduled on different nodes. "+
+										"Consider using ReadWriteMany (RWX) or ensuring node affinity.",
+									shard.Name,
+									poolName,
+									replicas,
+								))
+							}
 						}
 					}
 				}

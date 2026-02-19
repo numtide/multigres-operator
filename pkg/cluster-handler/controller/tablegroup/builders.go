@@ -54,6 +54,7 @@ func BuildShard(
 				tg.Spec.PVCDeletionPolicy,
 			),
 			Observability: tg.Spec.Observability,
+			Backup:        shardSpec.Backup,
 		},
 	}
 	if err := controllerutil.SetControllerReference(tg, shardCR, scheme); err != nil {

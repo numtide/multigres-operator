@@ -23,7 +23,9 @@ func TestBuildTableGroup(t *testing.T) {
 		},
 	}
 
-	dbName := multigresv1alpha1.DatabaseName("my-db")
+	dbCfg := multigresv1alpha1.DatabaseConfig{
+		Name: "my-db",
+	}
 	globalTopoRef := multigresv1alpha1.GlobalTopoServerRef{}
 
 	t.Run("Success", func(t *testing.T) {
@@ -34,7 +36,7 @@ func TestBuildTableGroup(t *testing.T) {
 			{Name: "shard-0"},
 		}
 
-		got, err := BuildTableGroup(cluster, dbName, tgCfg, resolvedShards, globalTopoRef, scheme)
+		got, err := BuildTableGroup(cluster, dbCfg, tgCfg, resolvedShards, globalTopoRef, scheme)
 		if err != nil {
 			t.Fatalf("BuildTableGroup() error = %v", err)
 		}
@@ -66,7 +68,7 @@ func TestBuildTableGroup(t *testing.T) {
 		}
 		resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
 
-		got, err := BuildTableGroup(cluster, dbName, tgCfg, resolvedShards, globalTopoRef, scheme)
+		got, err := BuildTableGroup(cluster, dbCfg, tgCfg, resolvedShards, globalTopoRef, scheme)
 		if err != nil {
 			t.Errorf("BuildTableGroup() error = %v, want nil", err)
 		}
@@ -88,7 +90,7 @@ func TestBuildTableGroup(t *testing.T) {
 
 		_, err := BuildTableGroup(
 			cluster,
-			dbName,
+			dbCfg,
 			tgCfg,
 			resolvedShards,
 			globalTopoRef,

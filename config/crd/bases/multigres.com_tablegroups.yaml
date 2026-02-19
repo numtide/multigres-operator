@@ -48,6 +48,78 @@ spec:
           spec:
             description: TableGroupSpec defines the desired state of TableGroup.
             properties:
+              backup:
+                description: Backup is the backup configuration inherited from MultigresCluster
+                  -> Database -> TableGroup.
+                properties:
+                  filesystem:
+                    description: |-
+                      Filesystem defines configuration for local/PVC-based backups.
+                      Required when type is "filesystem".
+                    properties:
+                      path:
+                        description: |-
+                          Path is the filesystem directory for backups.
+                          Defaults to "/backups".
+                        type: string
+                      storage:
+                        description: |-
+                          Storage defines the PVC configuration for the backup volume.
+                          This volume is shared by all pools in the shard (per-cell).
+                        properties:
+                          accessModes:
+                            description: |-
+                              AccessModes contains the desired access modes the volume should have.
+                              More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                            items:
+                              type: string
+                            type: array
+                          class:
+                            description: Class is the StorageClass name.
+                            maxLength: 63
+                            minLength: 1
+                            type: string
+                          size:
+                            description: Size of the persistent volume.
+                            maxLength: 63
+                            pattern: ^([0-9]+)(.+)$
+                            type: string
+                        type: object
+                    type: object
+                  s3:
+                    description: |-
+                      S3 defines the S3-compatible storage configuration.
+                      Required when type is "s3".
+                    properties:
+                      bucket:
+                        type: string
+                      endpoint:
+                        type: string
+                      keyPrefix:
+                        type: string
+                      region:
+                        type: string
+                      useEnvCredentials:
+                        type: boolean
+                    required:
+                    - bucket
+                    - region
+                    type: object
+                  type:
+                    description: Type is the backup storage backend (filesystem or
+                      s3).
+                    enum:
+                    - filesystem
+                    - s3
+                    type: string
+                required:
+                - type
+                type: object
+                x-kubernetes-validations:
+                - message: s3 config is required when type is 's3'
+                  rule: self.type != 's3' || has(self.s3)
+                - message: filesystem config is required when type is 'filesystem'
+                  rule: self.type != 'filesystem' || has(self.filesystem)
               databaseName:
                 description: DatabaseName is the name of the logical database.
                 maxLength: 30
@@ -267,6 +339,78 @@ spec:
                     ShardResolvedSpec represents the fully calculated spec for a shard,
                     pushed down to the TableGroup.
                   properties:
+                    backup:
+                      description: Backup is the backup configuration inherited from
+                        MultigresCluster.
+                      properties:
+                        filesystem:
+                          description: |-
+                            Filesystem defines configuration for local/PVC-based backups.
+                            Required when type is "filesystem".
+                          properties:
+                            path:
+                              description: |-
+                                Path is the filesystem directory for backups.
+                                Defaults to "/backups".
+                              type: string
+                            storage:
+                              description: |-
+                                Storage defines the PVC configuration for the backup volume.
+                                This volume is shared by all pools in the shard (per-cell).
+                              properties:
+                                accessModes:
+                                  description: |-
+                                    AccessModes contains the desired access modes the volume should have.
+                                    More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
+                                  items:
+                                    type: string
+                                  type: array
+                                class:
+                                  description: Class is the StorageClass name.
+                                  maxLength: 63
+                                  minLength: 1
+                                  type: string
+                                size:
+                                  description: Size of the persistent volume.
+                                  maxLength: 63
+                                  pattern: ^([0-9]+)(.+)$
+                                  type: string
+                              type: object
+                          type: object
+                        s3:
+                          description: |-
+                            S3 defines the S3-compatible storage configuration.
+                            Required when type is "s3".
+                          properties:
+                            bucket:
+                              type: string
+                            endpoint:
+                              type: string
+                            keyPrefix:
+                              type: string
+                            region:
+                              type: string
+                            useEnvCredentials:
+                              type: boolean
+                          required:
+                          - bucket
+                          - region
+                          type: object
+                        type:
+                          description: Type is the backup storage backend (filesystem
+                            or s3).
+                          enum:
+                          - filesystem
+                          - s3
+                          type: string
+                      required:
+                      - type
+                      type: object
+                      x-kubernetes-validations:
+                      - message: s3 config is required when type is 's3'
+                        rule: self.type != 's3' || has(self.s3)
+                      - message: filesystem config is required when type is 'filesystem'
+                        rule: self.type != 'filesystem' || has(self.filesystem)
                     multiorch:
                       description: MultiOrch is the fully resolved configuration for
                         the orchestrator.
@@ -2230,29 +2374,6 @@ spec:
                                     type: array
                                     x-kubernetes-list-type: atomic
                                 type: object
-                            type: object
-                          backupStorage:
-                            description: |-
-                              BackupStorage defines the storage configuration for backup volumes.
-                              Shared across all pods in a pool. Defaults to same as Storage if not specified.
-                            properties:
-                              accessModes:
-                                description: |-
-                                  AccessModes contains the desired access modes the volume should have.
-                                  More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes
-                                items:
-                                  type: string
-                                type: array
-                              class:
-                                description: Class is the StorageClass name.
-                                maxLength: 63
-                                minLength: 1
-                                type: string
-                              size:
-                                description: Size of the persistent volume.
-                                maxLength: 63
-                                pattern: ^([0-9]+)(.+)$
-                                type: string
                             type: object
                           cells:
                             description: Cells defines the list of cells where this

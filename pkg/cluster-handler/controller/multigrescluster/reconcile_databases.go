@@ -33,7 +33,9 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 	activeTGNames := make(map[string]bool)
 
 	for _, db := range cluster.Spec.Databases {
+		dbBackup := multigresv1alpha1.MergeBackupConfig(db.Backup, cluster.Spec.Backup)
 		for _, tg := range db.TableGroups {
+			tgBackup := multigresv1alpha1.MergeBackupConfig(tg.Backup, dbBackup)
 			tgNameFull := fmt.Sprintf("%s-%s-%s", cluster.Name, string(db.Name), string(tg.Name))
 			// ACTIVE MAP REGISTRATION MOVED DOWN: We must use the desired.Name (which might be hashed)
 			// instead of the logical tgNameFull.
@@ -56,8 +58,9 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 					shardCfg.ShardTemplate = cluster.Spec.TemplateDefaults.ShardTemplate
 				}
 
-				// Pass allCellNames to the resolver so it can perform "Empty means Everybody" defaulting
-				orch, pools, pvcPolicy, err := res.ResolveShard(ctx, shardCfg, allCellNames)
+				// Pass allCellNames to the resolver so it can perform "Empty means Everybody" defaulting.
+				// tgBackup carries the merged chain: TableGroup -> Database -> Cluster.
+				orch, pools, pvcPolicy, finalShardBackup, err := res.ResolveShard(ctx, shardCfg, allCellNames, tgBackup)
 				if err != nil {
 					r.Recorder.Eventf(
 						cluster,
@@ -74,19 +77,20 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 					)
 				}
 
-				// The Resolver now handles the "Empty Cells = All Cells" logic authoritative.
+				// The Resolver now handles the "Empty Cells = All Cells" logic authoritatively.
 				// We no longer need to manually infer or sort here, just trust the resolver.
 				resolvedShards = append(resolvedShards, multigresv1alpha1.ShardResolvedSpec{
 					Name:              string(shard.Name),
 					MultiOrch:         *orch,
 					Pools:             pools,
 					PVCDeletionPolicy: pvcPolicy,
+					Backup:            finalShardBackup,
 				})
 			}
 
 			desired, err := BuildTableGroup(
 				cluster,
-				db.Name,
+				db,
 				&tg,
 				resolvedShards,
 				globalTopoRef,

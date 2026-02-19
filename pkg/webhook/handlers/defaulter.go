@@ -195,7 +195,9 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	hasImplicitShard, _ := scopedResolver.ShardTemplateExists(ctx, resolver.FallbackShardTemplate)
 
 	for i := range cluster.Spec.Databases {
+		dbBackup := multigresv1alpha1.MergeBackupConfig(cluster.Spec.Databases[i].Backup, cluster.Spec.Backup)
 		for j := range cluster.Spec.Databases[i].TableGroups {
+			tgBackup := multigresv1alpha1.MergeBackupConfig(cluster.Spec.Databases[i].TableGroups[j].Backup, dbBackup)
 			for k := range cluster.Spec.Databases[i].TableGroups[j].Shards {
 				shard := &cluster.Spec.Databases[i].TableGroups[j].Shards[k]
 				hasInline := shard.ShardTemplate != ""
@@ -205,10 +207,11 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 				if !isUsingTemplate {
 					// We pass 'nil' for allCellNames to prevent "Sticky Context Defaults".
 					// We want the Stored Spec to remain empty (dynamic) rather than locking in the current list of cells.
-					multiOrchSpec, poolsSpec, resolvedPvcPolicy, err := scopedResolver.ResolveShard(
+					multiOrchSpec, poolsSpec, resolvedPvcPolicy, resolvedBackupConfig, err := scopedResolver.ResolveShard(
 						ctx,
 						shard,
 						nil,
+						tgBackup,
 					)
 					if err != nil {
 						return fmt.Errorf("failed to resolve shard '%s': %w", shard.Name, err)
@@ -228,6 +231,7 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 						Pools:             poolsSpec,
 						PVCDeletionPolicy: pvcPolicy,
 					}
+					shard.Backup = resolvedBackupConfig
 				}
 			}
 		}

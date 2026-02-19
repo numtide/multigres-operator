@@ -284,7 +284,70 @@ spec:
 
 ✅ **Production Recommendation**: For production clusters, use the default `Retain/Retain` policy and implement proper backup/restore procedures.
 
+
 ---
+
+## Backup & Restore
+
+The operator integrates **pgBackRest** to handle automated backups, WAL archiving, and point-in-time recovery (PITR). Backup configuration is fully declarative and propagates from the Cluster level down to individual Shards.
+
+### Architecture
+
+Every Shard in the cluster has its own independent backup repository.
+- **Replica-Based Backups:** To avoid impacting the primary's performance, backups are always performed by a **replica**. The operator's MultiAdmin component selects a healthy replica (typically in the primary zone/cell) to execute the backup.
+- **Universal Availability:** While only one replica performs the backup, **all replicas** (current and future) need access to the backup repository to:
+  1.  Bootstrap new replicas (via `pgbackrest restore`).
+  2.  Perform Point-in-Time Recovery (PITR).
+  3.  Catch up if they fall too far behind (WAL replay).
+
+### Supported Storage Backends
+
+#### 1. S3 (Recommended for Production)
+
+S3 (or any S3-compatible object storage) is the **only supported method for multi-cell / multi-zone clusters**.
+- **Why:** All replicas across all failure domains (zones/regions) can access the same S3 bucket.
+- **Behavior:** The operator configures all pods to read/write to the specified bucket and path.
+
+```yaml
+spec:
+  backup:
+    type: s3
+    s3:
+      bucket: my-database-backups
+      region: us-east-1
+      keyPrefix: prod/cluster-1
+      useEnvCredentials: true # Uses AWS_ACCESS_KEY_ID from env
+```
+
+#### 2. Filesystem (Development / Single-Node Only)
+
+The `filesystem` backend stores backups on a Persistent Volume Claim (PVC).
+- **Architecture:** The operator creates **One Shared PVC per Shard per Cell**.
+- **Naming:** `backup-data-{cluster}-{db}-{tg}-{shard}-{cell}`.
+- **Constraint:** All replicas in a specific Cell mount the *same* PVC.
+
+> [!WARNING]
+> **CRITICAL LIMITATION:** Filesystem backups are **Cell-Local**.
+> A backup taken by a replica in `zone-a` is stored in `zone-a`'s PVC. Replicas in `zone-b` have their own empty PVC and **cannot see or restore** from `zone-a`'s backups.
+>
+> **Do not use `filesystem` backups for multi-cell clusters** unless you understand that cross-cell failover will result in a split-brain backup state.
+
+**ReadWriteMany (RWX) Requirement:**
+If you have multiple replicas in the same Cell (e.g., `replicasPerCell: 3`), they must all mount the same PVC simultaneously.
+- **Option A (Recommended):** Use a StorageClass that supports `ReadWriteMany` (e.g., NFS, EFS, CephFS).
+- **Option B (Dev/Test):** If using standard block storage (RWO), you must ensure all 3 replicas are scheduled on the **same node**, or they will fail to start.
+
+```yaml
+spec:
+  backup:
+    type: filesystem
+    filesystem:
+      path: /backups
+      storage:
+        size: 10Gi
+        storageClassName: "nfs-client" # Requires RWX support
+```
+
 
 ## Observability
 

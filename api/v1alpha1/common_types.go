@@ -113,6 +113,59 @@ type ContainerConfig struct {
 }
 
 // ============================================================================
+// Backup Configuration Types
+// ============================================================================
+
+// BackupType defines the backup storage backend.
+// +kubebuilder:validation:Enum=filesystem;s3
+type BackupType string
+
+const (
+	BackupTypeFilesystem BackupType = "filesystem"
+	BackupTypeS3         BackupType = "s3"
+)
+
+// BackupConfig defines the pgBackRest backup configuration.
+// +kubebuilder:validation:XValidation:rule="self.type != 's3' || has(self.s3)",message="s3 config is required when type is 's3'"
+// +kubebuilder:validation:XValidation:rule="self.type != 'filesystem' || has(self.filesystem)",message="filesystem config is required when type is 'filesystem'"
+type BackupConfig struct {
+	// Type is the backup storage backend (filesystem or s3).
+	Type BackupType `json:"type"`
+
+	// Filesystem defines configuration for local/PVC-based backups.
+	// Required when type is "filesystem".
+	// +optional
+	Filesystem *FilesystemBackupConfig `json:"filesystem,omitempty"`
+
+	// S3 defines the S3-compatible storage configuration.
+	// Required when type is "s3".
+	// +optional
+	S3 *S3BackupConfig `json:"s3,omitempty"`
+}
+
+// FilesystemBackupConfig defines settings for filesystem-based backups.
+type FilesystemBackupConfig struct {
+	// Path is the filesystem directory for backups.
+	// Defaults to "/backups".
+	// +optional
+	Path string `json:"path,omitempty"`
+
+	// Storage defines the PVC configuration for the backup volume.
+	// This volume is shared by all pools in the shard (per-cell).
+	// +optional
+	Storage StorageSpec `json:"storage,omitempty"`
+}
+
+// S3BackupConfig defines S3-compatible backup storage settings.
+type S3BackupConfig struct {
+	Bucket            string `json:"bucket"`
+	Region            string `json:"region"`
+	Endpoint          string `json:"endpoint,omitempty"`
+	KeyPrefix         string `json:"keyPrefix,omitempty"`
+	UseEnvCredentials bool   `json:"useEnvCredentials,omitempty"`
+}
+
+// ============================================================================
 // Domain Specific Types (Strong Typing)
 // ============================================================================
 
@@ -193,6 +246,78 @@ func MergePVCDeletionPolicy(child, parent *PVCDeletionPolicy) *PVCDeletionPolicy
 	// If merged is empty, return nil (let caller use defaults)
 	if merged.WhenDeleted == "" && merged.WhenScaled == "" {
 		return nil
+	}
+
+	return merged
+}
+
+// MergeBackupConfig merges child and parent backup config with child taking precedence.
+// Implements deep merge logic where appropriate.
+func MergeBackupConfig(child, parent *BackupConfig) *BackupConfig {
+	if child == nil && parent == nil {
+		return nil
+	}
+	if child == nil {
+		return parent.DeepCopy()
+	}
+	if parent == nil {
+		return child.DeepCopy()
+	}
+
+	// Start with parent config as base
+	merged := parent.DeepCopy()
+
+	// If child changes the type, it fully replaces the parent config
+	if child.Type != "" && child.Type != parent.Type {
+		return child.DeepCopy()
+	}
+
+	// If types match (or child adopts parent type), merge details
+	if child.Type != "" {
+		merged.Type = child.Type
+	}
+
+	switch merged.Type {
+	case BackupTypeFilesystem:
+		if merged.Filesystem == nil {
+			merged.Filesystem = &FilesystemBackupConfig{}
+		}
+		if child.Filesystem != nil {
+			if child.Filesystem.Path != "" {
+				merged.Filesystem.Path = child.Filesystem.Path
+			}
+			// Storage spec replacement
+			if child.Filesystem.Storage.Size != "" {
+				merged.Filesystem.Storage.Size = child.Filesystem.Storage.Size
+			}
+			if child.Filesystem.Storage.Class != "" {
+				merged.Filesystem.Storage.Class = child.Filesystem.Storage.Class
+			}
+			if len(child.Filesystem.Storage.AccessModes) > 0 {
+				merged.Filesystem.Storage.AccessModes = child.Filesystem.Storage.AccessModes
+			}
+		}
+	case BackupTypeS3:
+		if merged.S3 == nil {
+			merged.S3 = &S3BackupConfig{}
+		}
+		if child.S3 != nil {
+			if child.S3.Bucket != "" {
+				merged.S3.Bucket = child.S3.Bucket
+			}
+			if child.S3.Region != "" {
+				merged.S3.Region = child.S3.Region
+			}
+			if child.S3.Endpoint != "" {
+				merged.S3.Endpoint = child.S3.Endpoint
+			}
+			if child.S3.KeyPrefix != "" {
+				merged.S3.KeyPrefix = child.S3.KeyPrefix
+			}
+			// Bool fields are tricky in merge (is false explicitly set or default?)
+			// For simplicity in v1alpha1, we assume if struct is present, we take the value
+			merged.S3.UseEnvCredentials = child.S3.UseEnvCredentials
+		}
 	}
 
 	return merged

@@ -13,7 +13,7 @@ import (
 // BuildTableGroup constructs the desired TableGroup resource.
 func BuildTableGroup(
 	cluster *multigresv1alpha1.MultigresCluster,
-	dbName multigresv1alpha1.DatabaseName,
+	dbCfg multigresv1alpha1.DatabaseConfig,
 	tgCfg *multigresv1alpha1.TableGroupConfig,
 	resolvedShards []multigresv1alpha1.ShardResolvedSpec,
 	globalTopoRef multigresv1alpha1.GlobalTopoServerRef,
@@ -22,13 +22,13 @@ func BuildTableGroup(
 	tgNameHash := name.JoinWithConstraints(
 		name.DefaultConstraints,
 		cluster.Name,
-		string(dbName),
+		string(dbCfg.Name),
 		string(tgCfg.Name),
 	)
 
 	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentTableGroup)
 	metadata.AddClusterLabel(labels, cluster.Name)
-	metadata.AddDatabaseLabel(labels, dbName)
+	metadata.AddDatabaseLabel(labels, dbCfg.Name)
 	metadata.AddTableGroupLabel(labels, tgCfg.Name)
 
 	tgCR := &multigresv1alpha1.TableGroup{
@@ -38,7 +38,7 @@ func BuildTableGroup(
 			Labels:    labels,
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{
-			DatabaseName:   dbName,
+			DatabaseName:   dbCfg.Name,
 			TableGroupName: tgCfg.Name,
 			IsDefault:      tgCfg.Default,
 			Images: multigresv1alpha1.ShardImages{
@@ -54,6 +54,11 @@ func BuildTableGroup(
 			PVCDeletionPolicy: multigresv1alpha1.MergePVCDeletionPolicy(
 				tgCfg.PVCDeletionPolicy,
 				cluster.Spec.PVCDeletionPolicy,
+			),
+			// Merge hierarchy: TableGroup -> Database -> MultigresCluster
+			Backup: multigresv1alpha1.MergeBackupConfig(
+				tgCfg.Backup,
+				multigresv1alpha1.MergeBackupConfig(dbCfg.Backup, cluster.Spec.Backup),
 			),
 			Observability: cluster.Spec.Observability,
 		},

@@ -93,6 +93,10 @@ type MultigresClusterSpec struct {
 	// variables at reconcile time. Set fields to override or disable.
 	// +optional
 	Observability *ObservabilityConfig `json:"observability,omitempty"`
+
+	// Backup configures the default backup settings for the entire cluster.
+	// +optional
+	Backup *BackupConfig `json:"backup,omitempty"`
 }
 
 // ============================================================================
@@ -244,6 +248,10 @@ type DatabaseConfig struct {
 	// +kubebuilder:validation:XValidation:rule="self.filter(x, has(x.default) && x.default).size() == 1",message="every database must have exactly one tablegroup marked as default"
 	// +kubebuilder:validation:MaxItems=20
 	TableGroups []TableGroupConfig `json:"tablegroups,omitempty"`
+
+	// Backup overrides the global backup configuration for this specific database.
+	// +optional
+	Backup *BackupConfig `json:"backup,omitempty"`
 }
 
 // TableGroupConfig defines a table group within a database.
@@ -262,6 +270,10 @@ type TableGroupConfig struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Shards []ShardConfig `json:"shards,omitempty"`
+
+	// Backup overrides the database backup configuration for this table group.
+	// +optional
+	Backup *BackupConfig `json:"backup,omitempty"`
 
 	// PVCDeletionPolicy controls PVC lifecycle for shards in this table group.
 	// Overrides MultigresCluster setting.
@@ -288,6 +300,10 @@ type ShardConfig struct {
 	// Spec defines the inline configuration if no template is used.
 	// +optional
 	Spec *ShardInlineSpec `json:"spec,omitempty"`
+
+	// Backup overrides the table group backup configuration for this specific shard.
+	// +optional
+	Backup *BackupConfig `json:"backup,omitempty"`
 }
 
 // ShardOverrides defines overrides for a ShardTemplate.
