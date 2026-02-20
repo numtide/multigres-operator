@@ -256,6 +256,10 @@ func BuildMultiAdminWebDeployment(
 							Image: string(cluster.Spec.Images.MultiAdminWeb),
 							Env: []corev1.EnvVar{
 								{
+									Name:  "HOSTNAME",
+									Value: "::",
+								},
+								{
 									Name:  "MULTIADMIN_API_URL",
 									Value: fmt.Sprintf("http://%s-multiadmin:18000", cluster.Name),
 								},
