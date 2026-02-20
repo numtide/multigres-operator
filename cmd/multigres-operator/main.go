@@ -217,15 +217,31 @@ func main() {
 	}
 
 	// 1. Auto-Detect Certificate Strategy
-	// If the cert files already exist (e.g. mounted by Cert-Manager), we skip internal generation.
+	// If cert files already exist on disk AND the operator didn't previously
+	// manage them (no cert-strategy annotation), we assume an external provider
+	// (e.g. cert-manager) is managing the certificates.
 	useInternalCerts := false
+	var tmpClient client.Client
 	if webhookEnabled {
-		if !certsExist(webhookCertDir) {
+		var err error
+		tmpClient, err = client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: scheme})
+		if err != nil {
+			setupLog.Error(err, "failed to create bootstrap client")
+			os.Exit(1)
+		}
+
+		switch {
+		case !certsExist(webhookCertDir):
 			setupLog.Info(
 				"webhook certificates not found on disk; enabling internal certificate rotation",
 			)
 			useInternalCerts = true
-		} else {
+		case multigreswebhook.HasCertAnnotation(context.Background(), tmpClient):
+			setupLog.Info(
+				"webhook certificates found on disk with operator cert-strategy annotation; resuming internal certificate rotation",
+			)
+			useInternalCerts = true
+		default:
 			setupLog.Info(
 				"webhook certificates found on disk; using external certificate management",
 			)
@@ -336,12 +352,7 @@ func main() {
 
 	// 2. Setup Internal Certificate Rotation (If enabled)
 	if webhookEnabled && useInternalCerts {
-		// Use a temporary client for bootstrap since mgr.Client isn't started yet
-		tmpClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: scheme})
-		if err != nil {
-			setupLog.Error(err, "failed to create bootstrap client")
-			os.Exit(1)
-		}
+		// tmpClient was already created above for the annotation check
 
 		// Resolve owner deployment for cert secret garbage collection
 		operatorLabels := map[string]string{

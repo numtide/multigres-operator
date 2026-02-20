@@ -7,6 +7,7 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -23,47 +24,130 @@ const (
 
 	// ValidatingWebhookName is the name of the ValidatingWebhookConfiguration resource.
 	ValidatingWebhookName = "multigres-operator-validating-webhook-configuration"
+
+	// CertStrategyAnnotation marks how the webhook TLS certificates are managed.
+	// The operator sets this to CertStrategySelfSigned when it manages its own PKI.
+	CertStrategyAnnotation = "multigres.com/cert-strategy"
+
+	// CertStrategySelfSigned indicates the operator manages its own CA and server certs.
+	CertStrategySelfSigned = "self-signed"
+
+	// certFieldOwner is the SSA field manager for caBundle and cert-strategy annotation.
+	certFieldOwner = "multigres-operator-cert"
 )
 
-// PatchWebhookCABundle injects the CA bundle into both the Mutating and Validating
-// webhook configurations. It tolerates NotFound errors (the configs may not exist
-// during initial bootstrap or if webhooks are disabled).
+// PatchWebhookCABundle injects the CA bundle and cert-strategy annotation into
+// both the Mutating and Validating webhook configurations using Server-Side Apply.
+// Using SSA with a dedicated field owner ensures that user-side SSA upgrades
+// (e.g. kubectl apply --server-side -f install.yaml) do not wipe caBundle,
+// because different field managers own different fields.
 func PatchWebhookCABundle(ctx context.Context, c client.Client, caBundle []byte) error {
-	// Mutating
+	if err := patchMutatingWebhook(ctx, c, caBundle); err != nil {
+		return err
+	}
+	return patchValidatingWebhook(ctx, c, caBundle)
+}
+
+func patchMutatingWebhook(ctx context.Context, c client.Client, caBundle []byte) error {
+	existing := &admissionregistrationv1.MutatingWebhookConfiguration{}
+	if err := c.Get(ctx, types.NamespacedName{Name: MutatingWebhookName}, existing); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get mutating webhook config: %w", err)
+	}
+	if len(existing.Webhooks) == 0 {
+		return nil
+	}
+
+	patch := &admissionregistrationv1.MutatingWebhookConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "admissionregistration.k8s.io/v1",
+			Kind:       "MutatingWebhookConfiguration",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: MutatingWebhookName,
+			Annotations: map[string]string{
+				CertStrategyAnnotation: CertStrategySelfSigned,
+			},
+		},
+		Webhooks: make([]admissionregistrationv1.MutatingWebhook, len(existing.Webhooks)),
+	}
+	for i, wh := range existing.Webhooks {
+		patch.Webhooks[i] = admissionregistrationv1.MutatingWebhook{
+			Name:                    wh.Name,
+			AdmissionReviewVersions: wh.AdmissionReviewVersions,
+			SideEffects:             wh.SideEffects,
+			ClientConfig: admissionregistrationv1.WebhookClientConfig{
+				CABundle: caBundle,
+				Service:  wh.ClientConfig.Service,
+			},
+		}
+	}
+
+	return c.Patch(ctx, patch, client.Apply, client.FieldOwner(certFieldOwner), client.ForceOwnership)
+}
+
+func patchValidatingWebhook(ctx context.Context, c client.Client, caBundle []byte) error {
+	existing := &admissionregistrationv1.ValidatingWebhookConfiguration{}
+	if err := c.Get(ctx, types.NamespacedName{Name: ValidatingWebhookName}, existing); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get validating webhook config: %w", err)
+	}
+	if len(existing.Webhooks) == 0 {
+		return nil
+	}
+
+	patch := &admissionregistrationv1.ValidatingWebhookConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "admissionregistration.k8s.io/v1",
+			Kind:       "ValidatingWebhookConfiguration",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ValidatingWebhookName,
+			Annotations: map[string]string{
+				CertStrategyAnnotation: CertStrategySelfSigned,
+			},
+		},
+		Webhooks: make([]admissionregistrationv1.ValidatingWebhook, len(existing.Webhooks)),
+	}
+	for i, wh := range existing.Webhooks {
+		patch.Webhooks[i] = admissionregistrationv1.ValidatingWebhook{
+			Name:                    wh.Name,
+			AdmissionReviewVersions: wh.AdmissionReviewVersions,
+			SideEffects:             wh.SideEffects,
+			ClientConfig: admissionregistrationv1.WebhookClientConfig{
+				CABundle: caBundle,
+				Service:  wh.ClientConfig.Service,
+			},
+		}
+	}
+
+	return c.Patch(ctx, patch, client.Apply, client.FieldOwner(certFieldOwner), client.ForceOwnership)
+}
+
+// HasCertAnnotation returns true if either webhook configuration carries the
+// cert-strategy annotation set by the operator. This is used during startup
+// to detect that the operator previously managed its own certs, even when
+// cert files exist on disk from surviving projected volumes.
+func HasCertAnnotation(ctx context.Context, c client.Client) bool {
 	mutating := &admissionregistrationv1.MutatingWebhookConfiguration{}
-	if err := c.Get(ctx, types.NamespacedName{Name: MutatingWebhookName}, mutating); err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to get mutating webhook config: %w", err)
-		}
-	} else {
-		for i := range mutating.Webhooks {
-			mutating.Webhooks[i].ClientConfig.CABundle = caBundle
-		}
-		if err := c.Update(ctx, mutating); err != nil {
-			return fmt.Errorf("failed to update mutating webhook config: %w", err)
+	if err := c.Get(ctx, types.NamespacedName{Name: MutatingWebhookName}, mutating); err == nil {
+		if mutating.Annotations[CertStrategyAnnotation] == CertStrategySelfSigned {
+			return true
 		}
 	}
 
-	// Validating
 	validating := &admissionregistrationv1.ValidatingWebhookConfiguration{}
-	if err := c.Get(
-		ctx,
-		types.NamespacedName{Name: ValidatingWebhookName},
-		validating,
-	); err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to get validating webhook config: %w", err)
-		}
-	} else {
-		for i := range validating.Webhooks {
-			validating.Webhooks[i].ClientConfig.CABundle = caBundle
-		}
-		if err := c.Update(ctx, validating); err != nil {
-			return fmt.Errorf("failed to update validating webhook config: %w", err)
+	if err := c.Get(ctx, types.NamespacedName{Name: ValidatingWebhookName}, validating); err == nil {
+		if validating.Annotations[CertStrategyAnnotation] == CertStrategySelfSigned {
+			return true
 		}
 	}
 
-	return nil
+	return false
 }
 
 // FindOperatorDeployment locates the operator's own Deployment for use as an owner

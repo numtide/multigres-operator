@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -27,12 +28,16 @@ func pkiScheme(tb testing.TB) *runtime.Scheme {
 	return s
 }
 
+func sideEffectNone() *admissionregistrationv1.SideEffectClass {
+	return ptr.To(admissionregistrationv1.SideEffectClassNone)
+}
+
 func TestPatchWebhookCABundle(t *testing.T) {
 	t.Parallel()
 
 	caBundle := []byte("test-ca-bundle")
 
-	t.Run("Patches Both Webhook Configs", func(t *testing.T) {
+	t.Run("Patches Both Webhook Configs via SSA", func(t *testing.T) {
 		t.Parallel()
 
 		mutating := &admissionregistrationv1.MutatingWebhookConfiguration{
@@ -42,10 +47,7 @@ func TestPatchWebhookCABundle(t *testing.T) {
 					Name:                    "wh1.example.com",
 					ClientConfig:            admissionregistrationv1.WebhookClientConfig{},
 					AdmissionReviewVersions: []string{"v1"},
-					SideEffects: func() *admissionregistrationv1.SideEffectClass {
-						v := admissionregistrationv1.SideEffectClassNone
-						return &v
-					}(),
+					SideEffects:             sideEffectNone(),
 				},
 			},
 		}
@@ -56,10 +58,7 @@ func TestPatchWebhookCABundle(t *testing.T) {
 					Name:                    "wh2.example.com",
 					ClientConfig:            admissionregistrationv1.WebhookClientConfig{},
 					AdmissionReviewVersions: []string{"v1"},
-					SideEffects: func() *admissionregistrationv1.SideEffectClass {
-						v := admissionregistrationv1.SideEffectClassNone
-						return &v
-					}(),
+					SideEffects:             sideEffectNone(),
 				},
 			},
 		}
@@ -73,7 +72,7 @@ func TestPatchWebhookCABundle(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Verify mutating
+		// Verify mutating: caBundle + annotation
 		got := &admissionregistrationv1.MutatingWebhookConfiguration{}
 		if err := cl.Get(
 			context.Background(),
@@ -89,8 +88,15 @@ func TestPatchWebhookCABundle(t *testing.T) {
 				caBundle,
 			)
 		}
+		if got.Annotations[CertStrategyAnnotation] != CertStrategySelfSigned {
+			t.Errorf(
+				"mutating annotation = %q, want %q",
+				got.Annotations[CertStrategyAnnotation],
+				CertStrategySelfSigned,
+			)
+		}
 
-		// Verify validating
+		// Verify validating: caBundle + annotation
 		gotV := &admissionregistrationv1.ValidatingWebhookConfiguration{}
 		if err := cl.Get(
 			context.Background(),
@@ -104,6 +110,13 @@ func TestPatchWebhookCABundle(t *testing.T) {
 				"validating CABundle = %q, want %q",
 				gotV.Webhooks[0].ClientConfig.CABundle,
 				caBundle,
+			)
+		}
+		if gotV.Annotations[CertStrategyAnnotation] != CertStrategySelfSigned {
+			t.Errorf(
+				"validating annotation = %q, want %q",
+				gotV.Annotations[CertStrategyAnnotation],
+				CertStrategySelfSigned,
 			)
 		}
 	})
@@ -139,7 +152,7 @@ func TestPatchWebhookCABundle(t *testing.T) {
 		}
 	})
 
-	t.Run("Error: Mutating Update Failure", func(t *testing.T) {
+	t.Run("Error: Mutating Patch Failure", func(t *testing.T) {
 		t.Parallel()
 
 		mutating := &admissionregistrationv1.MutatingWebhookConfiguration{
@@ -149,10 +162,7 @@ func TestPatchWebhookCABundle(t *testing.T) {
 					Name:                    "wh.example.com",
 					ClientConfig:            admissionregistrationv1.WebhookClientConfig{},
 					AdmissionReviewVersions: []string{"v1"},
-					SideEffects: func() *admissionregistrationv1.SideEffectClass {
-						v := admissionregistrationv1.SideEffectClassNone
-						return &v
-					}(),
+					SideEffects:             sideEffectNone(),
 				},
 			},
 		}
@@ -161,19 +171,18 @@ func TestPatchWebhookCABundle(t *testing.T) {
 			WithScheme(pkiScheme(t)).
 			WithObjects(mutating).
 			WithInterceptorFuncs(interceptor.Funcs{
-				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 					if _, ok := obj.(*admissionregistrationv1.MutatingWebhookConfiguration); ok {
-						return errors.New("update fail")
+						return errors.New("patch fail")
 					}
-					return c.Update(ctx, obj, opts...)
+					return c.Patch(ctx, obj, patch, opts...)
 				},
 			}).
 			Build()
 
 		err := PatchWebhookCABundle(context.Background(), cl, caBundle)
-		if err == nil ||
-			!strings.Contains(err.Error(), "failed to update mutating webhook config") {
-			t.Errorf("expected update error, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "patch fail") {
+			t.Errorf("expected patch error, got: %v", err)
 		}
 	})
 
@@ -198,7 +207,7 @@ func TestPatchWebhookCABundle(t *testing.T) {
 		}
 	})
 
-	t.Run("Error: Validating Update Failure", func(t *testing.T) {
+	t.Run("Error: Validating Patch Failure", func(t *testing.T) {
 		t.Parallel()
 
 		validating := &admissionregistrationv1.ValidatingWebhookConfiguration{
@@ -208,10 +217,7 @@ func TestPatchWebhookCABundle(t *testing.T) {
 					Name:                    "wh.example.com",
 					ClientConfig:            admissionregistrationv1.WebhookClientConfig{},
 					AdmissionReviewVersions: []string{"v1"},
-					SideEffects: func() *admissionregistrationv1.SideEffectClass {
-						v := admissionregistrationv1.SideEffectClassNone
-						return &v
-					}(),
+					SideEffects:             sideEffectNone(),
 				},
 			},
 		}
@@ -220,19 +226,98 @@ func TestPatchWebhookCABundle(t *testing.T) {
 			WithScheme(pkiScheme(t)).
 			WithObjects(validating).
 			WithInterceptorFuncs(interceptor.Funcs{
-				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 					if _, ok := obj.(*admissionregistrationv1.ValidatingWebhookConfiguration); ok {
-						return errors.New("update fail")
+						return errors.New("patch fail")
 					}
-					return c.Update(ctx, obj, opts...)
+					return c.Patch(ctx, obj, patch, opts...)
 				},
 			}).
 			Build()
 
 		err := PatchWebhookCABundle(context.Background(), cl, caBundle)
-		if err == nil ||
-			!strings.Contains(err.Error(), "failed to update validating webhook config") {
-			t.Errorf("expected update error, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "patch fail") {
+			t.Errorf("expected patch error, got: %v", err)
+		}
+	})
+
+	t.Run("Skips Patching When No Webhooks", func(t *testing.T) {
+		t.Parallel()
+
+		mutating := &admissionregistrationv1.MutatingWebhookConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: MutatingWebhookName},
+			Webhooks:   []admissionregistrationv1.MutatingWebhook{},
+		}
+		validating := &admissionregistrationv1.ValidatingWebhookConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: ValidatingWebhookName},
+			Webhooks:   []admissionregistrationv1.ValidatingWebhook{},
+		}
+
+		cl := fake.NewClientBuilder().
+			WithScheme(pkiScheme(t)).
+			WithObjects(mutating, validating).
+			Build()
+
+		if err := PatchWebhookCABundle(context.Background(), cl, caBundle); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestHasCertAnnotation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("True When Mutating Has Annotation", func(t *testing.T) {
+		t.Parallel()
+
+		mutating := &admissionregistrationv1.MutatingWebhookConfiguration{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        MutatingWebhookName,
+				Annotations: map[string]string{CertStrategyAnnotation: CertStrategySelfSigned},
+			},
+		}
+
+		cl := fake.NewClientBuilder().WithScheme(pkiScheme(t)).WithObjects(mutating).Build()
+		if !HasCertAnnotation(context.Background(), cl) {
+			t.Error("expected true when mutating has annotation")
+		}
+	})
+
+	t.Run("True When Validating Has Annotation", func(t *testing.T) {
+		t.Parallel()
+
+		validating := &admissionregistrationv1.ValidatingWebhookConfiguration{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        ValidatingWebhookName,
+				Annotations: map[string]string{CertStrategyAnnotation: CertStrategySelfSigned},
+			},
+		}
+
+		cl := fake.NewClientBuilder().WithScheme(pkiScheme(t)).WithObjects(validating).Build()
+		if !HasCertAnnotation(context.Background(), cl) {
+			t.Error("expected true when validating has annotation")
+		}
+	})
+
+	t.Run("False When No Annotation", func(t *testing.T) {
+		t.Parallel()
+
+		mutating := &admissionregistrationv1.MutatingWebhookConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: MutatingWebhookName},
+		}
+
+		cl := fake.NewClientBuilder().WithScheme(pkiScheme(t)).WithObjects(mutating).Build()
+		if HasCertAnnotation(context.Background(), cl) {
+			t.Error("expected false when no annotation")
+		}
+	})
+
+	t.Run("False When Configs Missing", func(t *testing.T) {
+		t.Parallel()
+
+		cl := fake.NewClientBuilder().WithScheme(pkiScheme(t)).Build()
+		if HasCertAnnotation(context.Background(), cl) {
+			t.Error("expected false when configs don't exist")
 		}
 	})
 }
