@@ -173,15 +173,19 @@ func (r *CellReconciler) handleDeletion(
 	if slices.Contains(cell.Finalizers, finalizerName) {
 		// Clean up cell data from topology
 		if err := r.unregisterCellFromTopology(ctx, cell); err != nil {
-			r.Recorder.Eventf(
-				cell,
-				"Warning",
-				"CleanupFailed",
-				"Failed to clean up cell from topology: %v",
-				err,
-			)
-			logger.Error(err, "Failed to unregister cell from topology")
-			return ctrl.Result{}, err
+			if isTopoUnavailable(err) {
+				logger.Info("Topology server unreachable during deletion, skipping cleanup")
+			} else {
+				r.Recorder.Eventf(
+					cell,
+					"Warning",
+					"CleanupFailed",
+					"Failed to clean up cell from topology: %v",
+					err,
+				)
+				logger.Error(err, "Failed to unregister cell from topology")
+				return ctrl.Result{}, err
+			}
 		}
 
 		// Remove finalizer
@@ -282,13 +286,15 @@ func (r *CellReconciler) unregisterCellFromTopology(
 			logger.V(1).Info("Cell does not exist in topology, skipping deletion")
 			return nil
 		}
-		r.Recorder.Eventf(
-			cell,
-			"Warning",
-			"UnregistrationFailed",
-			"Failed to remove cell from topology: %v",
-			err,
-		)
+		if !isTopoUnavailable(err) {
+			r.Recorder.Eventf(
+				cell,
+				"Warning",
+				"UnregistrationFailed",
+				"Failed to remove cell from topology: %v",
+				err,
+			)
+		}
 		return fmt.Errorf("failed to delete cell from topology: %w", err)
 	}
 
