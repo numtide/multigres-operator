@@ -4,6 +4,9 @@ metadata:
   name: minimal
   namespace: default
 spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
   # A minimal cluster requires at least one cell definition.
   #
   # The operator will resolve configuration defaults in this order:

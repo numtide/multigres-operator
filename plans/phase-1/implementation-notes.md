@@ -908,7 +908,7 @@ We implemented a **One Shared PVC per Shard per Cell** model.
     2.  **Collaboration:** Any authentic replica can perform a backup, and any other replica can restore from it (within the same cell).
 
 **Implications:**
-1.  **ReadWriteMany (RWX):** Since multiple pods (replicas) in the same cell need to mount the PVC, the underlying storage class MUST support `ReadWriteMany` (NFS, EFS, etc.). Using `ReadWriteOnce` with >1 replica per cell will cause scheduling failures unless they are scheduled on the same node.
+1.  **ReadWriteMany (RWX):** Since multiple pods (replicas) in the same cell need to mount the PVC, the underlying storage class MUST support `ReadWriteMany` (NFS, EFS, etc.). Using `ReadWriteOnce` with >1 replica per cell will cause the scheduler to **silently co-locate all replicas on the same node** (when using `WaitForFirstConsumer` binding, which is standard for EBS). The cluster will appear healthy but all replicas share a single point of failure. With `Immediate` binding, pods on different nodes will fail with `Multi-Attach` errors instead.
 2.  **Cell Isolation:** This shared PVC is **Cell-Local**. A backup created in `us-east-1a` (Cell A) is stored in Cell A's PVC. It is **NOT** available to Cell B (`us-east-1b`).
     - **Consequence:** You cannot failover to Cell B and restore from Cell A's filesystem backup.
     - **Solution:** Use **S3** for multi-cell clusters. S3 provides a single global repository accessible from all cells.
