@@ -85,7 +85,13 @@ func patchMutatingWebhook(ctx context.Context, c client.Client, caBundle []byte)
 		}
 	}
 
-	return c.Patch(ctx, patch, client.Apply, client.FieldOwner(certFieldOwner), client.ForceOwnership)
+	return c.Patch(
+		ctx,
+		patch,
+		client.Apply,
+		client.FieldOwner(certFieldOwner),
+		client.ForceOwnership,
+	)
 }
 
 func patchValidatingWebhook(ctx context.Context, c client.Client, caBundle []byte) error {
@@ -125,7 +131,13 @@ func patchValidatingWebhook(ctx context.Context, c client.Client, caBundle []byt
 		}
 	}
 
-	return c.Patch(ctx, patch, client.Apply, client.FieldOwner(certFieldOwner), client.ForceOwnership)
+	return c.Patch(
+		ctx,
+		patch,
+		client.Apply,
+		client.FieldOwner(certFieldOwner),
+		client.ForceOwnership,
+	)
 }
 
 // HasCertAnnotation returns true if either webhook configuration carries the
@@ -141,7 +153,11 @@ func HasCertAnnotation(ctx context.Context, c client.Client) bool {
 	}
 
 	validating := &admissionregistrationv1.ValidatingWebhookConfiguration{}
-	if err := c.Get(ctx, types.NamespacedName{Name: ValidatingWebhookName}, validating); err == nil {
+	if err := c.Get(
+		ctx,
+		types.NamespacedName{Name: ValidatingWebhookName},
+		validating,
+	); err == nil {
 		if validating.Annotations[CertStrategyAnnotation] == CertStrategySelfSigned {
 			return true
 		}
