@@ -6,6 +6,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -166,12 +167,26 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 		},
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardTpl).Build()
+	defaultSC := &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "standard",
+			Annotations: map[string]string{"storageclass.kubernetes.io/is-default-class": "true"},
+		},
+		Provisioner: "k8s.io/fake",
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardTpl, defaultSC).
+		Build()
+
+	noSCClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardTpl).Build()
 
 	tests := map[string]struct {
 		cluster        *multigresv1alpha1.MultigresCluster
 		wantWarnings   []string
 		wantErr        string
+		customClient   client.Client
 		clientFailures *testutil.FailureConfig
 	}{
 		"Valid Logic": {
@@ -354,13 +369,127 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			},
 			wantErr: "failed to resolve template for orphan check",
 		},
+		"No default SC and no explicit class rejects": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "no-sc", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{},
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			// Use a client with no StorageClasses at all
+			customClient: noSCClient,
+			wantErr:      "no default StorageClass found",
+		},
+		"No default SC but explicit class set passes": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "explicit-sc", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Storage: multigresv1alpha1.StorageSpec{Class: "my-sc"},
+						},
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeS3,
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+								Spec: &multigresv1alpha1.ShardInlineSpec{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"default": {
+											Type: "readWrite",
+											Storage: multigresv1alpha1.StorageSpec{
+												Class: "my-sc",
+												Size:  "10Gi",
+											},
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			customClient: noSCClient,
+		},
+		"Default SC exists with no explicit class passes": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-sc", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{},
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			// Uses fakeClient which HAS a default StorageClass
+		},
+		"SC list error propagated": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "list-err", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{},
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			clientFailures: &testutil.FailureConfig{
+				OnList: func(_ client.ObjectList) error {
+					return testutil.ErrInjected
+				},
+			},
+			wantErr: "failed to check for default StorageClass",
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			var c client.Client = fakeClient
+			if tc.customClient != nil {
+				c = tc.customClient
+			}
 			if tc.clientFailures != nil {
-				c = testutil.NewFakeClientWithFailures(fakeClient, tc.clientFailures)
+				c = testutil.NewFakeClientWithFailures(c, tc.clientFailures)
 			}
 			r := NewResolver(c, "default")
 			warnings, err := r.ValidateClusterLogic(t.Context(), tc.cluster)

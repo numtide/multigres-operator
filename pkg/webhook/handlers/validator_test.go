@@ -9,6 +9,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -22,6 +23,7 @@ import (
 func setupScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
 	return scheme
 }
 
@@ -526,6 +528,15 @@ func TestMultigresClusterValidator(t *testing.T) {
 								"default": {Type: "readWrite"}, // Only "default" pool exists
 							},
 						},
+					},
+					&storagev1.StorageClass{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "standard",
+							Annotations: map[string]string{
+								"storageclass.kubernetes.io/is-default-class": "true",
+							},
+						},
+						Provisioner: "k8s.io/fake",
 					},
 				}
 			}
