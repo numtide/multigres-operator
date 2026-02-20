@@ -220,6 +220,9 @@ func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
 		}
 
 		if err := m.Client.Create(ctx, secret); err != nil {
+			if errors.IsAlreadyExists(err) {
+				return m.ensureCA(ctx)
+			}
 			return nil, fmt.Errorf("failed to create CA secret: %w", err)
 		}
 
@@ -291,6 +294,9 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 		}
 
 		if err := m.Client.Create(ctx, secret); err != nil {
+			if errors.IsAlreadyExists(err) {
+				return m.ensureServerCert(ctx, ca)
+			}
 			return nil, fmt.Errorf("failed to create server cert secret: %w", err)
 		}
 
