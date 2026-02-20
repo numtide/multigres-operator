@@ -335,7 +335,10 @@ The `filesystem` backend stores backups on a Persistent Volume Claim (PVC).
 **ReadWriteMany (RWX) Requirement:**
 If you have multiple replicas in the same Cell (e.g., `replicasPerCell: 3`), they must all mount the same PVC simultaneously.
 - **Option A (Recommended):** Use a StorageClass that supports `ReadWriteMany` (e.g., NFS, EFS, CephFS).
-- **Option B (Dev/Test):** If using standard block storage (RWO), you must ensure all 3 replicas are scheduled on the **same node**, or they will fail to start.
+- **Option B (Dev/Test):** If using standard block storage (RWO), all replicas must be on the **same node**.
+
+> [!CAUTION]
+> **Silent HA Loss with RWO:** If your StorageClass uses `WaitForFirstConsumer` binding (standard for EBS/gp2/gp3), Kubernetes will **automatically co-locate all replicas on the same node** to satisfy the RWO constraint. The cluster will appear healthy, but all replicas are on a single node — if that node fails, you lose all replicas simultaneously. Use S3 or RWX storage for production to ensure replicas spread across nodes.
 
 ```yaml
 spec:
