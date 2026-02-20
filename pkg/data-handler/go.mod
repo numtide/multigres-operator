@@ -5,8 +5,8 @@ go 1.25.2
 require (
 	github.com/google/go-cmp v0.7.0
 	github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c
-	github.com/numtide/multigres-operator/api v0.0.0-20260220115648-270ce33c4e38
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260220115648-270ce33c4e38
+	github.com/numtide/multigres-operator/api v0.0.0-20260220134849-51cff7cd39d3
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260220134849-51cff7cd39d3
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
@@ -55,7 +55,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260220115648-270ce33c4e38
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260220134849-51cff7cd39d3
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
