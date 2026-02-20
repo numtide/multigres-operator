@@ -476,6 +476,33 @@ func TestReconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		"skips topo cleanup when topo unavailable during deletion": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-shard",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "postgres",
+					TableGroupName: "default",
+					ShardName:      "0",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:  "localhost:2379",
+						RootPath: "/test",
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells: []multigresv1alpha1.CellName{"zone-a"},
+						},
+					},
+				},
+			},
+			customTopoStoreFunc: func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+		},
 	}
 
 	for name, tc := range tests {

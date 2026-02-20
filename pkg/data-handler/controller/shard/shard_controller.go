@@ -165,15 +165,19 @@ func (r *ShardReconciler) handleDeletion(
 	if slices.Contains(shard.Finalizers, finalizerName) {
 		// Clean up database data from topology
 		if err := r.unregisterDatabaseFromTopology(ctx, shard); err != nil {
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"CleanupFailed",
-				"Failed to clean up database from topology: %v",
-				err,
-			)
-			logger.Error(err, "Failed to unregister database from topology")
-			return ctrl.Result{}, err
+			if isTopoUnavailable(err) {
+				logger.Info("Topology server unreachable during deletion, skipping cleanup")
+			} else {
+				r.Recorder.Eventf(
+					shard,
+					"Warning",
+					"CleanupFailed",
+					"Failed to clean up database from topology: %v",
+					err,
+				)
+				logger.Error(err, "Failed to unregister database from topology")
+				return ctrl.Result{}, err
+			}
 		}
 
 		// Remove finalizer
@@ -289,13 +293,15 @@ func (r *ShardReconciler) unregisterDatabaseFromTopology(
 				Info("Database does not exist in topology, skipping deletion", "database", dbName)
 			return nil
 		}
-		r.Recorder.Eventf(
-			shard,
-			"Warning",
-			"UnregistrationFailed",
-			"Failed to remove database from topology: %v",
-			err,
-		)
+		if !isTopoUnavailable(err) {
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"UnregistrationFailed",
+				"Failed to remove database from topology: %v",
+				err,
+			)
+		}
 		return fmt.Errorf("failed to delete database %s from topology: %w", dbName, err)
 	}
 

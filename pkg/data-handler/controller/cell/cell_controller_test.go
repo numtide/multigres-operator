@@ -408,6 +408,27 @@ func TestReconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		"skips topo cleanup when topo unavailable during deletion": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-cell",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-a",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "localhost:2379",
+						RootPath:       "/test",
+						Implementation: "memory",
+					},
+				},
+			},
+			customTopoStoreFunc: func(c *multigresv1alpha1.Cell) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+		},
 		"error on Update when removing finalizer": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
