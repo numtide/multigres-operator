@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -59,6 +61,7 @@ func TestMain(m *testing.M) {
 	_ = appsv1.AddToScheme(s)
 	_ = corev1.AddToScheme(s)
 	_ = rbacv1.AddToScheme(s)
+	_ = storagev1.AddToScheme(s)
 
 	// 3. Setup EnvTest
 	crdPath := filepath.Join("..", "..", "config", "crd", "bases")
@@ -175,6 +178,13 @@ func createDefaults(c client.Client) error {
 		&multigresv1alpha1.ShardTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: testNamespace},
 			Spec:       multigresv1alpha1.ShardTemplateSpec{},
+		},
+		&storagev1.StorageClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "standard",
+				Annotations: map[string]string{"storageclass.kubernetes.io/is-default-class": "true"},
+			},
+			Provisioner: "k8s.io/fake",
 		},
 	}
 
@@ -490,6 +500,106 @@ func TestWebhook_DeepTemplateProtection(t *testing.T) {
 
 		if err := k8sClient.Delete(ctx, st); err == nil {
 			t.Fatal("Expected error deleting in-use ShardTemplate, got nil")
+		}
+	})
+}
+
+func TestWebhook_StorageClassValidation(t *testing.T) {
+	t.Run("Should Reject When No Default SC and No Explicit Class", func(t *testing.T) {
+		// Remove the default StorageClass annotation
+		sc := &storagev1.StorageClass{}
+		if err := k8sClient.Get(ctx, client.ObjectKey{Name: "standard"}, sc); err != nil {
+			t.Fatalf("Failed to get SC: %v", err)
+		}
+		sc.Annotations["storageclass.kubernetes.io/is-default-class"] = "false"
+		if err := k8sClient.Update(ctx, sc); err != nil {
+			t.Fatalf("Failed to update SC: %v", err)
+		}
+
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "sc-reject-test",
+				Namespace: testNamespace,
+			},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
+			},
+		}
+
+		err := k8sClient.Create(ctx, cluster)
+		if err == nil {
+			t.Fatal("Expected rejection due to missing default StorageClass, got nil")
+		}
+		if !strings.Contains(err.Error(), "no default StorageClass found") {
+			t.Fatalf("Expected 'no default StorageClass found' in error, got: %v", err)
+		}
+
+		// Restore the default SC for subsequent tests
+		sc.Annotations["storageclass.kubernetes.io/is-default-class"] = "true"
+		if err := k8sClient.Update(ctx, sc); err != nil {
+			t.Fatalf("Failed to restore SC: %v", err)
+		}
+	})
+
+	t.Run("Should Accept With Explicit Class Even Without Default SC", func(t *testing.T) {
+		// Remove the default StorageClass annotation
+		sc := &storagev1.StorageClass{}
+		if err := k8sClient.Get(ctx, client.ObjectKey{Name: "standard"}, sc); err != nil {
+			t.Fatalf("Failed to get SC: %v", err)
+		}
+		sc.Annotations["storageclass.kubernetes.io/is-default-class"] = "false"
+		if err := k8sClient.Update(ctx, sc); err != nil {
+			t.Fatalf("Failed to update SC: %v", err)
+		}
+
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "sc-explicit-test",
+				Namespace: testNamespace,
+			},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						Storage: multigresv1alpha1.StorageSpec{Class: "manual", Size: "1Gi"},
+					},
+				},
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+					Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+						Storage: multigresv1alpha1.StorageSpec{Class: "manual", Size: "5Gi"},
+					},
+				},
+				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
+				Databases: []multigresv1alpha1.DatabaseConfig{{
+					Name:    "postgres",
+					Default: true,
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Name:    "default",
+						Default: true,
+						Shards: []multigresv1alpha1.ShardConfig{{
+							Name: "0-inf",
+							Spec: &multigresv1alpha1.ShardInlineSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+									"default": {
+										Type:    "readWrite",
+										Storage: multigresv1alpha1.StorageSpec{Class: "manual", Size: "10Gi"},
+									},
+								},
+							},
+						}},
+					}},
+				}},
+			},
+		}
+
+		if err := k8sClient.Create(ctx, cluster); err != nil {
+			t.Fatalf("Expected acceptance with explicit storage class, got: %v", err)
+		}
+
+		// Restore the default SC
+		sc.Annotations["storageclass.kubernetes.io/is-default-class"] = "true"
+		if err := k8sClient.Update(ctx, sc); err != nil {
+			t.Fatalf("Failed to restore SC: %v", err)
 		}
 	})
 }

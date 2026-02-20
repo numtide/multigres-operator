@@ -3,11 +3,13 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -489,5 +491,83 @@ func (r *Resolver) ValidateClusterLogic(
 		}
 	}
 
+	// ------------------------------------------------------------------
+	// 4. StorageClass Validation
+	// ------------------------------------------------------------------
+	// Collect all PVC-generating components that have no explicit storage class.
+	// If any exist, verify a default StorageClass is available in the cluster.
+	var missingClass []string
+
+	// Check global topo server etcd storage
+	if cluster.Spec.GlobalTopoServer != nil &&
+		cluster.Spec.GlobalTopoServer.Etcd != nil &&
+		cluster.Spec.GlobalTopoServer.Etcd.Storage.Class == "" {
+		missingClass = append(missingClass,
+			"spec.globalTopoServer.etcd.storage.class")
+	}
+
+	// Check all resolved pool and backup storage
+	for _, db := range cluster.Spec.Databases {
+		dbBackup := multigresv1alpha1.MergeBackupConfig(db.Backup, cluster.Spec.Backup)
+		for _, tg := range db.TableGroups {
+			tgBackup := multigresv1alpha1.MergeBackupConfig(tg.Backup, dbBackup)
+			for _, shard := range tg.Shards {
+				_, pools, _, backupCfg, err := r.ResolveShard(ctx, &shard, cellNames, tgBackup)
+				if err != nil {
+					continue // already validated in section 2
+				}
+
+				for poolName, pool := range pools {
+					if pool.Storage.Class == "" {
+						missingClass = append(missingClass, fmt.Sprintf(
+							"shard '%s' pool '%s' storage.class",
+							shard.Name, poolName))
+					}
+				}
+
+				if backupCfg != nil &&
+					backupCfg.Type == multigresv1alpha1.BackupTypeFilesystem &&
+					backupCfg.Filesystem != nil &&
+					backupCfg.Filesystem.Storage.Class == "" {
+					missingClass = append(missingClass, fmt.Sprintf(
+						"shard '%s' backup filesystem storage.class",
+						shard.Name))
+				}
+			}
+		}
+	}
+
+	if len(missingClass) > 0 {
+		hasDefault, err := r.hasDefaultStorageClass(ctx)
+		if err != nil {
+			return warnings, fmt.Errorf("failed to check for default StorageClass: %w", err)
+		}
+		if !hasDefault {
+			return nil, fmt.Errorf(
+				"no default StorageClass found in the cluster, and no explicit storage class is set for: %s. "+
+					"PVCs will be stuck in Pending. Either: "+
+					"(1) Set a default StorageClass: kubectl annotate sc <name> storageclass.kubernetes.io/is-default-class=true, or "+
+					"(2) Set the storage class explicitly in the MultigresCluster spec for each component listed above",
+				strings.Join(missingClass, ", "),
+			)
+		}
+	}
+
 	return warnings, nil
+}
+
+// hasDefaultStorageClass checks if the cluster has at least one StorageClass
+// annotated as the default.
+func (r *Resolver) hasDefaultStorageClass(ctx context.Context) (bool, error) {
+	var scList storagev1.StorageClassList
+	if err := r.Client.List(ctx, &scList); err != nil {
+		return false, err
+	}
+	for i := range scList.Items {
+		if scList.Items[i].Annotations["storageclass.kubernetes.io/is-default-class"] == "true" ||
+			scList.Items[i].Annotations["storageclass.beta.kubernetes.io/is-default-class"] == "true" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
