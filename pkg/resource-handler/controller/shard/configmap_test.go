@@ -72,8 +72,8 @@ func TestBuildPgHbaConfigMap(t *testing.T) {
 				return
 			}
 
-			if cm.Name != PgHbaConfigMapName {
-				t.Errorf("ConfigMap name = %v, want %v", cm.Name, PgHbaConfigMapName)
+			if cm.Name != PgHbaConfigMapName(tc.shard.Name) {
+				t.Errorf("ConfigMap name = %v, want %v", cm.Name, PgHbaConfigMapName(tc.shard.Name))
 			}
 			if cm.Namespace != tc.shard.Namespace {
 				t.Errorf("ConfigMap namespace = %v, want %v", cm.Namespace, tc.shard.Namespace)

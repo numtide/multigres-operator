@@ -30,7 +30,7 @@ func BuildPostgresPasswordSecret(
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PostgresPasswordSecretName,
+			Name:      PostgresPasswordSecretName(shard.Name),
 			Namespace: shard.Namespace,
 			Labels:    labels,
 		},

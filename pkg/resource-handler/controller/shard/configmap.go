@@ -35,7 +35,7 @@ func BuildPgHbaConfigMap(
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PgHbaConfigMapName,
+			Name:      PgHbaConfigMapName(shard.Name),
 			Namespace: shard.Namespace,
 			Labels:    labels,
 		},

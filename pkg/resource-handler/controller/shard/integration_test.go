@@ -396,7 +396,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("test-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -438,7 +438,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("test-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -488,7 +488,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeSource: corev1.VolumeSource{
 											ConfigMap: &corev1.ConfigMapVolumeSource{
 												LocalObjectReference: corev1.LocalObjectReference{
-													Name: "pg-hba-template",
+													Name: shardcontroller.PgHbaConfigMapName("test-shard"),
 												},
 												DefaultMode: ptr.To(int32(420)),
 											},
@@ -805,7 +805,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("delete-policy-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -847,7 +847,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("delete-policy-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -890,7 +890,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeSource: corev1.VolumeSource{
 											ConfigMap: &corev1.ConfigMapVolumeSource{
 												LocalObjectReference: corev1.LocalObjectReference{
-													Name: "pg-hba-template",
+													Name: shardcontroller.PgHbaConfigMapName("delete-policy-shard"),
 												},
 												DefaultMode: ptr.To(int32(420)),
 											},
@@ -1240,7 +1240,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeSource: corev1.VolumeSource{
 											ConfigMap: &corev1.ConfigMapVolumeSource{
 												LocalObjectReference: corev1.LocalObjectReference{
-													Name: "pg-hba-template",
+													Name: shardcontroller.PgHbaConfigMapName("multi-cell-shard"),
 												},
 												DefaultMode: ptr.To(int32(420)),
 											},
@@ -1357,7 +1357,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -1399,7 +1399,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -1518,7 +1518,7 @@ func TestShardReconciliation(t *testing.T) {
 										VolumeSource: corev1.VolumeSource{
 											ConfigMap: &corev1.ConfigMapVolumeSource{
 												LocalObjectReference: corev1.LocalObjectReference{
-													Name: "pg-hba-template",
+													Name: shardcontroller.PgHbaConfigMapName("multi-cell-shard"),
 												},
 												DefaultMode: ptr.To(int32(420)),
 											},
@@ -1635,7 +1635,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -1677,7 +1677,7 @@ func TestShardReconciliation(t *testing.T) {
 												ValueFrom: &corev1.EnvVarSource{
 													SecretKeyRef: &corev1.SecretKeySelector{
 														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName,
+															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
 														},
 														Key: shardcontroller.PostgresPasswordSecretKey,
 													},
@@ -2041,7 +2041,7 @@ func TestReconcileDeletions(t *testing.T) {
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pg-hba-template",
+			Name:      shardcontroller.PgHbaConfigMapName("test-shard-deletion-reconcile"),
 			Namespace: "default",
 		},
 	}
@@ -2050,7 +2050,7 @@ func TestReconcileDeletions(t *testing.T) {
 	// We use polling to avoid strict content matching on Data
 	pollFound := false
 	for i := 0; i < 20; i++ {
-		err := k8sClient.Get(ctx, types.NamespacedName{Name: "pg-hba-template", Namespace: "default"}, cm)
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: shardcontroller.PgHbaConfigMapName("test-shard-deletion-reconcile"), Namespace: "default"}, cm)
 		if err == nil {
 			pollFound = true
 			break
@@ -2085,7 +2085,7 @@ func TestReconcileDeletions(t *testing.T) {
 		default:
 		}
 
-		err := k8sClient.Get(ctx, types.NamespacedName{Name: "pg-hba-template", Namespace: "default"}, cm)
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: shardcontroller.PgHbaConfigMapName("test-shard-deletion-reconcile"), Namespace: "default"}, cm)
 		if err == nil {
 			found = true
 			break

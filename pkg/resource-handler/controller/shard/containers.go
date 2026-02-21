@@ -69,9 +69,6 @@ const (
 	// pgbackrest stores backups here via --repo1-path
 	BackupMountPath = "/backups"
 
-	// PgHbaConfigMapName is the name of the ConfigMap containing pg_hba template
-	PgHbaConfigMapName = "pg-hba-template"
-
 	// PgHbaVolumeName is the name of the volume for pg_hba template
 	PgHbaVolumeName = "pg-hba-template"
 
@@ -80,9 +77,6 @@ const (
 
 	// PgHbaTemplatePath is the full path to the pg_hba template file
 	PgHbaTemplatePath = PgHbaMountPath + "/pg_hba_template.conf"
-
-	// PostgresPasswordSecretName is the name of the Secret containing the PostgreSQL password
-	PostgresPasswordSecretName = "postgres-password"
 
 	// PostgresPasswordSecretKey is the key within the Secret that holds the password
 	PostgresPasswordSecretKey = "password"
@@ -97,6 +91,16 @@ const (
 	PgBackRestPort = 8432
 )
 
+// PgHbaConfigMapName returns the per-shard ConfigMap name for the pg_hba template.
+func PgHbaConfigMapName(shardName string) string {
+	return shardName + "-pg-hba"
+}
+
+// PostgresPasswordSecretName returns the per-shard Secret name for the postgres password.
+func PostgresPasswordSecretName(shardName string) string {
+	return shardName + "-postgres-password"
+}
+
 // buildSocketDirVolume creates the shared emptyDir volume for unix sockets.
 func buildSocketDirVolume() corev1.Volume {
 	return corev1.Volume{
@@ -108,13 +112,13 @@ func buildSocketDirVolume() corev1.Volume {
 }
 
 // buildPgHbaVolume creates the volume for pg_hba template from ConfigMap.
-func buildPgHbaVolume() corev1.Volume {
+func buildPgHbaVolume(shardName string) corev1.Volume {
 	return corev1.Volume{
 		Name: PgHbaVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: PgHbaConfigMapName,
+					Name: PgHbaConfigMapName(shardName),
 				},
 			},
 		},
@@ -162,7 +166,7 @@ func buildPostgresContainer(
 				Name:  "PGDATA",
 				Value: PgDataPath,
 			},
-			pgPasswordEnvVar(),
+			pgPasswordEnvVar(shard.Name),
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser:    ptr.To(int64(999)), // Must match postgres:17 image UID for file access
@@ -246,7 +250,7 @@ func buildPgctldContainer(
 			Name:  "PGDATA",
 			Value: PgDataPath,
 		},
-		pgPasswordEnvVar(),
+		pgPasswordEnvVar(shard.Name),
 	}
 	env = append(env, s3EnvVars(shard.Spec.Backup)...)
 	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
@@ -392,7 +396,7 @@ func buildMultiPoolerSidecar(
 				},
 			},
 		},
-		connpoolAdminPasswordEnvVar(),
+		connpoolAdminPasswordEnvVar(shard.Name),
 	}
 	env = append(env, s3EnvVars(shard.Spec.Backup)...)
 	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
@@ -520,7 +524,7 @@ func buildPoolVolumes(shard *multigresv1alpha1.Shard, cellName string) []corev1.
 		// buildPgctldVolume(),
 		buildSharedBackupVolume(shard, cellName),
 		buildSocketDirVolume(),
-		buildPgHbaVolume(),
+		buildPgHbaVolume(shard.Name),
 	}
 	if certVol := buildPgBackRestCertVolume(shard); certVol != nil {
 		volumes = append(volumes, *certVol)
@@ -655,15 +659,15 @@ func buildPgBackRestCertVolume(shard *multigresv1alpha1.Shard) *corev1.Volume {
 	}
 }
 
-// pgPasswordEnvVar returns a PGPASSWORD env var sourced from the postgres-password Secret.
+// pgPasswordEnvVar returns a PGPASSWORD env var sourced from the per-shard postgres password Secret.
 // pgctld reads this during initdb to set the superuser password.
-func pgPasswordEnvVar() corev1.EnvVar {
+func pgPasswordEnvVar(shardName string) corev1.EnvVar {
 	return corev1.EnvVar{
 		Name: "PGPASSWORD",
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: PostgresPasswordSecretName,
+					Name: PostgresPasswordSecretName(shardName),
 				},
 				Key: PostgresPasswordSecretKey,
 			},
@@ -672,15 +676,15 @@ func pgPasswordEnvVar() corev1.EnvVar {
 }
 
 // connpoolAdminPasswordEnvVar returns a CONNPOOL_ADMIN_PASSWORD env var sourced
-// from the postgres-password Secret. Multipooler uses this to authenticate
+// from the per-shard postgres password Secret. Multipooler uses this to authenticate
 // with PostgreSQL for connection pool administration.
-func connpoolAdminPasswordEnvVar() corev1.EnvVar {
+func connpoolAdminPasswordEnvVar(shardName string) corev1.EnvVar {
 	return corev1.EnvVar{
 		Name: "CONNPOOL_ADMIN_PASSWORD",
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: PostgresPasswordSecretName,
+					Name: PostgresPasswordSecretName(shardName),
 				},
 				Key: PostgresPasswordSecretKey,
 			},
