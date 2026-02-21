@@ -784,8 +784,10 @@ func TestBuildPgctldContainer(t *testing.T) {
 			},
 		}
 		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
-		assertContainsFlag(t, c.Args, "--backup-type=filesystem")
-		assertContainsFlag(t, c.Args, "--backup-path=/custom-backups")
+		assertContainsFlag(t, c.Args, "--pgbackrest-cert-dir="+PgBackRestCertMountPath)
+		assertContainsFlag(t, c.Args, "--pgbackrest-port=8432")
+		assertNotContainsFlag(t, c.Args, "--backup-type")
+		assertNotContainsFlag(t, c.Args, "--backup-path")
 	})
 
 	t.Run("with backup s3", func(t *testing.T) {
@@ -801,35 +803,21 @@ func TestBuildPgctldContainer(t *testing.T) {
 			},
 		}
 		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
-		assertContainsFlag(t, c.Args, "--backup-type=s3")
-		assertContainsFlag(t, c.Args, "--backup-path=/backups") // always required by upstream
-		assertContainsFlag(t, c.Args, "--backup-bucket=my-bucket")
-		assertContainsFlag(t, c.Args, "--backup-region=us-west-2")
+		assertContainsFlag(t, c.Args, "--pgbackrest-cert-dir="+PgBackRestCertMountPath)
+		assertContainsFlag(t, c.Args, "--pgbackrest-port=8432")
+		assertNotContainsFlag(t, c.Args, "--backup-type")
+		assertNotContainsFlag(t, c.Args, "--backup-bucket")
+		assertNotContainsFlag(t, c.Args, "--backup-region")
 	})
 
-	t.Run("with backup s3 all flags", func(t *testing.T) {
+	t.Run("no backup flags without backup config", func(t *testing.T) {
 		shard := &multigresv1alpha1.Shard{
-			Spec: multigresv1alpha1.ShardSpec{
-				Backup: &multigresv1alpha1.BackupConfig{
-					Type: multigresv1alpha1.BackupTypeS3,
-					S3: &multigresv1alpha1.S3BackupConfig{
-						Bucket:            "my-bucket",
-						Region:            "us-west-2",
-						Endpoint:          "https://minio.local:9000",
-						KeyPrefix:         "prod/backups",
-						UseEnvCredentials: true,
-					},
-				},
-			},
+			Spec: multigresv1alpha1.ShardSpec{},
 		}
 		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
-		assertContainsFlag(t, c.Args, "--backup-type=s3")
-		assertContainsFlag(t, c.Args, "--backup-path=/backups")
-		assertContainsFlag(t, c.Args, "--backup-bucket=my-bucket")
-		assertContainsFlag(t, c.Args, "--backup-region=us-west-2")
-		assertContainsFlag(t, c.Args, "--backup-endpoint=https://minio.local:9000")
-		assertContainsFlag(t, c.Args, "--backup-key-prefix=prod/backups")
-		assertContainsFlag(t, c.Args, "--backup-use-env-credentials")
+		assertNotContainsFlag(t, c.Args, "--pgbackrest-cert-dir")
+		assertNotContainsFlag(t, c.Args, "--pgbackrest-port")
+		assertNotContainsFlag(t, c.Args, "--backup-type")
 	})
 
 	t.Run("s3 credentials secret injects AWS env vars", func(t *testing.T) {

@@ -232,40 +232,9 @@ func buildPgctldContainer(
 	}
 
 	if shard.Spec.Backup != nil {
-		args = append(args, fmt.Sprintf("--backup-type=%s", shard.Spec.Backup.Type))
-
-		// --backup-path is always required by upstream pgctld regardless of type.
-		// For filesystem it's the repo directory; for S3 it's the local spool path.
-		backupPath := BackupMountPath
-		if shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem &&
-			shard.Spec.Backup.Filesystem != nil {
-			if shard.Spec.Backup.Filesystem.Path != "" {
-				backupPath = shard.Spec.Backup.Filesystem.Path
-			}
-		}
-		args = append(args, fmt.Sprintf("--backup-path=%s", backupPath))
-
-		if shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 && shard.Spec.Backup.S3 != nil {
-			args = append(args, fmt.Sprintf("--backup-bucket=%s", shard.Spec.Backup.S3.Bucket))
-			args = append(args, fmt.Sprintf("--backup-region=%s", shard.Spec.Backup.S3.Region))
-			if shard.Spec.Backup.S3.Endpoint != "" {
-				args = append(
-					args,
-					fmt.Sprintf("--backup-endpoint=%s", shard.Spec.Backup.S3.Endpoint),
-				)
-			}
-			if shard.Spec.Backup.S3.KeyPrefix != "" {
-				args = append(
-					args,
-					fmt.Sprintf("--backup-key-prefix=%s", shard.Spec.Backup.S3.KeyPrefix),
-				)
-			}
-			if shard.Spec.Backup.S3.UseEnvCredentials {
-				args = append(args, "--backup-use-env-credentials")
-			}
-		}
-
-		// pgBackRest TLS cert dir and port (enables the pgBackRest TLS server)
+		// pgBackRest TLS cert dir and port (enables the pgBackRest TLS server).
+		// Backup type/path/S3 config is resolved by multipooler from the etcd
+		// topology Database record, not via pgctld CLI flags.
 		args = append(args,
 			fmt.Sprintf("--pgbackrest-cert-dir=%s", PgBackRestCertMountPath),
 			fmt.Sprintf("--pgbackrest-port=%d", PgBackRestPort),
