@@ -29,7 +29,6 @@ limitations under the License.
 // # Configuration
 //
 // The [Options] struct controls webhook behavior:
-//   - Enable: Whether to start the webhook server.
 //   - Namespace: Operator namespace for service account identity.
 //   - ServiceAccountName: Used to construct the operator principal for child
 //     resource validation (only the operator can modify its managed resources).
