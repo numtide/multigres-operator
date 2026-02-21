@@ -77,20 +77,85 @@ Since ConfigMaps are generally lower volume and lower security risk than Secrets
 
 ### Developer Guide: Reading Secrets
 
-Because Secrets are filtered globally, you cannot simply `r.Get()` an arbitrary user secret (e.g. `spec.passwordSecretRef`) unless it is labeled.
+Because Secrets are filtered globally, you cannot simply `r.Get()` an arbitrary user secret (e.g. `spec.passwordSecretRef`) unless it is labeled. There are three patterns for accessing Secrets, each suited to a different scenario.
 
-**If you need to read a User Secret:**
+#### Decision Table
 
-**Option A (Preferred):** Require the user to label it.
-Tell the user: *"Please add `app.kubernetes.io/managed-by: multigres-operator` to your secret if you want us to use it."*
+| Scenario | Pattern | Cache Hit? | API Server Hit? | Example |
+| :--- | :--- | :---: | :---: | :--- |
+| Operator-created Secret | **Option A** (Label it) | ✅ | No | `postgres-password` Secret |
+| External Secret the operator must validate | **Option B** (APIReader) | ❌ | Yes (per reconcile) | pgBackRest TLS from cert-manager |
+| External Secret only pods need at runtime | **Option C** (Kubelet delegation) | N/A | No | S3 `credentialsSecret` |
 
-**Option B (Bypass Cache):** Direct API Reader.
-If Option A is impossible, use the API Reader directly. This makes a live call to K8s, bypassing the cache.
+#### Option A (Preferred): Require the Managed-By Label
 
+Secrets created by the operator (via SSA `r.Patch()`) automatically receive the `app.kubernetes.io/managed-by: multigres-operator` label through our standard metadata helpers. These Secrets are visible in the informer cache and accessible via the normal `r.Get()`.
+
+If a user-provided Secret must be visible to the operator's cached client, tell the user: *"Please add `app.kubernetes.io/managed-by: multigres-operator` to your secret."*
+
+#### Option B (Bypass Cache): Direct API Reader
+
+When the operator must **read and validate** a Secret that it does not own (e.g., a cert-manager-issued TLS Secret), the informer cache will return `NotFound` because the Secret lacks our label. Use `mgr.GetAPIReader()` to make a live, uncached call to the Kubernetes API Server.
+
+**Setup** (in `main.go`):
 ```go
-// Direct API call (slower, but sees everything)
-err := mgr.GetAPIReader().Get(ctx, key, &secret)
+&shardcontroller.ShardReconciler{
+    Client:    mgr.GetClient(),
+    APIReader: mgr.GetAPIReader(), // Uncached reader injected here
+}
 ```
+
+**Usage** (in `shard_controller.go:reconcilePgBackRestCerts`):
+```go
+// User-provided Secret: validate via uncached API reader.
+// External Secrets (e.g., cert-manager) lack the managed-by label
+// and are invisible to the cached r.Get().
+if err := r.APIReader.Get(ctx, types.NamespacedName{
+    Name:      secretName,
+    Namespace: shard.Namespace,
+}, secret); err != nil {
+    return fmt.Errorf("pgbackrest TLS secret %q not found: %w", secretName, err)
+}
+// Validate required keys exist
+for _, key := range []string{"ca.crt", "tls.crt", "tls.key"} {
+    if _, ok := secret.Data[key]; !ok {
+        return fmt.Errorf("secret %q missing required key %q", secretName, key)
+    }
+}
+```
+
+**Trade-offs:**
+- **Pro:** The operator can validate the Secret exists and has the correct shape before deploying pods.
+- **Con:** One live API call per reconcile per shard. With 20 max concurrent workers, the realistic upper bound is 20 simultaneous calls — trivial for the API server.
+
+#### Option C (Kubelet Delegation): Don't Read It At All
+
+When the operator does not need to inspect a Secret's contents — it only needs to pass the Secret to a pod — use `secretKeyRef` or `secretRef` in the container's `env` spec. The **kubelet** resolves the Secret at pod creation time, completely bypassing the operator's cache.
+
+**Usage** (in `containers.go:s3EnvVars`):
+```go
+// The operator never reads this Secret. It just passes the name
+// to the pod spec, and the kubelet resolves it at runtime.
+if backup.S3.CredentialsSecret != "" {
+    envs = append(envs, corev1.EnvVar{
+        Name: "AWS_ACCESS_KEY_ID",
+        ValueFrom: &corev1.EnvVarSource{
+            SecretKeyRef: &corev1.SecretKeySelector{
+                LocalObjectReference: corev1.LocalObjectReference{
+                    Name: backup.S3.CredentialsSecret,
+                },
+                Key: "AWS_ACCESS_KEY_ID",
+            },
+        },
+    })
+}
+```
+
+**Trade-offs:**
+- **Pro:** Zero cache concern, zero API server load from the operator, works with any Secret regardless of labels.
+- **Con:** The operator cannot validate the Secret exists before pod creation. If the Secret is missing or malformed, the pod will fail to start with a `CreateContainerConfigError`, which is only visible in pod events, not in the operator's reconcile loop.
+
+**When to use Option C:** When the Secret is only consumed by pods at runtime (credentials, API keys, tokens) and the operator does not need to make decisions based on its contents.
 
 ## Operator Performance Tuning
 
