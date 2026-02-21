@@ -13,9 +13,6 @@ import (
 
 // Options contains the configuration required to set up the webhook server.
 type Options struct {
-	Enable             bool
-	CertStrategy       string // Deprecated: Kept for compat but ignored
-	CertDir            string // Deprecated: Kept for compat but ignored
 	Namespace          string
 	ServiceAccountName string
 }

@@ -114,17 +114,6 @@ func TestSetup(t *testing.T) {
 			resolver: baseResolver,
 			opts:     Options{Namespace: "default"}, // Empty ServiceAccountName
 		},
-		"Happy Path: Disabled": {
-			mgrFunc: func(t *testing.T) *mockManager {
-				return &mockManager{
-					schemeFunc: func() *runtime.Scheme { return baseScheme },
-					client:     baseClient,
-					server:     &mockServer{},
-				}
-			},
-			resolver: baseResolver,
-			opts:     Options{Enable: false},
-		},
 		"Error: Nil Resolver": {
 			mgrFunc: func(t *testing.T) *mockManager {
 				return &mockManager{server: &mockServer{}}

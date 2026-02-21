@@ -116,9 +116,7 @@ func TestMain(m *testing.M) {
 	res := resolver.NewResolver(cachedClient, testNamespace)
 
 	if err := multigreswebhook.Setup(mgr, res, multigreswebhook.Options{
-		Enable:       true,
-		CertStrategy: "external",
-		Namespace:    testNamespace,
+		Namespace: testNamespace,
 	}); err != nil {
 		fmt.Printf("Failed to setup webhooks: %v\n", err)
 		os.Exit(1)
