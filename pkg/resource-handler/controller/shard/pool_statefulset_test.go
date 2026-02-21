@@ -157,7 +157,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
-										pgPasswordEnvVar(),
+										pgPasswordEnvVar("test-shard"),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
@@ -204,7 +204,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									"zone1",
 								),
 								buildSocketDirVolume(),
-								buildPgHbaVolume(),
+								buildPgHbaVolume("test-shard"),
 							},
 						},
 					},
@@ -369,7 +369,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
-										pgPasswordEnvVar(),
+										pgPasswordEnvVar("shard-001"),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
@@ -416,7 +416,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									"zone-west",
 								),
 								buildSocketDirVolume(),
-								buildPgHbaVolume(),
+								buildPgHbaVolume("shard-001"),
 							},
 						},
 					},
@@ -574,7 +574,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
-										pgPasswordEnvVar(),
+										pgPasswordEnvVar("shard-002"),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
@@ -621,7 +621,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									"zone1",
 								),
 								buildSocketDirVolume(),
-								buildPgHbaVolume(),
+								buildPgHbaVolume("shard-002"),
 							},
 						},
 					},
@@ -814,7 +814,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 											Name:  "PGDATA",
 											Value: "/var/lib/pooler/pg_data",
 										},
-										pgPasswordEnvVar(),
+										pgPasswordEnvVar("shard-affinity"),
 									},
 									SecurityContext: &corev1.SecurityContext{
 										RunAsUser:    ptr.To(int64(999)),
@@ -861,7 +861,7 @@ func TestBuildPoolStatefulSet(t *testing.T) {
 									"zone1",
 								),
 								buildSocketDirVolume(),
-								buildPgHbaVolume(),
+								buildPgHbaVolume("shard-affinity"),
 							},
 							Affinity: &corev1.Affinity{
 								NodeAffinity: &corev1.NodeAffinity{

@@ -417,7 +417,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "pg-hba-template",
+						Name:      PgHbaConfigMapName("existing-shard"),
 						Namespace: "default",
 					},
 				},
@@ -891,7 +891,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			failureConfig: &testutil.FailureConfig{
 				OnGet: func(key client.ObjectKey) error {
-					if key.Name == "pg-hba-template" {
+					if key.Name == PgHbaConfigMapName("test-shard-pghba-get-err") {
 						return testutil.ErrNetworkTimeout
 					}
 					return nil

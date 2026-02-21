@@ -21,7 +21,8 @@ func TestBuildPostgresContainer(t *testing.T) {
 	}{
 		"default postgres image with no resources": {
 			shard: &multigresv1alpha1.Shard{
-				Spec: multigresv1alpha1.ShardSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+				Spec:       multigresv1alpha1.ShardSpec{},
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: corev1.Container{
@@ -47,7 +48,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "PGDATA",
 						Value: PgDataPath,
 					},
-					pgPasswordEnvVar(),
+					pgPasswordEnvVar("test-shard"),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsUser:    ptr.To(int64(999)),
@@ -81,6 +82,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 		},
 		"custom postgres image": {
 			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
 				Spec: multigresv1alpha1.ShardSpec{
 					Images: multigresv1alpha1.ShardImages{
 						Postgres: "postgres:16",
@@ -111,7 +113,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "PGDATA",
 						Value: PgDataPath,
 					},
-					pgPasswordEnvVar(),
+					pgPasswordEnvVar("test-shard"),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsUser:    ptr.To(int64(999)),
@@ -145,7 +147,8 @@ func TestBuildPostgresContainer(t *testing.T) {
 		},
 		"with resource requirements": {
 			shard: &multigresv1alpha1.Shard{
-				Spec: multigresv1alpha1.ShardSpec{},
+				ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+				Spec:       multigresv1alpha1.ShardSpec{},
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{
 				Postgres: multigresv1alpha1.ContainerConfig{
@@ -193,7 +196,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 						Name:  "PGDATA",
 						Value: PgDataPath,
 					},
-					pgPasswordEnvVar(),
+					pgPasswordEnvVar("test-shard"),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					RunAsUser:    ptr.To(int64(999)),
@@ -329,7 +332,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							},
 						},
 					},
-					connpoolAdminPasswordEnvVar(),
+					connpoolAdminPasswordEnvVar("test-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -434,7 +437,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							},
 						},
 					},
-					connpoolAdminPasswordEnvVar(),
+					connpoolAdminPasswordEnvVar("custom-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -557,7 +560,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 							},
 						},
 					},
-					connpoolAdminPasswordEnvVar(),
+					connpoolAdminPasswordEnvVar("resource-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{

@@ -468,8 +468,8 @@ func TestReconcile_PatchError(t *testing.T) {
 					},
 				}
 			},
-			getFailObj: func(_ *multigresv1alpha1.Shard) string {
-				return PostgresPasswordSecretName
+			getFailObj: func(s *multigresv1alpha1.Shard) string {
+				return PostgresPasswordSecretName(s.Name)
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
 				return r.reconcilePostgresPasswordSecret(ctx, shard)
@@ -488,8 +488,8 @@ func TestReconcile_PatchError(t *testing.T) {
 					},
 				}
 			},
-			getFailObj: func(_ *multigresv1alpha1.Shard) string {
-				return PgHbaConfigMapName
+			getFailObj: func(s *multigresv1alpha1.Shard) string {
+				return PgHbaConfigMapName(s.Name)
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
 				return r.reconcilePgHbaConfigMap(ctx, shard)

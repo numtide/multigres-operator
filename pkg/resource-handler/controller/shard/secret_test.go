@@ -34,7 +34,7 @@ func TestBuildPostgresPasswordSecret(t *testing.T) {
 			scheme: scheme,
 			want: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      PostgresPasswordSecretName,
+					Name:      PostgresPasswordSecretName("test-shard"),
 					Namespace: "default",
 					Labels: map[string]string{
 						"app.kubernetes.io/name":       "multigres",
