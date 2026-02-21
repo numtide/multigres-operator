@@ -1320,4 +1320,85 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			t.Error("PoolsReady should be true when all pools are ready")
 		}
 	})
+
+	t.Run("multi_cell_pool_aggregates_across_cells", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-shard-multicell",
+				Namespace: "default",
+			},
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName:   "testdb",
+				TableGroupName: "default",
+				MultiOrch: multigresv1alpha1.MultiOrchSpec{
+					Cells: []multigresv1alpha1.CellName{"zone1", "zone2"},
+				},
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"primary": {
+						Cells:           []multigresv1alpha1.CellName{"zone1", "zone2"},
+						Type:            "readWrite",
+						ReplicasPerCell: ptr.To(int32(3)),
+					},
+				},
+			},
+		}
+
+		sts1Name := buildHashedPoolName(shard, "primary", "zone1")
+		sts1 := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Name: sts1Name, Namespace: "default"},
+			Status:     appsv1.StatefulSetStatus{Replicas: 3, ReadyReplicas: 3},
+		}
+
+		sts2Name := buildHashedPoolName(shard, "primary", "zone2")
+		sts2 := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Name: sts2Name, Namespace: "default"},
+			Status:     appsv1.StatefulSetStatus{Replicas: 2, ReadyReplicas: 2},
+		}
+
+		mo1Name := buildHashedMultiOrchName(shard, "zone1")
+		mo1 := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: mo1Name, Namespace: "default"},
+			Spec:       appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
+			Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+		}
+		mo2Name := buildHashedMultiOrchName(shard, "zone2")
+		mo2 := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: mo2Name, Namespace: "default"},
+			Spec:       appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
+			Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, sts1, sts2, mo1, mo2).
+			WithStatusSubresource(shard, sts1, sts2, mo1, mo2).
+			Build()
+
+		r := &ShardReconciler{
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
+
+		cellsSet := make(map[multigresv1alpha1.CellName]bool)
+		totalPods, readyPods, err := r.updatePoolsStatus(
+			context.Background(), shard, cellsSet,
+		)
+		if err != nil {
+			t.Fatalf("updatePoolsStatus failed: %v", err)
+		}
+
+		// Verify aggregate: 3 (zone1) + 2 (zone2) = 5
+		if totalPods != 5 {
+			t.Errorf("totalPods = %d, want 5", totalPods)
+		}
+		if readyPods != 5 {
+			t.Errorf("readyPods = %d, want 5", readyPods)
+		}
+
+		// Verify both cells are tracked
+		if !cellsSet["zone1"] || !cellsSet["zone2"] {
+			t.Errorf("cellsSet = %v, want both zone1 and zone2", cellsSet)
+		}
+	})
 }

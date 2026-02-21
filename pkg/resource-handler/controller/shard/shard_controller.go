@@ -697,6 +697,8 @@ func (r *ShardReconciler) updatePoolsStatus(
 	var totalPods, readyPods int32
 
 	for poolName, poolSpec := range shard.Spec.Pools {
+		var poolTotal, poolReady int32
+
 		// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
 		for _, cell := range poolSpec.Cells {
 			cellName := string(cell)
@@ -717,18 +719,17 @@ func (r *ShardReconciler) updatePoolsStatus(
 			}
 
 			totalPods += sts.Status.Replicas
+			poolTotal += sts.Status.Replicas
 			if sts.Status.ObservedGeneration == sts.Generation {
 				readyPods += sts.Status.ReadyReplicas
+				poolReady += sts.Status.ReadyReplicas
 			} // else treat as 0 ready pods because it is stale/progressing
-
-			monitoring.SetShardPoolReplicas(
-				shard.Name,
-				string(poolName),
-				shard.Namespace,
-				sts.Status.Replicas,
-				sts.Status.ReadyReplicas,
-			)
 		}
+
+		monitoring.SetShardPoolReplicas(
+			shard.Name, string(poolName), shard.Namespace,
+			poolTotal, poolReady,
+		)
 	}
 
 	return totalPods, readyPods, nil
