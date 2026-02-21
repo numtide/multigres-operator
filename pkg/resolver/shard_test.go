@@ -534,6 +534,136 @@ func TestMergeShardConfig(t *testing.T) {
 				},
 			},
 		},
+		"Storage Override Only Size Preserves Class And AccessModes": {
+			tpl: &multigresv1alpha1.ShardTemplate{
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"p1": {
+							Type: "read",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size:  "10Gi",
+								Class: "fast-ssd",
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
+							},
+						},
+					},
+				},
+			},
+			overrides: &multigresv1alpha1.ShardOverrides{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"p1": {Storage: multigresv1alpha1.StorageSpec{Size: "100Gi"}},
+				},
+			},
+			wantOrch: multigresv1alpha1.MultiOrchSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p1": {
+					Type: "read",
+					Storage: multigresv1alpha1.StorageSpec{
+						Size:        "100Gi",
+						Class:       "fast-ssd",
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					},
+				},
+			},
+		},
+		"Storage Override Only Class Preserves Size": {
+			tpl: &multigresv1alpha1.ShardTemplate{
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"p1": {
+							Type:    "read",
+							Storage: multigresv1alpha1.StorageSpec{Size: "10Gi", Class: "standard"},
+						},
+					},
+				},
+			},
+			overrides: &multigresv1alpha1.ShardOverrides{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"p1": {Storage: multigresv1alpha1.StorageSpec{Class: "gp3"}},
+				},
+			},
+			wantOrch: multigresv1alpha1.MultiOrchSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p1": {
+					Type:    "read",
+					Storage: multigresv1alpha1.StorageSpec{Size: "10Gi", Class: "gp3"},
+				},
+			},
+		},
+		"Storage Override Only AccessModes Preserves Size And Class": {
+			tpl: &multigresv1alpha1.ShardTemplate{
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"p1": {
+							Type:    "read",
+							Storage: multigresv1alpha1.StorageSpec{Size: "10Gi", Class: "fast-ssd"},
+						},
+					},
+				},
+			},
+			overrides: &multigresv1alpha1.ShardOverrides{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"p1": {
+						Storage: multigresv1alpha1.StorageSpec{
+							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+						},
+					},
+				},
+			},
+			wantOrch: multigresv1alpha1.MultiOrchSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p1": {
+					Type: "read",
+					Storage: multigresv1alpha1.StorageSpec{
+						Size:        "10Gi",
+						Class:       "fast-ssd",
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+					},
+				},
+			},
+		},
+		"Storage Override All Fields": {
+			tpl: &multigresv1alpha1.ShardTemplate{
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"p1": {
+							Type: "read",
+							Storage: multigresv1alpha1.StorageSpec{
+								Size:  "10Gi",
+								Class: "standard",
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteOnce,
+								},
+							},
+						},
+					},
+				},
+			},
+			overrides: &multigresv1alpha1.ShardOverrides{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"p1": {
+						Storage: multigresv1alpha1.StorageSpec{
+							Size:        "500Gi",
+							Class:       "io2",
+							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+						},
+					},
+				},
+			},
+			wantOrch: multigresv1alpha1.MultiOrchSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p1": {
+					Type: "read",
+					Storage: multigresv1alpha1.StorageSpec{
+						Size:        "500Gi",
+						Class:       "io2",
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {

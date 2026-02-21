@@ -218,7 +218,13 @@ func mergePoolSpec(
 		out.ReplicasPerCell = override.ReplicasPerCell
 	}
 	if override.Storage.Size != "" {
-		out.Storage = override.Storage
+		out.Storage.Size = override.Storage.Size
+	}
+	if override.Storage.Class != "" {
+		out.Storage.Class = override.Storage.Class
+	}
+	if len(override.Storage.AccessModes) > 0 {
+		out.Storage.AccessModes = override.Storage.AccessModes
 	}
 	// Safety: Use DeepCopy to avoid sharing pointers to maps within ResourceRequirements
 	if !isResourcesZero(override.Postgres.Resources) {
