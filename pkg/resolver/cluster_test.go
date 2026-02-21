@@ -615,6 +615,49 @@ func TestResolver_ResolveGlobalTopo(t *testing.T) {
 				},
 			},
 		},
+		"Partial Storage Override Preserves Base Fields": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						TemplateRef: "with-storage",
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Storage: multigresv1alpha1.StorageSpec{Class: "gp3"},
+						},
+					},
+				},
+			},
+			objects: []client.Object{
+				&multigresv1alpha1.CoreTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "with-storage", Namespace: "default"},
+					Spec: multigresv1alpha1.CoreTemplateSpec{
+						GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
+							Etcd: &multigresv1alpha1.EtcdSpec{
+								Image: "template-image",
+								Storage: multigresv1alpha1.StorageSpec{
+									Size:  "50Gi",
+									Class: "standard",
+									AccessModes: []corev1.PersistentVolumeAccessMode{
+										corev1.ReadWriteOnce,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Image:     "template-image",
+					Replicas:  ptr.To(DefaultEtcdReplicas),
+					Resources: DefaultResourcesEtcd(),
+					Storage: multigresv1alpha1.StorageSpec{
+						Size:        "50Gi",
+						Class:       "gp3",
+						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {

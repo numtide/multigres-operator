@@ -293,7 +293,13 @@ func mergeEtcdSpec(base *multigresv1alpha1.EtcdSpec, override *multigresv1alpha1
 		base.Replicas = override.Replicas
 	}
 	if override.Storage.Size != "" {
-		base.Storage = override.Storage
+		base.Storage.Size = override.Storage.Size
+	}
+	if override.Storage.Class != "" {
+		base.Storage.Class = override.Storage.Class
+	}
+	if len(override.Storage.AccessModes) > 0 {
+		base.Storage.AccessModes = override.Storage.AccessModes
 	}
 	if !isResourcesZero(override.Resources) {
 		base.Resources = *override.Resources.DeepCopy()
