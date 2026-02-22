@@ -173,7 +173,36 @@ spec:
 
 **Note on Overrides**: When using `overrides`, you must provide the complete struct for the section you are overriding if it's a pointer. For specific fields like resources, it's safer to ensure you provide the full context if the merge behavior isn't granular enough for your needs (currently, the resolver performs a deep merge).
 
-### 3. PVC Deletion Policy
+### 3. Template Update Behavior
+
+> [!WARNING]
+> When a template (`CoreTemplate`, `CellTemplate`, or `ShardTemplate`) is updated, **all clusters using that template are reconciled immediately**. This means changes to a shared template propagate to every referencing cluster at once.
+
+For production environments where you want controlled rollouts, consider **versioning templates by name**:
+
+```yaml
+# Instead of editing "standard-shard" in-place...
+apiVersion: multigres.com/v1alpha1
+kind: ShardTemplate
+metadata:
+  name: standard-shard-v2   # <--- New version = new resource
+spec:
+  # ... updated configuration
+```
+
+Then update each cluster's `templateRef` individually when ready:
+```yaml
+spec:
+  templateDefaults:
+    shardTemplate: "standard-shard-v2"  # <--- Opt-in to the new version
+```
+
+> [!NOTE]
+> Avoid using `default`-named templates (the namespace-level fallback) in production if you need controlled rollouts. They cannot be versioned since any cluster without an explicit template reference will automatically use whichever template is named `default`.
+>
+> This mechanism may change in future versions. See [Implementation Notes](plans/phase-1/implementation-notes.md#template-update-propagation) for details on planned improvements.
+
+### 4. PVC Deletion Policy
 
 The operator supports fine-grained control over **Persistent Volume Claim (PVC) lifecycle management** for stateful components (TopoServers and Shard Pools). This allows you to decide whether PVCs should be automatically deleted or retained when resources are deleted or scaled down.
 

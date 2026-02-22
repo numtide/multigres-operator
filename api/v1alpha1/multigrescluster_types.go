@@ -373,6 +373,26 @@ type MultigresClusterStatus struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=50
 	Databases map[DatabaseName]DatabaseStatusSummary `json:"databases,omitempty"`
+
+	// ResolvedTemplates records which templates were resolved during the last
+	// successful reconciliation. Used for targeted template-change enqueuing.
+	// +optional
+	ResolvedTemplates *ResolvedTemplates `json:"resolvedTemplates,omitempty"`
+}
+
+// ResolvedTemplates tracks the template names resolved during reconciliation.
+type ResolvedTemplates struct {
+	// CoreTemplates is the deduplicated set of CoreTemplate names resolved.
+	// +optional
+	CoreTemplates []TemplateRef `json:"coreTemplates,omitempty"`
+
+	// CellTemplates is the deduplicated set of CellTemplate names resolved.
+	// +optional
+	CellTemplates []TemplateRef `json:"cellTemplates,omitempty"`
+
+	// ShardTemplates is the deduplicated set of ShardTemplate names resolved.
+	// +optional
+	ShardTemplates []TemplateRef `json:"shardTemplates,omitempty"`
 }
 
 // CellStatusSummary provides a high-level status of a cell.
