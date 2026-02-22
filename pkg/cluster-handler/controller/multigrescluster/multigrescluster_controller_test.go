@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -858,21 +859,41 @@ func TestSetupWithManager_Coverage(t *testing.T) {
 func TestEnqueueRequestsFromTemplate(t *testing.T) {
 	scheme := setupScheme()
 
-	// Create clusters in same namespace
-	cluster1 := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster-1", Namespace: "default"},
+	// Cluster that references "prod-core" as CoreTemplate.
+	clusterWithCore := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-core", Namespace: "default"},
+		Status: multigresv1alpha1.MultigresClusterStatus{
+			ResolvedTemplates: &multigresv1alpha1.ResolvedTemplates{
+				CoreTemplates: []multigresv1alpha1.TemplateRef{"prod-core"},
+			},
+		},
 	}
-	cluster2 := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster-2", Namespace: "default"},
+	// Cluster that references "prod-shard" as ShardTemplate.
+	clusterWithShard := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-shard", Namespace: "default"},
+		Status: multigresv1alpha1.MultigresClusterStatus{
+			ResolvedTemplates: &multigresv1alpha1.ResolvedTemplates{
+				ShardTemplates: []multigresv1alpha1.TemplateRef{"prod-shard"},
+			},
+		},
 	}
-	// Create cluster in diff namespace
-	clusterDiff := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster-diff", Namespace: "other"},
+	// Cluster with nil resolvedTemplates (never reconciled).
+	clusterNilStatus := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-nil", Namespace: "default"},
+	}
+	// Cluster in different namespace.
+	clusterOtherNS := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-other", Namespace: "other"},
+		Status: multigresv1alpha1.MultigresClusterStatus{
+			ResolvedTemplates: &multigresv1alpha1.ResolvedTemplates{
+				CoreTemplates: []multigresv1alpha1.TemplateRef{"prod-core"},
+			},
+		},
 	}
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(cluster1, cluster2, clusterDiff).
+		WithObjects(clusterWithCore, clusterWithShard, clusterNilStatus, clusterOtherNS).
 		Build()
 
 	r := &MultigresClusterReconciler{
@@ -880,41 +901,271 @@ func TestEnqueueRequestsFromTemplate(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	// Trigger from a Template in "default"
-	tpl := &multigresv1alpha1.CoreTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "some-tpl", Namespace: "default"},
-	}
-
-	requests := r.enqueueRequestsFromTemplate(context.Background(), tpl)
-
-	// Should match cluster1 and cluster2
-	if len(requests) != 2 {
-		t.Errorf("Expected 2 requests, got %d", len(requests))
-	}
-
-	// Verify request content
-	names := make(map[string]bool)
-	for _, req := range requests {
-		if req.Namespace != "default" {
-			t.Errorf("Expected namespace default, got %s", req.Namespace)
+	t.Run("CoreTemplate matches only referencing and nil-status clusters", func(t *testing.T) {
+		tpl := &multigresv1alpha1.CoreTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "prod-core", Namespace: "default"},
 		}
-		names[req.Name] = true
+		requests := r.enqueueRequestsFromTemplate(context.Background(), tpl)
+
+		names := make(map[string]bool)
+		for _, req := range requests {
+			names[req.Name] = true
+		}
+		if !names["cluster-core"] {
+			t.Error("Expected cluster-core (references prod-core) to be enqueued")
+		}
+		if !names["cluster-nil"] {
+			t.Error("Expected cluster-nil (nil status) to be enqueued")
+		}
+		if names["cluster-shard"] {
+			t.Error("cluster-shard should not be enqueued for CoreTemplate change")
+		}
+		if names["cluster-other"] {
+			t.Error("cluster-other (different namespace) should not be enqueued")
+		}
+		if len(requests) != 2 {
+			t.Errorf("Expected 2 requests, got %d: %v", len(requests), names)
+		}
+	})
+
+	t.Run("ShardTemplate matches only referencing and nil-status clusters", func(t *testing.T) {
+		tpl := &multigresv1alpha1.ShardTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "prod-shard", Namespace: "default"},
+		}
+		requests := r.enqueueRequestsFromTemplate(context.Background(), tpl)
+
+		names := make(map[string]bool)
+		for _, req := range requests {
+			names[req.Name] = true
+		}
+		if !names["cluster-shard"] {
+			t.Error("Expected cluster-shard to be enqueued")
+		}
+		if !names["cluster-nil"] {
+			t.Error("Expected cluster-nil (nil status) to be enqueued")
+		}
+		if names["cluster-core"] {
+			t.Error("cluster-core should not be enqueued for ShardTemplate change")
+		}
+		if len(requests) != 2 {
+			t.Errorf("Expected 2 requests, got %d: %v", len(requests), names)
+		}
+	})
+
+	t.Run("Unmatched template enqueues only nil-status clusters", func(t *testing.T) {
+		tpl := &multigresv1alpha1.CellTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "nonexistent-cell", Namespace: "default"},
+		}
+		requests := r.enqueueRequestsFromTemplate(context.Background(), tpl)
+
+		if len(requests) != 1 {
+			t.Errorf("Expected 1 request (nil-status cluster only), got %d", len(requests))
+		}
+		if len(requests) == 1 && requests[0].Name != "cluster-nil" {
+			t.Errorf("Expected cluster-nil, got %s", requests[0].Name)
+		}
+	})
+
+	t.Run("List error returns empty", func(t *testing.T) {
+		failureConfig := &testutil.FailureConfig{
+			OnList: testutil.FailObjListAfterNCalls(0, errors.New("list error")),
+		}
+		r.Client = testutil.NewFakeClientWithFailures(fakeClient, failureConfig)
+		defer func() { r.Client = fakeClient }()
+
+		tpl := &multigresv1alpha1.CoreTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "prod-core", Namespace: "default"},
+		}
+		requests := r.enqueueRequestsFromTemplate(context.Background(), tpl)
+		if len(requests) != 0 {
+			t.Errorf("Expected 0 requests on list error, got %d", len(requests))
+		}
+	})
+}
+
+func TestTemplateKindFromObject(t *testing.T) {
+	tests := []struct {
+		name string
+		obj  client.Object
+		want string
+	}{
+		{"CoreTemplate", &multigresv1alpha1.CoreTemplate{}, "CoreTemplate"},
+		{"CellTemplate", &multigresv1alpha1.CellTemplate{}, "CellTemplate"},
+		{"ShardTemplate", &multigresv1alpha1.ShardTemplate{}, "ShardTemplate"},
+		{"Unknown type", &multigresv1alpha1.MultigresCluster{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := templateKindFromObject(tt.obj); got != tt.want {
+				t.Errorf("templateKindFromObject() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReferencesTemplate(t *testing.T) {
+	rt := &multigresv1alpha1.ResolvedTemplates{
+		CoreTemplates:  []multigresv1alpha1.TemplateRef{"core-a"},
+		CellTemplates:  []multigresv1alpha1.TemplateRef{"cell-a", "cell-b"},
+		ShardTemplates: []multigresv1alpha1.TemplateRef{"shard-a"},
 	}
 
-	if !names["cluster-1"] || !names["cluster-2"] {
-		t.Errorf("Expected cluster-1 and cluster-2, got %v", names)
+	tests := []struct {
+		name string
+		rt   *multigresv1alpha1.ResolvedTemplates
+		kind string
+		tpl  string
+		want bool
+	}{
+		{"nil status always matches", nil, "CoreTemplate", "anything", true},
+		{"CoreTemplate match", rt, "CoreTemplate", "core-a", true},
+		{"CoreTemplate no match", rt, "CoreTemplate", "core-x", false},
+		{"CellTemplate match first", rt, "CellTemplate", "cell-a", true},
+		{"CellTemplate match second", rt, "CellTemplate", "cell-b", true},
+		{"CellTemplate no match", rt, "CellTemplate", "cell-x", false},
+		{"ShardTemplate match", rt, "ShardTemplate", "shard-a", true},
+		{"ShardTemplate no match", rt, "ShardTemplate", "shard-x", false},
+		{"Unknown kind", rt, "UnknownKind", "anything", false},
 	}
 
-	// Test error case (List fails)
-	// We can't easily make fake client fail List inside enqueueRequestsFromTemplate without
-	// replacing the client with a failure-injecting one.
-	failureConfig := &testutil.FailureConfig{
-		OnList: testutil.FailObjListAfterNCalls(0, errors.New("list error")),
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := referencesTemplate(tt.rt, tt.kind, tt.tpl); got != tt.want {
+				t.Errorf("referencesTemplate() = %v, want %v", got, tt.want)
+			}
+		})
 	}
-	r.Client = testutil.NewFakeClientWithFailures(fakeClient, failureConfig)
+}
 
-	requests = r.enqueueRequestsFromTemplate(context.Background(), tpl)
-	if len(requests) != 0 {
-		t.Errorf("Expected 0 requests on list error, got %d", len(requests))
-	}
+func TestCollectResolvedTemplates(t *testing.T) {
+	t.Run("All template refs populated", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+					CoreTemplate:  "default-core",
+					CellTemplate:  "default-cell",
+					ShardTemplate: "default-shard",
+				},
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					TemplateRef: "gts-core",
+				},
+				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+					TemplateRef: "admin-core",
+				},
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "z1", CellTemplate: "cell-ha"},
+					{Name: "z2", CellTemplate: "cell-std"},
+				},
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Shards: []multigresv1alpha1.ShardConfig{
+									{ShardTemplate: "shard-prod"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		rt := collectResolvedTemplates(cluster)
+
+		wantCore := []multigresv1alpha1.TemplateRef{"admin-core", "default-core", "gts-core"}
+		if !slices.Equal(rt.CoreTemplates, wantCore) {
+			t.Errorf("CoreTemplates = %v, want %v", rt.CoreTemplates, wantCore)
+		}
+		wantCell := []multigresv1alpha1.TemplateRef{"cell-ha", "cell-std", "default-cell"}
+		if !slices.Equal(rt.CellTemplates, wantCell) {
+			t.Errorf("CellTemplates = %v, want %v", rt.CellTemplates, wantCell)
+		}
+		wantShard := []multigresv1alpha1.TemplateRef{"default-shard", "shard-prod"}
+		if !slices.Equal(rt.ShardTemplates, wantShard) {
+			t.Errorf("ShardTemplates = %v, want %v", rt.ShardTemplates, wantShard)
+		}
+	})
+
+	t.Run("Duplicates are deduplicated", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+					CoreTemplate:  "same-core",
+					CellTemplate:  "same-cell",
+					ShardTemplate: "same-shard",
+				},
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					TemplateRef: "same-core",
+				},
+				MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+					TemplateRef: "same-core",
+				},
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "z1", CellTemplate: "same-cell"},
+					{Name: "z2", CellTemplate: "same-cell"},
+				},
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Shards: []multigresv1alpha1.ShardConfig{
+									{ShardTemplate: "same-shard"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		rt := collectResolvedTemplates(cluster)
+
+		if len(rt.CoreTemplates) != 1 || rt.CoreTemplates[0] != "same-core" {
+			t.Errorf("CoreTemplates = %v, want [same-core]", rt.CoreTemplates)
+		}
+		if len(rt.CellTemplates) != 1 || rt.CellTemplates[0] != "same-cell" {
+			t.Errorf("CellTemplates = %v, want [same-cell]", rt.CellTemplates)
+		}
+		if len(rt.ShardTemplates) != 1 || rt.ShardTemplates[0] != "same-shard" {
+			t.Errorf("ShardTemplates = %v, want [same-shard]", rt.ShardTemplates)
+		}
+	})
+
+	t.Run("No templates (pure inline)", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "z1", Spec: &multigresv1alpha1.CellInlineSpec{}},
+				},
+			},
+		}
+
+		rt := collectResolvedTemplates(cluster)
+
+		if len(rt.CoreTemplates) != 0 {
+			t.Errorf("CoreTemplates should be empty, got %v", rt.CoreTemplates)
+		}
+		if len(rt.CellTemplates) != 0 {
+			t.Errorf("CellTemplates should be empty, got %v", rt.CellTemplates)
+		}
+		if len(rt.ShardTemplates) != 0 {
+			t.Errorf("ShardTemplates should be empty, got %v", rt.ShardTemplates)
+		}
+	})
+
+	t.Run("MultiAdminWeb templateRef included", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+					TemplateRef: "web-core",
+				},
+			},
+		}
+
+		rt := collectResolvedTemplates(cluster)
+
+		if len(rt.CoreTemplates) != 1 || rt.CoreTemplates[0] != "web-core" {
+			t.Errorf("CoreTemplates = %v, want [web-core]", rt.CoreTemplates)
+		}
+	})
 }

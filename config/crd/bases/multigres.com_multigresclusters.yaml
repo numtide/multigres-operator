@@ -10051,6 +10051,36 @@ spec:
                 - Degraded
                 - Unknown
                 type: string
+              resolvedTemplates:
+                description: |-
+                  ResolvedTemplates records which templates were resolved during the last
+                  successful reconciliation. Used for targeted template-change enqueuing.
+                properties:
+                  cellTemplates:
+                    description: CellTemplates is the deduplicated set of CellTemplate
+                      names resolved.
+                    items:
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    type: array
+                  coreTemplates:
+                    description: CoreTemplates is the deduplicated set of CoreTemplate
+                      names resolved.
+                    items:
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    type: array
+                  shardTemplates:
+                    description: ShardTemplates is the deduplicated set of ShardTemplate
+                      names resolved.
+                    items:
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    type: array
+                type: object
             type: object
         type: object
         x-kubernetes-validations:

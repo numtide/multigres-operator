@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sort"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -206,6 +207,8 @@ func (r *MultigresClusterReconciler) Reconcile(
 		childSpan.End()
 	}
 
+	cluster.Status.ResolvedTemplates = collectResolvedTemplates(cluster)
+
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.UpdateStatus")
 		if err := r.updateStatus(ctx, cluster); err != nil {
@@ -347,12 +350,17 @@ func (r *MultigresClusterReconciler) SetupWithManager(
 		Complete(r)
 }
 
-// enqueueRequestsFromTemplate returns a list of requests for all MultigresClusters in the same namespace
-// as the triggered Template. This ensures that if a default template changes, all clusters using it (potentially) are updated.
+// enqueueRequestsFromTemplate returns reconcile requests only for clusters
+// whose status.resolvedTemplates references the changed template.
 func (r *MultigresClusterReconciler) enqueueRequestsFromTemplate(
 	ctx context.Context,
 	o client.Object,
 ) []reconcile.Request {
+	templateKind := templateKindFromObject(o)
+	if templateKind == "" {
+		return nil
+	}
+
 	clusters := &multigresv1alpha1.MultigresClusterList{}
 	if err := r.List(ctx, clusters, client.InNamespace(o.GetNamespace())); err != nil {
 		return nil
@@ -360,9 +368,113 @@ func (r *MultigresClusterReconciler) enqueueRequestsFromTemplate(
 
 	var requests []reconcile.Request
 	for _, c := range clusters.Items {
-		requests = append(requests, reconcile.Request{
-			NamespacedName: client.ObjectKeyFromObject(&c),
-		})
+		if referencesTemplate(c.Status.ResolvedTemplates, templateKind, o.GetName()) {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(&c),
+			})
+		}
 	}
 	return requests
+}
+
+// templateKindFromObject determines the template kind from the Go type.
+// Controller-runtime strips GVK from informer objects, so we use a type switch.
+func templateKindFromObject(o client.Object) string {
+	switch o.(type) {
+	case *multigresv1alpha1.CoreTemplate:
+		return "CoreTemplate"
+	case *multigresv1alpha1.CellTemplate:
+		return "CellTemplate"
+	case *multigresv1alpha1.ShardTemplate:
+		return "ShardTemplate"
+	default:
+		return ""
+	}
+}
+
+// referencesTemplate checks whether a cluster's resolved templates include
+// the given template kind and name. Returns true for nil status (never-reconciled
+// clusters are always enqueued as a safe default).
+func referencesTemplate(rt *multigresv1alpha1.ResolvedTemplates, kind, name string) bool {
+	if rt == nil {
+		return true
+	}
+	switch kind {
+	case "CoreTemplate":
+		return slices.Contains(rt.CoreTemplates, multigresv1alpha1.TemplateRef(name))
+	case "CellTemplate":
+		return slices.Contains(rt.CellTemplates, multigresv1alpha1.TemplateRef(name))
+	case "ShardTemplate":
+		return slices.Contains(rt.ShardTemplates, multigresv1alpha1.TemplateRef(name))
+	}
+	return false
+}
+
+// collectResolvedTemplates walks the cluster spec and returns the
+// deduplicated set of template names referenced at every level.
+func collectResolvedTemplates(
+	cluster *multigresv1alpha1.MultigresCluster,
+) *multigresv1alpha1.ResolvedTemplates {
+	rt := &multigresv1alpha1.ResolvedTemplates{}
+
+	// Core templates referenced from multiple spec locations.
+	coreSet := map[multigresv1alpha1.TemplateRef]struct{}{}
+	if ref := cluster.Spec.TemplateDefaults.CoreTemplate; ref != "" {
+		coreSet[ref] = struct{}{}
+	}
+	if gts := cluster.Spec.GlobalTopoServer; gts != nil && gts.TemplateRef != "" {
+		coreSet[gts.TemplateRef] = struct{}{}
+	}
+	if ma := cluster.Spec.MultiAdmin; ma != nil && ma.TemplateRef != "" {
+		coreSet[ma.TemplateRef] = struct{}{}
+	}
+	if maw := cluster.Spec.MultiAdminWeb; maw != nil && maw.TemplateRef != "" {
+		coreSet[maw.TemplateRef] = struct{}{}
+	}
+	for ref := range coreSet {
+		rt.CoreTemplates = append(rt.CoreTemplates, ref)
+	}
+	sort.Slice(rt.CoreTemplates, func(i, j int) bool {
+		return rt.CoreTemplates[i] < rt.CoreTemplates[j]
+	})
+
+	// Cell templates.
+	cellSet := map[multigresv1alpha1.TemplateRef]struct{}{}
+	if ref := cluster.Spec.TemplateDefaults.CellTemplate; ref != "" {
+		cellSet[ref] = struct{}{}
+	}
+	for _, cell := range cluster.Spec.Cells {
+		if cell.CellTemplate != "" {
+			cellSet[cell.CellTemplate] = struct{}{}
+		}
+	}
+	for ref := range cellSet {
+		rt.CellTemplates = append(rt.CellTemplates, ref)
+	}
+	sort.Slice(rt.CellTemplates, func(i, j int) bool {
+		return rt.CellTemplates[i] < rt.CellTemplates[j]
+	})
+
+	// Shard templates.
+	shardSet := map[multigresv1alpha1.TemplateRef]struct{}{}
+	if ref := cluster.Spec.TemplateDefaults.ShardTemplate; ref != "" {
+		shardSet[ref] = struct{}{}
+	}
+	for _, db := range cluster.Spec.Databases {
+		for _, tg := range db.TableGroups {
+			for _, shard := range tg.Shards {
+				if shard.ShardTemplate != "" {
+					shardSet[shard.ShardTemplate] = struct{}{}
+				}
+			}
+		}
+	}
+	for ref := range shardSet {
+		rt.ShardTemplates = append(rt.ShardTemplates, ref)
+	}
+	sort.Slice(rt.ShardTemplates, func(i, j int) bool {
+		return rt.ShardTemplates[i] < rt.ShardTemplates[j]
+	})
+
+	return rt
 }
