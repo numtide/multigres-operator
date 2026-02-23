@@ -1083,3 +1083,94 @@ spec:
 Creating new template resources for each version (`standard-shard-ha-v1`, `standard-shard-ha-v2`) and updating cluster refs manually.
 
 **Not proposed as an operator feature, but available as a user convention:** This works today through name-versioned templates (documented in the README). However, it puts the rollout responsibility entirely on the user/CI pipeline. The Update Policy approach automates the detection and deferral within the operator itself.
+
+## Local TopoServer (Cell Children) — Not Yet Implemented
+
+### What the Design Specifies
+
+The API design document defines an optional `LocalTopoServer` as a child of each `Cell`. When a Cell specifies a `localTopoServer` (via inline `CellSpec`, `CellTemplate`, or the override chain), the Cell controller should create a dedicated `TopoServer` child CR with its own etcd cluster, providing cell-local topology storage instead of relying on the global topology server.
+
+The relevant design elements:
+- The `MultigresCluster` resource tree shows `LocalTopoServer (Child CR, optional)` under each Cell.
+- The `CellTemplate` spec includes an optional `localTopoServer` section with `etcd` or `external` options.
+- The Cell child CR has three topology options: (1) use global (default, empty `topoServer`), (2) inline external, or (3) managed local etcd.
+
+### What Is Already Scaffolded in the Operator
+
+The following plumbing is in place and functional:
+
+1. **API Types**: `LocalTopoServerSpec` (in `toposerver_types.go`) defines the configuration with `etcd` and `external` options, including CEL validation for mutual exclusion.
+2. **CellTemplate**: The `CellTemplateSpec` has a `LocalTopoServer *LocalTopoServerSpec` field.
+3. **MultigresCluster inline CellSpec**: The `CellInlineSpec` has a `LocalTopoServer *LocalTopoServerSpec` field.
+4. **Cell child CR**: The `CellSpec` has a `TopoServer *LocalTopoServerSpec` field ready to receive the resolved config.
+5. **Resolver**: `pkg/resolver/cell.go` fully resolves `LocalTopoServerSpec` through the 4-level override chain (inline → template → cluster default → namespace default).
+6. **Webhook defaulter**: `pkg/webhook/handlers/defaulter.go` passes the resolved `localTopoSpec` into the Cell CR builder.
+7. **Cluster controller**: `builders_cell.go` accepts `localTopoSpec` as a parameter and sets it on the Cell CR's `spec.topoServer`.
+8. **CEL Feature Gate**: Both `CellInlineSpec` and `CellTemplateSpec` have a CEL `XValidation` rule (`!has(self.localTopoServer)`) that rejects any attempt to set `localTopoServer`. This prevents silent misconfiguration until the feature is implemented. The rule must be removed and CRDs regenerated when the feature ships.
+
+### Why It Is Not Implemented
+
+The Cell controller (`pkg/resource-handler/controller/cell/cell_controller.go`) only reconciles the **MultiGateway Deployment** and **MultiGateway Service**. It does **not** inspect `spec.topoServer` or create a child `TopoServer` CR. The reason is that **upstream multigres does not yet support separate per-cell topology servers in practice**.
+
+Specifically:
+
+1. **Upstream architecture supports it conceptually**: The `topoclient.Store` in multigres maintains a two-tier topology model — a global connection and per-cell connections via `ConnForCell()`. The `Cell` protobuf (`clustermetadata.Cell`) has `ServerAddresses` and `Root` fields that can point to a separate etcd instance.
+
+2. **But the `createclustermetadata` CLI always reuses the global server**: When cells are registered by the upstream `multigres topo createclustermetadata` command, each cell's `ServerAddresses` is set to the global topo server address, and the cell's `Root` is derived as `{globalRoot}/{cellName}`. This means all cells share the same etcd cluster, just with different key prefixes.
+
+3. **No upstream testing or validation of separate per-cell etcd**: While `ConnForCell()` would technically connect to a different etcd address if a cell had one, this path has never been exercised in production or in the upstream test suite. There may be undiscovered issues with connection lifecycle, failure handling, or data consistency when cells use independent etcd clusters.
+
+4. **The operator's `topologyReconciliation` field**: The Cell CR includes a `topologyReconciliation.registerCell` flag, indicating that cell registration in the global topology server is a controller concern. This registration currently always sets the cell's topo address to the global topo server. Supporting local topo servers would require the operator to register cells with different `ServerAddresses` pointing to the local etcd.
+
+### How to Implement When Upstream Adds Support
+
+Once upstream multigres validates and supports per-cell topology servers, the operator implementation would involve:
+
+#### 0. Remove CEL Feature Gate
+
+Delete the `XValidation` markers from `CellInlineSpec` (in `multigrescluster_types.go`) and `CellTemplateSpec` (in `celltemplate_types.go`), then run `make generate manifests` to regenerate CRDs.
+
+#### 1. Cell Controller: Create TopoServer Child CR
+
+Add a `reconcileLocalTopoServer` step in `cell_controller.go` before the MultiGateway reconciliation:
+
+```go
+// In Reconcile(), before reconciling MultiGateway:
+if cell.Spec.TopoServer != nil && cell.Spec.TopoServer.Etcd != nil {
+    if err := r.reconcileLocalTopoServer(ctx, cell); err != nil {
+        return ctrl.Result{}, err
+    }
+}
+```
+
+This would create a `TopoServer` child CR (owned by the Cell) using the existing `TopoServer` controller infrastructure already used for the global topo server. The naming would follow the pattern `{cluster}-{cell}-local-topo`.
+
+#### 2. Cell Controller: Update `SetupWithManager`
+
+Add `Owns(&multigresv1alpha1.TopoServer{})` to the controller builder so the Cell controller watches its child TopoServer.
+
+#### 3. Cell Registration: Use Local TopoServer Address
+
+When registering the cell in the global topology (via `createclustermetadata` or an equivalent controller-side call), set the cell's `ServerAddresses` to the local etcd service address instead of the global one:
+
+```
+Cell "us-east-1a":
+  ServerAddresses: ["{cluster}-{cell}-local-topo-client.{ns}.svc.cluster.local:2379"]
+  Root: "/multigres/{cell}"
+```
+
+This way, when multigres components call `ConnForCell("us-east-1a")`, the `topoclient.Store` would connect to the local etcd instead of the global one.
+
+#### 4. MultiGateway/MultiOrch: No Changes Needed
+
+The multigateway and multiorch binaries already connect to cell topology via `ConnForCell()`, which reads the cell's `ServerAddresses` from the global topology. If the operator registers the cell with a local address, pool discovery and orchestration will automatically use the local etcd. No changes to the data-plane flags are required.
+
+#### 5. Cell Controller: Status Updates
+
+The Cell status should reflect the local TopoServer's health when present. This means:
+- Adding TopoServer readiness to the Cell's conditions.
+- Blocking MultiGateway creation until the local TopoServer is available (since the gateway needs a working topo server to discover poolers).
+
+#### 6. External TopoServer Support
+
+For `spec.topoServer.external`, no child CR creation is needed — the cell registration simply uses the provided external endpoints as the cell's `ServerAddresses`. This is simpler to implement and could be done first as a stepping stone.

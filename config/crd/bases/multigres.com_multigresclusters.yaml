@@ -2410,6 +2410,10 @@ spec:
                               type: object
                           type: object
                       type: object
+                      x-kubernetes-validations:
+                      - message: local topology servers (localTopoServer) are not
+                          yet supported
+                        rule: '!has(self.localTopoServer)'
                     zone:
                       description: Zone indicates the physical availability zone.
                       maxLength: 63
