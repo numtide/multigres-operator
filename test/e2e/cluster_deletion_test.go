@@ -21,7 +21,12 @@ import (
 // test because it doesn't run kube-controller-manager (which handles GC).
 func TestClusterDeletion(t *testing.T) {
 	t.Parallel()
-	_, c, ns := setUpOperator(t)
+	// Skip data-handler controllers: they add finalizers to Cells/Shards
+	// that require a live etcd topology server. Without a healthy topo
+	// server the finalizers block deletion indefinitely. This test focuses
+	// on Kubernetes GC cascading deletion via owner references, not data
+	// plane cleanup.
+	_, c, ns := setUpOperator(t, withoutDataHandler())
 	ctx := t.Context()
 
 	// Create a minimal cluster.

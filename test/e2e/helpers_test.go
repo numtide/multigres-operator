@@ -41,14 +41,34 @@ func newScheme(t testing.TB) *runtime.Scheme {
 	return scheme
 }
 
+type operatorOpts struct {
+	skipDataHandler bool
+}
+
+type operatorOption func(*operatorOpts)
+
+// withoutDataHandler skips registering data-handler controllers. Use this for
+// tests that don't need topology server connectivity (e.g. deletion tests).
+// The data-handler controllers add finalizers to Cells and Shards that require
+// a live etcd topology server to process; without a running etcd cluster these
+// finalizers block deletion indefinitely.
+func withoutDataHandler() operatorOption {
+	return func(o *operatorOpts) { o.skipDataHandler = true }
+}
+
 // setUpOperator starts a namespace-scoped manager against the kind cluster and
 // registers all operator controllers. It returns the running manager, a
 // Kubernetes client, and the isolated test namespace name.
 //
 // Each test gets its own namespace, so tests can run in parallel without
 // interfering with each other.
-func setUpOperator(t *testing.T) (manager.Manager, client.Client, string) {
+func setUpOperator(t *testing.T, opts ...operatorOption) (manager.Manager, client.Client, string) {
 	t.Helper()
+
+	cfg := &operatorOpts{}
+	for _, o := range opts {
+		o(cfg)
+	}
 
 	scheme := newScheme(t)
 	mgr, ns := testutil.SetUpKindManager(t, scheme,
@@ -103,21 +123,24 @@ func setUpOperator(t *testing.T) (manager.Manager, client.Client, string) {
 		t.Fatalf("Failed to set up Shard controller: %v", err)
 	}
 
-	// data-handler controllers
-	if err := (&datahandlercellcontroller.CellReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: mgr.GetEventRecorderFor("cell-datahandler"),
-	}).SetupWithManager(mgr, ctrlOpts); err != nil {
-		t.Fatalf("Failed to set up Cell data-handler controller: %v", err)
-	}
+	if !cfg.skipDataHandler {
+		// data-handler controllers require a live topology server (etcd)
+		// to process their finalizers during deletion.
+		if err := (&datahandlercellcontroller.CellReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: mgr.GetEventRecorderFor("cell-datahandler"),
+		}).SetupWithManager(mgr, ctrlOpts); err != nil {
+			t.Fatalf("Failed to set up Cell data-handler controller: %v", err)
+		}
 
-	if err := (&datahandlershardcontroller.ShardReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: mgr.GetEventRecorderFor("shard-datahandler"),
-	}).SetupWithManager(mgr, ctrlOpts); err != nil {
-		t.Fatalf("Failed to set up Shard data-handler controller: %v", err)
+		if err := (&datahandlershardcontroller.ShardReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: mgr.GetEventRecorderFor("shard-datahandler"),
+		}).SetupWithManager(mgr, ctrlOpts); err != nil {
+			t.Fatalf("Failed to set up Shard data-handler controller: %v", err)
+		}
 	}
 
 	return mgr, c, ns

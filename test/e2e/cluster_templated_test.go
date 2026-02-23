@@ -147,7 +147,10 @@ func TestTemplatedCluster(t *testing.T) {
 		t.Fatalf("Failed to create ShardTemplate: %v", err)
 	}
 
-	// Create the cluster referencing templates
+	// Create the cluster referencing templates.
+	// CoreTemplate components (MultiAdmin, GlobalTopoServer) require explicit
+	// TemplateRef on each component — TemplateDefaults.CoreTemplate is only
+	// used for validation and watch setup, not for resolution fallback.
 	cluster := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "standard-ha-cluster",
@@ -158,6 +161,12 @@ func TestTemplatedCluster(t *testing.T) {
 				CoreTemplate:  "standard-core",
 				CellTemplate:  "standard-cell",
 				ShardTemplate: "standard-shard",
+			},
+			GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+				TemplateRef: "standard-core",
+			},
+			MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+				TemplateRef: "standard-core",
 			},
 			Cells: []multigresv1alpha1.CellConfig{
 				{Name: "us-east-1a", Zone: "us-east-1a"},
