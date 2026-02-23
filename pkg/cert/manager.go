@@ -77,6 +77,13 @@ type Options struct {
 	// like patching webhook configurations with the CA bundle.
 	// If nil, no hook is called.
 	PostReconcileHook func(ctx context.Context, caBundle []byte) error
+
+	// Labels are applied to generated Secret objects. This is required when
+	// secrets are created outside the operator namespace, because the informer
+	// cache filters secrets by label (e.g., managed-by) in non-operator namespaces.
+	// Without the correct labels, secrets are invisible to the cached client,
+	// causing Get to return NotFound even after Create succeeds.
+	Labels map[string]string
 }
 
 func (o *Options) componentName() string {
@@ -193,6 +200,7 @@ func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Options.CASecretName,
 			Namespace: m.Options.Namespace,
+			Labels:    m.Options.Labels,
 		},
 	}
 
@@ -259,6 +267,7 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Options.ServerSecretName,
 			Namespace: m.Options.Namespace,
+			Labels:    m.Options.Labels,
 		},
 	}
 

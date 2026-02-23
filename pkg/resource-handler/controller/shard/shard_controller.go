@@ -26,6 +26,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/cert"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -390,6 +391,7 @@ func (r *ShardReconciler) reconcilePgBackRestCerts(
 	}
 
 	// Auto-generate: use pkg/cert to create CA + server cert Secrets.
+	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 	rotator := cert.NewManager(r.Client, r.Recorder, cert.Options{
 		Namespace:        shard.Namespace,
 		CASecretName:     shard.Name + "-pgbackrest-ca",
@@ -401,6 +403,7 @@ func (r *ShardReconciler) reconcilePgBackRestCerts(
 		Organization:  "Multigres",
 		Owner:         shard,
 		ComponentName: "pgbackrest",
+		Labels:        metadata.BuildStandardLabels(clusterName, "pgbackrest-tls"),
 	})
 	return rotator.Bootstrap(ctx)
 }

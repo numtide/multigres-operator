@@ -238,6 +238,7 @@ The operator includes a generic, consumer-agnostic TLS certificate lifecycle man
 | `ComponentName` | Label for Kubernetes Events (e.g. `"webhook"`) | `"cert"` |
 | `RotationInterval` | How often the background loop checks | `1h` |
 | `PostReconcileHook` | Callback after each successful reconcile | `nil` |
+| `Labels` | Labels applied to generated Secret objects (required outside operator NS) | `nil` |
 | `Owner` | `metav1.Object` for owner references | `nil` |
 | `WaitForProjection` | Block until cert file matches Secret on disk | `false` |
 
@@ -308,7 +309,11 @@ func (r *MultigresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 **Potential Issues:**
 If the controller logic *depended* on reading its own status to make decisions (e.g. "If status is 'Initializing', do X"), using this predicate would break that logic because the controller wouldn't wake up after setting 'Initializing'.
-*   *Mitigation:* Our controllers are designed to be level-triggered based on `Spec` and child resources. We do not use the primary resource's `Status` as a state machine driver; `Status` is purely an output observation.
+
+> [!CAUTION]
+> If you ever need a controller to make decisions based on its own `.status` fields, you **must remove** this predicate from that controller's `For` clause. Otherwise the controller will never re-reconcile after writing its own status, effectively deadlocking. This trade-off is acceptable only when status is purely observational output.
+
+*   *Current design:* Our controllers are level-triggered based on `Spec` and child resources. We do not use the primary resource's `Status` as a state machine driver; `Status` is purely an output observation.
 
 **Child Resources (Why we don't use it there):**
 We do *not* apply this predicate to child resources (`Owns`). We must react to child resource status transitions (e.g., a Deployment becoming Ready, a Pod changing state) to update the parent's status. Each parent only monitors the status of its *immediate* children (e.g. `MultigresCluster` watches `Cell`, but not `StatefulSet` directly if `Cell` owns it).
