@@ -382,7 +382,13 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER_E2E) go test -tags=e2e ./test/e2e/ -v -count=1
+	@echo "==> Loading upstream images into e2e kind cluster..."
+	@for img in $(MULTIGRES_IMAGES); do \
+		echo "  Loading $$img..."; \
+		$(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E) 2>/dev/null || \
+			($(CONTAINER_TOOL) pull $$img && $(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E)); \
+	done
+	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER_E2E) go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
