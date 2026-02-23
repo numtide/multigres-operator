@@ -27,6 +27,11 @@ const (
 
 	// RotationThreshold is the buffer before expiry at which certs are rotated (30 days).
 	RotationThreshold = 30 * 24 * time.Hour
+
+	// maxRecursionDepth guards against infinite recursion in ensureCA/ensureServerCert.
+	// If the cached client repeatedly disagrees with the API server (e.g. missing cache
+	// labels), the recursive retry will fail fast instead of hanging the goroutine.
+	maxRecursionDepth = 3
 )
 
 // Options configures the CertRotator behavior. Consumers provide their own
@@ -172,12 +177,12 @@ func (m *CertRotator) Start(ctx context.Context) error {
 // 3. Run PostReconcileHook (if set).
 // 4. Wait for projection (if enabled).
 func (m *CertRotator) reconcilePKI(ctx context.Context) error {
-	ca, err := m.ensureCA(ctx)
+	ca, err := m.ensureCA(ctx, 0)
 	if err != nil {
 		return err
 	}
 
-	serverCertPEM, err := m.ensureServerCert(ctx, ca)
+	serverCertPEM, err := m.ensureServerCert(ctx, ca, 0)
 	if err != nil {
 		return err
 	}
@@ -195,7 +200,15 @@ func (m *CertRotator) reconcilePKI(ctx context.Context) error {
 	return nil
 }
 
-func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
+func (m *CertRotator) ensureCA(ctx context.Context, depth int) (*CAArtifacts, error) {
+	if depth >= maxRecursionDepth {
+		return nil, fmt.Errorf(
+			"failed to ensure CA secret %q after %d attempts: "+
+				"secret exists on API server but is not visible in the informer cache "+
+				"(check that the secret has the required cache labels)",
+			m.Options.CASecretName, maxRecursionDepth,
+		)
+	}
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Options.CASecretName,
@@ -229,7 +242,12 @@ func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
 
 		if err := m.Client.Create(ctx, secret); err != nil {
 			if errors.IsAlreadyExists(err) {
-				return m.ensureCA(ctx)
+				log.FromContext(ctx).Info(
+					"CA secret exists on API server but was not found in cache, retrying",
+					"secret", m.Options.CASecretName,
+					"attempt", depth+1,
+				)
+				return m.ensureCA(ctx, depth+1)
 			}
 			return nil, fmt.Errorf("failed to create CA secret: %w", err)
 		}
@@ -247,7 +265,7 @@ func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
 		if err := m.Client.Delete(ctx, secret); err != nil {
 			return nil, fmt.Errorf("failed to delete corrupt CA secret: %w", err)
 		}
-		return m.ensureCA(ctx)
+		return m.ensureCA(ctx, depth+1)
 	}
 
 	// Check if near expiry
@@ -256,13 +274,25 @@ func (m *CertRotator) ensureCA(ctx context.Context) (*CAArtifacts, error) {
 		if err := m.Client.Delete(ctx, secret); err != nil {
 			return nil, fmt.Errorf("failed to delete expiring CA secret: %w", err)
 		}
-		return m.ensureCA(ctx)
+		return m.ensureCA(ctx, depth+1)
 	}
 
 	return artifacts, nil
 }
 
-func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]byte, error) {
+func (m *CertRotator) ensureServerCert(
+	ctx context.Context,
+	ca *CAArtifacts,
+	depth int,
+) ([]byte, error) {
+	if depth >= maxRecursionDepth {
+		return nil, fmt.Errorf(
+			"failed to ensure server cert secret %q after %d attempts: "+
+				"secret exists on API server but is not visible in the informer cache "+
+				"(check that the secret has the required cache labels)",
+			m.Options.ServerSecretName, maxRecursionDepth,
+		)
+	}
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Options.ServerSecretName,
@@ -304,7 +334,12 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 
 		if err := m.Client.Create(ctx, secret); err != nil {
 			if errors.IsAlreadyExists(err) {
-				return m.ensureServerCert(ctx, ca)
+				log.FromContext(ctx).Info(
+					"server cert secret exists on API server but was not found in cache, retrying",
+					"secret", m.Options.ServerSecretName,
+					"attempt", depth+1,
+				)
+				return m.ensureServerCert(ctx, ca, depth+1)
 			}
 			return nil, fmt.Errorf("failed to create server cert secret: %w", err)
 		}
@@ -321,7 +356,7 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 		if err := m.Client.Delete(ctx, secret); err != nil {
 			return nil, fmt.Errorf("failed to delete corrupt server cert secret: %w", err)
 		}
-		return m.ensureServerCert(ctx, ca)
+		return m.ensureServerCert(ctx, ca, depth+1)
 	}
 
 	cert, err := x509.ParseCertificate(certBlock.Bytes)
@@ -330,7 +365,7 @@ func (m *CertRotator) ensureServerCert(ctx context.Context, ca *CAArtifacts) ([]
 		if err := m.Client.Delete(ctx, secret); err != nil {
 			return nil, fmt.Errorf("failed to delete unparseable server cert secret: %w", err)
 		}
-		return m.ensureServerCert(ctx, ca)
+		return m.ensureServerCert(ctx, ca, depth+1)
 	}
 
 	// Check if near expiry OR if CA changed
