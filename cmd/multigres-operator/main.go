@@ -378,6 +378,9 @@ func main() {
 				Owner:             ownerDep,
 				WaitForProjection: true,
 				ComponentName:     "webhook",
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "multigres-operator",
+				},
 				PostReconcileHook: func(ctx context.Context, caBundle []byte) error {
 					return multigreswebhook.PatchWebhookCABundle(ctx, tmpClient, caBundle)
 				},
