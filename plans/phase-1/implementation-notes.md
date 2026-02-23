@@ -1206,6 +1206,21 @@ Zone/region on a cell is currently decorative. A user can specify `zone: us-east
 
 ### Planned Implementation
 
+#### 0. Prerequisite: Make Zone/Region Optional on CellSpec
+
+The `CellSpec` (child CR) currently has a CEL validation rule `has(self.zone) != has(self.region)` which requires exactly one of zone or region to be set. This must be relaxed to `!(has(self.zone) && has(self.region))` — rejecting only when **both** are present, while allowing **neither** to be set.
+
+This is necessary because:
+- **Clusters without topology labels** (e.g. kind, single-node dev clusters) have no `topology.kubernetes.io/zone` labels on nodes. If zone/region is required, any auto-injected `nodeSelector` would make all pods unschedulable.
+- **Defaults should not require topology** — a user creating a minimal `MultigresCluster` without specifying zone/region should get a working cluster that schedules anywhere.
+
+The three valid states become:
+- `zone` set → inject `nodeSelector` for `topology.kubernetes.io/zone`
+- `region` set → inject `nodeSelector` for `topology.kubernetes.io/region`
+- **neither set** → no `nodeSelector`, pods schedule on any node
+
+No changes are needed to the webhook defaulter, resolver, or cluster controller — none of them auto-populate zone/region. These fields pass through from user config only (verified in `defaulter.go`, `pkg/resolver/`, and `builders_cell.go`).
+
 #### 1. Auto-inject `nodeSelector` from Cell Zone/Region
 
 When a cell has `zone` or `region` set, the operator should auto-inject a `nodeSelector` on all pods belonging to that cell:
