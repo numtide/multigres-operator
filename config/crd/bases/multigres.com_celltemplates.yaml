@@ -1225,6 +1225,9 @@ spec:
                     type: object
                 type: object
             type: object
+            x-kubernetes-validations:
+            - message: local topology servers (localTopoServer) are not yet supported
+              rule: '!has(self.localTopoServer)'
         type: object
     served: true
     storage: true
