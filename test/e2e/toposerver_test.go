@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"fmt"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -21,7 +22,7 @@ import (
 func TestTopoServerCreatesStatefulSetAndServices(t *testing.T) {
 	t.Parallel()
 
-	mgr, c := setUpOperator(t)
+	mgr, c, ns := setUpOperator(t)
 	ctx := t.Context()
 
 	watcher := testutil.NewResourceWatcher(t, ctx, mgr,
@@ -38,7 +39,7 @@ func TestTopoServerCreatesStatefulSetAndServices(t *testing.T) {
 	topoServer := &multigresv1alpha1.TopoServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "e2e-topo",
-			Namespace: "default",
+			Namespace: ns,
 			Labels:    map[string]string{"multigres.com/cluster": "e2e-cluster"},
 		},
 		Spec: multigresv1alpha1.TopoServerSpec{
@@ -72,7 +73,7 @@ func TestTopoServerCreatesStatefulSetAndServices(t *testing.T) {
 		&appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "e2e-topo",
-				Namespace:       "default",
+				Namespace:       ns,
 				Labels:          labels,
 				OwnerReferences: ownerRefs,
 			},
@@ -126,7 +127,10 @@ func TestTopoServerCreatesStatefulSetAndServices(t *testing.T) {
 									{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).e2e-topo-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
 									{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
 									{Name: "ETCD_INITIAL_CLUSTER_TOKEN", Value: "e2e-topo"},
-									{Name: "ETCD_INITIAL_CLUSTER", Value: "e2e-topo-0=http://e2e-topo-0.e2e-topo-headless.default.svc.cluster.local:2380,e2e-topo-1=http://e2e-topo-1.e2e-topo-headless.default.svc.cluster.local:2380,e2e-topo-2=http://e2e-topo-2.e2e-topo-headless.default.svc.cluster.local:2380"},
+									{Name: "ETCD_INITIAL_CLUSTER", Value: fmt.Sprintf(
+									"e2e-topo-0=http://e2e-topo-0.e2e-topo-headless.%[1]s.svc.cluster.local:2380,"+
+										"e2e-topo-1=http://e2e-topo-1.e2e-topo-headless.%[1]s.svc.cluster.local:2380,"+
+										"e2e-topo-2=http://e2e-topo-2.e2e-topo-headless.%[1]s.svc.cluster.local:2380", ns)},
 								},
 								VolumeMounts: []corev1.VolumeMount{
 									{Name: "data", MountPath: "/var/lib/etcd"},
@@ -157,7 +161,7 @@ func TestTopoServerCreatesStatefulSetAndServices(t *testing.T) {
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "e2e-topo",
-				Namespace:       "default",
+				Namespace:       ns,
 				Labels:          labels,
 				OwnerReferences: ownerRefs,
 			},
@@ -172,7 +176,7 @@ func TestTopoServerCreatesStatefulSetAndServices(t *testing.T) {
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "e2e-topo-headless",
-				Namespace:       "default",
+				Namespace:       ns,
 				Labels:          labels,
 				OwnerReferences: ownerRefs,
 			},

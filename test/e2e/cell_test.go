@@ -21,7 +21,7 @@ import (
 func TestCellCreatesDeploymentAndService(t *testing.T) {
 	t.Parallel()
 
-	mgr, c := setUpOperator(t)
+	mgr, c, ns := setUpOperator(t)
 	ctx := t.Context()
 
 	watcher := testutil.NewResourceWatcher(t, ctx, mgr,
@@ -39,7 +39,7 @@ func TestCellCreatesDeploymentAndService(t *testing.T) {
 	cell := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "e2e-cell",
-			Namespace: "default",
+			Namespace: ns,
 			Labels:    map[string]string{"multigres.com/cluster": "e2e-cluster"},
 		},
 		Spec: multigresv1alpha1.CellSpec{
@@ -101,7 +101,7 @@ func TestCellCreatesDeploymentAndService(t *testing.T) {
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            hashedDeployName,
-				Namespace:       "default",
+				Namespace:       ns,
 				Labels:          labels,
 				OwnerReferences: ownerRefs,
 			},
@@ -170,7 +170,7 @@ func TestCellCreatesDeploymentAndService(t *testing.T) {
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            hashedSvcName,
-				Namespace:       "default",
+				Namespace:       ns,
 				Labels:          labels,
 				OwnerReferences: ownerRefs,
 			},

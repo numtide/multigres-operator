@@ -35,13 +35,13 @@ func newScheme(t testing.TB) *runtime.Scheme {
 }
 
 // setUpOperator starts a namespace-scoped manager against the kind cluster and
-// registers all operator controllers. It returns the running manager and a
-// Kubernetes client scoped to the test namespace.
-func setUpOperator(t *testing.T) (manager.Manager, client.Client) {
+// registers all operator controllers. It returns the running manager, a
+// Kubernetes client, and the isolated test namespace name.
+func setUpOperator(t *testing.T) (manager.Manager, client.Client, string) {
 	t.Helper()
 
 	scheme := newScheme(t)
-	mgr, _ := testutil.SetUpKindManager(t, scheme,
+	mgr, ns := testutil.SetUpKindManager(t, scheme,
 		testutil.WithKindCRDPaths("../../config/crd/bases"),
 	)
 	c := mgr.GetClient()
@@ -110,5 +110,5 @@ func setUpOperator(t *testing.T) (manager.Manager, client.Client) {
 		t.Fatalf("Failed to set up Shard data-handler controller: %v", err)
 	}
 
-	return mgr, c
+	return mgr, c, ns
 }
