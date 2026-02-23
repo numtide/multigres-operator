@@ -112,3 +112,4 @@ rules:
   - storageclasses
   verbs:
   - list
+  - watch
