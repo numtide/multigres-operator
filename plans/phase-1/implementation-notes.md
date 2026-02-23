@@ -1174,3 +1174,105 @@ The Cell status should reflect the local TopoServer's health when present. This 
 #### 6. External TopoServer Support
 
 For `spec.topoServer.external`, no child CR creation is needed — the cell registration simply uses the provided external endpoints as the cell's `ServerAddresses`. This is simpler to implement and could be done first as a stepping stone.
+
+## Cell Topology and Zone/Region Allocation
+
+### What Cells Are
+
+A Cell is a **logical failure domain** — a boundary that upstream multigres uses for consensus, sync replication, and pool discovery. When a pooler or gateway registers itself in the topology server, it carries an `ID.Cell` field that identifies which cell it belongs to.
+
+Upstream multigres has **no awareness of physical infrastructure topology**. The `Cell` protobuf (`clustermetadata.Cell`) contains only `Name`, `ServerAddresses`, and `Root` — there are no zone, region, or Kubernetes scheduling fields. The mapping of "cell = availability zone" is a convention enforced entirely by the operator.
+
+### Why Cells Matter for Durability
+
+The `QUORUM_TYPE_MULTI_CELL_ANY_N` durability policy groups standbys by `Id.Cell` and requires synchronous replication acknowledgment from N distinct cells. `BuildSyncReplicationConfig` in multiorch **excludes standbys in the same cell as the primary** when building the sync standby list for multi-cell policies.
+
+This means cells are the mechanism by which multigres guarantees that a committed write survives the failure of an entire availability zone. If a shard has pools in `zone-1` and `zone-2` and uses `MULTI_CELL_ANY_N` with `required_count: 2`, a write is only acknowledged after replication to a standby in the opposite zone.
+
+However, this guarantee is only real if the cell's pods actually run in the correct zone. If the Kubernetes scheduler places `zone-1` pool pods on `us-east-1b` nodes, the cross-cell quorum is meaningless — both "cells" are on the same physical infrastructure.
+
+### What the Operator Does Today
+
+The operator's `Cell` CR has `zone` and `region` fields (mutually exclusive via CEL). Currently:
+
+1. **Labels only** — The cell controller adds `multigres.com/zone` and `multigres.com/region` as informational labels on the MultiGateway Deployment and Service. These are useful for filtering and observability but do not affect scheduling.
+2. **No scheduling enforcement** — No `nodeSelector`, node affinity, or topology spread constraints are injected based on zone/region. The MultiGateway's `Affinity` field is a pass-through from user config.
+3. **Pool StatefulSets** — Created per-cell per-pool (e.g., `cluster-shard-pool-zone1`). They receive a `multigres.com/cell` label but no zone/region labels and no zone-based scheduling. The `Affinity` field is pass-through from `PoolSpec.Affinity`.
+4. **Manual affinity possible** — Users can already set `nodeAffinity` in `StatelessSpec.Affinity` (for multigateway) and `PoolSpec.Affinity` (for pools) to manually pin pods to zones, but nothing automates it.
+
+### The Gap
+
+Zone/region on a cell is currently decorative. A user can specify `zone: us-east-1a`, but nothing ensures that cell's pods run on nodes in `us-east-1a`. In a multi-AZ cluster, the scheduler could place all cells' pods on the same node, defeating multi-cell quorum entirely.
+
+### Planned Implementation
+
+#### 1. Auto-inject `nodeSelector` from Cell Zone/Region
+
+When a cell has `zone` or `region` set, the operator should auto-inject a `nodeSelector` on all pods belonging to that cell:
+
+- `zone: us-east-1a` → `nodeSelector: { topology.kubernetes.io/zone: us-east-1a }`
+- `region: us-east-1` → `nodeSelector: { topology.kubernetes.io/region: us-east-1 }`
+
+`nodeSelector` is preferred over `nodeAffinity` because:
+- It is **strict** — pods stay `Pending` if no matching nodes exist, which is the correct behavior for failure domain placement. Silently scheduling to the wrong zone is worse than being unschedulable.
+- It is **simple** — a direct label match with no operator expressions.
+- It is **additive** — `nodeSelector` does not conflict with user-provided `Affinity` rules. The scheduler applies both, so users can layer anti-affinity or topology spread constraints on top.
+
+#### 2. Components That Need `nodeSelector` Injection
+
+| Component | Where to inject | Controller |
+|---|---|---|
+| MultiGateway | Deployment PodSpec | Cell controller (`multigateway.go`) |
+| Pool StatefulSets | StatefulSet PodSpec | Shard controller (`pool_statefulset.go`) |
+| MultiOrch | Deployment PodSpec | Shard controller (`multiorch.go`) |
+| Backup PVCs | N/A (PVCs inherit from pod scheduling) | — |
+
+The shard controller needs the cell's zone/region to inject `nodeSelector` on pool StatefulSets. Rather than having the shard controller look up `Cell` CRs at reconcile time (extra API calls, cache timing issues), the zone/region mapping should be **propagated through the spec chain** using a `ZoneMap` pattern. The cluster controller builds a `map[string]string` of cell→zone and embeds it into the `Shard` spec, so the shard controller can resolve cell names to zones without additional API calls.
+
+For our operator, the `MultigresCluster` webhook defaulter (or the cluster controller when building `Shard` child CRs) would construct a similar map from the resolved cells and embed it in the `Shard` spec. The shard controller then reads the zone from the map when creating per-cell pool StatefulSets.
+
+#### 3. Webhook Validation: Zone/Region Warning
+
+The validating webhook should check that nodes with the specified topology label exist at admission time:
+
+```go
+// In ValidateClusterLogic, after cell iteration:
+for _, cell := range cluster.Spec.Cells {
+    if cell.Zone != "" {
+        if !r.nodesExistWithLabel(ctx, "topology.kubernetes.io/zone", string(cell.Zone)) {
+            warnings = append(warnings, fmt.Sprintf(
+                "cell '%s': no nodes currently match zone '%s'; pods will be Pending until matching nodes are available",
+                cell.Name, cell.Zone,
+            ))
+        }
+    }
+    if cell.Region != "" {
+        if !r.nodesExistWithLabel(ctx, "topology.kubernetes.io/region", string(cell.Region)) {
+            warnings = append(warnings, fmt.Sprintf(
+                "cell '%s': no nodes currently match region '%s'; pods will be Pending until matching nodes are available",
+                cell.Name, cell.Region,
+            ))
+        }
+    }
+}
+```
+
+This is a **warning, not a rejection**, because nodes are ephemeral — autoscaling groups can scale to zero and back. The warning alerts users to potential misconfigurations (typos, wrong zone names) while still allowing pre-provisioned cells for zones that will exist after scale-up.
+
+#### 4. User-Provided Affinity Remains Available
+
+The existing `Affinity` field on `StatelessSpec` (multigateway) and `PoolSpec` (pools) is preserved and works additively with the auto-injected `nodeSelector`. Users can use it for:
+
+- **Pod anti-affinity** — prevent multiple pool replicas from landing on the same node within a zone.
+- **Topology spread constraints** — distribute pods evenly across nodes within a zone.
+- **Additional scheduling preferences** — soft preferences for instance types, etc.
+
+The operator should never override user-provided affinity — it is always additive.
+
+#### 5. RBAC Requirements
+
+The webhook validator would need `list` permission on `nodes` to check topology labels. This adds a new RBAC marker:
+
+```go
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=list
+```
