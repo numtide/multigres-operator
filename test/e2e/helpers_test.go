@@ -42,8 +42,18 @@ func newScheme(t testing.TB) *runtime.Scheme {
 	return scheme
 }
 
+// multigresImages are the container images needed by the operator's workloads.
+// These must be loaded into the kind cluster before running tests.
+var multigresImages = []string{
+	"ghcr.io/multigres/multigres:main",
+	"ghcr.io/multigres/pgctld:main",
+	"ghcr.io/multigres/multiadmin-web:main",
+	"gcr.io/etcd-development/etcd:v3.6.7",
+}
+
 type operatorOpts struct {
 	skipDataHandler bool
+	kindOptions     []testutil.KindOption
 }
 
 type operatorOption func(*operatorOpts)
@@ -55,6 +65,14 @@ type operatorOption func(*operatorOpts)
 // finalizers block deletion indefinitely.
 func withoutDataHandler() operatorOption {
 	return func(o *operatorOpts) { o.skipDataHandler = true }
+}
+
+// withKindOptions passes additional KindOption values through to
+// testutil.SetUpKindManager. Use this to create ephemeral kind clusters per
+// test via testutil.WithKindCreateCluster() and load images via
+// testutil.WithKindImages().
+func withKindOptions(opts ...testutil.KindOption) operatorOption {
+	return func(o *operatorOpts) { o.kindOptions = append(o.kindOptions, opts...) }
 }
 
 // setUpOperator starts a namespace-scoped manager against the kind cluster and
@@ -72,9 +90,15 @@ func setUpOperator(t *testing.T, opts ...operatorOption) (manager.Manager, clien
 	}
 
 	scheme := newScheme(t)
-	mgr, ns := testutil.SetUpKindManager(t, scheme,
+
+	// Base kind options: always install CRDs
+	kindOpts := []testutil.KindOption{
 		testutil.WithKindCRDPaths("../../config/crd/bases"),
-	)
+	}
+	// Append any extra kind options (e.g. WithKindCreateCluster, WithKindImages)
+	kindOpts = append(kindOpts, cfg.kindOptions...)
+
+	mgr, ns := testutil.SetUpKindManager(t, scheme, kindOpts...)
 	c := mgr.GetClient()
 
 	ctrlOpts := controller.Options{
