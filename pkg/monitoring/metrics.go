@@ -48,7 +48,15 @@ var (
 			Name: "multigres_operator_shard_pool_replicas",
 			Help: "Pool replica counts for a Shard.",
 		},
-		[]string{"shard", "pool", "namespace", "state"},
+		[]string{"cluster", "shard", "pool", "cell", "namespace", "state"},
+	)
+
+	poolPodsDrifted = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "multigres_operator_pool_pods_drifted",
+			Help: "Number of pool pods with spec-hash mismatch requiring rolling update.",
+		},
+		[]string{"cluster", "shard", "pool", "cell", "namespace"},
 	)
 
 	toposerverReplicas = prometheus.NewGaugeVec(
@@ -92,6 +100,7 @@ func init() {
 		clusterShardsTotal,
 		cellGatewayReplicas,
 		shardPoolReplicas,
+		poolPodsDrifted,
 		toposerverReplicas,
 		webhookRequestTotal,
 		webhookRequestDuration,
@@ -108,6 +117,7 @@ func Collectors() []prometheus.Collector {
 		clusterShardsTotal,
 		cellGatewayReplicas,
 		shardPoolReplicas,
+		poolPodsDrifted,
 		toposerverReplicas,
 		webhookRequestTotal,
 		webhookRequestDuration,

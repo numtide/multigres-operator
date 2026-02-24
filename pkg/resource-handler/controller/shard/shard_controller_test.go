@@ -7,6 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,6 +20,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 type reconcileTestCase struct {
@@ -37,6 +39,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 
 	tests := map[string]reconcileTestCase{
 		////----------------------------------------
@@ -85,13 +88,21 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					t.Errorf("MultiOrch Service should exist: %v", err)
 				}
 
-				// Verify Pool StatefulSet was created (with cell suffix)
-				hashPoolName := buildHashedPoolName(shard, "primary", "zone1")
-				poolSts := &appsv1.StatefulSet{}
+				// Verify Pool Pod and PVC were created
+				podName := BuildPoolPodName(shard, "primary", "zone1", 0)
+				pod := &corev1.Pod{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: hashPoolName, Namespace: "default"},
-					poolSts); err != nil {
-					t.Errorf("Pool StatefulSet should exist: %v", err)
+					types.NamespacedName{Name: podName, Namespace: "default"},
+					pod); err != nil {
+					t.Errorf("Pool Pod should exist: %v", err)
+				}
+
+				pvcName := BuildPoolDataPVCName(shard, "primary", "zone1", 0)
+				pvc := &corev1.PersistentVolumeClaim{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: pvcName, Namespace: "default"},
+					pvc); err != nil {
+					t.Errorf("Pool PVC should exist: %v", err)
 				}
 
 				// Verify Pool headless Service was created (with cell suffix)
@@ -138,26 +149,20 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				// Verify replica pool StatefulSet
-				hashReplica := buildHashedPoolName(shard, "replica", "zone1")
-				replicaSts := &appsv1.StatefulSet{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: hashReplica, Namespace: "default"},
-					replicaSts); err != nil {
-					t.Errorf("Replica pool StatefulSet should exist: %v", err)
-				} else if *replicaSts.Spec.Replicas != 2 {
-					t.Errorf("Replica pool replicas = %d, want 2", *replicaSts.Spec.Replicas)
+				// Verify replica pool pods
+				for i := 0; i < 2; i++ {
+					podName := BuildPoolPodName(shard, "replica", "zone1", i)
+					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+						t.Errorf("Replica pool Pod %d should exist: %v", i, err)
+					}
 				}
 
-				// Verify readOnly pool StatefulSet
-				hashReadOnly := buildHashedPoolName(shard, "readOnly", "zone1")
-				readOnlySts := &appsv1.StatefulSet{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: hashReadOnly, Namespace: "default"},
-					readOnlySts); err != nil {
-					t.Errorf("ReadOnly pool StatefulSet should exist: %v", err)
-				} else if *readOnlySts.Spec.Replicas != 3 {
-					t.Errorf("ReadOnly pool replicas = %d, want 3", *readOnlySts.Spec.Replicas)
+				// Verify readOnly pool pods
+				for i := 0; i < 3; i++ {
+					podName := BuildPoolPodName(shard, "readOnly", "zone1", i)
+					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+						t.Errorf("ReadOnly pool Pod %d should exist: %v", i, err)
+					}
 				}
 
 				// Verify both headless services
@@ -306,28 +311,20 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			},
 			existingObjects: []client.Object{},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				// Verify StatefulSet for zone1
-				hashZone1 := buildHashedPoolName(shard, "primary", "zone1")
-				sts1 := &appsv1.StatefulSet{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: hashZone1, Namespace: "default"},
-					sts1); err != nil {
-					t.Fatalf("StatefulSet for zone1 should exist: %v", err)
-				}
-				if *sts1.Spec.Replicas != 2 {
-					t.Errorf("Zone1 replicas = %d, want 2", *sts1.Spec.Replicas)
+				// Verify Pods for zone1
+				for i := 0; i < 2; i++ {
+					podName := BuildPoolPodName(shard, "primary", "zone1", i)
+					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+						t.Errorf("Zone1 Pod %d should exist: %v", i, err)
+					}
 				}
 
-				// Verify StatefulSet for zone2
-				hashZone2 := buildHashedPoolName(shard, "primary", "zone2")
-				sts2 := &appsv1.StatefulSet{}
-				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: hashZone2, Namespace: "default"},
-					sts2); err != nil {
-					t.Fatalf("StatefulSet for zone2 should exist: %v", err)
-				}
-				if *sts2.Spec.Replicas != 2 {
-					t.Errorf("Zone2 replicas = %d, want 2", *sts2.Spec.Replicas)
+				// Verify Pods for zone2
+				for i := 0; i < 2; i++ {
+					podName := BuildPoolPodName(shard, "primary", "zone2", i)
+					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+						t.Errorf("Zone2 Pod %d should exist: %v", i, err)
+					}
 				}
 
 				// Verify headless Services for both cells
@@ -396,51 +393,14 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-shard-pool-primary-zone1",
-						Namespace: "default",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: ptr.To(int32(2)), // will be updated to 5
-					},
-					Status: appsv1.StatefulSetStatus{
-						Replicas:      2,
-						ReadyReplicas: 2,
-					},
-				},
-				&corev1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "existing-shard-pool-primary-zone1-headless",
-						Namespace: "default",
-					},
-				},
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      PgHbaConfigMapName("existing-shard"),
-						Namespace: "default",
-					},
-				},
-				&corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "backup-data-test-cluster-testdb-default--zone1",
-						Namespace: "default",
-					},
-				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
-				hashPool := buildHashedPoolName(shard, "primary", "zone1")
-				poolSts := &appsv1.StatefulSet{}
-				err := c.Get(t.Context(), types.NamespacedName{
-					Name:      hashPool,
-					Namespace: "default",
-				}, poolSts)
-				if err != nil {
-					t.Fatalf("Failed to get Pool StatefulSet: %v", err)
-				}
-
-				if *poolSts.Spec.Replicas != 5 {
-					t.Errorf("Pool StatefulSet replicas = %d, want 5", *poolSts.Spec.Replicas)
+				// Verify scale up to 5 pods
+				for i := 0; i < 5; i++ {
+					podName := BuildPoolPodName(shard, "primary", "zone1", i)
+					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+						t.Errorf("Zone1 Pod %d should exist: %v", i, err)
+					}
 				}
 			},
 		},
@@ -619,11 +579,12 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 
-		"error on Pool StatefulSet patch": {
+		"error on Pool PDB patch": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
 					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -645,11 +606,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnPatch: func(obj client.Object) error {
-					if sts, ok := obj.(*appsv1.StatefulSet); ok &&
+					if pdb, ok := obj.(*policyv1.PodDisruptionBudget); ok &&
 						strings.Contains(
-							sts.Name,
-							"pool",
-						) && strings.Contains(sts.Name, "primary") && strings.Contains(sts.Name, "zone1") {
+							pdb.Name,
+							"pdb",
+						) {
 						return testutil.ErrPermissionError
 					}
 					return nil
@@ -1106,6 +1067,7 @@ func TestShardReconciler_ReconcileNotFound(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -1138,6 +1100,7 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
 	t.Run("all_replicas_ready_status", func(t *testing.T) {
@@ -1168,21 +1131,14 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			},
 		}
 
-		stsName := buildHashedPoolName(shard, "primary", "zone1")
-		sts := &appsv1.StatefulSet{
+		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      stsName,
+				Name:      BuildPoolPodName(shard, "primary", "zone1", 0),
 				Namespace: "default",
-				Labels: map[string]string{
-					"multigres.com/shard": "test-shard-ready",
-				},
+				Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1", shard.Spec.Pools["primary"])),
 			},
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(3)),
-			},
-			Status: appsv1.StatefulSetStatus{
-				Replicas:      3,
-				ReadyReplicas: 3,
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
 			},
 		}
 
@@ -1203,8 +1159,8 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(shard, sts, mo).
-			WithStatusSubresource(shard, sts, mo).
+			WithObjects(shard, pod, mo).
+			WithStatusSubresource(shard, pod, mo).
 			Build()
 
 		r := &ShardReconciler{
@@ -1280,21 +1236,39 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			},
 		}
 
-		sts1Name := buildHashedPoolName(shard, "replica", "zone1")
-		sts1 := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: sts1Name, Namespace: "default"},
-			Status:     appsv1.StatefulSetStatus{Replicas: 2, ReadyReplicas: 2},
+		var objects []client.Object
+		objects = append(objects, shard)
+		for i := 0; i < 2; i++ {
+			p := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      BuildPoolPodName(shard, "replica", "zone1", i),
+					Namespace: "default",
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "replica", "zone1", shard.Spec.Pools["replica"])),
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+				},
+			}
+			objects = append(objects, p)
 		}
-		sts2Name := buildHashedPoolName(shard, "readOnly", "zone1")
-		sts2 := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: sts2Name, Namespace: "default"},
-			Status:     appsv1.StatefulSetStatus{Replicas: 3, ReadyReplicas: 3},
+		for i := 0; i < 3; i++ {
+			p := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      BuildPoolPodName(shard, "readOnly", "zone1", i),
+					Namespace: "default",
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "readOnly", "zone1", shard.Spec.Pools["readOnly"])),
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+				},
+			}
+			objects = append(objects, p)
 		}
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(shard, sts1, sts2).
-			WithStatusSubresource(shard, sts1, sts2).
+			WithObjects(objects...).
+			WithStatusSubresource(objects...).
 			Build()
 
 		r := &ShardReconciler{
@@ -1343,16 +1317,35 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			},
 		}
 
-		sts1Name := buildHashedPoolName(shard, "primary", "zone1")
-		sts1 := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: sts1Name, Namespace: "default"},
-			Status:     appsv1.StatefulSetStatus{Replicas: 3, ReadyReplicas: 3},
+		var objects []client.Object
+		objects = append(objects, shard)
+
+		for i := 0; i < 3; i++ {
+			p := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      BuildPoolPodName(shard, "primary", "zone1", i),
+					Namespace: "default",
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1", shard.Spec.Pools["primary"])),
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+				},
+			}
+			objects = append(objects, p)
 		}
 
-		sts2Name := buildHashedPoolName(shard, "primary", "zone2")
-		sts2 := &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: sts2Name, Namespace: "default"},
-			Status:     appsv1.StatefulSetStatus{Replicas: 2, ReadyReplicas: 2},
+		for i := 0; i < 2; i++ {
+			p := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      BuildPoolPodName(shard, "primary", "zone2", i),
+					Namespace: "default",
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone2", shard.Spec.Pools["primary"])),
+				},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+				},
+			}
+			objects = append(objects, p)
 		}
 
 		mo1Name := buildHashedMultiOrchName(shard, "zone1")
@@ -1361,17 +1354,20 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			Spec:       appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
 			Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
 		}
+		objects = append(objects, mo1)
+
 		mo2Name := buildHashedMultiOrchName(shard, "zone2")
 		mo2 := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: mo2Name, Namespace: "default"},
 			Spec:       appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
 			Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
 		}
+		objects = append(objects, mo2)
 
 		fakeClient := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(shard, sts1, sts2, mo1, mo2).
-			WithStatusSubresource(shard, sts1, sts2, mo1, mo2).
+			WithObjects(objects...).
+			WithStatusSubresource(objects...).
 			Build()
 
 		r := &ShardReconciler{

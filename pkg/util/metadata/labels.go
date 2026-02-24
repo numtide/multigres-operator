@@ -90,6 +90,9 @@ const (
 
 	// DefaultCellName is the default cell name when none is specified.
 	DefaultCellName = "multigres-global-topo"
+
+	// AnnotationSpecHash stores the hash of operator-managed pod spec fields.
+	AnnotationSpecHash = "multigres.com/spec-hash"
 )
 
 const (

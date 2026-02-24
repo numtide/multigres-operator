@@ -8,6 +8,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -229,7 +230,7 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				return r.reconcileMultiOrchService(ctx, shard, "cell1")
 			},
 		},
-		"PoolStatefulSet": {
+		"PoolPDB": {
 			setupShard: func() *multigresv1alpha1.Shard {
 				return &multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
@@ -239,10 +240,7 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				}
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
-				poolSpec := multigresv1alpha1.PoolSpec{
-					Cells: []multigresv1alpha1.CellName{"cell1"},
-				}
-				return r.reconcilePoolStatefulSet(ctx, shard, "pool1", "", poolSpec)
+				return r.reconcilePoolPDB(ctx, shard, "pool1", "cell1")
 			},
 		},
 		"PoolHeadlessService": {
@@ -324,7 +322,9 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme) // Need StatefulSet type registered for Get to work
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 
 	shard := &multigresv1alpha1.Shard{
 		ObjectMeta: metav1.ObjectMeta{
@@ -409,7 +409,7 @@ func TestReconcile_PatchError(t *testing.T) {
 				return r.reconcileMultiOrchService(ctx, shard, "cell1")
 			},
 		},
-		"PoolStatefulSet": {
+		"PoolPDB": {
 			setupShard: func() *multigresv1alpha1.Shard {
 				return &multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
@@ -423,13 +423,22 @@ func TestReconcile_PatchError(t *testing.T) {
 				}
 			},
 			getFailObj: func(s *multigresv1alpha1.Shard) string {
-				return buildHashedPoolName(s, "pool1", "cell1")
+				// The PDB name formula is from BuildPoolPodDisruptionBudget
+				clusterName := s.Labels["multigres.com/cluster"]
+				return name.JoinWithConstraints(
+					name.DefaultConstraints,
+					clusterName,
+					string(s.Spec.DatabaseName),
+					string(s.Spec.TableGroupName),
+					string(s.Spec.ShardName),
+					"pool",
+					"pool1",
+					"cell1",
+					"pdb",
+				)
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
-				poolSpec := multigresv1alpha1.PoolSpec{
-					Cells: []multigresv1alpha1.CellName{"cell1"},
-				}
-				return r.reconcilePoolStatefulSet(ctx, shard, "pool1", "cell1", poolSpec)
+				return r.reconcilePoolPDB(ctx, shard, "pool1", "cell1")
 			},
 		},
 		"PoolHeadlessService": {
@@ -503,6 +512,7 @@ func TestReconcile_PatchError(t *testing.T) {
 			_ = multigresv1alpha1.AddToScheme(scheme)
 			_ = appsv1.AddToScheme(scheme)
 			_ = corev1.AddToScheme(scheme)
+			_ = policyv1.AddToScheme(scheme)
 
 			shard := tc.setupShard()
 			failObj := tc.getFailObj(shard)

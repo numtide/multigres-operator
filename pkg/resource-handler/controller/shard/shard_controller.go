@@ -9,6 +9,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -464,9 +465,14 @@ func (r *ShardReconciler) reconcilePool(
 	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
 
-		// Reconcile pool StatefulSet for this cell
-		if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, cellName, poolSpec); err != nil {
-			return fmt.Errorf("failed to reconcile pool StatefulSet for cell %s: %w", cellName, err)
+		// Reconcile pool Pods and PVCs for this cell
+		if err := r.reconcilePoolPods(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf("failed to reconcile pool pods for cell %s: %w", cellName, err)
+		}
+
+		// Reconcile pool PDB for this cell
+		if err := r.reconcilePoolPDB(ctx, shard, poolName, cellName); err != nil {
+			return fmt.Errorf("failed to reconcile pool PDB for cell %s: %w", cellName, err)
 		}
 
 		// Reconcile pool headless Service for this cell
@@ -488,21 +494,113 @@ func (r *ShardReconciler) reconcilePool(
 	return nil
 }
 
-// reconcilePoolStatefulSet creates or updates the StatefulSet for a pool in a specific cell.
-func (r *ShardReconciler) reconcilePoolStatefulSet(
+// reconcilePoolPods ensures all missing pods and PVCs for a pool in a specific cell exist.
+// It also detects configuration drift and updates the drift metric.
+func (r *ShardReconciler) reconcilePoolPods(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	poolName string,
 	cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
-	desired, err := BuildPoolStatefulSet(shard, poolName, cellName, poolSpec, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build pool StatefulSet: %w", err)
+	logger := log.FromContext(ctx)
+
+	// Determine replicas
+	replicas := DefaultPoolReplicas
+	if poolSpec.ReplicasPerCell != nil {
+		replicas = *poolSpec.ReplicasPerCell
 	}
 
-	// Server Side Apply
-	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("StatefulSet"))
+	// 1. List existing pods and PVCs for this pool
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
+	selector := metadata.GetSelectorLabels(labels)
+
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+		return fmt.Errorf("failed to list pods for pool %s cell %s: %w", poolName, cellName, err)
+	}
+
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(ctx, pvcList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+		return fmt.Errorf("failed to list PVCs for pool %s cell %s: %w", poolName, cellName, err)
+	}
+
+	// Index existing resources
+	existingPods := make(map[string]*corev1.Pod)
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		existingPods[pod.Name] = pod
+	}
+
+	existingPVCs := make(map[string]*corev1.PersistentVolumeClaim)
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+		existingPVCs[pvc.Name] = pvc
+	}
+
+	// 2. Create missing PVCs and Pods
+	var driftedCount int
+	for i := int32(0); i < replicas; i++ {
+		podName := BuildPoolPodName(shard, poolName, cellName, int(i))
+		pvcName := BuildPoolDataPVCName(shard, poolName, cellName, int(i))
+
+		// Create PVC if missing
+		if _, exists := existingPVCs[pvcName]; !exists {
+			desiredPVC, err := BuildPoolDataPVC(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
+			if err != nil {
+				return fmt.Errorf("failed to build PVC %s: %w", pvcName, err)
+			}
+			if err := r.Create(ctx, desiredPVC); err != nil && !errors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to create PVC %s: %w", pvcName, err)
+			}
+			logger.Info("Created missing pool PVC", "pvc", pvcName)
+		}
+
+		// Create Pod if missing
+		if pod, exists := existingPods[podName]; !exists {
+			desiredPod, err := BuildPoolPod(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
+			if err != nil {
+				return fmt.Errorf("failed to build pod %s: %w", podName, err)
+			}
+			// We use r.Create instead of SSA (r.Patch with client.Apply) because most pod
+			// spec fields (containers, volumes, securityContext, nodeSelector) are immutable
+			// after creation. SSA would error on any configuration change. Instead, we detect
+			// drift via the spec-hash annotation and handle recreation in the rolling update
+			// logic (see Commit 6).
+			if err := r.Create(ctx, desiredPod); err != nil && !errors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to create pod %s: %w", podName, err)
+			}
+			logger.Info("Created missing pool pod", "pod", podName)
+			r.Recorder.Eventf(shard, "Normal", "PodCreated", "Created pod %s for pool %s", podName, poolName)
+		} else {
+			// Pod exists. Check if it's drifted.
+			if podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, int(i)) {
+				driftedCount++
+			}
+		}
+	}
+
+	// 3. Record drift metric
+	clusterName := shard.Labels[metadata.LabelMultigresCluster]
+	monitoring.SetPoolPodsDrifted(clusterName, shard.Name, poolName, cellName, shard.Namespace, driftedCount)
+
+	return nil
+}
+
+// reconcilePoolPDB applies the PodDisruptionBudget for the pool in the specific cell.
+func (r *ShardReconciler) reconcilePoolPDB(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	poolName string,
+	cellName string,
+) error {
+	desired, err := BuildPoolPodDisruptionBudget(shard, poolName, cellName, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build pool PDB: %w", err)
+	}
+
+	// Server Side Apply for PDB
+	desired.SetGroupVersionKind(policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudget"))
 	if err := r.Patch(
 		ctx,
 		desired,
@@ -510,19 +608,53 @@ func (r *ShardReconciler) reconcilePoolStatefulSet(
 		client.ForceOwnership,
 		client.FieldOwner("multigres-operator"),
 	); err != nil {
-		return fmt.Errorf("failed to apply pool StatefulSet: %w", err)
+		return fmt.Errorf("failed to apply pool PDB: %w", err)
 	}
 
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
+	// Emit an event only if it was just created or modified
+	if desired.ObjectMeta.ResourceVersion == "" {
+		r.Recorder.Eventf(
+			shard,
+			"Normal",
+			"Applied",
+			"Applied %s %s",
+			desired.GroupVersionKind().Kind,
+			desired.Name,
+		)
+	}
 
 	return nil
+}
+
+// podNeedsUpdate checks if a pod requires recreation due to spec changes.
+// Since most pod fields are immutable, we rely on the pre-computed spec-hash annotation.
+func podNeedsUpdate(
+	existing *corev1.Pod,
+	shard *multigresv1alpha1.Shard,
+	poolName, cellName string,
+	poolSpec multigresv1alpha1.PoolSpec,
+	index int,
+) bool {
+	// If it has a deletion timestamp, let it die
+	if !existing.DeletionTimestamp.IsZero() {
+		return false
+	}
+
+	// If missing the annotation entirely, it needs an update
+	existingHash, ok := existing.Annotations[metadata.AnnotationSpecHash]
+	if !ok {
+		return true
+	}
+
+	// Compute desired hash by building the ideal pod spec
+	// NOTE: BuildPoolPod doesn't make API calls, it's safe to call frequently.
+	desired, err := BuildPoolPod(shard, poolName, cellName, poolSpec, index, nil)
+	if err != nil {
+		return false // Assume no update needed if we can't build it
+	}
+
+	desiredHash := ComputeSpecHash(desired)
+	return existingHash != desiredHash
 }
 
 // reconcileSharedBackupPVC creates or updates the shared backup PVC for a specific cell.
@@ -690,7 +822,7 @@ func (r *ShardReconciler) updateStatus(
 	return nil
 }
 
-// updatePoolsStatus aggregates status from all pool StatefulSets.
+// updatePoolsStatus aggregates status from all pool pods.
 // Returns total pods, ready pods, and tracks cells in the cellsSet.
 func (r *ShardReconciler) updatePoolsStatus(
 	ctx context.Context,
@@ -698,6 +830,7 @@ func (r *ShardReconciler) updatePoolsStatus(
 	cellsSet map[multigresv1alpha1.CellName]bool,
 ) (int32, int32, error) {
 	var totalPods, readyPods int32
+	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 
 	for poolName, poolSpec := range shard.Spec.Pools {
 		var poolTotal, poolReady int32
@@ -707,30 +840,68 @@ func (r *ShardReconciler) updatePoolsStatus(
 			cellName := string(cell)
 			cellsSet[cell] = true
 
-			stsName := buildPoolNameWithCell(shard, string(poolName), cellName)
-			sts := &appsv1.StatefulSet{}
-			err := r.Get(
+			// List pods for this specific pool and cell
+			labels := buildPoolLabelsWithCell(shard, string(poolName), cellName, poolSpec)
+			selector := metadata.GetSelectorLabels(labels)
+			podList := &corev1.PodList{}
+			if err := r.List(
 				ctx,
-				client.ObjectKey{Namespace: shard.Namespace, Name: stsName},
-				sts,
-			)
-			if err != nil {
-				if errors.IsNotFound(err) {
-					continue
-				}
-				return 0, 0, fmt.Errorf("failed to get pool StatefulSet for status: %w", err)
+				podList,
+				client.InNamespace(shard.Namespace),
+				client.MatchingLabels(selector),
+			); err != nil {
+				return 0, 0, fmt.Errorf("failed to list pods for status: %w", err)
 			}
 
-			totalPods += sts.Status.Replicas
-			poolTotal += sts.Status.Replicas
-			if sts.Status.ObservedGeneration == sts.Generation {
-				readyPods += sts.Status.ReadyReplicas
-				poolReady += sts.Status.ReadyReplicas
-			} // else treat as 0 ready pods because it is stale/progressing
+			var cellTotal, cellReady int32
+			for i := range podList.Items {
+				pod := &podList.Items[i]
+
+				// Exclude terminating pods from total/ready counts
+				if !pod.DeletionTimestamp.IsZero() {
+					continue
+				}
+
+				cellTotal++
+
+				// Check if pod is ready
+				isReady := false
+				for _, cond := range pod.Status.Conditions {
+					if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+						isReady = true
+						break
+					}
+				}
+				if isReady {
+					cellReady++
+				}
+			}
+
+			// Emit a warning explicitly if the cell pool should have replicas but is empty
+			replicas := DefaultPoolReplicas
+			if poolSpec.ReplicasPerCell != nil {
+				replicas = *poolSpec.ReplicasPerCell
+			}
+			if replicas > 0 && cellReady == 0 {
+				r.Recorder.Eventf(
+					shard,
+					"Warning",
+					"PoolEmpty",
+					"Pool %s in cell %s has 0 ready replicas",
+					poolName,
+					cellName,
+				)
+			}
+
+			poolTotal += cellTotal
+			poolReady += cellReady
 		}
 
+		totalPods += poolTotal
+		readyPods += poolReady
+
 		monitoring.SetShardPoolReplicas(
-			shard.Name, string(poolName), shard.Namespace,
+			clusterName, shard.Name, string(poolName), "", shard.Namespace,
 			poolTotal, poolReady,
 		)
 	}
@@ -867,7 +1038,8 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.Shard{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&appsv1.Deployment{}).
-		Owns(&appsv1.StatefulSet{}).
+		Owns(&appsv1.StatefulSet{}). // Kept temporarily during pod migration (removed in Commit 7)
+		Owns(&corev1.Pod{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
