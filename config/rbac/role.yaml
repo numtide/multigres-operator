@@ -27,6 +27,12 @@ rules:
   - create
   - patch
 - apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+- apiGroups:
   - admissionregistration.k8s.io
   resourceNames:
   - multigres-operator-mutating-webhook-configuration

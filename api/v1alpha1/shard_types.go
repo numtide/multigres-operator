@@ -147,6 +147,13 @@ type ShardSpec struct {
 	// Inherited from MultigresCluster.Spec.Backup by the resolver.
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
+
+	// CellTopologyLabels maps cell names to their topology nodeSelector labels.
+	// Each entry is a map like {"topology.kubernetes.io/zone": "us-east-1a"}.
+	// Propagated from the cluster's cell configs so the shard controller
+	// can inject nodeSelector without looking up Cell CRs.
+	// +optional
+	CellTopologyLabels map[CellName]map[string]string `json:"cellTopologyLabels,omitempty"`
 }
 
 // ShardImages defines the images required for a Shard.

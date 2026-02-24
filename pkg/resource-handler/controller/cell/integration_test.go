@@ -155,6 +155,9 @@ func TestCellReconciliation(t *testing.T) {
 										},
 									},
 								},
+								NodeSelector: map[string]string{
+									"topology.kubernetes.io/zone": "us-west-1a",
+								},
 							},
 						},
 					},
@@ -270,6 +273,9 @@ func TestCellReconciliation(t *testing.T) {
 										},
 									},
 								},
+								NodeSelector: map[string]string{
+									"topology.kubernetes.io/zone": "us-west-1b",
+								},
 							},
 						},
 					},
@@ -384,6 +390,9 @@ func TestCellReconciliation(t *testing.T) {
 											PeriodSeconds: 5,
 										},
 									},
+								},
+								NodeSelector: map[string]string{
+									"topology.kubernetes.io/zone": "us-west-1c",
 								},
 							},
 						},
@@ -533,6 +542,9 @@ func TestCellReconciliation(t *testing.T) {
 											},
 										},
 									},
+								},
+								NodeSelector: map[string]string{
+									"topology.kubernetes.io/zone": "us-west-1d",
 								},
 							},
 						},

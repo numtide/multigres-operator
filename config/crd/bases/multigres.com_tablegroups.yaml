@@ -139,6 +139,15 @@ spec:
                   rule: self.type != 's3' || has(self.s3)
                 - message: filesystem config is required when type is 'filesystem'
                   rule: self.type != 'filesystem' || has(self.filesystem)
+              cellTopologyLabels:
+                additionalProperties:
+                  additionalProperties:
+                    type: string
+                  type: object
+                description: |-
+                  CellTopologyLabels maps cell names to their topology nodeSelector labels.
+                  Propagated from the cluster's cell configs.
+                type: object
               databaseName:
                 description: DatabaseName is the name of the logical database.
                 maxLength: 30
