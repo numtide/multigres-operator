@@ -45,3 +45,8 @@ func RecordWebhookRequest(operation, resource string, err error, duration time.D
 	webhookRequestTotal.WithLabelValues(operation, resource, result).Inc()
 	webhookRequestDuration.WithLabelValues(operation, resource).Observe(duration.Seconds())
 }
+
+// SetLastBackupAge sets the age of the most recent completed backup for a shard.
+func SetLastBackupAge(cluster, shard, namespace string, age time.Duration) {
+	lastBackupAgeSeconds.WithLabelValues(cluster, shard, namespace).Set(age.Seconds())
+}

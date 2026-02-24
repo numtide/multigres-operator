@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
 	"go.opentelemetry.io/otel/attribute"
@@ -51,6 +52,7 @@ type ShardReconciler struct {
 	Scheme          *runtime.Scheme
 	Recorder        record.EventRecorder
 	createTopoStore func(*multigresv1alpha1.Shard) (topoclient.Store, error)
+	rpcClient       rpcclient.MultiPoolerClient
 }
 
 // Reconcile handles Shard resource reconciliation for data plane operations.
@@ -147,6 +149,46 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			return ctrl.Result{}, err
 		}
 		childSpan.End()
+	}
+
+	// Evaluate backup health via gRPC to the primary pooler.
+	if r.rpcClient != nil {
+		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.EvaluateBackupHealth")
+		result, err := r.evaluateBackupHealth(ctx, shard)
+		if err != nil {
+			// Backup health is observational — log and emit a warning event,
+			// but do not fail the reconcile.
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to evaluate backup health")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"BackupCheckFailed",
+				"Failed to check backup health: %v",
+				err,
+			)
+		} else if result != nil {
+			prevHealthy := isConditionTrue(shard.Status.Conditions, conditionBackupHealthy)
+			applyBackupHealth(shard, result)
+
+			// Emit transition events.
+			if result.Healthy && !prevHealthy {
+				r.Recorder.Event(shard, "Normal", "BackupHealthy", result.Message)
+			} else if !result.Healthy {
+				r.Recorder.Eventf(shard, "Warning", "BackupStale", result.Message)
+			}
+
+			if err := r.Status().Update(ctx, shard); err != nil {
+				monitoring.RecordSpanError(childSpan, err)
+				childSpan.End()
+				logger.Error(err, "Failed to update shard backup status")
+				return ctrl.Result{}, err
+			}
+			childSpan.End()
+		} else {
+			childSpan.End()
+		}
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())

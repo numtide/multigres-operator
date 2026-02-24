@@ -2612,6 +2612,19 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              lastBackupTime:
+                description: LastBackupTime is the timestamp of the most recent completed
+                  backup.
+                format: date-time
+                type: string
+              lastBackupType:
+                description: LastBackupType is the type of the most recent completed
+                  backup (full, diff, incr).
+                enum:
+                - full
+                - diff
+                - incr
+                type: string
               message:
                 description: Message provides details about the current phase.
                 type: string

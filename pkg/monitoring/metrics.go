@@ -75,6 +75,14 @@ var (
 		},
 		[]string{"operation", "resource"},
 	)
+
+	lastBackupAgeSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "multigres_operator_last_backup_age_seconds",
+			Help: "Age of the most recent completed backup in seconds.",
+		},
+		[]string{"cluster", "shard", "namespace"},
+	)
 )
 
 func init() {
@@ -87,6 +95,7 @@ func init() {
 		toposerverReplicas,
 		webhookRequestTotal,
 		webhookRequestDuration,
+		lastBackupAgeSeconds,
 	)
 }
 
@@ -102,5 +111,6 @@ func Collectors() []prometheus.Collector {
 		toposerverReplicas,
 		webhookRequestTotal,
 		webhookRequestDuration,
+		lastBackupAgeSeconds,
 	}
 }

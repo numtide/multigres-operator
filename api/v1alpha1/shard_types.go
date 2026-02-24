@@ -215,6 +215,15 @@ type ShardStatus struct {
 
 	// PoolsReady indicates if all data pools are ready.
 	PoolsReady bool `json:"poolsReady"`
+
+	// LastBackupTime is the timestamp of the most recent completed backup.
+	// +optional
+	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
+
+	// LastBackupType is the type of the most recent completed backup (full, diff, incr).
+	// +optional
+	// +kubebuilder:validation:Enum=full;diff;incr
+	LastBackupType string `json:"lastBackupType,omitempty"`
 }
 
 // ============================================================================
