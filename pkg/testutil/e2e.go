@@ -263,9 +263,13 @@ func DeployOperator(t *testing.T, kubeconfigFile, clusterName, operatorImg strin
 		crdPath = filepath.Join(repoRoot, "config", "crd")
 	}
 
-	overlayPath := os.Getenv("KUSTOMIZE_OVERLAY")
-	if overlayPath == "" {
-		overlayPath = "config/no-webhook"
+	overlayRelPath := os.Getenv("KUSTOMIZE_OVERLAY")
+	if overlayRelPath == "" {
+		overlayRelPath = "config/no-webhook"
+	}
+	// Make relative to repo root so it works with the temp copy.
+	if strings.HasPrefix(overlayRelPath, repoRoot) {
+		overlayRelPath = strings.TrimPrefix(overlayRelPath, repoRoot+"/")
 	}
 
 	// 1. Install CRDs.
@@ -291,7 +295,7 @@ func DeployOperator(t *testing.T, kubeconfigFile, clusterName, operatorImg strin
 
 	// 4. Deploy operator via kustomize.
 	t.Log("e2e: deploying operator...")
-	kustomizePipe(t, kubeconfigFile, filepath.Join(tmpDir, overlayPath))
+	kustomizePipe(t, kubeconfigFile, filepath.Join(tmpDir, overlayRelPath))
 
 	t.Log("e2e: operator deployment applied")
 }

@@ -15,9 +15,11 @@ ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
 WORKDIR /workspace
-# Copy the Go Modules manifests
+# Copy the Go Modules manifests (including sub-module for replace directives)
 COPY go.mod go.mod
 COPY go.sum go.sum
+COPY pkg/testutil/go.mod pkg/testutil/go.mod
+COPY pkg/testutil/go.sum pkg/testutil/go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
