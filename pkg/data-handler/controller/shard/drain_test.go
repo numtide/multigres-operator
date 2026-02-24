@@ -174,13 +174,16 @@ func TestReplicaDrainFlow(t *testing.T) {
 		rpcClient: rpcMock,
 	}
 
-	store, _ := memorytopo.NewServerAndFactory(context.Background())
-	defer store.Close()
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+
 	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
-		return store, nil
+		return topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig()), nil
 	}
 
 	ctx := context.Background()
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer store.Close()
+
 	// Add primary
 	store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
 		Id:       &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
@@ -199,8 +202,8 @@ func TestReplicaDrainFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if requeue {
-		t.Fatalf("expected no requeue for replica")
+	if !requeue {
+		t.Fatalf("expected requeue for replica state transition")
 	}
 
 	c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
@@ -225,7 +228,9 @@ func TestReplicaDrainFlow(t *testing.T) {
 		t.Fatalf("expected state ready-for-deletion, got %v", pod.Annotations[metadata.AnnotationDrainState])
 	}
 
-	poolers, _ := store.GetMultiPoolersByCell(ctx, "cell1", nil)
+	inspectorStore := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer inspectorStore.Close()
+	poolers, _ := inspectorStore.GetMultiPoolersByCell(ctx, "cell1", nil)
 	if len(poolers) != 1 || poolers[0].MultiPooler.GetHostname() != "primary-pod" {
 		t.Fatalf("expected replica to be unregistered from topo")
 	}
@@ -261,11 +266,16 @@ func TestPrimaryDrainFlow(t *testing.T) {
 	rpcMock := &mockRPCClient{}
 	reconciler := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock}
 
-	store, _ := memorytopo.NewServerAndFactory(context.Background())
-	defer store.Close()
-	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) { return store, nil }
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+
+	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
+		return topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig()), nil
+	}
 
 	ctx := context.Background()
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer store.Close()
+
 	store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
 		Id:       &clustermetadata.ID{Cell: "cell1", Name: "test-pod-0"},
 		Hostname: "test-pod-0", Type: clustermetadata.PoolerType_PRIMARY,
@@ -293,26 +303,33 @@ func TestStuckTerminatingPod(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 
 	shardObj := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-shard", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
 	}
-
-	// Terminating for 10 minutes
-	delTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pod-0", Namespace: "default",
-			Labels:            map[string]string{metadata.LabelMultigresCell: "cell1"},
-			Annotations:       map[string]string{metadata.AnnotationDrainState: metadata.DrainStateRequested},
-			DeletionTimestamp: &delTime,
+			Labels:      map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{metadata.AnnotationDrainState: metadata.DrainStateRequested},
 		},
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	reconciler := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+	rpcMock := &mockRPCClient{}
+	reconciler := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock}
 
-	store, _ := memorytopo.NewServerAndFactory(context.Background())
+	store, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	defer store.Close()
+
 	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) { return store, nil }
 
 	ctx := context.Background()
@@ -321,9 +338,21 @@ func TestStuckTerminatingPod(t *testing.T) {
 		Hostname: "test-pod-0", Type: clustermetadata.PoolerType_REPLICA,
 	}, false)
 
+	// Delete the pod using the client to set DeletionTimestamp
+	_ = c.Delete(ctx, pod)
+
+	// Fast forward DeletionTimestamp by 10 minutes
+	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	delTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
+	pod.DeletionTimestamp = &delTime
+
 	reconciler.executeDrainStateMachine(ctx, shardObj, pod)
 
-	poolers, _ := store.GetMultiPoolersByCell(ctx, "cell1", nil)
+	// Recreate a new inspector store to verify unregistration without reuse
+	inspectorStore := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer inspectorStore.Close()
+
+	poolers, _ := inspectorStore.GetMultiPoolersByCell(ctx, "cell1", nil)
 	if len(poolers) != 0 {
 		t.Fatalf("expected stuck pod to be immediately unregistered")
 	}

@@ -79,7 +79,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"multigres.com/cell":          "zone1",
 						"multigres.com/database":      "testdb",
 						"multigres.com/tablegroup":    "default",
-						"multigres.com/shard":          "",
+						"multigres.com/shard":         "",
 						"multigres.com/cluster":       "test-cluster",
 					},
 					Ports: []corev1.ServicePort{
@@ -160,7 +160,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"multigres.com/cell":          "zone-east",
 						"multigres.com/database":      "testdb",
 						"multigres.com/tablegroup":    "default",
-						"multigres.com/shard":          "",
+						"multigres.com/shard":         "",
 						"multigres.com/cluster":       "prod-cluster",
 					},
 					Ports: []corev1.ServicePort{
@@ -238,7 +238,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 						"multigres.com/cell":          "zone1",
 						"multigres.com/database":      "testdb",
 						"multigres.com/tablegroup":    "default",
-						"multigres.com/shard":          "",
+						"multigres.com/shard":         "",
 						"multigres.com/cluster":       "test-cluster",
 					},
 					Ports: []corev1.ServicePort{

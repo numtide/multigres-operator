@@ -576,7 +576,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 			r.Recorder.Eventf(shard, "Normal", "PodCreated", "Created pod %s for pool %s", podName, poolName)
 		} else {
 			// Pod exists. Check if it's drifted.
-			if podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, int(i)) {
+			if podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, int(i), r.Scheme) {
 				driftedCount++
 			}
 		}
@@ -617,8 +617,38 @@ func (r *ShardReconciler) reconcilePoolPods(
 		}
 	}
 
-	// 3b. Initiate scale-down for extra pods
-	if len(extraPods) > 0 {
+	// Track if we delete or drain a pod in this loop, so we only do 1 at a time.
+	actionTaken := false
+
+	// 3b. Handle DRAINED pod replacements
+	for _, pod := range existingPods {
+		if actionTaken {
+			break
+		}
+
+		role := ""
+		if shard.Status.PodRoles != nil {
+			role = shard.Status.PodRoles[pod.Name]
+		}
+		state := pod.Annotations[metadata.AnnotationDrainState]
+		fmt.Printf("DEBUG: Pod %s has role '%s', drain state '%s'\n", pod.Name, role, state)
+
+		if shard.Status.PodRoles != nil && shard.Status.PodRoles[pod.Name] == "DRAINED" && pod.Annotations[metadata.AnnotationDrainState] == "" {
+			if pod.Annotations == nil {
+				pod.Annotations = make(map[string]string)
+			}
+			pod.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+			if err := r.Update(ctx, pod); err != nil {
+				return fmt.Errorf("failed to request drain for DRAINED pod %s: %w", pod.Name, err)
+			}
+			logger.Info("Requested drain for DRAINED pod", "pod", pod.Name)
+			r.Recorder.Eventf(shard, "Warning", "PodReplaced", "Replacing DRAINED pod %s", pod.Name)
+			actionTaken = true
+		}
+	}
+
+	// 3c. Initiate scale-down for extra pods
+	if !actionTaken && len(extraPods) > 0 {
 		podToDrain := r.selectPodToDrain(extraPods, shard)
 		if podToDrain != nil {
 			drainState := podToDrain.Annotations[metadata.AnnotationDrainState]
@@ -631,17 +661,96 @@ func (r *ShardReconciler) reconcilePoolPods(
 				if err := r.Update(ctx, podToDrain); err != nil {
 					return fmt.Errorf("failed to request drain for pod %s: %w", podToDrain.Name, err)
 				}
-				logger.Info("Requested drain for pod", "pod", podToDrain.Name)
-				r.Recorder.Eventf(shard, "Normal", "DrainStarted", "Initiated drain for pod %s", podToDrain.Name)
+				logger.Info("Requested drain for extra pod", "pod", podToDrain.Name)
+				r.Recorder.Eventf(shard, "Normal", "DrainStarted", "Initiated drain for extra pod %s", podToDrain.Name)
+				actionTaken = true
 			}
 		}
 	}
 
-	// 4. Record drift metric
+	// 3d. Rolling Updates
+	inProgress := false
+	if driftedCount > 0 {
+		inProgress = true
+	}
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	monitoring.SetPoolPodsDrifted(clusterName, shard.Name, poolName, cellName, shard.Namespace, driftedCount)
+	monitoring.SetRollingUpdateInProgress(clusterName, shard.Name, string(poolName), string(cellName), shard.Namespace, inProgress)
+
+	if inProgress {
+		// Only set condition if not already set or if message needs update
+		msg := fmt.Sprintf("%d pods need update in pool %s", driftedCount, poolName)
+		meta.SetStatusCondition(&shard.Status.Conditions, metav1.Condition{
+			Type:    "RollingUpdate",
+			Status:  metav1.ConditionTrue,
+			Reason:  "PodsDrifted",
+			Message: msg,
+		})
+	} else {
+		msg := fmt.Sprintf("All pods up to date in pool %s", poolName)
+		meta.SetStatusCondition(&shard.Status.Conditions, metav1.Condition{
+			Type:    "RollingUpdate",
+			Status:  metav1.ConditionFalse,
+			Reason:  "PodsUpToDate",
+			Message: msg,
+		})
+	}
+
+	if !actionTaken && driftedCount > 0 {
+		var waitPrimary *corev1.Pod // The primary pod needing an update, if it's the only one left.
+
+		for _, pod := range existingPods {
+			if podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, resolvePodIndex(pod.Name), r.Scheme) {
+				isPrimary := shard.Status.PodRoles != nil && shard.Status.PodRoles[pod.Name] == "PRIMARY"
+
+				if !isPrimary {
+					// Delete replica pod immediately to trigger recreation on next reconcile
+					if err := r.Delete(ctx, pod); err != nil {
+						return fmt.Errorf("failed to delete sub-spec pod %s: %w", pod.Name, err)
+					}
+					logger.Info("Deleted sub-spec replica pod for rolling update", "pod", pod.Name)
+					r.Recorder.Eventf(shard, "Normal", "PodUpdated", "Deleted replica pod %s for rolling update", pod.Name)
+					actionTaken = true
+					break // Only do 1 per reconcile loop
+				} else {
+					waitPrimary = pod
+				}
+			}
+		}
+
+		// If the only pod that needs updating is the PRIMARY, initiate a switchover.
+		if !actionTaken && waitPrimary != nil {
+			if waitPrimary.Annotations[metadata.AnnotationDrainState] == "" {
+				if waitPrimary.Annotations == nil {
+					waitPrimary.Annotations = make(map[string]string)
+				}
+				waitPrimary.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+				if err := r.Update(ctx, waitPrimary); err != nil {
+					return fmt.Errorf("failed to request drain for primary pod %s: %w", waitPrimary.Name, err)
+				}
+				logger.Info("Requested switchover for primary pod rolling update", "pod", waitPrimary.Name)
+				r.Recorder.Eventf(shard, "Normal", "RollingUpdateStarted", "Initiating primary switchover for rolling update of pod %s", waitPrimary.Name)
+				actionTaken = true
+			}
+		}
+	}
+
+	// 4. Record drift metric & events
+	monitoring.SetPoolPodsDrifted(clusterName, shard.Name, string(poolName), string(cellName), shard.Namespace, driftedCount)
 
 	return nil
+}
+
+// resolvePodIndex parses the index from the pod name
+func resolvePodIndex(podName string) int {
+	lastDash := strings.LastIndex(podName, "-")
+	if lastDash == -1 {
+		return 0
+	}
+	index, err := strconv.Atoi(podName[lastDash+1:])
+	if err != nil {
+		return 0
+	}
+	return index
 }
 
 // selectPodToDrain chooses the best pod to drain during scale-down.
@@ -793,6 +902,7 @@ func podNeedsUpdate(
 	poolName, cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 	index int,
+	scheme *runtime.Scheme,
 ) bool {
 	// If it has a deletion timestamp, let it die
 	if !existing.DeletionTimestamp.IsZero() {
@@ -807,7 +917,7 @@ func podNeedsUpdate(
 
 	// Compute desired hash by building the ideal pod spec
 	// NOTE: BuildPoolPod doesn't make API calls, it's safe to call frequently.
-	desired, err := BuildPoolPod(shard, poolName, cellName, poolSpec, index, nil)
+	desired, err := BuildPoolPod(shard, poolName, cellName, poolSpec, index, scheme)
 	if err != nil {
 		return false // Assume no update needed if we can't build it
 	}

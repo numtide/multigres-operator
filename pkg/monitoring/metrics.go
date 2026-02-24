@@ -99,6 +99,14 @@ var (
 		},
 		[]string{"cluster", "shard", "result"},
 	)
+
+	rollingUpdateInProgress = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "multigres_operator_rolling_update_in_progress",
+			Help: "Indicates if a rolling update is currently in progress for a pool.",
+		},
+		[]string{"cluster", "shard", "pool", "cell", "namespace"},
+	)
 )
 
 func init() {
@@ -114,6 +122,7 @@ func init() {
 		webhookRequestDuration,
 		lastBackupAgeSeconds,
 		drainOperationsTotal,
+		rollingUpdateInProgress,
 	)
 }
 
@@ -132,5 +141,6 @@ func Collectors() []prometheus.Collector {
 		webhookRequestDuration,
 		lastBackupAgeSeconds,
 		drainOperationsTotal,
+		rollingUpdateInProgress,
 	}
 }

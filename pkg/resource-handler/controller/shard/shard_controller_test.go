@@ -1461,3 +1461,171 @@ func TestScaleDownPodSelection(t *testing.T) {
 		t.Errorf("Expected pod-2 (highest index) to be selected, got %v", selected)
 	}
 }
+
+func TestRollingUpdateOrder(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {
+					ReplicasPerCell: ptr.To(int32(3)),
+					Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
+				},
+			},
+		},
+		Status: multigresv1alpha1.ShardStatus{
+			// PodRoles to be assigned later
+		},
+	}
+
+	shardObj.Status.PodRoles = map[string]string{
+		BuildPoolPodName(shardObj, "primary", "zone1", 0): "REPLICA",
+		BuildPoolPodName(shardObj, "primary", "zone1", 1): "PRIMARY",
+		BuildPoolPodName(shardObj, "primary", "zone1", 2): "REPLICA",
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj).Build()
+	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+	poolSpec := shardObj.Spec.Pools["primary"]
+
+	// Create 3 pods, all with old spec hash
+	for i := 0; i < 3; i++ {
+		podName := BuildPoolPodName(shardObj, "primary", "zone1", i)
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: "default",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":     "shard-pool",
+					"app.kubernetes.io/instance":      "test-cluster",
+					metadata.LabelMultigresCluster:    "test-cluster",
+					metadata.LabelMultigresDatabase:   "db",
+					metadata.LabelMultigresTableGroup: "tg",
+					metadata.LabelMultigresShard:      "s1",
+					metadata.LabelMultigresPool:       "primary",
+					metadata.LabelMultigresCell:       "zone1",
+				},
+				Annotations: map[string]string{
+					metadata.AnnotationSpecHash: "old-hash",
+				},
+			},
+		}
+		if err := c.Create(context.Background(), pod); err != nil {
+			t.Fatalf("failed to create pod: %v", err)
+		}
+	}
+
+	// Run reconcile loop
+	err := r.reconcilePoolPods(context.Background(), shardObj, "primary", "zone1", poolSpec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Check that EXACTLY ONE REPLICA was deleted. Pod 1 is PRIMARY.
+	// So either Pod 0 or Pod 2 should be gone.
+	deletedCount := 0
+	for i := 0; i < 3; i++ {
+		err := c.Get(context.Background(), types.NamespacedName{Name: BuildPoolPodName(shardObj, "primary", "zone1", i), Namespace: "default"}, &corev1.Pod{})
+		if err != nil {
+			deletedCount++
+			if i == 1 {
+				t.Errorf("Primary pod was deleted before replicas!")
+			}
+		}
+	}
+	if deletedCount != 1 {
+		t.Errorf("Expected exactly 1 pod to be deleted, got %d", deletedCount)
+	}
+}
+
+func TestDrainedPodReplacement(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {
+					ReplicasPerCell: ptr.To(int32(1)),
+					Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
+				},
+			},
+		},
+		Status: multigresv1alpha1.ShardStatus{
+			// PodRoles assigned later
+		},
+	}
+
+	shardObj.Status.PodRoles = map[string]string{
+		BuildPoolPodName(shardObj, "primary", "zone1", 0): "DRAINED",
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      BuildPoolPodName(shardObj, "primary", "zone1", 0),
+			Namespace: "default",
+			Labels: map[string]string{
+				"app.kubernetes.io/component":     "shard-pool",
+				"app.kubernetes.io/instance":      "test-cluster",
+				metadata.LabelMultigresCluster:    "test-cluster",
+				metadata.LabelMultigresDatabase:   "db",
+				metadata.LabelMultigresTableGroup: "tg",
+				metadata.LabelMultigresShard:      "s1",
+				metadata.LabelMultigresPool:       "primary",
+				metadata.LabelMultigresCell:       "zone1",
+			},
+			Annotations: map[string]string{
+				// We need the hash to match so it doesn't get deleted as drifted
+			},
+		},
+	}
+
+	// Pre-calculate hash
+	poolSpec := shardObj.Spec.Pools["primary"]
+	desiredPod, _ := BuildPoolPod(shardObj, "primary", "zone1", poolSpec, 0, scheme)
+	pod.Annotations[metadata.AnnotationSpecHash] = desiredPod.Annotations[metadata.AnnotationSpecHash]
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj).Build()
+	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	if err := c.Create(context.Background(), pod); err != nil {
+		t.Fatalf("failed to create pod: %v", err)
+	}
+
+	// Run reconcile loop
+	err := r.reconcilePoolPods(context.Background(), shardObj, "primary", "zone1", poolSpec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The DRAINED pod should now have the drain requested annotation
+	err = c.Get(context.Background(), types.NamespacedName{Name: BuildPoolPodName(shardObj, "primary", "zone1", 0), Namespace: "default"}, pod)
+	if err != nil {
+		t.Fatalf("expected pod to exist, got %v", err)
+	}
+
+	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+		t.Errorf("Expected DRAINED pod to have drain requested annotation, got %v", pod.Annotations[metadata.AnnotationDrainState])
+	}
+}

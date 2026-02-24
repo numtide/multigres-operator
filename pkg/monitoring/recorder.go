@@ -60,3 +60,12 @@ func SetLastBackupAge(cluster, shard, namespace string, age time.Duration) {
 func IncrementDrainOperations(cluster, shard, result string) {
 	drainOperationsTotal.WithLabelValues(cluster, shard, result).Inc()
 }
+
+// SetRollingUpdateInProgress sets whether a rolling update is currently in progress for a pool.
+func SetRollingUpdateInProgress(cluster, shard, pool, cell, namespace string, inProgress bool) {
+	val := 0.0
+	if inProgress {
+		val = 1.0
+	}
+	rollingUpdateInProgress.WithLabelValues(cluster, shard, pool, cell, namespace).Set(val)
+}

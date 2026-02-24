@@ -152,10 +152,8 @@ func (r *ShardReconciler) updateDrainState(ctx context.Context, pod *corev1.Pod,
 }
 
 func (r *ShardReconciler) forceUnregister(ctx context.Context, store topoclient.Store, pod *corev1.Pod) error {
-	cells := collectCells(shardFromPod(pod)) // Pseudo-helper just to find the cell
 	cellName := pod.Labels[metadata.LabelMultigresCell]
 	if cellName == "" {
-		_ = cells // Ignore unused
 		return nil
 	}
 
@@ -169,11 +167,5 @@ func (r *ShardReconciler) forceUnregister(ctx context.Context, store topoclient.
 			return store.UnregisterMultiPooler(ctx, p.Id)
 		}
 	}
-	return nil
-}
-
-func shardFromPod(pod *corev1.Pod) *multigresv1alpha1.Shard {
-	// Not strictly necessary: we just need to satisfy collectCells which iterates pools.
-	// But in forceUnregister we only need the cellName, which we can get directly from the label!
 	return nil
 }
