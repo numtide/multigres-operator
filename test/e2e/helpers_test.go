@@ -5,6 +5,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -307,73 +308,184 @@ func waitForPodsReady(t *testing.T, ctx context.Context, c client.Client, ns str
 	})
 }
 
-// kubectlPortForward starts a port-forward to the given service and returns
-// the local port and a cancel function. Uses OS-assigned port to avoid conflicts.
-func kubectlPortForward(t *testing.T, ns, svc string, remotePort int) (localPort int, cancel func()) {
+// waitForAllPodsReady waits until all pods in the namespace are in Ready
+// condition. This is the gate before attempting psql connectivity — all
+// components (etcd, multipooler, multiorch, multigateway) must be healthy.
+func waitForAllPodsReady(t *testing.T, ctx context.Context, c client.Client, ns string) {
+	t.Helper()
+	pollUntil(t, 5*time.Minute, 5*time.Second, "all pods ready", func() (bool, string) {
+		pods := &corev1.PodList{}
+		if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
+			return false, fmt.Sprintf("list error: %v", err)
+		}
+		if len(pods.Items) == 0 {
+			return false, "no pods found"
+		}
+		notReady := []string{}
+		for _, pod := range pods.Items {
+			// Skip completed pods (Jobs)
+			if pod.Status.Phase == corev1.PodSucceeded {
+				continue
+			}
+			ready := false
+			for _, cond := range pod.Status.Conditions {
+				if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+					ready = true
+					break
+				}
+			}
+			if !ready {
+				phase := string(pod.Status.Phase)
+				notReady = append(notReady, fmt.Sprintf("%s(%s)", pod.Name, phase))
+			}
+		}
+		if len(notReady) == 0 {
+			return true, ""
+		}
+		return false, fmt.Sprintf("not ready: %s", strings.Join(notReady, ", "))
+	})
+}
+
+// psqlViaKubectl runs a psql query by exec'ing into a pod that has the psql
+// binary (typically a multipooler/postgres pod). The query is directed at the
+// multigateway service on port 15432.
+//
+// This avoids requiring a local psql binary — we use the one inside the
+// postgres container.
+func psqlViaKubectl(t *testing.T, ctx context.Context, c client.Client, ns, gatewayHost string, query string) string {
 	t.Helper()
 
-	ctx, cancelFn := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "kubectl", "port-forward",
-		"-n", ns,
-		fmt.Sprintf("svc/%s", svc),
-		fmt.Sprintf(":%d", remotePort),
-	)
-
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-
-	if err := cmd.Start(); err != nil {
-		cancelFn()
-		t.Fatalf("Failed to start port-forward: %v", err)
+	// Find a pod with a "postgres" container (multipooler StatefulSet pods have psql)
+	pods := &corev1.PodList{}
+	if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
+		t.Fatalf("Failed to list pods: %v", err)
 	}
 
-	// Wait for "Forwarding from 127.0.0.1:<port>" message
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		output := stderr.String()
-		if idx := strings.Index(output, "Forwarding from 127.0.0.1:"); idx >= 0 {
-			after := output[idx+len("Forwarding from 127.0.0.1:"):]
-			spaceIdx := strings.IndexAny(after, " \n")
-			if spaceIdx > 0 {
-				var port int
-				if _, err := fmt.Sscanf(after[:spaceIdx], "%d", &port); err == nil {
-					return port, func() {
-						cancelFn()
-						_ = cmd.Wait()
-					}
+	var targetPod string
+	for _, pod := range pods.Items {
+		for _, cont := range pod.Spec.Containers {
+			if cont.Name == "postgres" {
+				if pod.Status.Phase == corev1.PodRunning {
+					targetPod = pod.Name
+					break
 				}
 			}
 		}
-		time.Sleep(200 * time.Millisecond)
+		if targetPod != "" {
+			break
+		}
+	}
+	if targetPod == "" {
+		t.Fatalf("No running pod with 'postgres' container found in namespace %s", ns)
 	}
 
-	cancelFn()
-	_ = cmd.Wait()
-	t.Fatalf("timed out waiting for port-forward. stderr: %s", stderr.String())
-	return 0, nil
-}
-
-// psqlQuery runs a psql command against host:port and returns stdout.
-// Requires psql to be available in PATH.
-func psqlQuery(t *testing.T, host string, port int, query string) string {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "psql",
-		"-h", host,
-		"-p", fmt.Sprintf("%d", port),
+	cmd := exec.CommandContext(cmdCtx, "kubectl", "exec",
+		"-n", ns,
+		targetPod,
+		"-c", "postgres",
+		"--",
+		"psql",
+		"-h", gatewayHost,
+		"-p", "15432",
 		"-U", "postgres",
 		"-d", "postgres",
 		"-t", "-A",
 		"-c", query,
 	)
-	cmd.Env = append(cmd.Environ(), "PGPASSWORD=postgres", "PGCONNECT_TIMEOUT=5")
+	cmd.Env = append(os.Environ(), "PGPASSWORD=postgres", "PGCONNECT_TIMEOUT=10")
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("psql query %q failed: %v\noutput: %s", query, err, out)
+		t.Fatalf("psql query %q via kubectl exec on %s failed: %v\noutput: %s", query, targetPod, err, out)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// waitForQueryServing polls until a SELECT 1 query succeeds through the
+// multigateway. This is the definitive test that the full stack is working:
+// etcd → metadata → multipooler → multiorch bootstrap → multigateway → psql.
+//
+// Per upstream research, HTTP /ready on multigateway only means "registered
+// with topology", not "can route queries". We must actually execute a query.
+func waitForQueryServing(t *testing.T, ctx context.Context, c client.Client, ns, gatewayHost string) {
+	t.Helper()
+	pollUntil(t, 3*time.Minute, 5*time.Second, "query serving via multigateway", func() (bool, string) {
+		// Find a postgres pod to exec from
+		pods := &corev1.PodList{}
+		if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
+			return false, fmt.Sprintf("list error: %v", err)
+		}
+
+		var targetPod string
+		for _, pod := range pods.Items {
+			if pod.Status.Phase != corev1.PodRunning {
+				continue
+			}
+			for _, cont := range pod.Spec.Containers {
+				if cont.Name == "postgres" {
+					targetPod = pod.Name
+					break
+				}
+			}
+			if targetPod != "" {
+				break
+			}
+		}
+		if targetPod == "" {
+			return false, "no running postgres pod found"
+		}
+
+		cmdCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(cmdCtx, "kubectl", "exec",
+			"-n", ns,
+			targetPod,
+			"-c", "postgres",
+			"--",
+			"psql",
+			"-h", gatewayHost,
+			"-p", "15432",
+			"-U", "postgres",
+			"-d", "postgres",
+			"-t", "-A",
+			"-c", "SELECT 1",
+		)
+		cmd.Env = append(os.Environ(), "PGPASSWORD=postgres", "PGCONNECT_TIMEOUT=5")
+
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return false, fmt.Sprintf("psql error: %v (output: %s)", err, strings.TrimSpace(string(out)))
+		}
+		result := strings.TrimSpace(string(out))
+		if result == "1" {
+			return true, ""
+		}
+		return false, fmt.Sprintf("unexpected result: %q", result)
+	})
+}
+
+// findGatewayServiceName finds the multigateway Service name in the namespace.
+func findGatewayServiceName(t *testing.T, ctx context.Context, c client.Client, ns string) string {
+	t.Helper()
+	var svcName string
+	pollUntil(t, 60*time.Second, 2*time.Second, "multigateway Service", func() (bool, string) {
+		svcs := &corev1.ServiceList{}
+		if err := c.List(ctx, svcs, client.InNamespace(ns)); err != nil {
+			return false, fmt.Sprintf("list error: %v", err)
+		}
+		for _, svc := range svcs.Items {
+			for _, port := range svc.Spec.Ports {
+				if port.Name == "postgres" && port.Port == 15432 {
+					svcName = svc.Name
+					return true, ""
+				}
+			}
+		}
+		return false, "no Service with postgres:15432"
+	})
+	return svcName
 }
