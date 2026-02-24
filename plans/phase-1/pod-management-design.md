@@ -307,7 +307,7 @@ Options:
 3. **Wait for upstream multigres to add a decommission RPC** — the multipooler could accept a "decommission" command via gRPC before being killed
 4. **Accept the 4-hour stale window** — multiorch handles it eventually, but during those 4 hours it'll log errors trying to reach the dead pooler
 
-**Recommendation**: Use option 1. The `UnregisterMultiPooler` API already exists and is tested. The operator should call it during the `FINISHED` state of the drain state machine, after deleting the pod and PVC.
+**Recommendation**: Use option 1. The `UnregisterMultiPooler` API already exists and is tested. The operator should call it during the `FINISHED` state of the drain state machine, after the pod's containers have fully terminated.
 
 ### Graceful Scale-Down Sequence
 
@@ -354,8 +354,9 @@ The recommended approach uses **pod annotations** to track the decommissioning s
                     │  Annotation: drain.multigres.com/    │
                     │    state=finished                    │
                     │                                      │
-                    │  Action: Delete pod, optionally      │
-                    │    delete PVC (PVCDeletionPolicy)    │
+                    │  Action: Verify Pod termination,     │
+                    │    call UnregisterMultiPooler,       │
+                    │    remove finalizer, delete PVC      │
                     └──────────────────────────────────────┘
 ```
 
@@ -875,7 +876,7 @@ It should **never** trigger a pod restart or affect pod scheduling.
 
 ### Gap 2: Scheduled Base Backups
 
-**Status**: Sugu noted in the 2026-02-23 meeting that backups are "very policy bound" and should be kept peripheral to the operator. The operator should at most be responsible for launching a command line at regular intervals, but the scheduling should be simple.
+**Status**: Sugu noted in the 2026-02-23 meeting that backups are "very policy bound" and should be kept peripheral to the operator. The operator should at most be responsible for launching a command line at regular intervals, but the scheduling should be simple. We will NOT be implementing this.
 
 **Problem**: Multigres only takes one automatic base backup — at shard bootstrap. After that, no base backups are ever taken unless someone manually triggers one via the CLI or gRPC API. Over time, this means:
 - Replica initialization replays unbounded amounts of WAL (hours/days for long-running clusters)
@@ -970,13 +971,13 @@ This means the operator sees a pod that is `NOT_SERVING` but has no way to disti
 
 **Resolution**: The `UnregisterMultiPooler` function already exists in multigres's `CellStore` interface (`go/common/topoclient/store.go:170`, implementation in `multipooler.go:283`). It deletes the pooler's etcd entry by path. It is part of the public `Store` interface and has test coverage. The multipooler's shutdown path deliberately does NOT call it (the comment says: *"If they are actually deleted, they need to be cleaned up outside the lifecycle of starting/stopping."*) — but this is by design: shutdown ≠ permanent removal.
 
-**Operator action**: The operator should call `ts.UnregisterMultiPooler()` during the `FINISHED` state of the drain state machine ([§6](#graceful-scale-down-sequence)), after deleting the pod and PVC. The data-handler already has a topology store client, so no new infrastructure is needed.
+**Operator action**: The operator should verify that the pod containers have terminated (after the pod's `DeletionTimestamp` is set), call `ts.UnregisterMultiPooler()`, remove the pod's finalizer, and delete the PVC. The data-handler already has a topology store client, so no new infrastructure is needed.
 
 ---
 
 ### Gap 6: Backup Health Reporting
 
-**Status**: GH Issue filed ([multigres/multigres#652](https://github.com/multigres/multigres/issues/652)).
+**Status**: ✅ **API Exists** — The operator can call `multiadmin` `GetBackups` RPC directly.
 
 **Problem**: The operator has no way to know whether backups are sufficient for replica initialization and disaster recovery. Specifically:
 
@@ -986,15 +987,11 @@ This means the operator sees a pod that is `NOT_SERVING` but has no way to disti
 > [!NOTE]
 > **WAL archiving health** (is the `archive_command` keeping up?) is a separate concern covered by Gap 1. Gap 6 is strictly about base backup metadata — whether usable backups exist and how old they are.
 
-**Recommended owner**: **Multigres** (expose backup metadata via gRPC or etcd)
+**Recommended owner**: **Operator** (using existing `GetBackups` RPC)
 
 **What already exists**: The `GetBackups` gRPC RPC already returns `BackupMetadata` with `status` (COMPLETE/INCOMPLETE), `backup_id` (which encodes the timestamp in pgBackRest format, e.g., `20260101-120000F`), `type` (full/diff/incr), and `backup_size_bytes`. The data is available — it's just not exposed proactively.
 
-**What we're asking multigres to do**: Either:
-- **Option A**: Write a backup health summary to the pooler's etcd entry (e.g., `last_complete_backup_id`, `last_complete_backup_type`, `backup_count`). This keeps it consistent with the Gap 4 approach (enriching the etcd entry).
-- **Option B**: The operator calls the existing `GetBackups` RPC periodically during reconciliation. This requires no multigres changes but adds a gRPC call per reconciliation.
-
-Option B is simpler and requires no multigres changes — the operator can call `GetBackups(limit=1)` on the primary's multipooler during each shard reconciliation to get the latest backup metadata.
+**Resolution**: The operator can call `GetBackups(limit=1)` on the `multiadmin` service during each shard reconciliation to get the latest backup metadata. This requires no upstream multigres changes.
 
 **What the operator does with it** (concrete actions on the **Shard** resource):
 
@@ -1109,11 +1106,11 @@ Once multigres exposes PITR via gRPC, the operator could surface it as a `Multig
 | # | Gap | Owner | Priority | Status |
 |---|---|---|---|---|
 | 1 | WAL archiving failure detection | Multigres | **High** | [Issue #654](https://github.com/multigres/multigres/issues/654) |
-| 2 | Scheduled base backups | Operator (using multigres `Backup` RPC) | **High** | Policy decision needed |
+| 2 | Scheduled base backups | Operator (using multigres `Backup` RPC) | **High** | Will NOT implement with the operator |
 | 3 | ~~S3 backup support in operator~~ | Operator | ✅ **Done** | Resolved — API, data handler, and resource handler fully wired |
 | 4 | Standby stuck without backup (not surfaced) | Multigres | **Medium** | [Issue #652](https://github.com/multigres/multigres/issues/652) (Upstream observability improvement needed) |
 | 5 | ~~Etcd cleanup on scale-down~~ | Operator (using multigres `UnregisterMultiPooler` API) | ✅ **API Exists** | Resolved — `UnregisterMultiPooler` exists in `CellStore` interface |
-| 6 | Backup health reporting | Multigres | **Medium** | [Issue #652](https://github.com/multigres/multigres/issues/652) |
+| 6 | Backup health reporting | Operator (calling `multiadmin` `GetBackups` RPC) | **Medium** | ✅ **API Exists** — Resolved without upstream multigres changes |
 | 7 | ~~pgBackRest TLS certificate handling~~ | Operator | ✅ **Done** | Resolved — `pkg/cert` infra, volume builder, and APIReader fully wired |
 | 8 | Graceful decommission RPC | Multigres | Low | [Issue #653](https://github.com/multigres/multigres/issues/653) |
 | 9 | Point-in-Time Recovery | Multigres | Low | Skipped |
