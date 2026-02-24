@@ -74,6 +74,7 @@ type MultigresClusterSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:XValidation:rule="oldSelf.all(c, c.name in self.map(x, x.name))",message="Cells cannot be removed or renamed (Append-Only)"
 	Cells []CellConfig `json:"cells,omitempty"`
 
 	// Databases defines the logical databases, table groups, and sharding.

@@ -37,6 +37,8 @@ import (
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // ============================================================================
 // Shard Component Specs (Reusable)
@@ -69,7 +71,8 @@ type PoolSpec struct {
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:rule="oldSelf.all(c, c in self)",message="Cells cannot be removed from a pool (Append-Only)"
 	Cells []CellName `json:"cells,omitempty"`
 
 	// ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
