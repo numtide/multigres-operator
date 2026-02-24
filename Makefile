@@ -72,7 +72,6 @@ KIND_CLUSTER ?= multigres-operator-dev
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
-KIND_CLUSTER_E2E ?= multigres-operator-test-e2e
 
 # Local kubeconfig for kind cluster (doesn't modify user's ~/.kube/config)
 KIND_KUBECONFIG ?= $(shell pwd)/kubeconfig.yaml
@@ -369,59 +368,15 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 	@echo "  - Combined data: coverage/combined.out (for CI/codecov)"
 
 ##@ Test End-to-End
-
-.PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
-	@command -v $(KIND) >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@case "$$($(KIND) get clusters)" in \
-		*"$(KIND_CLUSTER_E2E)"*) \
-			echo "Kind cluster '$(KIND_CLUSTER_E2E)' already exists. Skipping creation." ;; \
-		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER_E2E)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER_E2E) ;; \
-	esac
+# Each e2e test creates its own ephemeral Kind cluster via e2e-framework.
+# The Makefile only needs to build the operator image — the Go tests handle
+# cluster lifecycle, image loading, CRD installation, and operator deployment.
 
 .PHONY: test-e2e
-test-e2e: manifests generate fmt vet container setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	@echo "==> Loading operator image into e2e kind cluster..."
-	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_E2E)
-	@echo "==> Loading upstream images into e2e kind cluster..."
-	@for img in $(MULTIGRES_IMAGES); do \
-		echo "  Loading $$img..."; \
-		$(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E) 2>/dev/null || \
-			($(CONTAINER_TOOL) pull $$img && $(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E)); \
-	done
+test-e2e: manifests generate fmt vet container ## Run e2e tests (each test gets its own Kind cluster)
 	OPERATOR_IMG=$(IMG) \
-	KIND_CLUSTER=$(KIND_CLUSTER_E2E) \
-	CRD_PATH=$(shell pwd)/config/crd \
-	KUSTOMIZE_OVERLAY=$(shell pwd)/config/no-webhook \
 	REPO_ROOT=$(shell pwd) \
 	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
-	$(MAKE) cleanup-test-e2e
-
-.PHONY: test-e2e-no-cleanup
-test-e2e-no-cleanup: manifests generate fmt vet container setup-test-e2e ## Run e2e tests without cleanup (useful for debugging failures)
-	@echo "==> Loading operator image into e2e kind cluster..."
-	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_E2E)
-	@echo "==> Loading upstream images into e2e kind cluster..."
-	@for img in $(MULTIGRES_IMAGES); do \
-		echo "  Loading $$img..."; \
-		$(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E) 2>/dev/null || \
-			($(CONTAINER_TOOL) pull $$img && $(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E)); \
-	done
-	OPERATOR_IMG=$(IMG) \
-	KIND_CLUSTER=$(KIND_CLUSTER_E2E) \
-	CRD_PATH=$(shell pwd)/config/crd \
-	KUSTOMIZE_OVERLAY=$(shell pwd)/config/no-webhook \
-	REPO_ROOT=$(shell pwd) \
-	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
-
-.PHONY: cleanup-test-e2e
-cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
-	@$(KIND) delete cluster --name $(KIND_CLUSTER_E2E)
 
 ##@ Deployment
 
