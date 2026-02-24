@@ -14,6 +14,11 @@ import (
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
+const (
+	// DefaultDataVolumeSize is the minimal viable backup/data size
+	DefaultDataVolumeSize = "1Gi"
+)
+
 // BuildPoolDataPVCName constructs the PVC name for a specific pod index.
 func BuildPoolDataPVCName(shard *multigresv1alpha1.Shard, poolName, cellName string, index int) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
@@ -80,6 +85,73 @@ func BuildPoolDataPVC(
 
 	if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	return pvc, nil
+}
+
+// BuildSharedBackupPVCName builds the deterministic name for the cell-level shared backup PVC
+func BuildSharedBackupPVCName(shard *multigresv1alpha1.Shard, cellName string) string {
+	clusterName := shard.Labels["multigres.com/cluster"]
+	return nameutil.JoinWithConstraints(
+		nameutil.ServiceConstraints, // Using service constraints since PVC names follow similar rules
+		"backup-data",
+		clusterName,
+		string(shard.Spec.DatabaseName),
+		string(shard.Spec.TableGroupName),
+		string(shard.Spec.ShardName),
+		cellName,
+	)
+}
+
+// BuildSharedBackupPVC creates a ReadWriteMany PersistentVolumeClaim
+// shared by all pods in the cell.
+func BuildSharedBackupPVC(shard *multigresv1alpha1.Shard, cellName string, scheme *runtime.Scheme) (*corev1.PersistentVolumeClaim, error) {
+	pvcName := BuildSharedBackupPVCName(shard, cellName)
+	labels := buildMultiOrchLabelsWithCell(shard, cellName)
+
+	storageSize := DefaultDataVolumeSize
+	var pvcClass *string
+
+	if shard.Spec.Backup != nil &&
+		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem &&
+		shard.Spec.Backup.Filesystem != nil {
+
+		if shard.Spec.Backup.Filesystem.Storage.Size != "" {
+			storageSize = shard.Spec.Backup.Filesystem.Storage.Size
+		}
+		if shard.Spec.Backup.Filesystem.Storage.Class != "" {
+			pvcClass = &shard.Spec.Backup.Filesystem.Storage.Class
+		}
+	}
+
+	qty, err := resource.ParseQuantity(storageSize)
+	if err != nil {
+		return nil, fmt.Errorf("invalid storage size '%s': %w", storageSize, err)
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: shard.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: qty,
+				},
+			},
+		},
+	}
+
+	if pvcClass != nil && *pvcClass != "" {
+		pvc.Spec.StorageClassName = pvcClass
+	}
+
+	if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
+		return nil, fmt.Errorf("failed to set controller reference on backup PVC: %w", err)
 	}
 
 	return pvc, nil

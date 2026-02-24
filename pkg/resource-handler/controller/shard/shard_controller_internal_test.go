@@ -318,8 +318,8 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 	}
 }
 
-// TestUpdateStatus_PoolStatefulSetNotFound tests the NotFound path in updateStatus.
-func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
+// TestUpdateStatus_PoolPodsNotFound tests the NotFound path in updateStatus.
+func TestUpdateStatus_PoolPodsNotFound(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -352,10 +352,10 @@ func TestUpdateStatus_PoolStatefulSetNotFound(t *testing.T) {
 		Recorder: record.NewFakeRecorder(100),
 	}
 
-	// Call updateStatus when pool StatefulSet doesn't exist yet
+	// Call updateStatus when pool Pods don't exist yet
 	err := reconciler.updateStatus(context.Background(), shard)
 	if err != nil {
-		t.Errorf("updateStatus() should not error when pool StatefulSet not found, got: %v", err)
+		t.Errorf("updateStatus() should not error when pool Pods not found, got: %v", err)
 	}
 }
 
@@ -760,7 +760,7 @@ func TestUpdateStatus_MultiOrch(t *testing.T) {
 	}
 }
 
-// TestUpdateStatus_GetError tests error path on Get pool StatefulSet (not NotFound).
+// TestUpdateStatus_ListError tests error path on List pool Pods.
 func TestUpdateStatus_GetError(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
@@ -787,10 +787,12 @@ func TestUpdateStatus_GetError(t *testing.T) {
 		Build()
 
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-		OnGet: testutil.FailOnKeyName(
-			buildHashedPoolName(shard, "pool1", "cell1"),
-			testutil.ErrNetworkTimeout,
-		),
+		OnList: func(list client.ObjectList) error {
+			if _, ok := list.(*corev1.PodList); ok {
+				return testutil.ErrNetworkTimeout
+			}
+			return nil
+		},
 	})
 
 	reconciler := &ShardReconciler{

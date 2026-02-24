@@ -29,6 +29,9 @@ const (
 	// defaultTerminationGracePeriod gives multipooler time to gracefully close
 	// connections and set NOT_SERVING in etcd before SIGKILL.
 	defaultTerminationGracePeriod int64 = 30
+
+	// DefaultPoolReplicas is the default number of replicas for a pool cell if not specified.
+	DefaultPoolReplicas int32 = 1
 )
 
 // BuildPoolPodName constructs the deterministic name for a pool pod at the

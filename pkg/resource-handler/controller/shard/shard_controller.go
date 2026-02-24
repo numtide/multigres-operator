@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -82,7 +83,7 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
-	// Reconcile pg_hba ConfigMap first (required by all pools before StatefulSets start)
+	// Reconcile pg_hba ConfigMap first (required by all pools before starting)
 	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
 		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to reconcile pg_hba ConfigMap")
@@ -446,8 +447,8 @@ func (r *ShardReconciler) reconcileMultiOrchService(
 	return nil
 }
 
-// reconcilePool creates or updates the StatefulSet and headless Service for a pool.
-// For pools spanning multiple cells, this creates one StatefulSet per cell.
+// reconcilePool creates or updates the Pods, PVCs and headless Service for a pool.
+// For pools spanning multiple cells, this creates resources per cell.
 func (r *ShardReconciler) reconcilePool(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -462,7 +463,7 @@ func (r *ShardReconciler) reconcilePool(
 		)
 	}
 
-	// Create one StatefulSet per cell
+	// Create Pods and PVCs per cell
 	// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
 	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
@@ -815,10 +816,7 @@ func (r *ShardReconciler) cleanupDrainedPod(
 	logger := log.FromContext(ctx)
 
 	// Remove finalizer to allow Kubernetes to delete the pod
-	if slices.Contains(pod.Finalizers, PoolPodFinalizer) {
-		pod.Finalizers = slices.DeleteFunc(pod.Finalizers, func(f string) bool {
-			return f == PoolPodFinalizer
-		})
+	if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
 		if err := r.Update(ctx, pod); err != nil {
 			return fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
 		}
@@ -1307,7 +1305,6 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&multigresv1alpha1.Shard{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&appsv1.Deployment{}).
-		Owns(&appsv1.StatefulSet{}). // Kept temporarily during pod migration (removed in Commit 7)
 		Owns(&corev1.Pod{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
