@@ -385,15 +385,39 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	esac
 
 .PHONY: test-e2e
-test-e2e: manifests generate fmt vet setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
+test-e2e: manifests generate fmt vet container setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
+	@echo "==> Loading operator image into e2e kind cluster..."
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_E2E)
 	@echo "==> Loading upstream images into e2e kind cluster..."
 	@for img in $(MULTIGRES_IMAGES); do \
 		echo "  Loading $$img..."; \
 		$(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E) 2>/dev/null || \
 			($(CONTAINER_TOOL) pull $$img && $(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E)); \
 	done
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER_E2E) go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
+	OPERATOR_IMG=$(IMG) \
+	KIND_CLUSTER=$(KIND_CLUSTER_E2E) \
+	CRD_PATH=$(shell pwd)/config/crd \
+	KUSTOMIZE_OVERLAY=$(shell pwd)/config/no-webhook \
+	REPO_ROOT=$(shell pwd) \
+	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
 	$(MAKE) cleanup-test-e2e
+
+.PHONY: test-e2e-no-cleanup
+test-e2e-no-cleanup: manifests generate fmt vet container setup-test-e2e ## Run e2e tests without cleanup (useful for debugging failures)
+	@echo "==> Loading operator image into e2e kind cluster..."
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_E2E)
+	@echo "==> Loading upstream images into e2e kind cluster..."
+	@for img in $(MULTIGRES_IMAGES); do \
+		echo "  Loading $$img..."; \
+		$(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E) 2>/dev/null || \
+			($(CONTAINER_TOOL) pull $$img && $(KIND) load docker-image $$img --name $(KIND_CLUSTER_E2E)); \
+	done
+	OPERATOR_IMG=$(IMG) \
+	KIND_CLUSTER=$(KIND_CLUSTER_E2E) \
+	CRD_PATH=$(shell pwd)/config/crd \
+	KUSTOMIZE_OVERLAY=$(shell pwd)/config/no-webhook \
+	REPO_ROOT=$(shell pwd) \
+	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
