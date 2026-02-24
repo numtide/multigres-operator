@@ -371,11 +371,23 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 # Each e2e test creates its own ephemeral Kind cluster via e2e-framework.
 # The Makefile only needs to build the operator image — the Go tests handle
 # cluster lifecycle, image loading, CRD installation, and operator deployment.
+#
+# Set E2E_KEEP_CLUSTERS to control cluster cleanup:
+#   never      (default) always destroy clusters
+#   on-failure keep clusters from failed tests for debugging
+#   always     never destroy clusters
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet container ## Run e2e tests (each test gets its own Kind cluster)
 	OPERATOR_IMG=$(IMG) \
 	REPO_ROOT=$(shell pwd) \
+	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
+
+.PHONY: test-e2e-keep
+test-e2e-keep: manifests generate fmt vet container ## Run e2e tests; keep Kind clusters from failed tests for debugging
+	OPERATOR_IMG=$(IMG) \
+	REPO_ROOT=$(shell pwd) \
+	E2E_KEEP_CLUSTERS=on-failure \
 	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
 
 ##@ Deployment

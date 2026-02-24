@@ -5,6 +5,20 @@
 //
 // The Makefile builds the operator container image and loads it into Kind
 // BEFORE `go test` runs. The Go code does NOT call `make container`.
+//
+// # Cluster cleanup
+//
+// By default, Kind clusters are destroyed after each test (pass or fail).
+// Set E2E_KEEP_CLUSTERS to control this:
+//
+//	E2E_KEEP_CLUSTERS=never   (default) always destroy clusters
+//	E2E_KEEP_CLUSTERS=on-failure        keep clusters from failed tests
+//	E2E_KEEP_CLUSTERS=always            never destroy clusters
+//
+// When a cluster is kept, the test logs the cluster name and the command
+// to destroy it manually:
+//
+//	kind delete cluster --name <cluster-name>
 package testutil
 
 import (
@@ -147,10 +161,9 @@ func NewTestCluster(t *testing.T, opts ...E2EOption) *TestCluster {
 	}
 	setupFuncs = append(setupFuncs, o.setupFuncs...)
 
-	// Build finish chain.
+	// Build finish chain (log export only — destroy is conditional).
 	finishFuncs := append(o.finishFuncs,
 		envfuncs.ExportClusterLogs(clusterName, fmt.Sprintf("/tmp/e2e-logs/%s", clusterName)),
-		envfuncs.DestroyCluster(clusterName),
 	)
 
 	tc := &TestCluster{
@@ -162,6 +175,7 @@ func NewTestCluster(t *testing.T, opts ...E2EOption) *TestCluster {
 	tc.runSetup(setupFuncs)
 	t.Cleanup(func() {
 		tc.runFinish(finishFuncs)
+		tc.maybeDestroyCluster()
 	})
 
 	return tc
@@ -202,11 +216,42 @@ func (tc *TestCluster) runSetup(funcs []env.Func) {
 	tc.env = env.NewWithConfig(tc.cfg)
 }
 
-// runFinish executes finish funcs (log export, cluster destroy).
+// runFinish executes finish funcs (log export etc, but not cluster destroy).
 func (tc *TestCluster) runFinish(funcs []env.Func) {
 	ctx := context.Background()
 	for _, fn := range funcs {
 		ctx, _ = fn(ctx, tc.cfg)
+	}
+}
+
+// maybeDestroyCluster destroys the Kind cluster unless E2E_KEEP_CLUSTERS says
+// to keep it. Called from t.Cleanup after runFinish.
+func (tc *TestCluster) maybeDestroyCluster() {
+	keep := os.Getenv("E2E_KEEP_CLUSTERS")
+
+	switch keep {
+	case "always":
+		tc.t.Logf("e2e: keeping cluster %q (E2E_KEEP_CLUSTERS=always)", tc.clusterName)
+		tc.t.Logf("e2e: to clean up: kind delete cluster --name %s", tc.clusterName)
+		return
+	case "on-failure":
+		if tc.t.Failed() {
+			tc.t.Logf("e2e: keeping cluster %q for debugging (E2E_KEEP_CLUSTERS=on-failure)", tc.clusterName)
+			tc.t.Logf("e2e: inspect:  export KUBECONFIG=$(kind get kubeconfig --name %s)", tc.clusterName)
+			tc.t.Logf("e2e: logs:     kubectl logs -n multigres-operator deploy/multigres-operator-controller-manager")
+			tc.t.Logf("e2e: clean up: kind delete cluster --name %s", tc.clusterName)
+			return
+		}
+	}
+
+	// Default: destroy.
+	if tc.t.Failed() {
+		tc.t.Logf("e2e: cluster %q will be destroyed. To keep failed clusters for debugging, run with E2E_KEEP_CLUSTERS=on-failure", tc.clusterName)
+	}
+	ctx := context.Background()
+	destroyFn := envfuncs.DestroyCluster(tc.clusterName)
+	if _, err := destroyFn(ctx, tc.cfg); err != nil {
+		tc.t.Logf("e2e: failed to destroy cluster %q: %v", tc.clusterName, err)
 	}
 }
 
