@@ -1,6 +1,6 @@
 # Pod Management Design: StatefulSet → Direct Pod Management
 
-> **Status**: Draft — For Review by Multigres Team
+> **Status**: Approved — Ready for Implementation
 >
 > **Goal**: Document the design for replacing StatefulSets with direct pod management in the operator, covering pod identity, decommissioning, failure scenarios, and scope limitations.
 
