@@ -3,130 +3,92 @@
 package e2e_test
 
 import (
+	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/e2e-framework/pkg/envconf"
+	"sigs.k8s.io/e2e-framework/pkg/features"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 // TestMinimalCluster applies the equivalent of config/samples/minimal.yaml and
 // verifies the full resource tree is provisioned, all pods become ready, and
 // psql SELECT 1 succeeds through the multigateway.
-//
-// The operator runs inside the kind cluster as a real Deployment. All
-// controllers (cluster-handler, resource-handler, data-handler) are active.
-// Data-handler creates cell/database metadata in etcd; multiorch bootstraps
-// postgres; multigateway serves queries.
 func TestMinimalCluster(t *testing.T) {
-	tc := setUpCluster(t)
-	ctx := t.Context()
-	c := tc.client
-	ns := tc.namespace
+	tc, operatorSetup := newClusterWithOperator(t)
+	ns := createNamespace(t, tc)
+	c := newCRClient(t, tc)
 
-	// Apply the minimal cluster spec — operator resolves all defaults.
-	cluster := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "minimal",
-			Namespace: ns,
-		},
-		Spec: multigresv1alpha1.MultigresClusterSpec{
-			PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
-				WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
-				WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
-			},
-			Cells: []multigresv1alpha1.CellConfig{
-				{Name: "zone-a", Zone: "us-east-1a"},
-			},
-		},
-	}
+	feat := features.New("minimal-cluster").
+		Setup(operatorSetup).
+		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			t.Helper()
+			cluster := &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "minimal",
+					Namespace: ns,
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-a", Zone: "us-east-1a"},
+					},
+				},
+			}
+			if err := c.Create(ctx, cluster); err != nil {
+				t.Fatalf("Failed to create MultigresCluster: %v", err)
+			}
+			return ctx
+		}).
+		Assess("child CRDs created", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			waitForCRDCount(t, c, ns,
+				&multigresv1alpha1.TopoServerList{},
+				func(l *multigresv1alpha1.TopoServerList) int { return len(l.Items) },
+				1, "TopoServer",
+			)
+			waitForCRDCount(t, c, ns,
+				&multigresv1alpha1.CellList{},
+				func(l *multigresv1alpha1.CellList) int { return len(l.Items) },
+				1, "Cell",
+			)
+			waitForCRDCount(t, c, ns,
+				&multigresv1alpha1.TableGroupList{},
+				func(l *multigresv1alpha1.TableGroupList) int { return len(l.Items) },
+				1, "TableGroup",
+			)
+			waitForCRDCount(t, c, ns,
+				&multigresv1alpha1.ShardList{},
+				func(l *multigresv1alpha1.ShardList) int { return len(l.Items) },
+				1, "Shard",
+			)
+			return ctx
+		}).
+		Assess("leaf resources created", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			waitForStatefulSetWithContainer(t, c, ns, "etcd")
+			waitForDeploymentWithContainer(t, c, ns, "multiadmin")
+			waitForDeploymentWithContainer(t, c, ns, "multigateway")
+			waitForDeploymentWithContainer(t, c, ns, "multiorch")
+			waitForStatefulSetWithContainer(t, c, ns, "postgres")
+			waitForServiceWithPort(t, c, ns, "postgres", 15432)
+			waitForServiceWithPort(t, c, ns, "client", 2379)
+			return ctx
+		}).
+		Assess("all pods ready", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			testutil.WaitForAllPodsReady(t, tc.Clientset(), ns)
+			return ctx
+		}).
+		Assess("psql SELECT 1 through multigateway", func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
+			gwSvc := findGatewayServiceName(t, tc, ns)
+			waitForQueryServingSafe(t, tc, ns, gwSvc)
+			return ctx
+		}).
+		Feature()
 
-	if err := c.Create(ctx, cluster); err != nil {
-		t.Fatalf("Failed to create MultigresCluster: %v", err)
-	}
-
-	// ----- Verify CRDs created by the cluster controller -----
-
-	t.Run("TopoServer created", func(t *testing.T) {
-		waitForMinCount(t, ctx, c, ns,
-			func() *multigresv1alpha1.TopoServerList { return &multigresv1alpha1.TopoServerList{} },
-			func(l *multigresv1alpha1.TopoServerList) int { return len(l.Items) },
-			1, "TopoServer",
-		)
-	})
-
-	t.Run("Cell created for zone-a", func(t *testing.T) {
-		waitForMinCount(t, ctx, c, ns,
-			func() *multigresv1alpha1.CellList { return &multigresv1alpha1.CellList{} },
-			func(l *multigresv1alpha1.CellList) int {
-				count := 0
-				for _, cell := range l.Items {
-					if cell.Spec.Name == "zone-a" {
-						count++
-					}
-				}
-				return count
-			},
-			1, "Cell zone-a",
-		)
-	})
-
-	t.Run("TableGroup created", func(t *testing.T) {
-		waitForMinCount(t, ctx, c, ns,
-			func() *multigresv1alpha1.TableGroupList { return &multigresv1alpha1.TableGroupList{} },
-			func(l *multigresv1alpha1.TableGroupList) int { return len(l.Items) },
-			1, "TableGroup",
-		)
-	})
-
-	t.Run("Shard created", func(t *testing.T) {
-		waitForMinCount(t, ctx, c, ns,
-			func() *multigresv1alpha1.ShardList { return &multigresv1alpha1.ShardList{} },
-			func(l *multigresv1alpha1.ShardList) int { return len(l.Items) },
-			1, "Shard",
-		)
-	})
-
-	// ----- Verify leaf Kubernetes resources -----
-
-	t.Run("Etcd StatefulSet created", func(t *testing.T) {
-		waitForStatefulSetWithContainer(t, ctx, c, ns, "etcd")
-	})
-
-	t.Run("MultiAdmin Deployment created", func(t *testing.T) {
-		waitForDeploymentWithContainer(t, ctx, c, ns, "multiadmin")
-	})
-
-	t.Run("MultiGateway Deployment created", func(t *testing.T) {
-		waitForDeploymentWithContainer(t, ctx, c, ns, "multigateway")
-	})
-
-	t.Run("MultiOrch Deployment created", func(t *testing.T) {
-		waitForDeploymentWithContainer(t, ctx, c, ns, "multiorch")
-	})
-
-	t.Run("Postgres StatefulSet created", func(t *testing.T) {
-		waitForStatefulSetWithContainer(t, ctx, c, ns, "postgres")
-	})
-
-	t.Run("MultiGateway Service with postgres port", func(t *testing.T) {
-		waitForServiceWithPort(t, ctx, c, ns, "postgres", 15432)
-	})
-
-	t.Run("Etcd client Service", func(t *testing.T) {
-		waitForServiceWithPort(t, ctx, c, ns, "client", 2379)
-	})
-
-	// ----- Verify all pods healthy -----
-
-	t.Run("All pods ready", func(t *testing.T) {
-		waitForAllPodsReady(t, ctx, c, ns)
-	})
-
-	// ----- Verify psql connectivity through multigateway -----
-
-	t.Run("Query serving via multigateway", func(t *testing.T) {
-		gwSvc := findGatewayServiceName(t, ctx, c, ns)
-		waitForQueryServing(t, tc, gwSvc)
-	})
+	tc.Test(t, feat)
 }
