@@ -3,7 +3,9 @@
 package e2e_test
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -11,14 +13,20 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 // TestTemplatedCluster applies config/samples/templates/*.yaml followed by
-// config/samples/templated-cluster.yaml and verifies the full resource tree.
+// config/samples/templated-cluster.yaml and verifies the full resource tree
+// plus psql connectivity through multigateway.
 // This tests the template resolution path with two cells and a database.
 func TestTemplatedCluster(t *testing.T) {
-	t.Parallel()
-	_, c, ns := setUpOperator(t)
+	clusterName := fmt.Sprintf("e2e-templated-%d", time.Now().UnixNano())
+	_, c, ns := setUpOperator(t, withKindOptions(
+		testutil.WithKindCreateCluster(),
+		testutil.WithKindImages(multigresImages...),
+		testutil.WithKindCluster(clusterName),
+	))
 	ctx := t.Context()
 
 	// Create templates first (equivalent to config/samples/templates/*.yaml)
@@ -261,5 +269,17 @@ func TestTemplatedCluster(t *testing.T) {
 
 	t.Run("MultiOrch Deployment", func(t *testing.T) {
 		waitForDeploymentWithContainer(t, ctx, c, ns, "multiorch")
+	})
+
+	// ----- Verify full-stack connectivity -----
+
+	t.Run("All pods ready", func(t *testing.T) {
+		waitForAllPodsReady(t, ctx, c, ns)
+	})
+
+	t.Run("Query serving through multigateway", func(t *testing.T) {
+		gw := findGatewayServiceName(t, ctx, c, ns)
+		t.Logf("Testing psql connectivity through gateway service %q", gw)
+		waitForQueryServing(t, ctx, c, ns, gw)
 	})
 }
