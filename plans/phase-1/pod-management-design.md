@@ -302,12 +302,12 @@ This means:
 > The operator SHOULD clean up etcd topology entries when permanently removing a pod. This is an improvement over the current StatefulSet behavior.
 
 Options:
-1. **Operator calls `ts.DeleteMultiPooler()` on scale-down** — but this function doesn't exist yet in upstream multigres
+1. **Operator calls `ts.UnregisterMultiPooler()` on scale-down** — this function already exists in multigres's `CellStore` interface (`go/common/topoclient/store.go:170`, implementation in `multipooler.go:283`). It deletes the pooler's etcd entry by path. The operator's data-handler already has a topology store client and can call this directly.
 2. **Operator calls `ts.UpdateMultiPoolerFields()` to set type to DRAINED** — this exists, but the stale entry still persists
-3. **Wait for upstream multigres to add a deregister RPC** — the multipooler could accept a "decommission" command via gRPC before being killed
+3. **Wait for upstream multigres to add a decommission RPC** — the multipooler could accept a "decommission" command via gRPC before being killed
 4. **Accept the 4-hour stale window** — multiorch handles it eventually, but during those 4 hours it'll log errors trying to reach the dead pooler
 
-**Recommendation**: For Phase 1, start with option 4 (same behavior as today with StatefulSets). Track option 1 or 3 as an improvement item. The stale entries don't cause data corruption — multiorch just logs warnings trying to health-check unreachable poolers.
+**Recommendation**: Use option 1. The `UnregisterMultiPooler` API already exists and is tested. The operator should call it during the `FINISHED` state of the drain state machine, after deleting the pod and PVC.
 
 ### Graceful Scale-Down Sequence
 
@@ -840,6 +840,8 @@ Neither use case is currently automatable through multigres. Future versions cou
 
 ### Gap 1: WAL Archiving Failure Detection
 
+**Status**: GH Issue filed ([multigres/multigres#654](https://github.com/multigres/multigres/issues/654)). In the 2026-02-23 meeting, Sugu confirmed this is part of a much larger "observability hole" in multigres that will be addressed upstream. It does not block the StatefulSet to Pods migration.
+
 **Problem**: When the `archive_command` fails (PVC full, S3 credentials expired, network issue), PostgreSQL retries indefinitely and `pg_wal/` grows until the data PVC fills up, at which point PostgreSQL **stops accepting writes**. Neither multigres nor the operator currently monitors for this condition.
 
 **Recommended owner**: **Multigres** (multipooler)
@@ -872,6 +874,8 @@ It should **never** trigger a pod restart or affect pod scheduling.
 ---
 
 ### Gap 2: Scheduled Base Backups
+
+**Status**: Sugu noted in the 2026-02-23 meeting that backups are "very policy bound" and should be kept peripheral to the operator. The operator should at most be responsible for launching a command line at regular intervals, but the scheduling should be simple.
 
 **Problem**: Multigres only takes one automatic base backup — at shard bootstrap. After that, no base backups are ever taken unless someone manually triggers one via the CLI or gRPC API. Over time, this means:
 - Replica initialization replays unbounded amounts of WAL (hours/days for long-running clusters)
@@ -928,6 +932,8 @@ All three required changes are complete:
 
 ### Gap 4: Standby Stuck Waiting for Backup
 
+**Status**: GH Issue filed ([multigres/multigres#652](https://github.com/multigres/multigres/issues/652)). Sugu confirmed in the 2026-02-23 meeting that this intended behavior, but similarly to Gap 1, the lack of observability is a known issue. The operator should treat this as a reporting gap.
+
 **Problem**: When a standby has no PGDATA and no base backup exists in the repository, it enters `reasonWaitingForBackup` and **waits indefinitely**. The multipooler's `ServingStatus` stays at `NOT_SERVING` — the same status it has during normal initialization, restore-in-progress, or when pgctld is unavailable. The reason string (`reasonWaitingForBackup`) is stored only in a private field (`pgMonitorLastLoggedReason`) used for log deduplication. It is **not** exposed via gRPC, etcd, or any health endpoint.
 
 This means the operator sees a pod that is `NOT_SERVING` but has no way to distinguish between:
@@ -956,21 +962,21 @@ This means the operator sees a pod that is `NOT_SERVING` but has no way to disti
 
 ---
 
-### Gap 5: Etcd Topology Cleanup on Scale-Down
+### Gap 5: Etcd Topology Cleanup on Scale-Down — ✅ Resolved (API Exists)
 
-**Problem**: When a pod is permanently deleted (scale-down), its etcd topology entry persists forever with `ServingStatus = NOT_SERVING`. Multiorch's `forgetLongUnseenInstances()` removes it from its internal in-memory store after 4 hours, but the etcd entry is never deleted. During those 4 hours, multiorch logs errors trying to health-check the dead pooler.
+**Status**: The required API already exists in multigres. No upstream changes needed.
 
-**Recommended owner**: **Multigres** (add a `DeleteMultiPooler` or `UnregisterMultiPooler` API)
+**Problem**: When a pod is permanently deleted (scale-down), its etcd topology entry persists forever with `ServingStatus = NOT_SERVING`. Multiorch's `forgetLongUnseenInstances()` removes it from its internal in-memory store after 4 hours, but the etcd entry is never deleted.
 
-**Rationale**: The multigres code already acknowledges this gap — the comment in the unregister function says: *"If they are actually deleted, they need to be cleaned up outside the lifecycle of starting/stopping."* The proper fix is a topology API that allows permanent removal. This benefits all multigres users (not just the Kubernetes operator).
+**Resolution**: The `UnregisterMultiPooler` function already exists in multigres's `CellStore` interface (`go/common/topoclient/store.go:170`, implementation in `multipooler.go:283`). It deletes the pooler's etcd entry by path. It is part of the public `Store` interface and has test coverage. The multipooler's shutdown path deliberately does NOT call it (the comment says: *"If they are actually deleted, they need to be cleaned up outside the lifecycle of starting/stopping."*) — but this is by design: shutdown ≠ permanent removal.
 
-**Operator action**: Once the API exists, the operator should call it during the `FINISHED` state of the drain state machine ([§6](#graceful-scale-down-sequence)), after deleting the pod and PVC.
-
-**Interim**: Accept the 4-hour stale window. This is the same behavior as today with StatefulSets.
+**Operator action**: The operator should call `ts.UnregisterMultiPooler()` during the `FINISHED` state of the drain state machine ([§6](#graceful-scale-down-sequence)), after deleting the pod and PVC. The data-handler already has a topology store client, so no new infrastructure is needed.
 
 ---
 
 ### Gap 6: Backup Health Reporting
+
+**Status**: GH Issue filed ([multigres/multigres#652](https://github.com/multigres/multigres/issues/652)).
 
 **Problem**: The operator has no way to know whether backups are sufficient for replica initialization and disaster recovery. Specifically:
 
@@ -1061,6 +1067,8 @@ Both modes use a unified volume mounting strategy:
 
 ### Gap 8: Graceful Decommission RPC
 
+**Status**: GH Issue filed ([multigres/multigres#653](https://github.com/multigres/multigres/issues/653)). Sugu noted in the 2026-02-23 meeting that there is ongoing internal debate in the multigres team about handling this. Additionally, the team discussed that it is acceptable for the operator to read from the topology to determine pod status (like `DRAINED`), provided we track these topology accesses carefully.
+
 **Problem**: Before the operator deletes a pod during scale-down, it would be ideal to tell the multipooler to decommission itself gracefully: drain active connections, remove itself from `synchronous_standby_names`, set type to `DRAINED` in etcd, and then exit cleanly. Currently the operator must do this piecemeal by calling `UpdateSynchronousStandbyList(REMOVE)` on the primary, then deleting the pod.
 
 **Recommended owner**: **Multigres** (add a `Decommission` gRPC RPC)
@@ -1077,6 +1085,8 @@ Neither benefit addresses a user-visible problem today. The investment is likely
 ---
 
 ### Gap 9: Point-in-Time Recovery (PITR)
+
+**Status**: Skipped. Per the 2026-02-23 meeting, this is a distinct product line that is far out right now.
 
 **Problem**: pgBackRest natively supports PITR, but multigres `executePgBackrestRestore` always uses `--type=standby` (restore to latest state). There is no way to restore to a specific timestamp.
 
@@ -1096,14 +1106,17 @@ Once multigres exposes PITR via gRPC, the operator could surface it as a `Multig
 
 ### Summary Table
 
-| # | Gap | Owner | Priority | Blocker? |
+| # | Gap | Owner | Priority | Status |
 |---|---|---|---|---|
-| 1 | WAL archiving failure detection | Multigres | **High** | No, but risks silent data loss |
-| 2 | Scheduled base backups | Operator (using multigres `Backup` RPC) | **High** | No, but restore times grow unboundedly |
+| 1 | WAL archiving failure detection | Multigres | **High** | [Issue #654](https://github.com/multigres/multigres/issues/654) |
+| 2 | Scheduled base backups | Operator (using multigres `Backup` RPC) | **High** | Policy decision needed |
 | 3 | ~~S3 backup support in operator~~ | Operator | ✅ **Done** | Resolved — API, data handler, and resource handler fully wired |
-| 4 | Standby stuck without backup (not surfaced) | Multigres | **Medium** | No, but blocks scale-up silently |
-| 5 | Etcd cleanup on scale-down | Multigres | **Medium** | No — 4-hour stale window is acceptable |
-| 6 | Backup health reporting | Multigres | **Medium** | No, but the operator flies blind on backup state |
+| 4 | Standby stuck without backup (not surfaced) | Multigres | **Medium** | [Issue #652](https://github.com/multigres/multigres/issues/652) (Upstream observability improvement needed) |
+| 5 | ~~Etcd cleanup on scale-down~~ | Operator (using multigres `UnregisterMultiPooler` API) | ✅ **API Exists** | Resolved — `UnregisterMultiPooler` exists in `CellStore` interface |
+| 6 | Backup health reporting | Multigres | **Medium** | [Issue #652](https://github.com/multigres/multigres/issues/652) |
 | 7 | ~~pgBackRest TLS certificate handling~~ | Operator | ✅ **Done** | Resolved — `pkg/cert` infra, volume builder, and APIReader fully wired |
-| 8 | Graceful decommission RPC | Multigres | Low | No — drain state machine works without it |
-| 9 | Point-in-Time Recovery | Multigres | Low | No — advanced feature for later |
+| 8 | Graceful decommission RPC | Multigres | Low | [Issue #653](https://github.com/multigres/multigres/issues/653) |
+| 9 | Point-in-Time Recovery | Multigres | Low | Skipped |
+
+> [!NOTE]
+> During the 2026-02-23 design review meeting, it was approved for the operator to **read from the etcd topology** in order to correctly report status and correctly sequence operations like scale-down. The operator should be thoughtful to avoid excessive coupling, and interactions should be cataloged and audited. None of these upstream gaps block the StatefulSet-to-Direct-Pod migration.
