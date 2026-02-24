@@ -656,7 +656,9 @@ func (r *Resolver) validateCellTopology(
 			for _, cellName := range tc.cells {
 				warnings = append(warnings, fmt.Sprintf(
 					"cell '%s': no nodes currently match %s=%s; pods will be Pending until matching nodes are available",
-					cellName, tc.key, tc.value,
+					cellName,
+					tc.key,
+					tc.value,
 				))
 			}
 		}
