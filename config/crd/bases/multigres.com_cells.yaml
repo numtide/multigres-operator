@@ -1441,8 +1441,8 @@ spec:
             - name
             type: object
             x-kubernetes-validations:
-            - message: must specify either 'zone' or 'region', but not both
-              rule: has(self.zone) != has(self.region)
+            - message: cannot specify both 'zone' and 'region'
+              rule: '!(has(self.zone) && has(self.region))'
           status:
             description: CellStatus defines the observed state of Cell.
             properties:

@@ -123,7 +123,7 @@ func TestCEL_MultigresCluster(t *testing.T) {
 					},
 				},
 			},
-			expectError: "must specify either 'zone' or 'region', but not both",
+			expectError: "cannot specify both 'zone' and 'region'",
 		},
 		{
 			name: "Invalid Shard: Both Spec and Overrides",

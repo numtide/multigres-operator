@@ -140,6 +140,17 @@ spec:
                   rule: self.type != 's3' || has(self.s3)
                 - message: filesystem config is required when type is 'filesystem'
                   rule: self.type != 'filesystem' || has(self.filesystem)
+              cellTopologyLabels:
+                additionalProperties:
+                  additionalProperties:
+                    type: string
+                  type: object
+                description: |-
+                  CellTopologyLabels maps cell names to their topology nodeSelector labels.
+                  Each entry is a map like {"topology.kubernetes.io/zone": "us-east-1a"}.
+                  Propagated from the cluster's cell configs so the shard controller
+                  can inject nodeSelector without looking up Cell CRs.
+                type: object
               databaseName:
                 description: DatabaseName is the name of the logical database this
                   shard belongs to.

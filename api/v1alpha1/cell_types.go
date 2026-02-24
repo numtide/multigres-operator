@@ -43,7 +43,7 @@ import (
 // Cell is a child CR managed by MultigresCluster.
 
 // CellSpec defines the desired state of Cell.
-// +kubebuilder:validation:XValidation:rule="has(self.zone) != has(self.region)",message="must specify either 'zone' or 'region', but not both"
+// +kubebuilder:validation:XValidation:rule="!(has(self.zone) && has(self.region))",message="cannot specify both 'zone' and 'region'"
 type CellSpec struct {
 	// Name is the logical name of the cell.
 	Name CellName `json:"name"`

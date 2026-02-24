@@ -356,6 +356,12 @@ func (r *Resolver) ValidateClusterLogic(
 		validCells[c.Name] = true
 	}
 
+	// ------------------------------------------------------------------
+	// 0. Cell Topology Validation (Warnings Only)
+	// ------------------------------------------------------------------
+	topologyWarnings := r.validateCellTopology(ctx, cluster.Spec.Cells)
+	warnings = append(warnings, topologyWarnings...)
+
 	// Iterate through every Shard and "Simulate" Resolution
 	for _, db := range cluster.Spec.Databases {
 		dbBackup := multigresv1alpha1.MergeBackupConfig(db.Backup, cluster.Spec.Backup)
@@ -570,4 +576,91 @@ func (r *Resolver) hasDefaultStorageClass(ctx context.Context) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// validateCellTopology checks if nodes exist in the cluster matching each cell's
+// zone or region topology label. Returns warnings (not errors) for any cells
+// whose topology labels don't match any nodes — pods targeting those cells will
+// remain Pending until matching nodes appear.
+func (r *Resolver) validateCellTopology(
+	ctx context.Context,
+	cells []multigresv1alpha1.CellConfig,
+) admission.Warnings {
+	var warnings admission.Warnings
+
+	// Collect unique topology checks needed
+	type topoCheck struct {
+		key   string
+		value string
+		cells []string
+	}
+	checks := make(map[string]*topoCheck)
+	for _, cell := range cells {
+		var key, value string
+		switch {
+		case cell.Zone != "":
+			key = "topology.kubernetes.io/zone"
+			value = string(cell.Zone)
+		case cell.Region != "":
+			key = "topology.kubernetes.io/region"
+			value = string(cell.Region)
+		default:
+			continue
+		}
+		k := key + "=" + value
+		if tc, ok := checks[k]; ok {
+			tc.cells = append(tc.cells, string(cell.Name))
+		} else {
+			checks[k] = &topoCheck{
+				key:   key,
+				value: value,
+				cells: []string{string(cell.Name)},
+			}
+		}
+	}
+
+	if len(checks) == 0 {
+		return nil
+	}
+
+	// List all nodes once
+	var nodeList corev1.NodeList
+	if err := r.Client.List(ctx, &nodeList); err != nil {
+		// If we can't list nodes, skip topology validation silently.
+		// RBAC might not be configured yet.
+		return nil
+	}
+
+	// Build a set of available topology values
+	availableZones := make(map[string]bool)
+	availableRegions := make(map[string]bool)
+	for i := range nodeList.Items {
+		labels := nodeList.Items[i].Labels
+		if z, ok := labels["topology.kubernetes.io/zone"]; ok {
+			availableZones[z] = true
+		}
+		if reg, ok := labels["topology.kubernetes.io/region"]; ok {
+			availableRegions[reg] = true
+		}
+	}
+
+	for _, tc := range checks {
+		var found bool
+		switch tc.key {
+		case "topology.kubernetes.io/zone":
+			found = availableZones[tc.value]
+		case "topology.kubernetes.io/region":
+			found = availableRegions[tc.value]
+		}
+		if !found {
+			for _, cellName := range tc.cells {
+				warnings = append(warnings, fmt.Sprintf(
+					"cell '%s': no nodes currently match %s=%s; pods will be Pending until matching nodes are available",
+					cellName, tc.key, tc.value,
+				))
+			}
+		}
+	}
+
+	return warnings
 }

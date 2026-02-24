@@ -2427,8 +2427,8 @@ spec:
                     rule: '!(has(self.spec) && has(self.cellTemplate))'
                   - message: cannot specify both 'spec' and 'overrides'
                     rule: '!(has(self.spec) && has(self.overrides))'
-                  - message: must specify either 'zone' or 'region', but not both
-                    rule: has(self.zone) != has(self.region)
+                  - message: cannot specify both 'zone' and 'region'
+                    rule: '!(has(self.zone) && has(self.region))'
                 maxItems: 50
                 type: array
                 x-kubernetes-list-map-keys:

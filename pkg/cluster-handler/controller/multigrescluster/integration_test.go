@@ -442,6 +442,9 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						OwnerReferences: clusterOwnerRefs(t, clusterName),
 					},
 					Spec: multigresv1alpha1.TableGroupSpec{
+						CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
+							"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
+						},
 						DatabaseName:   "postgres",
 						TableGroupName: "default",
 						IsDefault:      true,
@@ -730,6 +733,9 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
 					},
 					Spec: multigresv1alpha1.TableGroupSpec{
+						CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
+							"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
+						},
 						DatabaseName:   "postgres",
 						TableGroupName: "default",
 						IsDefault:      true,
@@ -1016,6 +1022,9 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						OwnerReferences: clusterOwnerRefs(t, "lazy-cluster"),
 					},
 					Spec: multigresv1alpha1.TableGroupSpec{
+						CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
+							"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
+						},
 						DatabaseName:   "postgres",
 						TableGroupName: "default",
 						IsDefault:      true,

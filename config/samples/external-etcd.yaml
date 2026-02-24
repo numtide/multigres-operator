@@ -25,12 +25,12 @@ spec:
     # Cell A: Standard Configuration
     # Uses the Global External Etcd defined above.
     - name: "zone-a"
-      zone: "us-east-1a"
+      # zone: "us-east-1a"
 
     # Cell B: High-Isolation Configuration
     # This cell has its own dedicated, Operator-managed Etcd cluster.
     - name: "zone-b-isolated"
-      zone: "us-east-1b"
+      # zone: "us-east-1b"
       spec:
         localTopoServer:
           etcd:

@@ -77,6 +77,11 @@ type TableGroupSpec struct {
 	// Backup is the backup configuration inherited from MultigresCluster -> Database -> TableGroup.
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
+
+	// CellTopologyLabels maps cell names to their topology nodeSelector labels.
+	// Propagated from the cluster's cell configs.
+	// +optional
+	CellTopologyLabels map[CellName]map[string]string `json:"cellTopologyLabels,omitempty"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,

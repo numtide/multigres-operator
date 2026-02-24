@@ -60,7 +60,8 @@ func BuildTableGroup(
 				tgCfg.Backup,
 				multigresv1alpha1.MergeBackupConfig(dbCfg.Backup, cluster.Spec.Backup),
 			),
-			Observability: cluster.Spec.Observability,
+			Observability:      cluster.Spec.Observability,
+			CellTopologyLabels: buildCellTopologyLabels(cluster),
 		},
 	}
 
@@ -69,4 +70,29 @@ func BuildTableGroup(
 	}
 
 	return tgCR, nil
+}
+
+// buildCellTopologyLabels builds a map of cell name → nodeSelector labels from the cluster's cells.
+// Zone cells get {"topology.kubernetes.io/zone": value}, region cells get
+// {"topology.kubernetes.io/region": value}. Cells without zone or region are omitted.
+func buildCellTopologyLabels(
+	cluster *multigresv1alpha1.MultigresCluster,
+) map[multigresv1alpha1.CellName]map[string]string {
+	m := make(map[multigresv1alpha1.CellName]map[string]string)
+	for _, cell := range cluster.Spec.Cells {
+		switch {
+		case cell.Zone != "":
+			m[cell.Name] = map[string]string{
+				"topology.kubernetes.io/zone": string(cell.Zone),
+			}
+		case cell.Region != "":
+			m[cell.Name] = map[string]string{
+				"topology.kubernetes.io/region": string(cell.Region),
+			}
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }

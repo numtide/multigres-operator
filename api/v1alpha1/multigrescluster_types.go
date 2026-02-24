@@ -40,6 +40,7 @@ import (
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,resourceNames=multigres-operator-mutating-webhook-configuration,verbs=get;update;patch
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,resourceNames=multigres-operator-validating-webhook-configuration,verbs=get;update;patch
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=list;watch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=list
 
 // ============================================================================
 // MultigresClusterSpec Spec (User-editable API)
@@ -186,7 +187,7 @@ type MultiAdminWebConfig struct {
 // CellConfig defines a cell in the cluster.
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.cellTemplate))",message="cannot specify both 'spec' and 'cellTemplate'"
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.overrides))",message="cannot specify both 'spec' and 'overrides'"
-// +kubebuilder:validation:XValidation:rule="has(self.zone) != has(self.region)",message="must specify either 'zone' or 'region', but not both"
+// +kubebuilder:validation:XValidation:rule="!(has(self.zone) && has(self.region))",message="cannot specify both 'zone' and 'region'"
 type CellConfig struct {
 	// Name is the logical name of the cell.
 	Name CellName `json:"name"`

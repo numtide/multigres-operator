@@ -287,6 +287,10 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				Namespace: testNamespace,
 			},
 			Spec: multigresv1alpha1.TableGroupSpec{
+				CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
+					"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
+					"zone-c": {"topology.kubernetes.io/zone": "us-east-1c"},
+				},
 				DatabaseName:   "postgres",
 				TableGroupName: "default",
 				IsDefault:      true,
@@ -557,6 +561,9 @@ func TestMultigresCluster_TemplateOverrides(t *testing.T) {
 			Namespace: testNamespace,
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{
+			CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
+				"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
+			},
 			DatabaseName:   "postgres",
 			TableGroupName: "default",
 			IsDefault:      true,

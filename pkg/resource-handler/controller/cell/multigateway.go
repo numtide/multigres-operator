@@ -169,7 +169,8 @@ func BuildMultiGatewayDeployment(
 							},
 						},
 					},
-					Affinity: cell.Spec.MultiGateway.Affinity,
+					Affinity:     cell.Spec.MultiGateway.Affinity,
+					NodeSelector: buildCellNodeSelector(cell),
 				},
 			},
 		},
@@ -235,4 +236,21 @@ func BuildMultiGatewayService(
 	}
 
 	return svc, nil
+}
+
+// buildCellNodeSelector returns a nodeSelector map for the cell's topology.
+// Returns nil if the cell has no zone or region, which means no scheduling constraint.
+func buildCellNodeSelector(cell *multigresv1alpha1.Cell) map[string]string {
+	switch {
+	case cell.Spec.Zone != "":
+		return map[string]string{
+			"topology.kubernetes.io/zone": string(cell.Spec.Zone),
+		}
+	case cell.Spec.Region != "":
+		return map[string]string{
+			"topology.kubernetes.io/region": string(cell.Spec.Region),
+		}
+	default:
+		return nil
+	}
 }

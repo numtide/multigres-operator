@@ -723,9 +723,8 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name:   "zone-topo",
-					Zone:   "us-east-1a",
-					Region: "us-east-1",
+					Name: "zone-topo",
+					Zone: "us-east-1a",
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
@@ -745,7 +744,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/zone":           "us-east-1a",
-						"multigres.com/region":         "us-east-1",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -775,7 +773,6 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								"app.kubernetes.io/part-of":    "multigres",
 								"app.kubernetes.io/managed-by": "multigres-operator",
 								"multigres.com/zone":           "us-east-1a",
-								"multigres.com/region":         "us-east-1",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -839,6 +836,9 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										PeriodSeconds: 5,
 									},
 								},
+							},
+							NodeSelector: map[string]string{
+								"topology.kubernetes.io/zone": "us-east-1a",
 							},
 						},
 					},
@@ -1059,9 +1059,8 @@ func TestBuildMultiGatewayService(t *testing.T) {
 					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.CellSpec{
-					Name:   "zone-topo",
-					Zone:   "us-east-1a",
-					Region: "us-east-1",
+					Name: "zone-topo",
+					Zone: "us-east-1a",
 				},
 			},
 			scheme: scheme,
@@ -1076,7 +1075,6 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						"app.kubernetes.io/part-of":    "multigres",
 						"app.kubernetes.io/managed-by": "multigres-operator",
 						"multigres.com/zone":           "us-east-1a",
-						"multigres.com/region":         "us-east-1",
 					},
 					OwnerReferences: []metav1.OwnerReference{
 						{
