@@ -5,10 +5,10 @@ go 1.25.2
 require (
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
-	github.com/numtide/multigres-operator/api v0.0.0-20260223124843-d875825fac0e
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260223124843-d875825fac0e
-	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260223124843-d875825fac0e
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260223124843-d875825fac0e
+	github.com/numtide/multigres-operator/api v0.0.0-20260224095621-36608e864839
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260224095621-36608e864839
+	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260224095621-36608e864839
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260224095621-36608e864839
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
