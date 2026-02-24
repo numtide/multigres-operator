@@ -5,6 +5,8 @@ import (
 	"crypto/x509"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -580,9 +582,166 @@ func (r *ShardReconciler) reconcilePoolPods(
 		}
 	}
 
-	// 3. Record drift metric
+	// 3. Handle scale-down and pod cleanup
+	var extraPods []*corev1.Pod
+	var readyForDeletion []*corev1.Pod
+
+	for _, pod := range existingPods {
+		drainState := pod.Annotations[metadata.AnnotationDrainState]
+
+		if drainState == metadata.DrainStateReadyForDeletion {
+			readyForDeletion = append(readyForDeletion, pod)
+			continue
+		}
+
+		lastDash := strings.LastIndex(pod.Name, "-")
+		if lastDash == -1 {
+			continue
+		}
+		index, err := strconv.Atoi(pod.Name[lastDash+1:])
+		if err != nil {
+			logger.Error(err, "Failed to parse pod index", "podName", pod.Name)
+			continue
+		}
+
+		// If the pod's index is >= desired replicas, it's an extra pod.
+		if int32(index) >= replicas {
+			extraPods = append(extraPods, pod)
+		}
+	}
+
+	// 3a. Cleanup pods ready for deletion
+	for _, pod := range readyForDeletion {
+		if err := r.cleanupDrainedPod(ctx, shard, pod, poolName, poolSpec); err != nil {
+			return fmt.Errorf("failed to cleanup drained pod %s: %w", pod.Name, err)
+		}
+	}
+
+	// 3b. Initiate scale-down for extra pods
+	if len(extraPods) > 0 {
+		podToDrain := r.selectPodToDrain(extraPods, shard)
+		if podToDrain != nil {
+			drainState := podToDrain.Annotations[metadata.AnnotationDrainState]
+			if drainState == "" {
+				if podToDrain.Annotations == nil {
+					podToDrain.Annotations = make(map[string]string)
+				}
+				podToDrain.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+
+				if err := r.Update(ctx, podToDrain); err != nil {
+					return fmt.Errorf("failed to request drain for pod %s: %w", podToDrain.Name, err)
+				}
+				logger.Info("Requested drain for pod", "pod", podToDrain.Name)
+				r.Recorder.Eventf(shard, "Normal", "DrainStarted", "Initiated drain for pod %s", podToDrain.Name)
+			}
+		}
+	}
+
+	// 4. Record drift metric
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 	monitoring.SetPoolPodsDrifted(clusterName, shard.Name, poolName, cellName, shard.Namespace, driftedCount)
+
+	return nil
+}
+
+// selectPodToDrain chooses the best pod to drain during scale-down.
+// Preference: non-ready, non-primary, highest index.
+func (r *ShardReconciler) selectPodToDrain(
+	extraPods []*corev1.Pod,
+	shard *multigresv1alpha1.Shard,
+) *corev1.Pod {
+	if len(extraPods) == 0 {
+		return nil
+	}
+
+	var bestPod *corev1.Pod
+	var bestScore int
+
+	for _, pod := range extraPods {
+		score := 0
+
+		lastDash := strings.LastIndex(pod.Name, "-")
+		if lastDash != -1 {
+			idx, _ := strconv.Atoi(pod.Name[lastDash+1:])
+			score += idx // higher index gets higher score
+		}
+
+		// Avoid PRIMARY if possible
+		if shard.Status.PodRoles != nil {
+			// In etcd, roles are sometimes recorded as "PRIMARY", depending on implementation.
+			// Compare loosely. We assume data-handler populates the raw pb enum string.
+			if role, ok := shard.Status.PodRoles[pod.Name]; ok && role == "PRIMARY" {
+				score -= 1000
+			}
+		}
+
+		// Prefer non-ready pods
+		isReady := false
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+				isReady = true
+				break
+			}
+		}
+		if !isReady {
+			score += 500
+		}
+
+		if bestPod == nil || score > bestScore {
+			bestPod = pod
+			bestScore = score
+		}
+	}
+
+	return bestPod
+}
+
+func (r *ShardReconciler) cleanupDrainedPod(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	pod *corev1.Pod,
+	poolName string,
+	poolSpec multigresv1alpha1.PoolSpec,
+) error {
+	logger := log.FromContext(ctx)
+
+	// Remove finalizer to allow Kubernetes to delete the pod
+	if slices.Contains(pod.Finalizers, PoolPodFinalizer) {
+		pod.Finalizers = slices.DeleteFunc(pod.Finalizers, func(f string) bool {
+			return f == PoolPodFinalizer
+		})
+		if err := r.Update(ctx, pod); err != nil {
+			return fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
+		}
+		logger.Info("Removed finalizer from drained pod", "pod", pod.Name)
+		r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Completed drain for pod %s", pod.Name)
+	}
+
+	// Handle PVC deletion based on policy
+	policy := multigresv1alpha1.PVCDeletionPolicy{WhenScaled: multigresv1alpha1.RetainPVCRetentionPolicy}
+	if poolSpec.PVCDeletionPolicy != nil && poolSpec.PVCDeletionPolicy.WhenScaled != "" {
+		policy = *poolSpec.PVCDeletionPolicy
+	} else if shard.Spec.PVCDeletionPolicy != nil && shard.Spec.PVCDeletionPolicy.WhenScaled != "" {
+		policy = *shard.Spec.PVCDeletionPolicy
+	}
+
+	if policy.WhenScaled == multigresv1alpha1.DeletePVCRetentionPolicy {
+		lastDash := strings.LastIndex(pod.Name, "-")
+		if lastDash != -1 {
+			idx, _ := strconv.Atoi(pod.Name[lastDash+1:])
+			cellName := pod.Labels[metadata.LabelMultigresCell]
+			pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
+			pvc := &corev1.PersistentVolumeClaim{}
+			err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pvcName}, pvc)
+			if err == nil {
+				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
+					logger.Error(err, "Failed to delete PVC for scaled down pod", "pvc", pvcName)
+				} else {
+					logger.Info("Deleted PVC for scaled down pod", "pvc", pvcName)
+				}
+			}
+		}
+	}
 
 	return nil
 }

@@ -93,6 +93,19 @@ const (
 
 	// AnnotationSpecHash stores the hash of operator-managed pod spec fields.
 	AnnotationSpecHash = "multigres.com/spec-hash"
+
+	// AnnotationDrainState is used to coordinate graceful scale down between
+	// the resource-handler (Kubernetes) and data-handler (etcd).
+	AnnotationDrainState = "drain.multigres.com/state"
+
+	// DrainStateRequested indicates the resource-handler wants this pod removed.
+	DrainStateRequested = "requested"
+	// DrainStateDraining indicates the data-handler is removing the pod from synchronous standby.
+	DrainStateDraining = "draining"
+	// DrainStateAcknowledged indicates the data-handler verified removal from synchronous standby.
+	DrainStateAcknowledged = "acknowledged"
+	// DrainStateReadyForDeletion indicates the data-handler unregistered the pod from etcd.
+	DrainStateReadyForDeletion = "ready-for-deletion"
 )
 
 const (

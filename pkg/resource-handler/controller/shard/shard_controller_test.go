@@ -1398,3 +1398,66 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		}
 	})
 }
+
+func TestScaleDownPodSelection(t *testing.T) {
+	t.Parallel()
+	r := &ShardReconciler{}
+
+	shard := &multigresv1alpha1.Shard{
+		Status: multigresv1alpha1.ShardStatus{
+			PodRoles: map[string]string{
+				"pod-0": "REPLICA",
+				"pod-1": "PRIMARY",
+				"pod-2": "REPLICA",
+			},
+		},
+	}
+
+	pods := []*corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-0"},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-1"},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-2"},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+	}
+
+	// 1. All ready, 1 is primary. Should pick 2 (highest index and not primary)
+	selected := r.selectPodToDrain(pods, shard)
+	if selected == nil || selected.Name != "pod-2" {
+		t.Errorf("Expected pod-2 to be selected, got %v", selected)
+	}
+
+	// 2. Pod 0 is NOT ready. Should pick 0.
+	pods[0].Status.Conditions[0].Status = corev1.ConditionFalse
+	selected = r.selectPodToDrain(pods, shard)
+	if selected == nil || selected.Name != "pod-0" {
+		t.Errorf("Expected pod-0 (not ready) to be selected, got %v", selected)
+	}
+
+	// 3. Delete pod Roles, shouldn't panic, falls back to highest index
+	shard.Status.PodRoles = nil
+	pods[0].Status.Conditions[0].Status = corev1.ConditionTrue
+	selected = r.selectPodToDrain(pods, shard)
+	if selected == nil || selected.Name != "pod-2" {
+		t.Errorf("Expected pod-2 (highest index) to be selected, got %v", selected)
+	}
+}

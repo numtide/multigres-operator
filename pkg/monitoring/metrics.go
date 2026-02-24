@@ -91,6 +91,14 @@ var (
 		},
 		[]string{"cluster", "shard", "namespace"},
 	)
+
+	drainOperationsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "multigres_operator_drain_operations_total",
+			Help: "Total number of graceful pod drain operations.",
+		},
+		[]string{"cluster", "shard", "result"},
+	)
 )
 
 func init() {
@@ -105,6 +113,7 @@ func init() {
 		webhookRequestTotal,
 		webhookRequestDuration,
 		lastBackupAgeSeconds,
+		drainOperationsTotal,
 	)
 }
 
@@ -122,5 +131,6 @@ func Collectors() []prometheus.Collector {
 		webhookRequestTotal,
 		webhookRequestDuration,
 		lastBackupAgeSeconds,
+		drainOperationsTotal,
 	}
 }

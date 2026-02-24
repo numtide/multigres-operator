@@ -12,17 +12,24 @@ import (
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"k8s.io/client-go/tools/record"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 const (
@@ -147,6 +154,80 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			)
 			logger.Error(err, "Failed to register database in topology")
 			return ctrl.Result{}, err
+		}
+		childSpan.End()
+	}
+
+	// Update PodRoles and execute Drain State Machine
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.DrainStateMachine")
+		podList := &corev1.PodList{}
+		lbls := map[string]string{
+			metadata.LabelMultigresShard: shard.Name,
+		}
+		if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(lbls)); err != nil {
+			logger.Error(err, "Failed to list pods for shard")
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			return ctrl.Result{}, err
+		}
+
+		store, err := r.getTopoStore(shard)
+		if err == nil {
+			if shard.Status.PodRoles == nil {
+				shard.Status.PodRoles = make(map[string]string)
+			}
+			rolesChanged := false
+
+			cells := collectCells(shard)
+			for _, cell := range cells {
+				poolers, cerr := store.GetMultiPoolersByCell(ctx, cell, nil)
+				if cerr == nil {
+					for _, p := range poolers {
+						roleName := "REPLICA"
+						if p.Type == 1 { // clustermetadata.PoolerType_PRIMARY
+							roleName = "PRIMARY"
+						}
+						hostname := p.MultiPooler.GetHostname()
+						if hostname == "" {
+							hostname = fmt.Sprintf("%v", p.Id)
+						}
+
+						if shard.Status.PodRoles[hostname] != roleName {
+							shard.Status.PodRoles[hostname] = roleName
+							rolesChanged = true
+						}
+					}
+				}
+			}
+
+			if rolesChanged {
+				if err := r.Status().Update(ctx, shard); err != nil {
+					logger.Error(err, "Failed to update shard pod roles")
+					// continue, non-fatal for drain
+				}
+			}
+
+			requeue := false
+			for i := range podList.Items {
+				pod := &podList.Items[i]
+				if pod.Annotations[metadata.AnnotationDrainState] != "" {
+					shouldRequeue, derr := r.executeDrainStateMachine(ctx, shard, pod)
+					if derr != nil {
+						logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
+					}
+					if shouldRequeue {
+						requeue = true
+					}
+				}
+			}
+			store.Close()
+			if requeue {
+				childSpan.End()
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+			}
+		} else {
+			logger.Error(err, "Failed to get topo store, cannot update roles or execute drain")
 		}
 		childSpan.End()
 	}
@@ -466,5 +547,35 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 		Named("shard-datahandler").
 		For(&multigresv1alpha1.Shard{}).
 		WithOptions(controllerOpts).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.podToShard),
+			builder.WithPredicates(predicate.Funcs{
+				CreateFunc: func(e event.CreateEvent) bool {
+					return e.Object.GetAnnotations()[metadata.AnnotationDrainState] != ""
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldState := e.ObjectOld.GetAnnotations()[metadata.AnnotationDrainState]
+					newState := e.ObjectNew.GetAnnotations()[metadata.AnnotationDrainState]
+					return newState != "" && oldState != newState
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					return false
+				},
+			}),
+		).
 		Complete(r)
+}
+
+func (r *ShardReconciler) podToShard(ctx context.Context, o client.Object) []ctrl.Request {
+	shardName := o.GetLabels()[metadata.LabelMultigresShard]
+	if shardName == "" {
+		return nil
+	}
+	return []ctrl.Request{
+		{NamespacedName: types.NamespacedName{
+			Name:      shardName,
+			Namespace: o.GetNamespace(),
+		}},
+	}
 }

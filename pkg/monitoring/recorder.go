@@ -55,3 +55,8 @@ func RecordWebhookRequest(operation, resource string, err error, duration time.D
 func SetLastBackupAge(cluster, shard, namespace string, age time.Duration) {
 	lastBackupAgeSeconds.WithLabelValues(cluster, shard, namespace).Set(age.Seconds())
 }
+
+// IncrementDrainOperations increments the counter for drain operations.
+func IncrementDrainOperations(cluster, shard, result string) {
+	drainOperationsTotal.WithLabelValues(cluster, shard, result).Inc()
+}
