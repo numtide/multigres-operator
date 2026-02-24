@@ -17,17 +17,13 @@ import (
 )
 
 // TestClusterDeletion verifies that deleting a MultigresCluster triggers
-// cascading deletion of all child resources. This is something envtest cannot
-// test because it doesn't run kube-controller-manager (which handles GC).
+// cascading deletion of all child resources, including data-handler cleanup
+// of etcd topology entries.
 func TestClusterDeletion(t *testing.T) {
-	t.Parallel()
-	// Skip data-handler controllers: they add finalizers to Cells/Shards
-	// that require a live etcd topology server. Without a healthy topo
-	// server the finalizers block deletion indefinitely. This test focuses
-	// on Kubernetes GC cascading deletion via owner references, not data
-	// plane cleanup.
-	_, c, ns := setUpOperator(t, withoutDataHandler())
+	tc := setUpCluster(t)
 	ctx := t.Context()
+	c := tc.client
+	ns := tc.namespace
 
 	// Create a minimal cluster.
 	cluster := &multigresv1alpha1.MultigresCluster{
@@ -50,11 +46,8 @@ func TestClusterDeletion(t *testing.T) {
 		t.Fatalf("Failed to create MultigresCluster: %v", err)
 	}
 
-	// Wait for child resources to be fully provisioned.
-	waitForDeploymentWithContainer(t, ctx, c, ns, "multigateway")
-	waitForStatefulSetWithContainer(t, ctx, c, ns, "etcd")
-	waitForDeploymentWithContainer(t, ctx, c, ns, "multiadmin")
-
+	// Wait for full provisioning including pod health.
+	waitForAllPodsReady(t, ctx, c, ns)
 	t.Log("Cluster fully provisioned, initiating deletion...")
 
 	// Delete the cluster.
@@ -63,11 +56,11 @@ func TestClusterDeletion(t *testing.T) {
 	}
 
 	// Verify all child resources are cleaned up.
-	// The operator's finalizer handles phased deletion: Cells → TableGroups → Shards → then remove finalizer.
-	// Kubernetes GC then cleans up the remaining resources.
+	// The data-handler finalizers unregister cells/shards from etcd topology,
+	// then Kubernetes GC cascades the rest.
 
 	t.Run("MultigresCluster deleted", func(t *testing.T) {
-		pollUntil(t, 3*time.Minute, 3*time.Second, "MultigresCluster deletion", func() (bool, string) {
+		pollUntil(t, 5*time.Minute, 3*time.Second, "MultigresCluster deletion", func() (bool, string) {
 			err := c.Get(ctx, client.ObjectKeyFromObject(cluster), &multigresv1alpha1.MultigresCluster{})
 			if apierrors.IsNotFound(err) {
 				return true, ""

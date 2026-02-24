@@ -4,32 +4,44 @@ package e2e_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
-	tablegroupcontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
-	datahandlercellcontroller "github.com/numtide/multigres-operator/pkg/data-handler/controller/cell"
-	datahandlershardcontroller "github.com/numtide/multigres-operator/pkg/data-handler/controller/shard"
-	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
-	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
-	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
-	"github.com/numtide/multigres-operator/pkg/testutil"
 )
+
+// multigresImages are the upstream container images needed by operator workloads.
+var multigresImages = []string{
+	"ghcr.io/multigres/multigres:main",
+	"ghcr.io/multigres/pgctld:main",
+	"ghcr.io/multigres/multiadmin-web:main",
+	"gcr.io/etcd-development/etcd:v3.6.7",
+}
+
+// testCluster holds references to a kind cluster set up for e2e testing.
+// The operator is deployed as a real Deployment inside the cluster, so all
+// controllers (including data-handler) run in-cluster with full network access.
+type testCluster struct {
+	name      string // kind cluster name
+	client    client.Client
+	clientset *kubernetes.Clientset
+	namespace string // isolated test namespace
+}
 
 // newScheme creates a runtime.Scheme with all types needed by the operator.
 func newScheme(t testing.TB) *runtime.Scheme {
@@ -42,138 +54,198 @@ func newScheme(t testing.TB) *runtime.Scheme {
 	return scheme
 }
 
-// multigresImages are the container images needed by the operator's workloads.
-// These must be loaded into the kind cluster before running tests.
-var multigresImages = []string{
-	"ghcr.io/multigres/multigres:main",
-	"ghcr.io/multigres/pgctld:main",
-	"ghcr.io/multigres/multiadmin-web:main",
-	"gcr.io/etcd-development/etcd:v3.6.7",
-}
-
-type operatorOpts struct {
-	skipDataHandler bool
-	kindOptions     []testutil.KindOption
-}
-
-type operatorOption func(*operatorOpts)
-
-// withoutDataHandler skips registering data-handler controllers. Use this for
-// tests that don't need topology server connectivity (e.g. deletion tests).
-// The data-handler controllers add finalizers to Cells and Shards that require
-// a live etcd topology server to process; without a running etcd cluster these
-// finalizers block deletion indefinitely.
-func withoutDataHandler() operatorOption {
-	return func(o *operatorOpts) { o.skipDataHandler = true }
-}
-
-// withKindOptions passes additional KindOption values through to
-// testutil.SetUpKindManager. Use this to create ephemeral kind clusters per
-// test via testutil.WithKindCreateCluster() and load images via
-// testutil.WithKindImages().
-func withKindOptions(opts ...testutil.KindOption) operatorOption {
-	return func(o *operatorOpts) { o.kindOptions = append(o.kindOptions, opts...) }
-}
-
-// setUpOperator starts a namespace-scoped manager against the kind cluster and
-// registers all operator controllers. It returns the running manager, a
-// Kubernetes client, and the isolated test namespace name.
+// setUpCluster creates a kind cluster, builds and deploys the operator,
+// loads upstream images, and returns a testCluster ready for use.
 //
-// Each test gets its own namespace, so tests can run in parallel without
-// interfering with each other.
-func setUpOperator(t *testing.T, opts ...operatorOption) (manager.Manager, client.Client, string) {
+// The operator runs as a real Deployment inside the cluster with all
+// controllers (cluster-handler, resource-handler, data-handler). This is
+// a true end-to-end test — no in-process controllers, no hacks.
+func setUpCluster(t *testing.T) *testCluster {
 	t.Helper()
 
-	cfg := &operatorOpts{}
-	for _, o := range opts {
-		o(cfg)
+	clusterName := fmt.Sprintf("e2e-%s", randSuffix())
+	t.Logf("Creating kind cluster %q...", clusterName)
+
+	// Create kind cluster
+	run(t, "kind", "create", "cluster", "--name", clusterName)
+	t.Cleanup(func() {
+		t.Logf("Deleting kind cluster %q...", clusterName)
+		out, err := exec.Command("kind", "delete", "cluster", "--name", clusterName).CombinedOutput()
+		if err != nil {
+			t.Errorf("Failed to delete kind cluster %q: %v\n%s", clusterName, err, out)
+		}
+	})
+
+	// Build operator image
+	t.Log("Building operator image...")
+	runInRepo(t, "make", "container")
+
+	// Load operator image into kind
+	operatorImg := operatorImage(t)
+	t.Logf("Loading operator image %s into kind...", operatorImg)
+	run(t, "kind", "load", "docker-image", operatorImg, "--name", clusterName)
+
+	// Load upstream multigres images into kind
+	for _, img := range multigresImages {
+		t.Logf("Loading image %s...", img)
+		// Pull if not present locally
+		if _, err := exec.Command("docker", "image", "inspect", img).Output(); err != nil {
+			run(t, "docker", "pull", img)
+		}
+		run(t, "kind", "load", "docker-image", img, "--name", clusterName)
 	}
 
+	// Get kubeconfig
+	kubeconfigData := runOutput(t, "kind", "get", "kubeconfig", "--name", clusterName)
+	restCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfigData))
+	if err != nil {
+		t.Fatalf("Failed to parse kubeconfig: %v", err)
+	}
+
+	// Deploy operator (no-webhook) via kustomize
+	t.Log("Deploying operator into cluster...")
+	deployOperator(t, clusterName, operatorImg)
+
+	// Wait for operator pod to be ready
+	t.Log("Waiting for operator to be ready...")
+	waitForOperatorReady(t, clusterName)
+
+	// Create controller-runtime client
 	scheme := newScheme(t)
-
-	// Base kind options: always install CRDs
-	kindOpts := []testutil.KindOption{
-		testutil.WithKindCRDPaths("../../config/crd/bases"),
-	}
-	// Append any extra kind options (e.g. WithKindCreateCluster, WithKindImages)
-	kindOpts = append(kindOpts, cfg.kindOptions...)
-
-	mgr, ns := testutil.SetUpKindManager(t, scheme, kindOpts...)
-	c := mgr.GetClient()
-
-	ctrlOpts := controller.Options{
-		SkipNameValidation: ptr.To(true),
+	c, err := client.New(restCfg, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	// cluster-handler controllers
-	if err := (&multigresclustercontroller.MultigresClusterReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: mgr.GetEventRecorderFor("multigrescluster-controller"),
-	}).SetupWithManager(mgr, ctrlOpts); err != nil {
-		t.Fatalf("Failed to set up MultigresCluster controller: %v", err)
+	// Create clientset for namespace management
+	clientset, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		t.Fatalf("Failed to create clientset: %v", err)
 	}
 
-	if err := (&tablegroupcontroller.TableGroupReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: mgr.GetEventRecorderFor("tablegroup-controller"),
-	}).SetupWithManager(mgr, ctrlOpts); err != nil {
-		t.Fatalf("Failed to set up TableGroup controller: %v", err)
+	// Create isolated test namespace
+	ns := fmt.Sprintf("e2e-test-%s", randSuffix())
+	_, err = clientset.CoreV1().Namespaces().Create(
+		context.Background(),
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: ns},
+		},
+		metav1.CreateOptions{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to create namespace %q: %v", ns, err)
 	}
+	t.Cleanup(func() {
+		_ = clientset.CoreV1().Namespaces().Delete(context.Background(), ns, metav1.DeleteOptions{})
+	})
 
-	// resource-handler controllers
-	if err := (&cellcontroller.CellReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: mgr.GetEventRecorderFor("cell-controller"),
-	}).SetupWithManager(mgr, ctrlOpts); err != nil {
-		t.Fatalf("Failed to set up Cell controller: %v", err)
+	return &testCluster{
+		name:      clusterName,
+		client:    c,
+		clientset: clientset,
+		namespace: ns,
 	}
-
-	if err := (&toposervercontroller.TopoServerReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: mgr.GetEventRecorderFor("toposerver-controller"),
-	}).SetupWithManager(mgr, ctrlOpts); err != nil {
-		t.Fatalf("Failed to set up TopoServer controller: %v", err)
-	}
-
-	if err := (&shardcontroller.ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  mgr.GetEventRecorderFor("shard-controller"),
-		APIReader: mgr.GetAPIReader(),
-	}).SetupWithManager(mgr, ctrlOpts); err != nil {
-		t.Fatalf("Failed to set up Shard controller: %v", err)
-	}
-
-	if !cfg.skipDataHandler {
-		// data-handler controllers require a live topology server (etcd)
-		// to process their finalizers during deletion.
-		if err := (&datahandlercellcontroller.CellReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: mgr.GetEventRecorderFor("cell-datahandler"),
-		}).SetupWithManager(mgr, ctrlOpts); err != nil {
-			t.Fatalf("Failed to set up Cell data-handler controller: %v", err)
-		}
-
-		if err := (&datahandlershardcontroller.ShardReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: mgr.GetEventRecorderFor("shard-datahandler"),
-		}).SetupWithManager(mgr, ctrlOpts); err != nil {
-			t.Fatalf("Failed to set up Shard data-handler controller: %v", err)
-		}
-	}
-
-	return mgr, c, ns
 }
 
-// pollUntil repeatedly calls check with the given interval until it returns
-// true or the timeout is exceeded. Returns an error describing the last state
-// on timeout.
+// operatorImage returns the operator container image tag from the Makefile.
+func operatorImage(t *testing.T) string {
+	t.Helper()
+	out := runInRepoOutput(t, "make", "--no-print-directory", "-s", "print-img")
+	return strings.TrimSpace(out)
+}
+
+// deployOperator deploys the operator into the kind cluster using kustomize.
+func deployOperator(t *testing.T, clusterName, img string) {
+	t.Helper()
+
+	kubeconfig := kindKubeconfig(t, clusterName)
+
+	// Install CRDs
+	kustomizeOut := runInRepoOutput(t, "kustomize", "build", "config/crd")
+	cmd := exec.Command("kubectl", "--kubeconfig", kubeconfig, "apply", "--server-side", "-f", "-")
+	cmd.Stdin = strings.NewReader(kustomizeOut)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to install CRDs: %v\n%s", err, out)
+	}
+
+	// Set the image and deploy using no-webhook config
+	repoDir := repoRoot(t)
+
+	// Run kustomize edit set image in a temp copy to avoid git dirty
+	tmpDir := t.TempDir()
+	run(t, "cp", "-r", repoDir+"/config", tmpDir+"/config")
+	cmd = exec.Command("kustomize", "edit", "set", "image", "controller="+img)
+	cmd.Dir = tmpDir + "/config/manager"
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to set image: %v\n%s", err, out)
+	}
+
+	cmd = exec.Command("kustomize", "build", tmpDir+"/config/no-webhook")
+	manifestOut, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			t.Fatalf("kustomize build failed: %v\n%s", err, exitErr.Stderr)
+		}
+		t.Fatalf("kustomize build failed: %v", err)
+	}
+
+	cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "apply", "--server-side", "-f", "-")
+	cmd.Stdin = strings.NewReader(string(manifestOut))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to deploy operator: %v\n%s", err, out)
+	}
+}
+
+// waitForOperatorReady waits until the operator Deployment has at least 1 ready replica.
+func waitForOperatorReady(t *testing.T, clusterName string) {
+	t.Helper()
+	kubeconfig := kindKubeconfig(t, clusterName)
+	pollUntil(t, 3*time.Minute, 5*time.Second, "operator ready", func() (bool, string) {
+		out, err := exec.Command("kubectl", "--kubeconfig", kubeconfig,
+			"get", "deployment", "-n", "multigres-operator",
+			"multigres-operator-controller-manager",
+			"-o", "jsonpath={.status.readyReplicas}",
+		).Output()
+		if err != nil {
+			return false, fmt.Sprintf("kubectl error: %v", err)
+		}
+		if strings.TrimSpace(string(out)) == "1" {
+			return true, ""
+		}
+		return false, fmt.Sprintf("readyReplicas=%s", string(out))
+	})
+}
+
+// kindKubeconfig writes the kubeconfig for a kind cluster to a temp file and
+// returns its path.
+func kindKubeconfig(t *testing.T, clusterName string) string {
+	t.Helper()
+	data := runOutput(t, "kind", "get", "kubeconfig", "--name", clusterName)
+	f, err := os.CreateTemp("", "kubeconfig-*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp kubeconfig: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(f.Name()) })
+	if _, err := f.WriteString(data); err != nil {
+		t.Fatalf("Failed to write kubeconfig: %v", err)
+	}
+	f.Close()
+	return f.Name()
+}
+
+// repoRoot returns the absolute path to the repo root.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	out := runOutput(t, "git", "rev-parse", "--show-toplevel")
+	return strings.TrimSpace(out)
+}
+
+// --------------------------------------------------------------------------
+// Poll and wait helpers
+// --------------------------------------------------------------------------
+
+// pollUntil repeatedly calls check until it returns true or timeout is exceeded.
 func pollUntil(t *testing.T, timeout, interval time.Duration, desc string, check func() (bool, string)) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -189,43 +261,13 @@ func pollUntil(t *testing.T, timeout, interval time.Duration, desc string, check
 	t.Fatalf("timed out waiting for %s: %s", desc, lastMsg)
 }
 
-// requireResourceCount waits until exactly count resources of the given type
-// exist in the namespace. Returns the list when found.
-func requireResourceCount[T any, PT interface {
-	*T
-	client.ObjectList
-}](t *testing.T, ctx context.Context, c client.Client, ns string, count int, desc string,
-) *T {
-	t.Helper()
-
-	var result T
-	pollUntil(t, 60*time.Second, 2*time.Second, desc, func() (bool, string) {
-		list := PT(&result)
-		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
-			return false, fmt.Sprintf("list error: %v", err)
-		}
-		// Use reflection-free approach: just check if the resource was created
-		// We can't easily get len() generically, so callers should use the typed helpers below
-		return true, ""
-	})
-	return &result
-}
-
-// listResources is a generic helper that lists resources in a namespace.
-func listResources[T client.ObjectList](t *testing.T, ctx context.Context, c client.Client, ns string, list T) {
-	t.Helper()
-	if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
-		t.Fatalf("Failed to list resources: %v", err)
-	}
-}
-
 // waitForMinCount waits until at least minCount items exist for a resource kind.
 func waitForMinCount[T client.ObjectList](
 	t *testing.T, ctx context.Context, c client.Client, ns string,
 	factory func() T, countFn func(T) int, minCount int, desc string,
 ) {
 	t.Helper()
-	pollUntil(t, 120*time.Second, 2*time.Second, desc, func() (bool, string) {
+	pollUntil(t, 2*time.Minute, 2*time.Second, desc, func() (bool, string) {
 		list := factory()
 		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
 			return false, fmt.Sprintf("list error: %v", err)
@@ -243,7 +285,7 @@ func waitForMinCount[T client.ObjectList](
 func waitForDeploymentWithContainer(t *testing.T, ctx context.Context, c client.Client, ns, containerName string) *appsv1.Deployment {
 	t.Helper()
 	var found *appsv1.Deployment
-	pollUntil(t, 120*time.Second, 2*time.Second, fmt.Sprintf("Deployment with container %q", containerName), func() (bool, string) {
+	pollUntil(t, 2*time.Minute, 2*time.Second, fmt.Sprintf("Deployment with container %q", containerName), func() (bool, string) {
 		list := &appsv1.DeploymentList{}
 		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
 			return false, fmt.Sprintf("list error: %v", err)
@@ -266,7 +308,7 @@ func waitForDeploymentWithContainer(t *testing.T, ctx context.Context, c client.
 func waitForStatefulSetWithContainer(t *testing.T, ctx context.Context, c client.Client, ns, containerName string) *appsv1.StatefulSet {
 	t.Helper()
 	var found *appsv1.StatefulSet
-	pollUntil(t, 120*time.Second, 2*time.Second, fmt.Sprintf("StatefulSet with container %q", containerName), func() (bool, string) {
+	pollUntil(t, 2*time.Minute, 2*time.Second, fmt.Sprintf("StatefulSet with container %q", containerName), func() (bool, string) {
 		list := &appsv1.StatefulSetList{}
 		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
 			return false, fmt.Sprintf("list error: %v", err)
@@ -284,12 +326,11 @@ func waitForStatefulSetWithContainer(t *testing.T, ctx context.Context, c client
 	return found
 }
 
-// waitForServiceWithPort waits for a Service with the given port name and number
-// to appear in the namespace.
+// waitForServiceWithPort waits for a Service with the given port name and number.
 func waitForServiceWithPort(t *testing.T, ctx context.Context, c client.Client, ns, portName string, port int32) *corev1.Service {
 	t.Helper()
 	var found *corev1.Service
-	pollUntil(t, 120*time.Second, 2*time.Second, fmt.Sprintf("Service with port %s:%d", portName, port), func() (bool, string) {
+	pollUntil(t, 2*time.Minute, 2*time.Second, fmt.Sprintf("Service with port %s:%d", portName, port), func() (bool, string) {
 		list := &corev1.ServiceList{}
 		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
 			return false, fmt.Sprintf("list error: %v", err)
@@ -307,37 +348,10 @@ func waitForServiceWithPort(t *testing.T, ctx context.Context, c client.Client, 
 	return found
 }
 
-// waitForPodsReady waits for at least minReady pods matching the given labels
-// to be in Ready condition.
-func waitForPodsReady(t *testing.T, ctx context.Context, c client.Client, ns string, labels map[string]string, minReady int) {
-	t.Helper()
-	pollUntil(t, 5*time.Minute, 3*time.Second, fmt.Sprintf("pods with labels %v ready", labels), func() (bool, string) {
-		pods := &corev1.PodList{}
-		if err := c.List(ctx, pods, client.InNamespace(ns), client.MatchingLabels(labels)); err != nil {
-			return false, fmt.Sprintf("list error: %v", err)
-		}
-		readyCount := 0
-		for _, pod := range pods.Items {
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-					readyCount++
-					break
-				}
-			}
-		}
-		if readyCount >= minReady {
-			return true, ""
-		}
-		return false, fmt.Sprintf("%d/%d pods ready (want >= %d)", readyCount, len(pods.Items), minReady)
-	})
-}
-
-// waitForAllPodsReady waits until all pods in the namespace are in Ready
-// condition. This is the gate before attempting psql connectivity — all
-// components (etcd, multipooler, multiorch, multigateway) must be healthy.
+// waitForAllPodsReady waits until all pods in the namespace are Ready.
 func waitForAllPodsReady(t *testing.T, ctx context.Context, c client.Client, ns string) {
 	t.Helper()
-	pollUntil(t, 5*time.Minute, 5*time.Second, "all pods ready", func() (bool, string) {
+	pollUntil(t, 8*time.Minute, 5*time.Second, "all pods ready", func() (bool, string) {
 		pods := &corev1.PodList{}
 		if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
 			return false, fmt.Sprintf("list error: %v", err)
@@ -345,9 +359,8 @@ func waitForAllPodsReady(t *testing.T, ctx context.Context, c client.Client, ns 
 		if len(pods.Items) == 0 {
 			return false, "no pods found"
 		}
-		notReady := []string{}
+		var notReady []string
 		for _, pod := range pods.Items {
-			// Skip completed pods (Jobs)
 			if pod.Status.Phase == corev1.PodSucceeded {
 				continue
 			}
@@ -359,8 +372,7 @@ func waitForAllPodsReady(t *testing.T, ctx context.Context, c client.Client, ns 
 				}
 			}
 			if !ready {
-				phase := string(pod.Status.Phase)
-				notReady = append(notReady, fmt.Sprintf("%s(%s)", pod.Name, phase))
+				notReady = append(notReady, fmt.Sprintf("%s(%s)", pod.Name, pod.Status.Phase))
 			}
 		}
 		if len(notReady) == 0 {
@@ -370,79 +382,17 @@ func waitForAllPodsReady(t *testing.T, ctx context.Context, c client.Client, ns 
 	})
 }
 
-// psqlViaKubectl runs a psql query by exec'ing into a pod that has the psql
-// binary (typically a multipooler/postgres pod). The query is directed at the
-// multigateway service on port 15432.
-//
-// This avoids requiring a local psql binary — we use the one inside the
-// postgres container.
-func psqlViaKubectl(t *testing.T, ctx context.Context, c client.Client, ns, gatewayHost string, query string) string {
+// waitForQueryServing polls until SELECT 1 succeeds through the multigateway.
+// Uses kubectl exec into a pod with psql (pgctld container is based on postgres).
+func waitForQueryServing(t *testing.T, tc *testCluster, gatewaySvc string) {
 	t.Helper()
-
-	// Find a pod with a "postgres" container (multipooler StatefulSet pods have psql)
-	pods := &corev1.PodList{}
-	if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
-		t.Fatalf("Failed to list pods: %v", err)
-	}
-
-	var targetPod string
-	for _, pod := range pods.Items {
-		for _, cont := range pod.Spec.Containers {
-			if cont.Name == "postgres" {
-				if pod.Status.Phase == corev1.PodRunning {
-					targetPod = pod.Name
-					break
-				}
-			}
-		}
-		if targetPod != "" {
-			break
-		}
-	}
-	if targetPod == "" {
-		t.Fatalf("No running pod with 'postgres' container found in namespace %s", ns)
-	}
-
-	cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(cmdCtx, "kubectl", "exec",
-		"-n", ns,
-		targetPod,
-		"-c", "postgres",
-		"--",
-		"psql",
-		"-h", gatewayHost,
-		"-p", "15432",
-		"-U", "postgres",
-		"-d", "postgres",
-		"-t", "-A",
-		"-c", query,
-	)
-	cmd.Env = append(os.Environ(), "PGPASSWORD=postgres", "PGCONNECT_TIMEOUT=10")
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("psql query %q via kubectl exec on %s failed: %v\noutput: %s", query, targetPod, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
-// waitForQueryServing polls until a SELECT 1 query succeeds through the
-// multigateway. This is the definitive test that the full stack is working:
-// etcd → metadata → multipooler → multiorch bootstrap → multigateway → psql.
-//
-// Per upstream research, HTTP /ready on multigateway only means "registered
-// with topology", not "can route queries". We must actually execute a query.
-func waitForQueryServing(t *testing.T, ctx context.Context, c client.Client, ns, gatewayHost string) {
-	t.Helper()
+	kubeconfig := kindKubeconfig(t, tc.name)
 	pollUntil(t, 3*time.Minute, 5*time.Second, "query serving via multigateway", func() (bool, string) {
-		// Find a postgres pod to exec from
+		// Find a running pod with postgres container (has psql)
 		pods := &corev1.PodList{}
-		if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
+		if err := tc.client.List(context.Background(), pods, client.InNamespace(tc.namespace)); err != nil {
 			return false, fmt.Sprintf("list error: %v", err)
 		}
-
 		var targetPod string
 		for _, pod := range pods.Items {
 			if pod.Status.Phase != corev1.PodRunning {
@@ -450,8 +400,12 @@ func waitForQueryServing(t *testing.T, ctx context.Context, c client.Client, ns,
 			}
 			for _, cont := range pod.Spec.Containers {
 				if cont.Name == "postgres" {
-					targetPod = pod.Name
-					break
+					// Check container is actually ready
+					for _, cs := range pod.Status.ContainerStatuses {
+						if cs.Name == "postgres" && cs.Ready {
+							targetPod = pod.Name
+						}
+					}
 				}
 			}
 			if targetPod != "" {
@@ -459,28 +413,23 @@ func waitForQueryServing(t *testing.T, ctx context.Context, c client.Client, ns,
 			}
 		}
 		if targetPod == "" {
-			return false, "no running postgres pod found"
+			return false, "no running postgres pod with ready container"
 		}
 
-		cmdCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		cmd := exec.CommandContext(cmdCtx, "kubectl", "exec",
-			"-n", ns,
-			targetPod,
-			"-c", "postgres",
+		out, err := exec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig,
+			"exec", "-n", tc.namespace, targetPod, "-c", "postgres",
 			"--",
 			"psql",
-			"-h", gatewayHost,
+			"-h", gatewaySvc,
 			"-p", "15432",
 			"-U", "postgres",
 			"-d", "postgres",
 			"-t", "-A",
 			"-c", "SELECT 1",
-		)
-		cmd.Env = append(os.Environ(), "PGPASSWORD=postgres", "PGCONNECT_TIMEOUT=5")
-
-		out, err := cmd.CombinedOutput()
+		).CombinedOutput()
 		if err != nil {
 			return false, fmt.Sprintf("psql error: %v (output: %s)", err, strings.TrimSpace(string(out)))
 		}
@@ -492,7 +441,7 @@ func waitForQueryServing(t *testing.T, ctx context.Context, c client.Client, ns,
 	})
 }
 
-// findGatewayServiceName finds the multigateway Service name in the namespace.
+// findGatewayServiceName finds the multigateway Service name.
 func findGatewayServiceName(t *testing.T, ctx context.Context, c client.Client, ns string) string {
 	t.Helper()
 	var svcName string
@@ -512,4 +461,62 @@ func findGatewayServiceName(t *testing.T, ctx context.Context, c client.Client, 
 		return false, "no Service with postgres:15432"
 	})
 	return svcName
+}
+
+// --------------------------------------------------------------------------
+// Exec helpers
+// --------------------------------------------------------------------------
+
+func run(t *testing.T, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Command %s %v failed: %v\n%s", name, args, err, out)
+	}
+}
+
+func runOutput(t *testing.T, name string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command(name, args...).Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			t.Fatalf("Command %s %v failed: %v\nstderr: %s", name, args, err, exitErr.Stderr)
+		}
+		t.Fatalf("Command %s %v failed: %v", name, args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func runInRepo(t *testing.T, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = repoRoot(t)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Command %s %v (in repo) failed: %v\n%s", name, args, err, out)
+	}
+}
+
+func runInRepoOutput(t *testing.T, name string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = repoRoot(t)
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			t.Fatalf("Command %s %v (in repo) failed: %v\nstderr: %s", name, args, err, exitErr.Stderr)
+		}
+		t.Fatalf("Command %s %v (in repo) failed: %v", name, args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func randSuffix() string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 8)
+	for i := range b {
+		b[i] = chars[rand.IntN(len(chars))]
+	}
+	return string(b)
 }

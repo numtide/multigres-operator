@@ -3,64 +3,37 @@
 package e2e_test
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"net"
-	"os/exec"
-	"strings"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	_ "github.com/lib/pq"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
-// TestTemplatedCluster applies config/samples/templates/*.yaml followed by
-// config/samples/templated-cluster.yaml and verifies the full resource tree
-// plus psql connectivity through multigateway.
-// This tests the template resolution path with two cells and a database.
+// TestTemplatedCluster applies templates and a templated cluster CR, then
+// verifies the full resource tree, pod health, and psql connectivity.
 func TestTemplatedCluster(t *testing.T) {
-	clusterName := fmt.Sprintf("e2e-templated-%d", time.Now().UnixNano())
-	_, c, ns := setUpOperator(t,
-		withoutDataHandler(),
-		withKindOptions(
-			testutil.WithKindCreateCluster(),
-			testutil.WithKindImages(multigresImages...),
-			testutil.WithKindCluster(clusterName),
-		),
-	)
+	tc := setUpCluster(t)
 	ctx := t.Context()
+	c := tc.client
+	ns := tc.namespace
 
-	// Create templates first (equivalent to config/samples/templates/*.yaml)
-
+	// Create templates first
 	coreTemplate := &multigresv1alpha1.CoreTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "standard-core",
-			Namespace: ns,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "standard-core", Namespace: ns},
 		Spec: multigresv1alpha1.CoreTemplateSpec{
 			GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:    "gcr.io/etcd-development/etcd:v3.6.7",
 					Replicas: ptr.To(int32(3)),
-					Storage:  multigresv1alpha1.StorageSpec{Size: "10Gi"},
+					Storage:  multigresv1alpha1.StorageSpec{Size: "1Gi"},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("100m"),
 							corev1.ResourceMemory: resource.MustParse("128Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("200m"),
-							corev1.ResourceMemory: resource.MustParse("256Mi"),
 						},
 					},
 				},
@@ -72,10 +45,6 @@ func TestTemplatedCluster(t *testing.T) {
 						corev1.ResourceCPU:    resource.MustParse("100m"),
 						corev1.ResourceMemory: resource.MustParse("128Mi"),
 					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
 				},
 			},
 		},
@@ -85,10 +54,7 @@ func TestTemplatedCluster(t *testing.T) {
 	}
 
 	cellTemplate := &multigresv1alpha1.CellTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "standard-cell",
-			Namespace: ns,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "standard-cell", Namespace: ns},
 		Spec: multigresv1alpha1.CellTemplateSpec{
 			MultiGateway: &multigresv1alpha1.StatelessSpec{
 				Replicas: ptr.To(int32(2)),
@@ -96,10 +62,6 @@ func TestTemplatedCluster(t *testing.T) {
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("100m"),
 						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
 					},
 				},
 			},
@@ -110,22 +72,15 @@ func TestTemplatedCluster(t *testing.T) {
 	}
 
 	shardTemplate := &multigresv1alpha1.ShardTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "standard-shard",
-			Namespace: ns,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "standard-shard", Namespace: ns},
 		Spec: multigresv1alpha1.ShardTemplateSpec{
 			MultiOrch: &multigresv1alpha1.MultiOrchSpec{
 				StatelessSpec: multigresv1alpha1.StatelessSpec{
 					Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("128Mi"),
+						},
 					},
 				},
 			},
@@ -133,16 +88,12 @@ func TestTemplatedCluster(t *testing.T) {
 				"main-app": {
 					Type:            "readWrite",
 					ReplicasPerCell: ptr.To(int32(2)),
-					Storage:         multigresv1alpha1.StorageSpec{Size: "100Gi"},
+					Storage:         multigresv1alpha1.StorageSpec{Size: "1Gi"},
 					Postgres: multigresv1alpha1.ContainerConfig{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("100m"),
 								corev1.ResourceMemory: resource.MustParse("256Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("512Mi"),
 							},
 						},
 					},
@@ -151,10 +102,6 @@ func TestTemplatedCluster(t *testing.T) {
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("100m"),
 								corev1.ResourceMemory: resource.MustParse("128Mi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("200m"),
-								corev1.ResourceMemory: resource.MustParse("256Mi"),
 							},
 						},
 					},
@@ -166,15 +113,9 @@ func TestTemplatedCluster(t *testing.T) {
 		t.Fatalf("Failed to create ShardTemplate: %v", err)
 	}
 
-	// Create the cluster referencing templates.
-	// CoreTemplate components (MultiAdmin, GlobalTopoServer) require explicit
-	// TemplateRef on each component — TemplateDefaults.CoreTemplate is only
-	// used for validation and watch setup, not for resolution fallback.
+	// Create the cluster referencing templates
 	cluster := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "standard-ha-cluster",
-			Namespace: ns,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "standard-ha-cluster", Namespace: ns},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			TemplateDefaults: multigresv1alpha1.TemplateDefaults{
 				CoreTemplate:  "standard-core",
@@ -221,7 +162,7 @@ func TestTemplatedCluster(t *testing.T) {
 		t.Fatalf("Failed to create MultigresCluster: %v", err)
 	}
 
-	// ----- Verify: Two cells should be created -----
+	// ----- Verify resources -----
 
 	t.Run("Two Cells created", func(t *testing.T) {
 		waitForMinCount(t, ctx, c, ns,
@@ -247,19 +188,6 @@ func TestTemplatedCluster(t *testing.T) {
 		)
 	})
 
-	// ----- Verify leaf resources -----
-
-	t.Run("Two MultiGateway Deployments (one per cell)", func(t *testing.T) {
-		waitForMinCount(t, ctx, c, ns,
-			func() *multigresv1alpha1.CellList { return &multigresv1alpha1.CellList{} },
-			func(l *multigresv1alpha1.CellList) int { return len(l.Items) },
-			2, "2 Cells for gateway check",
-		)
-		// Each Cell creates a multigateway Deployment
-		// We verify at least 2 multigateway Deployments exist
-		waitForDeploymentWithContainer(t, ctx, c, ns, "multigateway")
-	})
-
 	t.Run("Etcd StatefulSet with 3 replicas from template", func(t *testing.T) {
 		sts := waitForStatefulSetWithContainer(t, ctx, c, ns, "etcd")
 		if sts.Spec.Replicas != nil && *sts.Spec.Replicas != 3 {
@@ -282,121 +210,16 @@ func TestTemplatedCluster(t *testing.T) {
 		waitForDeploymentWithContainer(t, ctx, c, ns, "multiorch")
 	})
 
-	// ----- Create cluster metadata in etcd -----
-	// Data-handler controllers run in the Go test process outside K8s and
-	// cannot reach etcd via K8s DNS. Exec createclustermetadata manually
-	// inside K8s to populate cell and database metadata.
-
-	t.Run("Create cluster metadata", func(t *testing.T) {
-		// Find a running pod with the multigres binary (multigateway uses
-		// ghcr.io/multigres/multigres:main which has /multigres/bin/multigres).
-		var targetPod, targetContainer string
-		pollUntil(t, 2*time.Minute, 5*time.Second, "running pod with multigres binary", func() (bool, string) {
-			pods := &corev1.PodList{}
-			if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
-				return false, fmt.Sprintf("list error: %v", err)
-			}
-			for _, pod := range pods.Items {
-				if pod.Status.Phase != corev1.PodRunning {
-					continue
-				}
-				for _, cont := range pod.Spec.Containers {
-					if cont.Name == "multigateway" || cont.Name == "multiorch" {
-						targetPod = pod.Name
-						targetContainer = cont.Name
-						return true, ""
-					}
-				}
-			}
-			return false, "no running multigateway/multiorch pod"
-		})
-
-		// Etcd client service: {cluster-name}-global-topo (from builders_global.go)
-		etcdSvc := "standard-ha-cluster-global-topo"
-
-		// Poll until createclustermetadata succeeds (etcd must be accepting connections).
-		pollUntil(t, 3*time.Minute, 5*time.Second, "createclustermetadata", func() (bool, string) {
-			cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			defer cancel()
-
-			cmd := exec.CommandContext(cmdCtx, "kubectl", "exec",
-				"-n", ns, targetPod, "-c", targetContainer, "--",
-				"/multigres/bin/multigres", "createclustermetadata",
-				"--global-topo-address="+etcdSvc+":2379",
-				"--global-topo-root=/multigres/global",
-				"--cells=us-east-1a,us-east-1b",
-				"--durability-policy=ANY_2",
-				"--backup-location=/backups",
-			)
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				return false, fmt.Sprintf("error: %v, output: %s", err, strings.TrimSpace(string(out)))
-			}
-			t.Logf("createclustermetadata succeeded via pod %s", targetPod)
-			return true, ""
-		})
-	})
-
-	// ----- Verify full-stack connectivity -----
+	// ----- Verify all pods healthy -----
 
 	t.Run("All pods ready", func(t *testing.T) {
 		waitForAllPodsReady(t, ctx, c, ns)
 	})
 
-	t.Run("Query serving through multigateway", func(t *testing.T) {
-		gw := findGatewayServiceName(t, ctx, c, ns)
-		t.Logf("Testing psql connectivity through gateway service %q", gw)
+	// ----- Verify psql connectivity through multigateway -----
 
-		// Port-forward to multigateway service instead of kubectl exec psql,
-		// so we don't depend on a psql binary inside the pods.
-		localPort := findFreePort(t)
-		pfCtx, pfCancel := context.WithCancel(ctx)
-		defer pfCancel()
-
-		pfCmd := exec.CommandContext(pfCtx, "kubectl", "port-forward",
-			"-n", ns,
-			"svc/"+gw,
-			fmt.Sprintf("%d:15432", localPort),
-		)
-		if err := pfCmd.Start(); err != nil {
-			t.Fatalf("Failed to start port-forward: %v", err)
-		}
-		defer func() {
-			pfCancel()
-			_ = pfCmd.Wait()
-		}()
-
-		connStr := fmt.Sprintf(
-			"host=127.0.0.1 port=%d user=postgres password=postgres dbname=postgres sslmode=disable connect_timeout=5",
-			localPort,
-		)
-		db, err := sql.Open("postgres", connStr)
-		if err != nil {
-			t.Fatalf("Failed to open database connection: %v", err)
-		}
-		defer db.Close()
-
-		pollUntil(t, 3*time.Minute, 5*time.Second, "SELECT 1 via multigateway", func() (bool, string) {
-			var result int
-			if err := db.QueryRowContext(ctx, "SELECT 1").Scan(&result); err != nil {
-				return false, fmt.Sprintf("query error: %v", err)
-			}
-			if result != 1 {
-				return false, fmt.Sprintf("unexpected result: %d", result)
-			}
-			return true, ""
-		})
+	t.Run("Query serving via multigateway", func(t *testing.T) {
+		gwSvc := findGatewayServiceName(t, ctx, c, ns)
+		waitForQueryServing(t, tc, gwSvc)
 	})
-}
-
-// findFreePort returns an available TCP port on localhost.
-func findFreePort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Failed to find free port: %v", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	l.Close()
-	return port
 }

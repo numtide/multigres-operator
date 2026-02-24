@@ -3,43 +3,24 @@
 package e2e_test
 
 import (
-	"context"
-	"fmt"
-	"math/rand/v2"
-	"os/exec"
-	"strings"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 // TestInlineCluster applies the equivalent of config/samples/no-templates.yaml
-// and verifies the full resource tree is provisioned and that psql connectivity
-// works through the multigateway. This cluster specifies all configuration
-// inline (no template references).
-//
-// Data-handler controllers are skipped because they run in-process and cannot
-// reach etcd via K8s DNS from the host. Instead, cluster metadata is created
-// manually via kubectl exec into a multigres pod.
+// and verifies the full resource tree is provisioned, all pods become ready,
+// and psql SELECT 1 succeeds through the multigateway.
 func TestInlineCluster(t *testing.T) {
-	clusterName := fmt.Sprintf("e2e-inline-%04d", rand.IntN(10000))
-	_, c, ns := setUpOperator(t,
-		withoutDataHandler(),
-		withKindOptions(
-			testutil.WithKindCreateCluster(),
-			testutil.WithKindImages(multigresImages...),
-			testutil.WithKindCluster(clusterName),
-		),
-	)
+	tc := setUpCluster(t)
 	ctx := t.Context()
+	c := tc.client
+	ns := tc.namespace
 
 	cluster := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -61,10 +42,6 @@ func TestInlineCluster(t *testing.T) {
 							corev1.ResourceCPU:    resource.MustParse("100m"),
 							corev1.ResourceMemory: resource.MustParse("256Mi"),
 						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("200m"),
-							corev1.ResourceMemory: resource.MustParse("512Mi"),
-						},
 					},
 				},
 			},
@@ -75,10 +52,6 @@ func TestInlineCluster(t *testing.T) {
 						Requests: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("100m"),
 							corev1.ResourceMemory: resource.MustParse("128Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("200m"),
-							corev1.ResourceMemory: resource.MustParse("256Mi"),
 						},
 					},
 				},
@@ -94,10 +67,6 @@ func TestInlineCluster(t *testing.T) {
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("100m"),
 									corev1.ResourceMemory: resource.MustParse("128Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("200m"),
-									corev1.ResourceMemory: resource.MustParse("256Mi"),
 								},
 							},
 						},
@@ -123,10 +92,6 @@ func TestInlineCluster(t *testing.T) {
 														corev1.ResourceCPU:    resource.MustParse("50m"),
 														corev1.ResourceMemory: resource.MustParse("64Mi"),
 													},
-													Limits: corev1.ResourceList{
-														corev1.ResourceCPU:    resource.MustParse("100m"),
-														corev1.ResourceMemory: resource.MustParse("128Mi"),
-													},
 												},
 											},
 											Cells: []multigresv1alpha1.CellName{"z1"},
@@ -145,10 +110,6 @@ func TestInlineCluster(t *testing.T) {
 															corev1.ResourceCPU:    resource.MustParse("100m"),
 															corev1.ResourceMemory: resource.MustParse("256Mi"),
 														},
-														Limits: corev1.ResourceList{
-															corev1.ResourceCPU:    resource.MustParse("500m"),
-															corev1.ResourceMemory: resource.MustParse("512Mi"),
-														},
 													},
 												},
 												Multipooler: multigresv1alpha1.ContainerConfig{
@@ -156,10 +117,6 @@ func TestInlineCluster(t *testing.T) {
 														Requests: corev1.ResourceList{
 															corev1.ResourceCPU:    resource.MustParse("50m"),
 															corev1.ResourceMemory: resource.MustParse("64Mi"),
-														},
-														Limits: corev1.ResourceList{
-															corev1.ResourceCPU:    resource.MustParse("200m"),
-															corev1.ResourceMemory: resource.MustParse("128Mi"),
 														},
 													},
 												},
@@ -175,14 +132,9 @@ func TestInlineCluster(t *testing.T) {
 		},
 	}
 
-	// Retry Create because the REST mapper may not have discovered the CRD yet
-	// on a freshly-created kind cluster.
-	pollUntil(t, 30*time.Second, 2*time.Second, "create MultigresCluster", func() (bool, string) {
-		if err := c.Create(ctx, cluster); err != nil {
-			return false, err.Error()
-		}
-		return true, ""
-	})
+	if err := c.Create(ctx, cluster); err != nil {
+		t.Fatalf("Failed to create MultigresCluster: %v", err)
+	}
 
 	// ----- Verify CRDs -----
 
@@ -262,65 +214,7 @@ func TestInlineCluster(t *testing.T) {
 		waitForServiceWithPort(t, ctx, c, ns, "postgres", 15432)
 	})
 
-	// ----- Create cluster metadata in etcd -----
-	// Data-handler controllers are skipped (they run in-process and can't
-	// reach etcd via K8s DNS). Manually create the cell/database metadata
-	// that multipooler and multiorch need by exec'ing into a multigres pod.
-
-	t.Run("Create cluster metadata in etcd", func(t *testing.T) {
-		topoAddr := fmt.Sprintf("inline-global-topo.%s.svc:2379", ns)
-		pollUntil(t, 3*time.Minute, 5*time.Second, "createclustermetadata", func() (bool, string) {
-			// Find a running pod with the multigres binary (multiorch has it)
-			pods := &corev1.PodList{}
-			if err := c.List(ctx, pods, client.InNamespace(ns)); err != nil {
-				return false, fmt.Sprintf("list error: %v", err)
-			}
-			var targetPod string
-			for _, pod := range pods.Items {
-				if pod.Status.Phase != corev1.PodRunning {
-					continue
-				}
-				for _, cont := range pod.Spec.Containers {
-					if cont.Name == "multiorch" {
-						targetPod = pod.Name
-						break
-					}
-				}
-				if targetPod != "" {
-					break
-				}
-			}
-			if targetPod == "" {
-				return false, "no running multiorch pod found"
-			}
-
-			cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			defer cancel()
-
-			cmd := exec.CommandContext(cmdCtx, "kubectl", "exec",
-				"-n", ns,
-				targetPod,
-				"-c", "multiorch",
-				"--",
-				"/multigres/bin/multigres",
-				"createclustermetadata",
-				"--global-topo-address="+topoAddr,
-				"--global-topo-root=/multigres/global",
-				"--cells=z1",
-				"--durability-policy=ANY_2",
-				"--backup-location=/backups",
-			)
-
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				return false, fmt.Sprintf("exec error: %v (output: %s)", err, strings.TrimSpace(string(out)))
-			}
-			t.Logf("createclustermetadata output: %s", strings.TrimSpace(string(out)))
-			return true, ""
-		})
-	})
-
-	// ----- Verify pod readiness -----
+	// ----- Verify all pods healthy -----
 
 	t.Run("All pods ready", func(t *testing.T) {
 		waitForAllPodsReady(t, ctx, c, ns)
@@ -329,7 +223,7 @@ func TestInlineCluster(t *testing.T) {
 	// ----- Verify psql connectivity through multigateway -----
 
 	t.Run("Query serving via multigateway", func(t *testing.T) {
-		gatewaySvc := findGatewayServiceName(t, ctx, c, ns)
-		waitForQueryServing(t, ctx, c, ns, gatewaySvc)
+		gwSvc := findGatewayServiceName(t, ctx, c, ns)
+		waitForQueryServing(t, tc, gwSvc)
 	})
 }

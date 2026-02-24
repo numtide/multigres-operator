@@ -39,6 +39,10 @@ IMG_PREFIX ?= ghcr.io/numtide
 IMG_REPO ?= multigres-operator
 IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
 
+.PHONY: print-img
+print-img: ## Print the full operator container image reference
+	@echo $(IMG)
+
 # Build metadata
 BUILD_DATE ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
