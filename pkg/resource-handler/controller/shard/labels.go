@@ -16,6 +16,7 @@ func buildPoolLabelsWithCell(
 ) map[string]string {
 	clusterName := shard.Labels["multigres.com/cluster"]
 	labels := metadata.BuildStandardLabels(clusterName, PoolComponentName)
+	metadata.AddShardLabel(labels, shard.Spec.ShardName)
 	metadata.AddCellLabel(labels, multigresv1alpha1.CellName(cellName))
 	metadata.AddPoolLabel(labels, multigresv1alpha1.PoolName(poolName))
 	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)

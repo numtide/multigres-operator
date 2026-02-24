@@ -1,0 +1,314 @@
+package shard
+
+import (
+	"strings"
+	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+)
+
+func newTestShard() *multigresv1alpha1.Shard {
+	return &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			UID:       "test-uid",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "postgres",
+			TableGroupName: "default",
+			ShardName:      "0-inf",
+		},
+	}
+}
+
+func newTestPoolSpec() multigresv1alpha1.PoolSpec {
+	return multigresv1alpha1.PoolSpec{
+		Type: "replica",
+		Storage: multigresv1alpha1.StorageSpec{
+			Size: "10Gi",
+		},
+	}
+}
+
+func testScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	return scheme
+}
+
+func TestBuildPoolPod_BasicStructure(t *testing.T) {
+	shard := newTestShard()
+	pool := newTestPoolSpec()
+
+	pod, err := BuildPoolPod(shard, "main", "z1", pool, 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pod.Namespace != "default" {
+		t.Errorf("namespace = %q, want %q", pod.Namespace, "default")
+	}
+
+	// Verify owner reference
+	if len(pod.OwnerReferences) != 1 {
+		t.Fatalf("expected 1 owner reference, got %d", len(pod.OwnerReferences))
+	}
+	if pod.OwnerReferences[0].Name != "test-shard" {
+		t.Errorf("owner name = %q, want %q", pod.OwnerReferences[0].Name, "test-shard")
+	}
+	if pod.OwnerReferences[0].Kind != "Shard" {
+		t.Errorf("owner kind = %q, want %q", pod.OwnerReferences[0].Kind, "Shard")
+	}
+
+	// Verify labels
+	expectedLabels := map[string]string{
+		"app.kubernetes.io/component":  PoolComponentName,
+		"app.kubernetes.io/managed-by": "multigres-operator",
+		"multigres.com/cluster":        "test-cluster",
+		"multigres.com/cell":           "z1",
+		"multigres.com/pool":           "main",
+		"multigres.com/shard":          "0-inf",
+		"multigres.com/database":       "postgres",
+		"multigres.com/tablegroup":     "default",
+	}
+	for k, want := range expectedLabels {
+		if got := pod.Labels[k]; got != want {
+			t.Errorf("label %q = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestBuildPoolPod_Containers(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pod.Spec.InitContainers) != 1 {
+		t.Fatalf("expected 1 init container (multipooler sidecar), got %d", len(pod.Spec.InitContainers))
+	}
+	if pod.Spec.InitContainers[0].Name != "multipooler" {
+		t.Errorf("init container name = %q, want %q", pod.Spec.InitContainers[0].Name, "multipooler")
+	}
+
+	if len(pod.Spec.Containers) != 1 {
+		t.Fatalf("expected 1 container (pgctld), got %d", len(pod.Spec.Containers))
+	}
+	if pod.Spec.Containers[0].Name != "postgres" {
+		t.Errorf("container name = %q, want %q", pod.Spec.Containers[0].Name, "postgres")
+	}
+}
+
+func TestBuildPoolPod_Volumes(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	volumeNames := make(map[string]bool)
+	for _, v := range pod.Spec.Volumes {
+		volumeNames[v.Name] = true
+	}
+
+	required := []string{DataVolumeName, "backup-data", "socket-dir", PgHbaVolumeName}
+	for _, name := range required {
+		if !volumeNames[name] {
+			t.Errorf("missing required volume %q", name)
+		}
+	}
+
+	// Verify data volume references PVC
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == DataVolumeName {
+			if v.PersistentVolumeClaim == nil {
+				t.Fatal("data volume should reference a PVC")
+			}
+			pvcName := v.PersistentVolumeClaim.ClaimName
+			if pvcName == "" {
+				t.Error("data volume PVC claim name is empty")
+			}
+		}
+	}
+}
+
+func TestBuildPoolPod_SecurityContext(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pod.Spec.SecurityContext == nil {
+		t.Fatal("pod security context is nil")
+	}
+	if pod.Spec.SecurityContext.FSGroup == nil || *pod.Spec.SecurityContext.FSGroup != 999 {
+		t.Error("FSGroup should be 999 (postgres group)")
+	}
+
+	if pod.Spec.TerminationGracePeriodSeconds == nil || *pod.Spec.TerminationGracePeriodSeconds != 30 {
+		t.Errorf("terminationGracePeriodSeconds = %v, want 30", pod.Spec.TerminationGracePeriodSeconds)
+	}
+}
+
+func TestBuildPoolPod_SpecHash(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	hash, ok := pod.Annotations[AnnotationSpecHash]
+	if !ok {
+		t.Fatal("spec-hash annotation missing")
+	}
+	if hash == "" {
+		t.Error("spec-hash annotation is empty")
+	}
+	if len(hash) != 8 {
+		t.Errorf("spec-hash length = %d, want 8 (FNV-1a 32-bit hex)", len(hash))
+	}
+}
+
+func TestBuildPoolPod_Finalizer(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pod.Finalizers) != 1 || pod.Finalizers[0] != PoolPodFinalizer {
+		t.Errorf("finalizers = %v, want [%q]", pod.Finalizers, PoolPodFinalizer)
+	}
+}
+
+func TestBuildPoolPod_Affinity(t *testing.T) {
+	pool := newTestPoolSpec()
+	pool.Affinity = &corev1.Affinity{
+		NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key: "disk-type", Operator: corev1.NodeSelectorOpIn, Values: []string{"ssd"},
+					}},
+				}},
+			},
+		},
+	}
+
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", pool, 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pod.Spec.Affinity == nil || pod.Spec.Affinity.NodeAffinity == nil {
+		t.Fatal("affinity not set on pod")
+	}
+}
+
+func TestBuildPoolPod_NodeSelector(t *testing.T) {
+	shard := newTestShard()
+	shard.Spec.CellTopologyLabels = map[multigresv1alpha1.CellName]map[string]string{
+		"z1": {"topology.kubernetes.io/zone": "us-east-1a"},
+	}
+
+	pod, err := BuildPoolPod(shard, "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pod.Spec.NodeSelector == nil {
+		t.Fatal("node selector is nil")
+	}
+	if pod.Spec.NodeSelector["topology.kubernetes.io/zone"] != "us-east-1a" {
+		t.Errorf("node selector zone = %q, want %q",
+			pod.Spec.NodeSelector["topology.kubernetes.io/zone"], "us-east-1a")
+	}
+}
+
+func TestBuildPoolPod_Hostname(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pod.Spec.Hostname != pod.Name {
+		t.Errorf("hostname = %q, should match pod name %q", pod.Spec.Hostname, pod.Name)
+	}
+	if pod.Spec.Subdomain == "" {
+		t.Error("subdomain (headless service name) should not be empty")
+	}
+}
+
+func TestComputeSpecHash_Deterministic(t *testing.T) {
+	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	pod2, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+
+	if hash1 != hash2 {
+		t.Errorf("spec hash not deterministic: %q != %q", hash1, hash2)
+	}
+}
+
+func TestComputeSpecHash_ChangesOnDrift(t *testing.T) {
+	pool := newTestPoolSpec()
+	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", pool, 0, testScheme())
+
+	// Build a second pod with different affinity (changes operator-managed fields)
+	pool2 := newTestPoolSpec()
+	pool2.Affinity = &corev1.Affinity{
+		NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key: "disk-type", Operator: corev1.NodeSelectorOpIn, Values: []string{"ssd"},
+					}},
+				}},
+			},
+		},
+	}
+	pod2, _ := BuildPoolPod(newTestShard(), "main", "z1", pool2, 0, testScheme())
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when affinity changes")
+	}
+}
+
+func TestBuildPoolPodName_Truncation(t *testing.T) {
+	shard := newTestShard()
+	shard.Labels["multigres.com/cluster"] = "very-long-cluster-name-for-testing"
+	shard.Spec.DatabaseName = "long-database-name"
+	shard.Spec.TableGroupName = "long-tablegroup"
+	shard.Spec.ShardName = "long-shard"
+
+	name := BuildPoolPodName(shard, "main-pool", "us-east-1a", 99)
+
+	if len(name) > 63 {
+		t.Errorf("pod name %q exceeds 63 chars (len=%d)", name, len(name))
+	}
+	if !strings.HasSuffix(name, "-99") {
+		t.Errorf("pod name %q should end with -99", name)
+	}
+}
+
+func TestBuildPoolPodName_ShortName(t *testing.T) {
+	name := BuildPoolPodName(newTestShard(), "main", "z1", 0)
+
+	if len(name) > 63 {
+		t.Errorf("pod name %q exceeds 63 chars (len=%d)", name, len(name))
+	}
+	if !strings.HasSuffix(name, "-0") {
+		t.Errorf("pod name %q should end with -0", name)
+	}
+	// Pod name should contain meaningful parts
+	if !strings.Contains(name, "pool") {
+		t.Errorf("pod name %q should contain 'pool'", name)
+	}
+}
