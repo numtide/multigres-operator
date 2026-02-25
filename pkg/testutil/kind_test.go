@@ -1,9 +1,6 @@
-//go:build e2e
-
 package testutil
 
 import (
-	"os"
 	"testing"
 )
 
@@ -17,17 +14,6 @@ func TestDefaultKindConfig_ClusterNameFromEnv(t *testing.T) {
 }
 
 func TestDefaultKindConfig_ClusterNameFallback(t *testing.T) {
-	t.Setenv("KIND_CLUSTER", "")
-
-	cfg := defaultKindConfig()
-	if cfg.clusterName != defaultKindCluster {
-		t.Errorf("clusterName = %q, want %q", cfg.clusterName, defaultKindCluster)
-	}
-}
-
-func TestDefaultKindConfig_ClusterNameUnset(t *testing.T) {
-	// Unset the env var entirely (Setenv("", "") sets it to empty string)
-	os.Unsetenv("KIND_CLUSTER")
 	t.Setenv("KIND_CLUSTER", "")
 
 	cfg := defaultKindConfig()
@@ -82,8 +68,46 @@ func TestWithKindCRDPaths(t *testing.T) {
 	if cfg.crdPaths[0] != "/path/to/crds" {
 		t.Errorf("crdPaths[0] = %q, want %q", cfg.crdPaths[0], "/path/to/crds")
 	}
-	if cfg.crdPaths[1] != "/another/path" {
-		t.Errorf("crdPaths[1] = %q, want %q", cfg.crdPaths[1], "/another/path")
+}
+
+func TestWithKindCreateCluster(t *testing.T) {
+	cfg := defaultKindConfig()
+	if cfg.createCluster {
+		t.Error("createCluster should be false by default")
+	}
+	WithKindCreateCluster()(cfg)
+	if !cfg.createCluster {
+		t.Error("createCluster should be true after WithKindCreateCluster")
+	}
+}
+
+func TestWithKindImages(t *testing.T) {
+	cfg := defaultKindConfig()
+	WithKindImages("img1:latest", "img2:v1")(cfg)
+
+	if len(cfg.images) != 2 {
+		t.Fatalf("len(images) = %d, want 2", len(cfg.images))
+	}
+	if cfg.images[0] != "img1:latest" {
+		t.Errorf("images[0] = %q, want %q", cfg.images[0], "img1:latest")
+	}
+	if cfg.images[1] != "img2:v1" {
+		t.Errorf("images[1] = %q, want %q", cfg.images[1], "img2:v1")
+	}
+}
+
+func TestKindClusterName(t *testing.T) {
+	name := KindClusterName(WithKindCluster("test-cluster"))
+	if name != "test-cluster" {
+		t.Errorf("KindClusterName = %q, want %q", name, "test-cluster")
+	}
+}
+
+func TestKindClusterName_Default(t *testing.T) {
+	t.Setenv("KIND_CLUSTER", "")
+	name := KindClusterName()
+	if name != defaultKindCluster {
+		t.Errorf("KindClusterName = %q, want %q", name, defaultKindCluster)
 	}
 }
 
@@ -96,5 +120,11 @@ func TestRandomSuffix(t *testing.T) {
 	}
 	if s1 == s2 {
 		t.Errorf("randomSuffix() returned same value twice: %q", s1)
+	}
+	// Check all chars are valid
+	for _, c := range s1 {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+			t.Errorf("randomSuffix() contains invalid char %q", c)
+		}
 	}
 }

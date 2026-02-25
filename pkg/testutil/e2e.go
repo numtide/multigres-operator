@@ -228,30 +228,55 @@ func (tc *TestCluster) runFinish(funcs []env.Func) {
 // to keep it. Called from t.Cleanup after runFinish.
 func (tc *TestCluster) maybeDestroyCluster() {
 	keep := os.Getenv("E2E_KEEP_CLUSTERS")
+	action := clusterCleanupAction(keep, tc.t.Failed())
 
-	switch keep {
-	case "always":
-		tc.t.Logf("e2e: keeping cluster %q (E2E_KEEP_CLUSTERS=always)", tc.clusterName)
-		tc.t.Logf("e2e: to clean up: kind delete cluster --name %s", tc.clusterName)
-		return
-	case "on-failure":
-		if tc.t.Failed() {
-			tc.t.Logf("e2e: keeping cluster %q for debugging (E2E_KEEP_CLUSTERS=on-failure)", tc.clusterName)
-			tc.t.Logf("e2e: inspect:  export KUBECONFIG=$(kind get kubeconfig --name %s)", tc.clusterName)
-			tc.t.Logf("e2e: logs:     kubectl logs -n multigres-operator deploy/multigres-operator-controller-manager")
-			tc.t.Logf("e2e: clean up: kind delete cluster --name %s", tc.clusterName)
-			return
-		}
-	}
-
-	// Default: destroy.
-	if tc.t.Failed() {
+	switch action {
+	case cleanupKeep:
+		tc.t.Logf("e2e: keeping cluster %q (E2E_KEEP_CLUSTERS=%s)", tc.clusterName, keep)
+		tc.t.Logf("e2e: inspect:  export KUBECONFIG=$(kind get kubeconfig --name %s)", tc.clusterName)
+		tc.t.Logf("e2e: logs:     kubectl logs -n multigres-operator deploy/multigres-operator-controller-manager")
+		tc.t.Logf("e2e: clean up: kind delete cluster --name %s", tc.clusterName)
+	case cleanupDestroyWithHint:
 		tc.t.Logf("e2e: cluster %q will be destroyed. To keep failed clusters for debugging, run with E2E_KEEP_CLUSTERS=on-failure", tc.clusterName)
+		tc.destroyCluster()
+	case cleanupDestroy:
+		tc.destroyCluster()
 	}
+}
+
+func (tc *TestCluster) destroyCluster() {
 	ctx := context.Background()
 	destroyFn := envfuncs.DestroyCluster(tc.clusterName)
 	if _, err := destroyFn(ctx, tc.cfg); err != nil {
 		tc.t.Logf("e2e: failed to destroy cluster %q: %v", tc.clusterName, err)
+	}
+}
+
+type cleanupDecision int
+
+const (
+	cleanupDestroy         cleanupDecision = iota // destroy silently
+	cleanupDestroyWithHint                        // destroy but hint about on-failure
+	cleanupKeep                                   // keep the cluster
+)
+
+// clusterCleanupAction decides what to do with the cluster based on the
+// E2E_KEEP_CLUSTERS value and whether the test failed. This is a pure
+// function for testability.
+func clusterCleanupAction(keepPolicy string, failed bool) cleanupDecision {
+	switch keepPolicy {
+	case "always":
+		return cleanupKeep
+	case "on-failure":
+		if failed {
+			return cleanupKeep
+		}
+		return cleanupDestroy
+	default:
+		if failed {
+			return cleanupDestroyWithHint
+		}
+		return cleanupDestroy
 	}
 }
 
