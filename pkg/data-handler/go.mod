@@ -5,12 +5,23 @@ go 1.25.2
 require (
 	github.com/google/go-cmp v0.7.0
 	github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c
-	github.com/numtide/multigres-operator/api v0.0.0-20260224095621-36608e864839
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260224095621-36608e864839
+	github.com/numtide/multigres-operator/api v0.0.0-20260225213642-5bfde5e48101
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260225213642-5bfde5e48101
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260225213642-5bfde5e48101
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 	sigs.k8s.io/controller-runtime v0.22.4
+)
+
+require (
+	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
+	github.com/moby/spdystream v0.5.0 // indirect
+	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
+	github.com/vladimirvivien/gexe v0.4.1 // indirect
+	k8s.io/component-base v0.35.0 // indirect
+	sigs.k8s.io/e2e-framework v0.6.0 // indirect
 )
 
 require (
@@ -55,7 +66,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260224095621-36608e864839
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260225213642-5bfde5e48101
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect

@@ -66,7 +66,8 @@ func (r *ShardReconciler) executeDrainStateMachine(
 
 	for _, p := range poolers {
 		// In multigres, the pooler ID depends on the hostname which is the pod name
-		if fmt.Sprintf("%v", p.Id) == pod.Name || p.MultiPooler.GetHostname() == pod.Name { // Fallback heuristics for matching
+		if fmt.Sprintf("%v", p.Id) == pod.Name ||
+			p.GetHostname() == pod.Name { // Fallback heuristics for matching
 			myPooler = p
 			break
 		}
@@ -84,7 +85,8 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			for _, cell := range cells {
 				pp, _ := store.GetMultiPoolersByCell(ctx, cell, nil)
 				for _, p := range pp {
-					if p.Type != clustermetadatapb.PoolerType_PRIMARY && (fmt.Sprintf("%v", p.Id) != pod.Name && p.MultiPooler.GetHostname() != pod.Name) {
+					if p.Type != clustermetadatapb.PoolerType_PRIMARY &&
+						(fmt.Sprintf("%v", p.Id) != pod.Name && p.GetHostname() != pod.Name) {
 						otherPooler = p
 						break
 					}
@@ -96,23 +98,57 @@ func (r *ShardReconciler) executeDrainStateMachine(
 
 			if otherPooler != nil {
 				if r.rpcClient == nil {
-					logger.Info("RPC client not configured, cannot trigger failover", "pod", pod.Name)
+					logger.Info(
+						"RPC client not configured, cannot trigger failover",
+						"pod",
+						pod.Name,
+					)
 					return true, nil
 				}
-				_, err = r.rpcClient.Promote(ctx, otherPooler.MultiPooler, &multipoolermanagerdatapb.PromoteRequest{})
+				_, err = r.rpcClient.Promote(
+					ctx,
+					otherPooler.MultiPooler,
+					&multipoolermanagerdatapb.PromoteRequest{},
+				)
 				if err != nil {
-					logger.Error(err, "Failed to appoint new leader", "newPrimary", otherPooler.MultiPooler.GetHostname())
+					logger.Error(
+						err,
+						"Failed to appoint new leader",
+						"newPrimary",
+						otherPooler.GetHostname(),
+					)
 					return true, nil // Requeue and try again
 				}
-				r.Recorder.Eventf(shard, "Warning", "FailoverInitiated", "Initiated failover from %s to %s", pod.Name, otherPooler.MultiPooler.GetHostname())
+				r.Recorder.Eventf(
+					shard,
+					"Warning",
+					"FailoverInitiated",
+					"Initiated failover from %s to %s",
+					pod.Name,
+					otherPooler.GetHostname(),
+				)
 			} else {
 				// No replicas available — check if we've exceeded the drain timeout.
 				if reqAt, ok := pod.Annotations[metadata.AnnotationDrainRequestedAt]; ok {
-					if t, parseErr := time.Parse(time.RFC3339, reqAt); parseErr == nil && time.Since(t) > drainTimeout {
-						r.Recorder.Eventf(shard, "Warning", "FailoverTimeout",
-							"Cannot failover PRIMARY pod %s: no eligible replicas found after %s", pod.Name, drainTimeout)
+					if t, parseErr := time.Parse(
+						time.RFC3339,
+						reqAt,
+					); parseErr == nil &&
+						time.Since(t) > drainTimeout {
+						r.Recorder.Eventf(
+							shard,
+							"Warning",
+							"FailoverTimeout",
+							"Cannot failover PRIMARY pod %s: no eligible replicas found after %s",
+							pod.Name,
+							drainTimeout,
+						)
 						monitoring.IncrementDrainOperations(clusterName, shard.Name, "failure")
-						return false, fmt.Errorf("failover timeout: no replicas available for PRIMARY pod %s after %s", pod.Name, drainTimeout)
+						return false, fmt.Errorf(
+							"failover timeout: no replicas available for PRIMARY pod %s after %s",
+							pod.Name,
+							drainTimeout,
+						)
 					}
 				}
 				logger.Info("No replicas available for failover, will retry", "pod", pod.Name)
@@ -132,7 +168,12 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			}
 			_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 			if rpcErr != nil {
-				logger.Error(rpcErr, "Failed to remove pod from synchronous standby list", "pod", pod.Name)
+				logger.Error(
+					rpcErr,
+					"Failed to remove pod from synchronous standby list",
+					"pod",
+					pod.Name,
+				)
 				return true, nil
 			}
 		}
@@ -144,7 +185,12 @@ func (r *ShardReconciler) executeDrainStateMachine(
 		// idempotent REMOVE call on the primary. If the primary is unreachable, requeue.
 		primary, err := findPrimaryPooler(ctx, store, cells)
 		if err != nil {
-			logger.Error(err, "Failed to find primary for drain verification, will retry", "pod", pod.Name)
+			logger.Error(
+				err,
+				"Failed to find primary for drain verification, will retry",
+				"pod",
+				pod.Name,
+			)
 			return true, nil
 		}
 		if primary != nil && myPooler != nil {
@@ -154,7 +200,12 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			}
 			_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 			if rpcErr != nil {
-				logger.Error(rpcErr, "Standby removal verification failed, will retry", "pod", pod.Name)
+				logger.Error(
+					rpcErr,
+					"Standby removal verification failed, will retry",
+					"pod",
+					pod.Name,
+				)
 				return true, nil
 			}
 		}
@@ -176,7 +227,11 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	return false, nil
 }
 
-func (r *ShardReconciler) updateDrainState(ctx context.Context, pod *corev1.Pod, newState string) (bool, error) {
+func (r *ShardReconciler) updateDrainState(
+	ctx context.Context,
+	pod *corev1.Pod,
+	newState string,
+) (bool, error) {
 	patch := client.MergeFrom(pod.DeepCopy())
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
@@ -188,7 +243,11 @@ func (r *ShardReconciler) updateDrainState(ctx context.Context, pod *corev1.Pod,
 	return true, nil
 }
 
-func (r *ShardReconciler) forceUnregister(ctx context.Context, store topoclient.Store, pod *corev1.Pod) error {
+func (r *ShardReconciler) forceUnregister(
+	ctx context.Context,
+	store topoclient.Store,
+	pod *corev1.Pod,
+) error {
 	cellName := pod.Labels[metadata.LabelMultigresCell]
 	if cellName == "" {
 		return nil
@@ -200,11 +259,12 @@ func (r *ShardReconciler) forceUnregister(ctx context.Context, store topoclient.
 	}
 
 	for _, p := range poolers {
-		if fmt.Sprintf("%v", p.Id) == pod.Name || p.MultiPooler.GetHostname() == pod.Name {
+		if fmt.Sprintf("%v", p.Id) == pod.Name || p.GetHostname() == pod.Name {
 			return store.UnregisterMultiPooler(ctx, p.Id)
 		}
 	}
-	log.FromContext(ctx).Info("No matching pooler found in topology for pod, skipping unregistration",
-		"pod", pod.Name, "cell", cellName)
+	log.FromContext(ctx).
+		Info("No matching pooler found in topology for pod, skipping unregistration",
+			"pod", pod.Name, "cell", cellName)
 	return nil
 }

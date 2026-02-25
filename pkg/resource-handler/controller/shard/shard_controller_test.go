@@ -152,7 +152,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify replica pool pods
 				for i := 0; i < 2; i++ {
 					podName := BuildPoolPodName(shard, "replica", "zone1", i)
-					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+					if err := c.Get(
+						t.Context(),
+						types.NamespacedName{Name: podName, Namespace: "default"},
+						&corev1.Pod{},
+					); err != nil {
 						t.Errorf("Replica pool Pod %d should exist: %v", i, err)
 					}
 				}
@@ -160,7 +164,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify readOnly pool pods
 				for i := 0; i < 3; i++ {
 					podName := BuildPoolPodName(shard, "readOnly", "zone1", i)
-					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+					if err := c.Get(
+						t.Context(),
+						types.NamespacedName{Name: podName, Namespace: "default"},
+						&corev1.Pod{},
+					); err != nil {
 						t.Errorf("ReadOnly pool Pod %d should exist: %v", i, err)
 					}
 				}
@@ -314,7 +322,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify Pods for zone1
 				for i := 0; i < 2; i++ {
 					podName := BuildPoolPodName(shard, "primary", "zone1", i)
-					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+					if err := c.Get(
+						t.Context(),
+						types.NamespacedName{Name: podName, Namespace: "default"},
+						&corev1.Pod{},
+					); err != nil {
 						t.Errorf("Zone1 Pod %d should exist: %v", i, err)
 					}
 				}
@@ -322,7 +334,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify Pods for zone2
 				for i := 0; i < 2; i++ {
 					podName := BuildPoolPodName(shard, "primary", "zone2", i)
-					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+					if err := c.Get(
+						t.Context(),
+						types.NamespacedName{Name: podName, Namespace: "default"},
+						&corev1.Pod{},
+					); err != nil {
 						t.Errorf("Zone2 Pod %d should exist: %v", i, err)
 					}
 				}
@@ -398,7 +414,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Verify scale up to 5 pods
 				for i := 0; i < 5; i++ {
 					podName := BuildPoolPodName(shard, "primary", "zone1", i)
-					if err := c.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: "default"}, &corev1.Pod{}); err != nil {
+					if err := c.Get(
+						t.Context(),
+						types.NamespacedName{Name: podName, Namespace: "default"},
+						&corev1.Pod{},
+					); err != nil {
 						t.Errorf("Zone1 Pod %d should exist: %v", i, err)
 					}
 				}
@@ -1070,7 +1090,11 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				// Mark all pods as Ready so the next iteration can create more pods.
 				// The reconciler blocks creation when existing pods aren't Ready.
 				podList := &corev1.PodList{}
-				if err := fakeClient.List(t.Context(), podList, client.InNamespace(tc.shard.Namespace)); err == nil {
+				if err := fakeClient.List(
+					t.Context(),
+					podList,
+					client.InNamespace(tc.shard.Namespace),
+				); err == nil {
 					for idx := range podList.Items {
 						p := &podList.Items[idx]
 						if isPodReady(p) {
@@ -1165,10 +1189,14 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      BuildPoolPodName(shard, "primary", "zone1", 0),
 				Namespace: "default",
-				Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1")),
+				Labels: metadata.GetSelectorLabels(
+					buildPoolLabelsWithCell(shard, "primary", "zone1"),
+				),
 			},
 			Status: corev1.PodStatus{
-				Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
 			},
 		}
 
@@ -1273,10 +1301,14 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "replica", "zone1", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "replica", "zone1")),
+					Labels: metadata.GetSelectorLabels(
+						buildPoolLabelsWithCell(shard, "replica", "zone1"),
+					),
 				},
 				Status: corev1.PodStatus{
-					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					},
 				},
 			}
 			objects = append(objects, p)
@@ -1286,10 +1318,14 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "readOnly", "zone1", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "readOnly", "zone1")),
+					Labels: metadata.GetSelectorLabels(
+						buildPoolLabelsWithCell(shard, "readOnly", "zone1"),
+					),
 				},
 				Status: corev1.PodStatus{
-					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					},
 				},
 			}
 			objects = append(objects, p)
@@ -1355,10 +1391,14 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "primary", "zone1", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1")),
+					Labels: metadata.GetSelectorLabels(
+						buildPoolLabelsWithCell(shard, "primary", "zone1"),
+					),
 				},
 				Status: corev1.PodStatus{
-					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					},
 				},
 			}
 			objects = append(objects, p)
@@ -1369,10 +1409,14 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "primary", "zone2", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone2")),
+					Labels: metadata.GetSelectorLabels(
+						buildPoolLabelsWithCell(shard, "primary", "zone2"),
+					),
 				},
 				Status: corev1.PodStatus{
-					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					},
 				},
 			}
 			objects = append(objects, p)
@@ -1568,7 +1612,14 @@ func TestRollingUpdateOrder(t *testing.T) {
 	drainCount := 0
 	for i := 0; i < 3; i++ {
 		var pod corev1.Pod
-		if err := c.Get(context.Background(), types.NamespacedName{Name: BuildPoolPodName(shardObj, "primary", "zone1", i), Namespace: "default"}, &pod); err != nil {
+		if err := c.Get(
+			context.Background(),
+			types.NamespacedName{
+				Name:      BuildPoolPodName(shardObj, "primary", "zone1", i),
+				Namespace: "default",
+			},
+			&pod,
+		); err != nil {
 			t.Fatalf("pod %d should still exist: %v", i, err)
 		}
 		if pod.Annotations[metadata.AnnotationDrainState] == metadata.DrainStateRequested {
@@ -1658,12 +1709,22 @@ func TestDrainedPodReplacement(t *testing.T) {
 	}
 
 	// The DRAINED pod should now have the drain requested annotation
-	err = c.Get(context.Background(), types.NamespacedName{Name: BuildPoolPodName(shardObj, "primary", "zone1", 0), Namespace: "default"}, pod)
+	err = c.Get(
+		context.Background(),
+		types.NamespacedName{
+			Name:      BuildPoolPodName(shardObj, "primary", "zone1", 0),
+			Namespace: "default",
+		},
+		pod,
+	)
 	if err != nil {
 		t.Fatalf("expected pod to exist, got %v", err)
 	}
 
 	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
-		t.Errorf("Expected DRAINED pod to have drain requested annotation, got %v", pod.Annotations[metadata.AnnotationDrainState])
+		t.Errorf(
+			"Expected DRAINED pod to have drain requested annotation, got %v",
+			pod.Annotations[metadata.AnnotationDrainState],
+		)
 	}
 }

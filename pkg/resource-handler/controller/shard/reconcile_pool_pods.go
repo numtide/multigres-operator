@@ -44,12 +44,22 @@ func (r *ShardReconciler) reconcilePoolPods(
 	selector := metadata.GetSelectorLabels(labels)
 
 	podList := &corev1.PodList{}
-	if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+	if err := r.List(
+		ctx,
+		podList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
 		return fmt.Errorf("failed to list pods for pool %s cell %s: %w", poolName, cellName, err)
 	}
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(ctx, pvcList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+	if err := r.List(
+		ctx,
+		pvcList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
 		return fmt.Errorf("failed to list PVCs for pool %s cell %s: %w", poolName, cellName, err)
 	}
 
@@ -83,14 +93,29 @@ func (r *ShardReconciler) reconcilePoolPods(
 
 	// Phase 3: Handle rolling updates
 	if err := r.handleRollingUpdates(
-		ctx, shard, poolName, cellName, poolSpec, existingPods, driftedCount, actionTaken, inProgress,
+		ctx,
+		shard,
+		poolName,
+		cellName,
+		poolSpec,
+		existingPods,
+		driftedCount,
+		actionTaken,
+		inProgress,
 	); err != nil {
 		return err
 	}
 
 	// Record drift metric
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	monitoring.SetPoolPodsDrifted(clusterName, shard.Name, poolName, cellName, shard.Namespace, driftedCount)
+	monitoring.SetPoolPodsDrifted(
+		clusterName,
+		shard.Name,
+		poolName,
+		cellName,
+		shard.Namespace,
+		driftedCount,
+	)
 
 	return nil
 }
@@ -116,11 +141,22 @@ func (r *ShardReconciler) createMissingResources(
 		// Create PVC if missing
 		if _, exists := existingPVCs[pvcName]; !exists {
 			if !actionTaken {
-				desiredPVC, buildErr := BuildPoolDataPVC(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
+				desiredPVC, buildErr := BuildPoolDataPVC(
+					shard,
+					poolName,
+					cellName,
+					poolSpec,
+					int(i),
+					r.Scheme,
+				)
 				if buildErr != nil {
 					return 0, false, fmt.Errorf("failed to build PVC %s: %w", pvcName, buildErr)
 				}
-				if createErr := r.Create(ctx, desiredPVC); createErr != nil && !errors.IsAlreadyExists(createErr) {
+				if createErr := r.Create(
+					ctx,
+					desiredPVC,
+				); createErr != nil &&
+					!errors.IsAlreadyExists(createErr) {
 					return 0, false, fmt.Errorf("failed to create PVC %s: %w", pvcName, createErr)
 				}
 				logger.Info("Created missing pool PVC", "pvc", pvcName)
@@ -131,26 +167,55 @@ func (r *ShardReconciler) createMissingResources(
 		pod, exists := existingPods[podName]
 		if !exists {
 			if !actionTaken {
-				desiredPod, buildErr := BuildPoolPod(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
+				desiredPod, buildErr := BuildPoolPod(
+					shard,
+					poolName,
+					cellName,
+					poolSpec,
+					int(i),
+					r.Scheme,
+				)
 				if buildErr != nil {
 					return 0, false, fmt.Errorf("failed to build pod %s: %w", podName, buildErr)
 				}
-				if createErr := r.Create(ctx, desiredPod); createErr != nil && !errors.IsAlreadyExists(createErr) {
+				if createErr := r.Create(
+					ctx,
+					desiredPod,
+				); createErr != nil &&
+					!errors.IsAlreadyExists(createErr) {
 					return 0, false, fmt.Errorf("failed to create pod %s: %w", podName, createErr)
 				}
 				logger.Info("Created missing pool pod", "pod", podName)
-				r.Recorder.Eventf(shard, "Normal", "PodCreated", "Created pod %s for pool %s", podName, poolName)
+				r.Recorder.Eventf(
+					shard,
+					"Normal",
+					"PodCreated",
+					"Created pod %s for pool %s",
+					podName,
+					poolName,
+				)
 				actionTaken = true
 			}
 			continue
 		}
 
 		// Handle terminal pods (Failed/Succeeded) — delete for recreation
-		if (pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded) && pod.DeletionTimestamp.IsZero() {
+		if (pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded) &&
+			pod.DeletionTimestamp.IsZero() {
 			if !actionTaken {
-				logger.Info("Deleting terminal pool pod for recreation", "pod", pod.Name, "phase", pod.Status.Phase)
+				logger.Info(
+					"Deleting terminal pool pod for recreation",
+					"pod",
+					pod.Name,
+					"phase",
+					pod.Status.Phase,
+				)
 				if delErr := r.Delete(ctx, pod); delErr != nil && !errors.IsNotFound(delErr) {
-					return 0, false, fmt.Errorf("failed to delete terminal pod %s: %w", pod.Name, delErr)
+					return 0, false, fmt.Errorf(
+						"failed to delete terminal pod %s: %w",
+						pod.Name,
+						delErr,
+					)
 				}
 				actionTaken = true
 			}
@@ -158,7 +223,8 @@ func (r *ShardReconciler) createMissingResources(
 		}
 
 		// Handle pods being deleted externally
-		if !pod.DeletionTimestamp.IsZero() && controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
+		if !pod.DeletionTimestamp.IsZero() &&
+			controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
 			if !actionTaken {
 				if handleErr := r.handleExternalDeletion(ctx, shard, pod); handleErr != nil {
 					return 0, false, handleErr
@@ -217,10 +283,18 @@ func (r *ShardReconciler) handleExternalDeletion(
 
 	if !isScheduled {
 		// Never scheduled -> can't be registered in etcd, safe to remove finalizer.
-		logger.Info("Removing finalizer from unscheduled pod to clear deletion deadlock", "pod", pod.Name)
+		logger.Info(
+			"Removing finalizer from unscheduled pod to clear deletion deadlock",
+			"pod",
+			pod.Name,
+		)
 		if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
 			if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to remove finalizer from unscheduled pod %s: %w", pod.Name, err)
+				return fmt.Errorf(
+					"failed to remove finalizer from unscheduled pod %s: %w",
+					pod.Name,
+					err,
+				)
 			}
 		}
 		return nil
@@ -234,7 +308,13 @@ func (r *ShardReconciler) handleExternalDeletion(
 		if err := r.initiateDrain(ctx, pod); err != nil {
 			return err
 		}
-		r.Recorder.Eventf(shard, "Warning", "ExternalDeletion", "Initiating drain for externally-deleted pod %s", pod.Name)
+		r.Recorder.Eventf(
+			shard,
+			"Warning",
+			"ExternalDeletion",
+			"Initiating drain for externally-deleted pod %s",
+			pod.Name,
+		)
 	}
 
 	return nil
@@ -279,7 +359,7 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 
 		index := resolvePodIndex(pod.Name)
-		if int32(index) >= replicas {
+		if index >= int(replicas) {
 			extraPods = append(extraPods, pod)
 		}
 	}
@@ -288,10 +368,18 @@ func (r *ShardReconciler) handleScaleDown(
 	for _, pod := range readyForDeletion {
 		logger.Info("Cleaning up pod in ready-for-deletion state", "pod", pod.Name)
 		if err := r.cleanupDrainedPod(ctx, shard, pod, poolName, poolSpec); err != nil {
-			return actionTaken, inProgress, fmt.Errorf("failed to cleanup drained pod %s: %w", pod.Name, err)
+			return actionTaken, inProgress, fmt.Errorf(
+				"failed to cleanup drained pod %s: %w",
+				pod.Name,
+				err,
+			)
 		}
 		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
-			return actionTaken, inProgress, fmt.Errorf("failed to delete ready-for-deletion pod %s: %w", pod.Name, err)
+			return actionTaken, inProgress, fmt.Errorf(
+				"failed to delete ready-for-deletion pod %s: %w",
+				pod.Name,
+				err,
+			)
 		}
 		actionTaken = true
 	}
@@ -304,11 +392,16 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 		role := resolvePodRole(shard, pod.Name)
 		state := pod.Annotations[metadata.AnnotationDrainState]
-		logger.V(1).Info("Checking pod for replacement", "pod", pod.Name, "role", role, "drainState", state)
+		logger.V(1).
+			Info("Checking pod for replacement", "pod", pod.Name, "role", role, "drainState", state)
 
 		if role == "DRAINED" && state == "" {
 			if err := r.initiateDrain(ctx, pod); err != nil {
-				return actionTaken, inProgress, fmt.Errorf("failed to initiate drain for DRAINED pod %s: %w", pod.Name, err)
+				return actionTaken, inProgress, fmt.Errorf(
+					"failed to initiate drain for DRAINED pod %s: %w",
+					pod.Name,
+					err,
+				)
 			}
 			logger.Info("Requested drain for DRAINED pod", "pod", pod.Name)
 			r.Recorder.Eventf(shard, "Warning", "PodReplaced", "Replacing DRAINED pod %s", pod.Name)
@@ -317,15 +410,26 @@ func (r *ShardReconciler) handleScaleDown(
 	}
 
 	// Drain extra pods (scale-down)
-	logger.V(1).Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "desiredReplicas", replicas)
+	logger.V(1).
+		Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "desiredReplicas", replicas)
 	if !actionTaken && len(extraPods) > 0 {
 		podToDrain := r.selectPodToDrain(ctx, extraPods, shard)
 		if podToDrain != nil && podToDrain.Annotations[metadata.AnnotationDrainState] == "" {
 			if err := r.initiateDrain(ctx, podToDrain); err != nil {
-				return actionTaken, inProgress, fmt.Errorf("failed to initiate drain for extra pod %s: %w", podToDrain.Name, err)
+				return actionTaken, inProgress, fmt.Errorf(
+					"failed to initiate drain for extra pod %s: %w",
+					podToDrain.Name,
+					err,
+				)
 			}
 			logger.Info("Requested drain for extra pod", "pod", podToDrain.Name)
-			r.Recorder.Eventf(shard, "Normal", "DrainStarted", "Initiated drain for extra pod %s", podToDrain.Name)
+			r.Recorder.Eventf(
+				shard,
+				"Normal",
+				"DrainStarted",
+				"Initiated drain for extra pod %s",
+				podToDrain.Name,
+			)
 			actionTaken = true
 		}
 	}
@@ -347,7 +451,14 @@ func (r *ShardReconciler) handleRollingUpdates(
 
 	inProgress := isAnyPodDraining || driftedCount > 0
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	monitoring.SetRollingUpdateInProgress(clusterName, shard.Name, poolName, cellName, shard.Namespace, inProgress)
+	monitoring.SetRollingUpdateInProgress(
+		clusterName,
+		shard.Name,
+		poolName,
+		cellName,
+		shard.Namespace,
+		inProgress,
+	)
 
 	if inProgress {
 		msg := fmt.Sprintf("%d pods need update in pool %s", driftedCount, poolName)
@@ -381,7 +492,15 @@ func (r *ShardReconciler) handleRollingUpdates(
 	var waitPrimary *corev1.Pod
 	for _, name := range podNames {
 		pod := existingPods[name]
-		if !podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, resolvePodIndex(pod.Name), r.Scheme) {
+		if !podNeedsUpdate(
+			pod,
+			shard,
+			poolName,
+			cellName,
+			poolSpec,
+			resolvePodIndex(pod.Name),
+			r.Scheme,
+		) {
 			continue
 		}
 
@@ -390,8 +509,18 @@ func (r *ShardReconciler) handleRollingUpdates(
 			if err := r.initiateDrain(ctx, pod); err != nil {
 				return fmt.Errorf("failed to initiate drain for drifted pod %s: %w", pod.Name, err)
 			}
-			logger.Info("Initiated drain for drifted replica pod during rolling update", "pod", pod.Name)
-			r.Recorder.Eventf(shard, "Normal", "PodUpdated", "Initiated drain for drifted replica pod %s", pod.Name)
+			logger.Info(
+				"Initiated drain for drifted replica pod during rolling update",
+				"pod",
+				pod.Name,
+			)
+			r.Recorder.Eventf(
+				shard,
+				"Normal",
+				"PodUpdated",
+				"Initiated drain for drifted replica pod %s",
+				pod.Name,
+			)
 			return nil // Only one per reconcile loop
 		}
 		waitPrimary = pod
@@ -400,10 +529,20 @@ func (r *ShardReconciler) handleRollingUpdates(
 	// If the only pod that needs updating is the PRIMARY, initiate a switchover.
 	if waitPrimary != nil && waitPrimary.Annotations[metadata.AnnotationDrainState] == "" {
 		if err := r.initiateDrain(ctx, waitPrimary); err != nil {
-			return fmt.Errorf("failed to request drain for primary pod %s: %w", waitPrimary.Name, err)
+			return fmt.Errorf(
+				"failed to request drain for primary pod %s: %w",
+				waitPrimary.Name,
+				err,
+			)
 		}
 		logger.Info("Requested switchover for primary pod rolling update", "pod", waitPrimary.Name)
-		r.Recorder.Eventf(shard, "Normal", "RollingUpdateStarted", "Initiating primary switchover for rolling update of pod %s", waitPrimary.Name)
+		r.Recorder.Eventf(
+			shard,
+			"Normal",
+			"RollingUpdateStarted",
+			"Initiating primary switchover for rolling update of pod %s",
+			waitPrimary.Name,
+		)
 	}
 
 	return nil
@@ -447,7 +586,8 @@ func (r *ShardReconciler) selectPodToDrain(
 			score += 500
 		}
 
-		logger.V(1).Info("Pod score for drain", "pod", pod.Name, "score", score, "isReady", isReady, "role", role)
+		logger.V(1).
+			Info("Pod score for drain", "pod", pod.Name, "score", score, "isReady", isReady, "role", role)
 		if bestPod == nil || score > bestScore {
 			bestPod = pod
 			bestScore = score
@@ -482,8 +622,13 @@ func (r *ShardReconciler) cleanupDrainedPod(
 	}
 
 	// Handle PVC deletion based on policy
-	mergedPolicy := multigresv1alpha1.MergePVCDeletionPolicy(poolSpec.PVCDeletionPolicy, shard.Spec.PVCDeletionPolicy)
-	policy := multigresv1alpha1.PVCDeletionPolicy{WhenScaled: multigresv1alpha1.RetainPVCRetentionPolicy}
+	mergedPolicy := multigresv1alpha1.MergePVCDeletionPolicy(
+		poolSpec.PVCDeletionPolicy,
+		shard.Spec.PVCDeletionPolicy,
+	)
+	policy := multigresv1alpha1.PVCDeletionPolicy{
+		WhenScaled: multigresv1alpha1.RetainPVCRetentionPolicy,
+	}
 	if mergedPolicy != nil && mergedPolicy.WhenScaled != "" {
 		policy = *mergedPolicy
 	}

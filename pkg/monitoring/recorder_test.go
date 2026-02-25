@@ -72,11 +72,29 @@ func TestSetShardPoolReplicas(t *testing.T) {
 
 	SetShardPoolReplicas("test-cluster", "shard-1", "primary", "z1", "default", 3, 3)
 
-	desired := gaugeValue(t, shardPoolReplicas, "test-cluster", "shard-1", "primary", "z1", "default", "desired")
+	desired := gaugeValue(
+		t,
+		shardPoolReplicas,
+		"test-cluster",
+		"shard-1",
+		"primary",
+		"z1",
+		"default",
+		"desired",
+	)
 	if desired != 3 {
 		t.Errorf("expected desired=3, got %f", desired)
 	}
-	ready := gaugeValue(t, shardPoolReplicas, "test-cluster", "shard-1", "primary", "z1", "default", "ready")
+	ready := gaugeValue(
+		t,
+		shardPoolReplicas,
+		"test-cluster",
+		"shard-1",
+		"primary",
+		"z1",
+		"default",
+		"ready",
+	)
 	if ready != 3 {
 		t.Errorf("expected ready=3, got %f", ready)
 	}

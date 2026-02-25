@@ -148,7 +148,14 @@ func TestBuildPoolDataPVCName_MatchesPodReference(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pvcName := BuildPoolDataPVCName(tt.shard, tt.poolName, tt.cellName, tt.index)
-			pod, _ := BuildPoolPod(tt.shard, tt.poolName, tt.cellName, newTestPoolSpec(), tt.index, testScheme())
+			pod, _ := BuildPoolPod(
+				tt.shard,
+				tt.poolName,
+				tt.cellName,
+				newTestPoolSpec(),
+				tt.index,
+				testScheme(),
+			)
 
 			var podPVCRef string
 			for _, v := range pod.Spec.Volumes {
@@ -202,7 +209,11 @@ func TestBuildPoolPodDisruptionBudget(t *testing.T) {
 		t.Errorf("selector cell = %q, want %q", sel["multigres.com/cell"], "z1")
 	}
 	if sel["app.kubernetes.io/component"] != PoolComponentName {
-		t.Errorf("selector component = %q, want %q", sel["app.kubernetes.io/component"], PoolComponentName)
+		t.Errorf(
+			"selector component = %q, want %q",
+			sel["app.kubernetes.io/component"],
+			PoolComponentName,
+		)
 	}
 
 	// Owner reference

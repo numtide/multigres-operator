@@ -92,10 +92,17 @@ func TestBuildPoolPod_Containers(t *testing.T) {
 	}
 
 	if len(pod.Spec.InitContainers) != 1 {
-		t.Fatalf("expected 1 init container (multipooler sidecar), got %d", len(pod.Spec.InitContainers))
+		t.Fatalf(
+			"expected 1 init container (multipooler sidecar), got %d",
+			len(pod.Spec.InitContainers),
+		)
 	}
 	if pod.Spec.InitContainers[0].Name != "multipooler" {
-		t.Errorf("init container name = %q, want %q", pod.Spec.InitContainers[0].Name, "multipooler")
+		t.Errorf(
+			"init container name = %q, want %q",
+			pod.Spec.InitContainers[0].Name,
+			"multipooler",
+		)
 	}
 
 	if len(pod.Spec.Containers) != 1 {
@@ -151,8 +158,12 @@ func TestBuildPoolPod_SecurityContext(t *testing.T) {
 		t.Error("FSGroup should be 999 (postgres group)")
 	}
 
-	if pod.Spec.TerminationGracePeriodSeconds == nil || *pod.Spec.TerminationGracePeriodSeconds != 30 {
-		t.Errorf("terminationGracePeriodSeconds = %v, want 30", pod.Spec.TerminationGracePeriodSeconds)
+	if pod.Spec.TerminationGracePeriodSeconds == nil ||
+		*pod.Spec.TerminationGracePeriodSeconds != 30 {
+		t.Errorf(
+			"terminationGracePeriodSeconds = %v, want 30",
+			pod.Spec.TerminationGracePeriodSeconds,
+		)
 	}
 }
 
@@ -191,9 +202,13 @@ func TestBuildPoolPod_Affinity(t *testing.T) {
 		NodeAffinity: &corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 				NodeSelectorTerms: []corev1.NodeSelectorTerm{{
-					MatchExpressions: []corev1.NodeSelectorRequirement{{
-						Key: "disk-type", Operator: corev1.NodeSelectorOpIn, Values: []string{"ssd"},
-					}},
+					MatchExpressions: []corev1.NodeSelectorRequirement{
+						{
+							Key:      "disk-type",
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{"ssd"},
+						},
+					},
 				}},
 			},
 		},
@@ -265,9 +280,13 @@ func TestComputeSpecHash_ChangesOnDrift(t *testing.T) {
 		NodeAffinity: &corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 				NodeSelectorTerms: []corev1.NodeSelectorTerm{{
-					MatchExpressions: []corev1.NodeSelectorRequirement{{
-						Key: "disk-type", Operator: corev1.NodeSelectorOpIn, Values: []string{"ssd"},
-					}},
+					MatchExpressions: []corev1.NodeSelectorRequirement{
+						{
+							Key:      "disk-type",
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{"ssd"},
+						},
+					},
 				}},
 			},
 		},
