@@ -39,6 +39,10 @@ IMG_PREFIX ?= ghcr.io/numtide
 IMG_REPO ?= multigres-operator
 IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
 
+.PHONY: print-img
+print-img: ## Print the full operator container image reference
+	@echo $(IMG)
+
 # Build metadata
 BUILD_DATE ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -68,7 +72,6 @@ KIND_CLUSTER ?= multigres-operator-dev
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
-KIND_CLUSTER_E2E ?= multigres-operator-test-e2e
 
 # Local kubeconfig for kind cluster (doesn't modify user's ~/.kube/config)
 KIND_KUBECONFIG ?= $(shell pwd)/kubeconfig.yaml
@@ -365,29 +368,27 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 	@echo "  - Combined data: coverage/combined.out (for CI/codecov)"
 
 ##@ Test End-to-End
-
-.PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
-	@command -v $(KIND) >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@case "$$($(KIND) get clusters)" in \
-		*"$(KIND_CLUSTER_E2E)"*) \
-			echo "Kind cluster '$(KIND_CLUSTER_E2E)' already exists. Skipping creation." ;; \
-		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER_E2E)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER_E2E) ;; \
-	esac
+# Each e2e test creates its own ephemeral Kind cluster via e2e-framework.
+# The Makefile only needs to build the operator image — the Go tests handle
+# cluster lifecycle, image loading, CRD installation, and operator deployment.
+#
+# Set E2E_KEEP_CLUSTERS to control cluster cleanup:
+#   never      (default) always destroy clusters
+#   on-failure keep clusters from failed tests for debugging
+#   always     never destroy clusters
 
 .PHONY: test-e2e
-test-e2e: manifests generate fmt vet setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER_E2E) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
-	$(MAKE) cleanup-test-e2e
+test-e2e: manifests generate fmt vet container ## Run e2e tests (each test gets its own Kind cluster)
+	OPERATOR_IMG=$(IMG) \
+	REPO_ROOT=$(shell pwd) \
+	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
 
-.PHONY: cleanup-test-e2e
-cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
-	@$(KIND) delete cluster --name $(KIND_CLUSTER_E2E)
+.PHONY: test-e2e-keep
+test-e2e-keep: manifests generate fmt vet container ## Run e2e tests; keep Kind clusters from failed tests for debugging
+	OPERATOR_IMG=$(IMG) \
+	REPO_ROOT=$(shell pwd) \
+	E2E_KEEP_CLUSTERS=on-failure \
+	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
 
 ##@ Deployment
 

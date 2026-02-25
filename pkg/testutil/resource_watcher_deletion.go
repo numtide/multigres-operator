@@ -74,31 +74,33 @@ func (rw *ResourceWatcher) waitForSingleDeletion(obj client.Object, deadline tim
 	name := obj.GetName()
 	namespace := obj.GetNamespace()
 
-	// Check existing events first
-	if evt := rw.findLatestEvent(func(e ResourceEvent) bool {
-		return e.Kind == kind && e.Name == name && e.Namespace == namespace && e.Type == "DELETED"
-	}); evt != nil {
+	predicate := func(evt ResourceEvent) bool {
+		return evt.Kind == kind && evt.Name == name && evt.Namespace == namespace &&
+			evt.Type == "DELETED"
+	}
+
+	// Subscribe BEFORE checking existing events to avoid TOCTOU race:
+	// without this, an event could arrive between findLatestEvent and
+	// subscribe, and be missed by both.
+	subCh := rw.subscribe()
+	defer rw.unsubscribe(subCh)
+
+	// Check existing events (already in cache).
+	if evt := rw.findLatestEvent(predicate); evt != nil {
 		rw.t.Logf("Matched DELETED \"%s\" %s/%s (from existing events)", kind, namespace, name)
 		return nil
 	}
 
-	// Subscribe to new events
-	subCh := rw.subscribe()
-	defer rw.unsubscribe(subCh)
-
-	// Wait for DELETED event
-	predicate := func(evt ResourceEvent) bool {
-		if evt.Kind != kind || evt.Name != name || evt.Namespace != namespace {
-			return false
-		}
-		if evt.Type == "DELETED" {
+	// Wait for new DELETED event via subscription.
+	matchPredicate := func(evt ResourceEvent) bool {
+		if predicate(evt) {
 			rw.t.Logf("Matched DELETED \"%s\" %s/%s", kind, namespace, name)
 			return true
 		}
 		return false
 	}
 
-	_, err := rw.waitForEvent(subCh, deadline, predicate)
+	_, err := rw.waitForEvent(subCh, deadline, matchPredicate)
 	if err != nil {
 		return fmt.Errorf("waiting for %s %s/%s to be deleted: %w", kind, namespace, name, err)
 	}

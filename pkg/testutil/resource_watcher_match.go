@@ -94,6 +94,12 @@ func (rw *ResourceWatcher) waitForSingleMatch(
 
 	kind := extractKind(expected)
 
+	// Subscribe BEFORE checking existing events to avoid TOCTOU race:
+	// without this, an event could arrive between checkLatestEventMatches
+	// and subscribe, and be missed by both.
+	subCh := rw.subscribe()
+	defer rw.unsubscribe(subCh)
+
 	// Step 1: Check latest state of resource in existing events.
 	matched, diff := rw.checkLatestEventMatches(expected, cmpOpts)
 	if matched {
@@ -107,10 +113,6 @@ func (rw *ResourceWatcher) waitForSingleMatch(
 		}
 		rw.t.Logf("Exists but not matching \"%s\", subscribing for updates...%s", kind, suffix)
 	}
-
-	// Step 2: Subscribe to new events.
-	subCh := rw.subscribe()
-	defer rw.unsubscribe(subCh)
 
 	// Step 3: Wait for matching event or timeout (using shared deadline).
 	// Initialize lastDiff with the diff from initial check (if any).
