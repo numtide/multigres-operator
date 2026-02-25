@@ -2518,6 +2518,13 @@ spec:
                     - Delete
                     type: string
                 type: object
+              replicas:
+                description: |-
+                  Replicas is the total number of desired replicas across all pools in this shard.
+                  This field is used by the scale subresource to support HPA and PDBs.
+                  It is automatically populated by the cluster-handler based on the sum of ReplicasPerCell.
+                format: int32
+                type: integer
               shardName:
                 description: ShardName is the specific identifier for this shard (e.g.
                   "0").
@@ -2654,6 +2661,11 @@ spec:
               poolsReady:
                 description: PoolsReady indicates if all data pools are ready.
                 type: boolean
+              readyReplicas:
+                description: ReadyReplicas is the total number of ready pods across
+                  all pools in this shard.
+                format: int32
+                type: integer
             required:
             - orchReady
             - poolsReady
@@ -2662,4 +2674,7 @@ spec:
     served: true
     storage: true
     subresources:
+      scale:
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.readyReplicas
       status: {}

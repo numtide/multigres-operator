@@ -157,6 +157,12 @@ type ShardSpec struct {
 	// can inject nodeSelector without looking up Cell CRs.
 	// +optional
 	CellTopologyLabels map[CellName]map[string]string `json:"cellTopologyLabels,omitempty"`
+
+	// Replicas is the total number of desired replicas across all pools in this shard.
+	// This field is used by the scale subresource to support HPA and PDBs.
+	// It is automatically populated by the cluster-handler based on the sum of ReplicasPerCell.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // ShardImages defines the images required for a Shard.
@@ -228,6 +234,10 @@ type ShardStatus struct {
 	// PodRoles maps pod names to their database roles (e.g. PRIMARY, REPLICA, DRAINED).
 	// +optional
 	PodRoles map[string]string `json:"podRoles,omitempty"`
+
+	// ReadyReplicas is the total number of ready pods across all pools in this shard.
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
 }
 
 // ============================================================================
@@ -241,6 +251,7 @@ type ShardStatus struct {
 // Shard is the Schema for the shards API
 // +kubebuilder:resource:shortName=srd
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.readyReplicas
 type Shard struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

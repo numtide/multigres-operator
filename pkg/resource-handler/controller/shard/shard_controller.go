@@ -277,10 +277,38 @@ func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1
 		return ctrl.Result{}, fmt.Errorf("failed to list pods for deletion: %w", err)
 	}
 
+	// Delete all Deployments owned by this shard
+	deployList := &appsv1.DeploymentList{}
+	if err := r.List(ctx, deployList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list deployments for deletion: %w", err)
+	}
+	for i := range deployList.Items {
+		deploy := &deployList.Items[i]
+		if deploy.DeletionTimestamp.IsZero() {
+			logger.Info("Initiating deployment deletion during shard cleanup", "deployment", deploy.Name)
+			if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete deployment %s: %w", deploy.Name, err)
+			}
+		}
+	}
+
 	// Remove finalizers from all pods to allow them to be deleted by GC
 	podsStillPresent := 0
 	for i := range podList.Items {
 		pod := &podList.Items[i]
+
+		// Initiate pod deletion if not already deleting.
+		// We can't rely solely on ownerReference propagation because:
+		// 1. If propagation is Background, children are deleted AFTER parent (blocked by finalizers).
+		// 2. If propagation is Foreground, children are deleted BEFORE parent, but we might reach
+		//    this code before GC has marked them for deletion.
+		if pod.DeletionTimestamp.IsZero() {
+			logger.Info("Initiating pod deletion during shard cleanup", "pod", pod.Name)
+			if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+			}
+		}
+
 		if controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
 			if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
 				if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
@@ -293,7 +321,7 @@ func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1
 	}
 
 	if podsStillPresent > 0 {
-		logger.Info("Waiting for pods to be removed", "count", podsStillPresent)
+		logger.V(1).Info("Waiting for pods to be removed", "count", podsStillPresent)
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
@@ -1181,6 +1209,7 @@ func (r *ShardReconciler) updateStatus(
 
 	// Update aggregate status fields
 	shard.Status.PoolsReady = (totalPods > 0 && totalPods == readyPods)
+	shard.Status.ReadyReplicas = readyPods
 
 	// Update Phase
 	if shard.Status.PoolsReady && shard.Status.OrchReady {

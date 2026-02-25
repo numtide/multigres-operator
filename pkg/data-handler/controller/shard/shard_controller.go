@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	finalizerName = "multigres.com/shard-protection"
+	finalizerName = "multigres.com/shard-data-protection"
 
 	// topoUnavailableGracePeriod is the duration after resource creation during
 	// which topology UNAVAILABLE errors are silently requeued instead of being
@@ -105,6 +105,11 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if !slices.Contains(shard.Finalizers, finalizerName) {
 		shard.Finalizers = append(shard.Finalizers, finalizerName)
 		if err := r.Update(ctx, shard); err != nil {
+			if apierrors.IsConflict(err) {
+				// Requeue on conflict without emitting a warning event.
+				// This is expected in Kubernetes when multiple controllers reconcile the same object.
+				return ctrl.Result{Requeue: true}, nil
+			}
 			monitoring.RecordSpanError(span, err)
 			r.Recorder.Eventf(
 				shard,
@@ -205,6 +210,11 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 			if rolesChanged {
 				if err := r.Status().Update(ctx, shard); err != nil {
+					if apierrors.IsConflict(err) {
+						logger.V(1).Info("Conflict updating shard pod roles, retrying")
+						childSpan.End()
+						return ctrl.Result{Requeue: true}, nil
+					}
 					logger.Error(err, "Failed to update shard pod roles")
 					// continue, non-fatal for drain
 				}
@@ -310,6 +320,9 @@ func (r *ShardReconciler) handleDeletion(
 			return s == finalizerName
 		})
 		if err := r.Update(ctx, shard); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			logger.Error(err, "Failed to remove finalizer")
 			r.Recorder.Eventf(
 				shard,

@@ -24,7 +24,7 @@ const (
 
 	// ShardFinalizer ensures the operator cleans up child resources (Pods, PVCs)
 	// that have their own finalizers before the Shard resource is removed.
-	ShardFinalizer = "multigres.com/shard-protection"
+	ShardFinalizer = "multigres.com/shard-resource-protection"
 
 	// AnnotationSpecHash stores the FNV-1a hash of operator-managed pod spec
 	// fields, enabling O(1) drift detection without deep comparison.
