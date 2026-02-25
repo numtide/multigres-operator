@@ -673,9 +673,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 				continue
 			}
 
-			// 2. Handle stuck deletion for pods that never scheduled
-			// If a pod is being deleted but never scheduled, it cannot have registered in etcd,
-			// so it's safe to remove the finalizer immediately to break deadlocks.
+			// 2. Handle pods being deleted (externally or via kubectl delete).
 			if !pod.DeletionTimestamp.IsZero() && controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
 				isScheduled := false
 				for _, cond := range pod.Status.Conditions {
@@ -685,12 +683,28 @@ func (r *ShardReconciler) reconcilePoolPods(
 					}
 				}
 				if !isScheduled {
+					// Never scheduled → can't be registered in etcd, safe to remove finalizer.
 					logger.Info("Removing finalizer from unscheduled pod to clear deletion deadlock", "pod", pod.Name)
 					if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
 						if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
 							return fmt.Errorf("failed to remove finalizer from unscheduled pod %s: %w", pod.Name, err)
 						}
 					}
+				} else if pod.Annotations[metadata.AnnotationDrainState] == "" {
+					// Scheduled pod deleted externally without a drain annotation.
+					// Initiate the drain state machine so the data-handler can
+					// unregister it from etcd before the finalizer is removed.
+					logger.Info("Initiating drain for externally-deleted pod", "pod", pod.Name)
+					patch := client.MergeFrom(pod.DeepCopy())
+					if pod.Annotations == nil {
+						pod.Annotations = make(map[string]string)
+					}
+					pod.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+					pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().UTC().Format(time.RFC3339)
+					if err := r.Patch(ctx, pod, patch); err != nil && !errors.IsNotFound(err) {
+						return fmt.Errorf("failed to initiate drain for externally-deleted pod %s: %w", pod.Name, err)
+					}
+					r.Recorder.Eventf(shard, "Warning", "ExternalDeletion", "Initiating drain for externally-deleted pod %s", pod.Name)
 				}
 			}
 
@@ -784,6 +798,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 				pod.Annotations = make(map[string]string)
 			}
 			pod.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+			pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().UTC().Format(time.RFC3339)
 			if err := r.Patch(ctx, pod, patch); err != nil {
 				return fmt.Errorf("failed to patch drain-requested for DRAINED pod %s: %w", pod.Name, err)
 			}
@@ -805,6 +820,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 					podToDrain.Annotations = make(map[string]string)
 				}
 				podToDrain.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+				podToDrain.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().UTC().Format(time.RFC3339)
 
 				logger.Info("Patching pod with drain-requested", "pod", podToDrain.Name)
 				if err := r.Patch(ctx, podToDrain, patch); err != nil {
@@ -860,6 +876,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 						pod.Annotations = make(map[string]string)
 					}
 					pod.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+					pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().UTC().Format(time.RFC3339)
 					if err := r.Patch(ctx, pod, patch); err != nil {
 						return fmt.Errorf("failed to patch drain-requested for drifted pod %s: %w", pod.Name, err)
 					}
@@ -880,6 +897,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 					waitPrimary.Annotations = make(map[string]string)
 				}
 				waitPrimary.Annotations[metadata.AnnotationDrainState] = metadata.DrainStateRequested
+				waitPrimary.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().UTC().Format(time.RFC3339)
 				if err := r.Update(ctx, waitPrimary); err != nil {
 					return fmt.Errorf("failed to request drain for primary pod %s: %w", waitPrimary.Name, err)
 				}
@@ -917,7 +935,6 @@ func (r *ShardReconciler) selectPodToDrain(
 	shard *multigresv1alpha1.Shard,
 ) *corev1.Pod {
 	logger := log.FromContext(ctx)
-	fmt.Printf("DEBUG: selectPodToDrain called with %d extraPods\n", len(extraPods))
 	if len(extraPods) == 0 {
 		return nil
 	}
@@ -925,13 +942,10 @@ func (r *ShardReconciler) selectPodToDrain(
 	var bestPod *corev1.Pod
 	var bestScore int
 
-	fmt.Printf("DEBUG: selectPodToDrain extraPods: %v\n", extraPods)
-	for i, pod := range extraPods {
+	for _, pod := range extraPods {
 		if pod == nil {
-			fmt.Printf("DEBUG: Pod at index %d is nil!\n", i)
 			continue
 		}
-		fmt.Printf("DEBUG: Processing pod %d: %s\n", i, pod.Name)
 		score := 0
 
 		lastDash := strings.LastIndex(pod.Name, "-")
@@ -1491,6 +1505,7 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		WithOptions(controllerOpts).
 		Complete(r)
 }

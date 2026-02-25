@@ -2,6 +2,7 @@ package shard
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"hash"
 	"hash/fnv"
@@ -149,7 +150,9 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 	hashContainers(h, spec.Containers)
 
 	if spec.Affinity != nil {
-		fmt.Fprintf(h, "%v", spec.Affinity)
+		if b, err := json.Marshal(spec.Affinity); err == nil {
+			h.Write(b)
+		}
 	}
 
 	if spec.NodeSelector != nil {
@@ -179,12 +182,16 @@ func hashContainers(h hash.Hash32, containers []corev1.Container) {
 		for _, e := range c.Env {
 			fmt.Fprintf(h, "env=%s=%s", e.Name, e.Value)
 		}
-		fmt.Fprintf(h, "res=%v", c.Resources)
+		if b, err := json.Marshal(c.Resources); err == nil {
+			fmt.Fprintf(h, "res=%s", b)
+		}
 		for _, vm := range c.VolumeMounts {
 			fmt.Fprintf(h, "vm=%s:%s", vm.Name, vm.MountPath)
 		}
 		if c.SecurityContext != nil {
-			fmt.Fprintf(h, "sc=%v", c.SecurityContext)
+			if b, err := json.Marshal(c.SecurityContext); err == nil {
+				fmt.Fprintf(h, "sc=%s", b)
+			}
 		}
 	}
 }

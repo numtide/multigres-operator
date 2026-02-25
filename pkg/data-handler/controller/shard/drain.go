@@ -16,6 +16,12 @@ import (
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
+const (
+	// drainTimeout is the maximum time to wait for a failover or drain operation
+	// before giving up and reporting an error.
+	drainTimeout = 5 * time.Minute
+)
+
 // executeDrainStateMachine handles the graceful scale down and etcd unregistration for a pod.
 // Returns true if reconciliation should be requeued.
 func (r *ShardReconciler) executeDrainStateMachine(
@@ -39,7 +45,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 
 	// Node Failure Safety: If the pod is stuck terminating for > 5 minutes, force unregister.
-	if !pod.DeletionTimestamp.IsZero() && time.Since(pod.DeletionTimestamp.Time) > 5*time.Minute {
+	if !pod.DeletionTimestamp.IsZero() && time.Since(pod.DeletionTimestamp.Time) > drainTimeout {
 		logger.Info("Pod is stuck terminating, forcing unregistration", "pod", pod.Name)
 		if err := r.forceUnregister(ctx, store, pod); err != nil {
 			return false, fmt.Errorf("forcing unregistration: %w", err)
@@ -68,7 +74,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	// We only want to handle valid states
 	switch state {
 	case metadata.DrainStateRequested:
-		if myPooler != nil && myPooler.Type == 1 /* PRIMARY */ {
+		if myPooler != nil && myPooler.Type == clustermetadatapb.PoolerType_PRIMARY {
 			// It is a primary. We need to initiate a failover first.
 			logger.Info("Pod is PRIMARY, triggering failover", "pod", pod.Name)
 
@@ -77,7 +83,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			for _, cell := range cells {
 				pp, _ := store.GetMultiPoolersByCell(ctx, cell, nil)
 				for _, p := range pp {
-					if p.Type != 1 && (fmt.Sprintf("%v", p.Id) != pod.Name && p.MultiPooler.GetHostname() != pod.Name) {
+					if p.Type != clustermetadatapb.PoolerType_PRIMARY && (fmt.Sprintf("%v", p.Id) != pod.Name && p.MultiPooler.GetHostname() != pod.Name) {
 						otherPooler = p
 						break
 					}
@@ -95,7 +101,16 @@ func (r *ShardReconciler) executeDrainStateMachine(
 				}
 				r.Recorder.Eventf(shard, "Warning", "FailoverInitiated", "Initiated failover from %s to %s", pod.Name, otherPooler.MultiPooler.GetHostname())
 			} else {
-				logger.Error(fmt.Errorf("no replicas available"), "Cannot safely failover, no eligible replicas found")
+				// No replicas available — check if we've exceeded the drain timeout.
+				if reqAt, ok := pod.Annotations[metadata.AnnotationDrainRequestedAt]; ok {
+					if t, parseErr := time.Parse(time.RFC3339, reqAt); parseErr == nil && time.Since(t) > drainTimeout {
+						r.Recorder.Eventf(shard, "Warning", "FailoverTimeout",
+							"Cannot failover PRIMARY pod %s: no eligible replicas found after %s", pod.Name, drainTimeout)
+						monitoring.IncrementDrainOperations(clusterName, shard.Name, "failure")
+						return false, fmt.Errorf("failover timeout: no replicas available for PRIMARY pod %s after %s", pod.Name, drainTimeout)
+					}
+				}
+				logger.Info("No replicas available for failover, will retry", "pod", pod.Name)
 			}
 			return true, nil // Requeue until it becomes a replica
 		}
@@ -113,7 +128,6 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 			if rpcErr != nil {
 				logger.Error(rpcErr, "Failed to remove pod from synchronous standby list", "pod", pod.Name)
-				// Even if it fails, maybe we still advance? No, wait and requeue.
 				return true, nil
 			}
 		}
@@ -122,7 +136,24 @@ func (r *ShardReconciler) executeDrainStateMachine(
 		return r.updateDrainState(ctx, pod, metadata.DrainStateDraining)
 
 	case metadata.DrainStateDraining:
-		// Transition to acknowledged (simulating verification)
+		// Verify that the standby removal actually took effect by re-attempting the
+		// idempotent REMOVE call on the primary. If the primary is unreachable, requeue.
+		primary, err := findPrimaryPooler(ctx, store, cells)
+		if err != nil {
+			logger.Error(err, "Failed to find primary for drain verification, will retry", "pod", pod.Name)
+			return true, nil
+		}
+		if primary != nil && myPooler != nil {
+			req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
+				Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
+				StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
+			}
+			_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
+			if rpcErr != nil {
+				logger.Error(rpcErr, "Standby removal verification failed, will retry", "pod", pod.Name)
+				return true, nil
+			}
+		}
 		return r.updateDrainState(ctx, pod, metadata.DrainStateAcknowledged)
 
 	case metadata.DrainStateAcknowledged:

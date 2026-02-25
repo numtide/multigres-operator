@@ -106,6 +106,10 @@ const (
 	DrainStateAcknowledged = "acknowledged"
 	// DrainStateReadyForDeletion indicates the data-handler unregistered the pod from etcd.
 	DrainStateReadyForDeletion = "ready-for-deletion"
+
+	// AnnotationDrainRequestedAt stores the RFC3339 timestamp of when the drain
+	// was first requested. Used to detect failover timeouts.
+	AnnotationDrainRequestedAt = "drain.multigres.com/requested-at"
 )
 
 const (

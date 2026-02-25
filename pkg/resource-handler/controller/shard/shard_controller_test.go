@@ -1441,14 +1441,14 @@ func TestScaleDownPodSelection(t *testing.T) {
 	}
 
 	// 1. All ready, 1 is primary. Should pick 2 (highest index and not primary)
-	selected := r.selectPodToDrain(pods, shard)
+	selected := r.selectPodToDrain(context.Background(), pods, shard)
 	if selected == nil || selected.Name != "pod-2" {
 		t.Errorf("Expected pod-2 to be selected, got %v", selected)
 	}
 
 	// 2. Pod 0 is NOT ready. Should pick 0.
 	pods[0].Status.Conditions[0].Status = corev1.ConditionFalse
-	selected = r.selectPodToDrain(pods, shard)
+	selected = r.selectPodToDrain(context.Background(), pods, shard)
 	if selected == nil || selected.Name != "pod-0" {
 		t.Errorf("Expected pod-0 (not ready) to be selected, got %v", selected)
 	}
@@ -1456,7 +1456,7 @@ func TestScaleDownPodSelection(t *testing.T) {
 	// 3. Delete pod Roles, shouldn't panic, falls back to highest index
 	shard.Status.PodRoles = nil
 	pods[0].Status.Conditions[0].Status = corev1.ConditionTrue
-	selected = r.selectPodToDrain(pods, shard)
+	selected = r.selectPodToDrain(context.Background(), pods, shard)
 	if selected == nil || selected.Name != "pod-2" {
 		t.Errorf("Expected pod-2 (highest index) to be selected, got %v", selected)
 	}
@@ -1533,20 +1533,23 @@ func TestRollingUpdateOrder(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Check that EXACTLY ONE REPLICA was deleted. Pod 1 is PRIMARY.
-	// So either Pod 0 or Pod 2 should be gone.
-	deletedCount := 0
+	// Check that EXACTLY ONE REPLICA has drain-requested annotation. Pod 1 is PRIMARY.
+	// So either Pod 0 or Pod 2 should be marked for drain, not Pod 1.
+	drainCount := 0
 	for i := 0; i < 3; i++ {
-		err := c.Get(context.Background(), types.NamespacedName{Name: BuildPoolPodName(shardObj, "primary", "zone1", i), Namespace: "default"}, &corev1.Pod{})
-		if err != nil {
-			deletedCount++
+		var pod corev1.Pod
+		if err := c.Get(context.Background(), types.NamespacedName{Name: BuildPoolPodName(shardObj, "primary", "zone1", i), Namespace: "default"}, &pod); err != nil {
+			t.Fatalf("pod %d should still exist: %v", i, err)
+		}
+		if pod.Annotations[metadata.AnnotationDrainState] == metadata.DrainStateRequested {
+			drainCount++
 			if i == 1 {
-				t.Errorf("Primary pod was deleted before replicas!")
+				t.Errorf("Primary pod was marked for drain before replicas!")
 			}
 		}
 	}
-	if deletedCount != 1 {
-		t.Errorf("Expected exactly 1 pod to be deleted, got %d", deletedCount)
+	if drainCount != 1 {
+		t.Errorf("Expected exactly 1 pod to have drain-requested annotation, got %d", drainCount)
 	}
 }
 
