@@ -1,3 +1,5 @@
+//go:build e2e
+
 // e2e.go provides reusable infrastructure for end-to-end tests that run the
 // multigres-operator inside a Kind cluster. Tests are black-box: they apply
 // CRs via the Kubernetes API and assert on the resulting resources and pod
