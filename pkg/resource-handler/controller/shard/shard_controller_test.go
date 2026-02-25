@@ -1135,7 +1135,7 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      BuildPoolPodName(shard, "primary", "zone1", 0),
 				Namespace: "default",
-				Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1", shard.Spec.Pools["primary"])),
+				Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1")),
 			},
 			Status: corev1.PodStatus{
 				Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
@@ -1243,7 +1243,7 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "replica", "zone1", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "replica", "zone1", shard.Spec.Pools["replica"])),
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "replica", "zone1")),
 				},
 				Status: corev1.PodStatus{
 					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
@@ -1256,7 +1256,7 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "readOnly", "zone1", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "readOnly", "zone1", shard.Spec.Pools["readOnly"])),
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "readOnly", "zone1")),
 				},
 				Status: corev1.PodStatus{
 					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
@@ -1325,7 +1325,7 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "primary", "zone1", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1", shard.Spec.Pools["primary"])),
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone1")),
 				},
 				Status: corev1.PodStatus{
 					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
@@ -1339,7 +1339,7 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BuildPoolPodName(shard, "primary", "zone2", i),
 					Namespace: "default",
-					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone2", shard.Spec.Pools["primary"])),
+					Labels:    metadata.GetSelectorLabels(buildPoolLabelsWithCell(shard, "primary", "zone2")),
 				},
 				Status: corev1.PodStatus{
 					Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},

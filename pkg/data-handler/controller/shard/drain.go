@@ -9,6 +9,7 @@ import (
 	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	multipoolermanagerdatapb "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -94,6 +95,10 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			}
 
 			if otherPooler != nil {
+				if r.rpcClient == nil {
+					logger.Info("RPC client not configured, cannot trigger failover", "pod", pod.Name)
+					return true, nil
+				}
 				_, err = r.rpcClient.Promote(ctx, otherPooler.MultiPooler, &multipoolermanagerdatapb.PromoteRequest{})
 				if err != nil {
 					logger.Error(err, "Failed to appoint new leader", "newPrimary", otherPooler.MultiPooler.GetHostname())
@@ -120,7 +125,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 
 		// Get the current primary to remove this replica from synchronous standby
 		primary, err := findPrimaryPooler(ctx, store, cells)
-		if err == nil && primary != nil && myPooler != nil {
+		if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
 			req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
 				Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
 				StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
@@ -132,7 +137,6 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			}
 		}
 
-		monitoring.IncrementDrainOperations(clusterName, shard.Name, "success")
 		return r.updateDrainState(ctx, pod, metadata.DrainStateDraining)
 
 	case metadata.DrainStateDraining:
@@ -164,6 +168,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			}
 		}
 
+		monitoring.IncrementDrainOperations(clusterName, shard.Name, "success")
 		r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Pod %s completely drained", pod.Name)
 		return r.updateDrainState(ctx, pod, metadata.DrainStateReadyForDeletion)
 	}
@@ -172,11 +177,12 @@ func (r *ShardReconciler) executeDrainStateMachine(
 }
 
 func (r *ShardReconciler) updateDrainState(ctx context.Context, pod *corev1.Pod, newState string) (bool, error) {
+	patch := client.MergeFrom(pod.DeepCopy())
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
 	pod.Annotations[metadata.AnnotationDrainState] = newState
-	if err := r.Update(ctx, pod); err != nil {
+	if err := r.Patch(ctx, pod, patch); err != nil {
 		return false, fmt.Errorf("updating pod drain state to %s: %w", newState, err)
 	}
 	return true, nil
@@ -198,5 +204,7 @@ func (r *ShardReconciler) forceUnregister(ctx context.Context, store topoclient.
 			return store.UnregisterMultiPooler(ctx, p.Id)
 		}
 	}
+	log.FromContext(ctx).Info("No matching pooler found in topology for pod, skipping unregistration",
+		"pod", pod.Name, "cell", cellName)
 	return nil
 }

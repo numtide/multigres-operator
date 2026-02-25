@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 func newTestShard() *multigresv1alpha1.Shard {
@@ -161,7 +162,7 @@ func TestBuildPoolPod_SpecHash(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	hash, ok := pod.Annotations[AnnotationSpecHash]
+	hash, ok := pod.Annotations[metadata.AnnotationSpecHash]
 	if !ok {
 		t.Fatal("spec-hash annotation missing")
 	}

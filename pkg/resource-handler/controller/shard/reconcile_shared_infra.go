@@ -38,15 +38,6 @@ func (r *ShardReconciler) reconcilePgHbaConfigMap(
 		return fmt.Errorf("failed to apply pg_hba ConfigMap: %w", err)
 	}
 
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
 	return nil
 }
 
@@ -72,15 +63,6 @@ func (r *ShardReconciler) reconcilePostgresPasswordSecret(
 	); err != nil {
 		return fmt.Errorf("failed to apply postgres password Secret: %w", err)
 	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
 
 	return nil
 }
@@ -209,18 +191,6 @@ func (r *ShardReconciler) reconcilePoolPDB(
 		return fmt.Errorf("failed to apply pool PDB: %w", err)
 	}
 
-	// Emit an event only if it was just created or modified
-	if desired.ObjectMeta.ResourceVersion == "" {
-		r.Recorder.Eventf(
-			shard,
-			"Normal",
-			"Applied",
-			"Applied %s %s",
-			desired.GroupVersionKind().Kind,
-			desired.Name,
-		)
-	}
-
 	return nil
 }
 
@@ -248,15 +218,6 @@ func (r *ShardReconciler) reconcilePoolHeadlessService(
 	); err != nil {
 		return fmt.Errorf("failed to apply pool headless Service: %w", err)
 	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
 
 	return nil
 }

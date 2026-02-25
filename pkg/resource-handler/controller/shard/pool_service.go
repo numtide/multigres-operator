@@ -18,8 +18,8 @@ const (
 	PoolComponentName = "shard-pool"
 )
 
-// BuildPoolHeadlessService creates a headless Service for a pool's StatefulSet in a specific cell.
-// Headless services are required for StatefulSet pod DNS records.
+// BuildPoolHeadlessService creates a headless Service for a pool's pods in a specific cell.
+// Headless services are required for pool pod DNS records.
 func BuildPoolHeadlessService(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
@@ -31,7 +31,7 @@ func BuildPoolHeadlessService(
 	// by appending "-headless" to an already hashed/truncated name.
 	// Logic: Use LOGICAL parts from Spec/Labels to avoid chaining hashes.
 	headlessName := buildPoolHeadlessServiceName(shard, poolName, cellName)
-	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -52,22 +52,6 @@ func BuildPoolHeadlessService(
 	}
 
 	return svc, nil
-}
-
-func buildPoolNameWithCell(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
-	// Logic: Use LOGICAL parts from Spec/Labels to avoid double hashing.
-	// shard.Name is already hashed (cluster-db-tg-shard-HASH).
-	clusterName := shard.Labels["multigres.com/cluster"]
-	return nameutil.JoinWithConstraints(
-		nameutil.StatefulSetConstraints,
-		clusterName,
-		string(shard.Spec.DatabaseName),
-		string(shard.Spec.TableGroupName),
-		string(shard.Spec.ShardName),
-		"pool",
-		poolName,
-		cellName,
-	)
 }
 
 // buildPoolHeadlessServiceName generates the name for pool headless service in a specific cell.

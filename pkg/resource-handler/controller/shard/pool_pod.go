@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -26,10 +27,6 @@ const (
 	// ShardFinalizer ensures the operator cleans up child resources (Pods, PVCs)
 	// that have their own finalizers before the Shard resource is removed.
 	ShardFinalizer = "multigres.com/shard-resource-protection"
-
-	// AnnotationSpecHash stores the FNV-1a hash of operator-managed pod spec
-	// fields, enabling O(1) drift detection without deep comparison.
-	AnnotationSpecHash = "multigres.com/spec-hash"
 
 	// defaultTerminationGracePeriod gives multipooler time to gracefully close
 	// connections and set NOT_SERVING in etcd before SIGKILL.
@@ -69,7 +66,7 @@ func BuildPoolPod(
 	scheme *runtime.Scheme,
 ) (*corev1.Pod, error) {
 	podName := BuildPoolPodName(shard, poolName, cellName, index)
-	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName)
 
 	// Construct volumes: reuse shared volumes and prepend the per-pod data PVC.
 	dataPVCName := BuildPoolDataPVCName(shard, poolName, cellName, index)
@@ -89,7 +86,7 @@ func BuildPoolPod(
 			Namespace: shard.Namespace,
 			Labels:    labels,
 			Annotations: map[string]string{
-				AnnotationSpecHash: "", // placeholder, computed below
+				metadata.AnnotationSpecHash: "", // placeholder, computed below
 			},
 			Finalizers: []string{PoolPodFinalizer},
 		},
@@ -98,8 +95,10 @@ func BuildPoolPod(
 				FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
 			},
 			TerminationGracePeriodSeconds: ptr.To(defaultTerminationGracePeriod),
-			Containers: []corev1.Container{
+			InitContainers: []corev1.Container{
 				buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
+			},
+			Containers: []corev1.Container{
 				buildPgctldContainer(shard, poolSpec),
 			},
 			Volumes:      volumes,
@@ -111,7 +110,7 @@ func BuildPoolPod(
 		},
 	}
 
-	pod.Annotations[AnnotationSpecHash] = ComputeSpecHash(pod)
+	pod.Annotations[metadata.AnnotationSpecHash] = ComputeSpecHash(pod)
 
 	if err := ctrl.SetControllerReference(shard, pod, scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
@@ -148,6 +147,12 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 	hashContainers(h, spec.InitContainers)
 	hashContainers(h, spec.Containers)
+
+	for _, v := range spec.Volumes {
+		if b, err := json.Marshal(v); err == nil {
+			h.Write(b)
+		}
+	}
 
 	if spec.Affinity != nil {
 		if b, err := json.Marshal(spec.Affinity); err == nil {

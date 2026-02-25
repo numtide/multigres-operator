@@ -122,7 +122,7 @@ func (r *ShardReconciler) updatePoolsStatus(
 			cellsSet[cell] = true
 
 			// List pods for this specific pool and cell
-			labels := buildPoolLabelsWithCell(shard, string(poolName), cellName, poolSpec)
+			labels := buildPoolLabelsWithCell(shard, string(poolName), cellName)
 			selector := metadata.GetSelectorLabels(labels)
 			podList := &corev1.PodList{}
 			if err := r.List(

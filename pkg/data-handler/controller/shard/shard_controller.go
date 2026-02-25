@@ -10,7 +10,7 @@ import (
 
 	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
-	"github.com/multigres/multigres/go/pb/clustermetadata"
+	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -192,8 +192,10 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				if cerr == nil {
 					for _, p := range poolers {
 						roleName := "REPLICA"
-						if p.Type == 1 { // clustermetadata.PoolerType_PRIMARY
+						if p.Type == clustermetadatapb.PoolerType_PRIMARY {
 							roleName = "PRIMARY"
+						} else if p.Type == clustermetadatapb.PoolerType_DRAINED {
+							roleName = "DRAINED"
 						}
 						hostname := p.MultiPooler.GetHostname()
 						if hostname == "" {
@@ -239,7 +241,10 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 			}
 		} else {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
 			logger.Error(err, "Failed to get topo store, cannot update roles or execute drain")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		childSpan.End()
 	}
@@ -285,7 +290,6 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
-	logger.Info("Database registered in topology successfully")
 	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled database topology")
 	return ctrl.Result{}, nil
 }
@@ -354,22 +358,11 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 
 	dbName := string(shard.Spec.DatabaseName)
 
-	// Collect cells from pools
-	cellsMap := make(map[string]bool)
-	for _, pool := range shard.Spec.Pools {
-		for _, cell := range pool.Cells {
-			cellsMap[string(cell)] = true
-		}
-	}
-
-	cells := make([]string, 0, len(cellsMap))
-	for cell := range cellsMap {
-		cells = append(cells, cell)
-	}
-	slices.Sort(cells) // Sort for deterministic output
+	cells := collectCells(shard)
+	slices.Sort(cells)
 
 	// Build database metadata
-	dbMetadata := &clustermetadata.Database{
+	dbMetadata := &clustermetadatapb.Database{
 		Name:             dbName,
 		BackupLocation:   r.getBackupLocation(shard),
 		DurabilityPolicy: r.getDurabilityPolicy(shard),
@@ -381,8 +374,17 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 		// Check if the error is because the database already exists
 		var topoErr topoclient.TopoError
 		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NodeExists {
-			logger.V(1).
-				Info("Database already exists in topology, skipping creation", "database", dbName)
+			// Database already exists — update its fields to propagate any changes
+			// to backup location or cells since initial creation. UpdateDatabaseFields
+			// uses atomic read-modify-write with automatic retry on version conflicts.
+			if err := store.UpdateDatabaseFields(ctx, dbName, func(existing *clustermetadatapb.Database) error {
+				existing.BackupLocation = dbMetadata.BackupLocation
+				existing.Cells = dbMetadata.Cells
+				return nil
+			}); err != nil {
+				return fmt.Errorf("updating existing database %s in topology: %w", dbName, err)
+			}
+			logger.V(1).Info("Updated existing database in topology", "database", dbName)
 			return nil
 		}
 		r.Recorder.Eventf(
@@ -457,13 +459,13 @@ func (r *ShardReconciler) unregisterDatabaseFromTopology(
 // getBackupLocation extracts the backup location from the shard config.
 func (r *ShardReconciler) getBackupLocation(
 	shard *multigresv1alpha1.Shard,
-) *clustermetadata.BackupLocation {
+) *clustermetadatapb.BackupLocation {
 	if shard.Spec.Backup != nil &&
 		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 &&
 		shard.Spec.Backup.S3 != nil {
-		return &clustermetadata.BackupLocation{
-			Location: &clustermetadata.BackupLocation_S3{
-				S3: &clustermetadata.S3Backup{
+		return &clustermetadatapb.BackupLocation{
+			Location: &clustermetadatapb.BackupLocation_S3{
+				S3: &clustermetadatapb.S3Backup{
 					Bucket:            shard.Spec.Backup.S3.Bucket,
 					Region:            shard.Spec.Backup.S3.Region,
 					Endpoint:          shard.Spec.Backup.S3.Endpoint,
@@ -483,9 +485,9 @@ func (r *ShardReconciler) getBackupLocation(
 		path = shard.Spec.Backup.Filesystem.Path
 	}
 
-	return &clustermetadata.BackupLocation{
-		Location: &clustermetadata.BackupLocation_Filesystem{
-			Filesystem: &clustermetadata.FilesystemBackup{
+	return &clustermetadatapb.BackupLocation{
+		Location: &clustermetadatapb.BackupLocation_Filesystem{
+			Filesystem: &clustermetadatapb.FilesystemBackup{
 				Path: path,
 			},
 		},

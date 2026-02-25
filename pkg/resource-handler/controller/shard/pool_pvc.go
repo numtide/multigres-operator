@@ -45,7 +45,7 @@ func BuildPoolDataPVC(
 	scheme *runtime.Scheme,
 ) (*corev1.PersistentVolumeClaim, error) {
 	pvcName := BuildPoolDataPVCName(shard, poolName, cellName, index)
-	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName)
 	clusterName := shard.Labels["multigres.com/cluster"]
 	metadata.AddClusterLabel(labels, clusterName)
 

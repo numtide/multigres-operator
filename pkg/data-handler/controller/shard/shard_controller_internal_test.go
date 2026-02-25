@@ -310,7 +310,7 @@ func TestReconcile_ErrorRegisteringDatabase(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-shard",
 			Namespace:         "default",
-			Finalizers:        []string{"shard.data-handler.multigres.com/finalizer"},
+			Finalizers:        []string{"multigres.com/shard-data-protection"},
 			CreationTimestamp: metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
@@ -370,7 +370,7 @@ func TestReconcile_ErrorDeletingDatabase(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-shard",
 			Namespace:         "default",
-			Finalizers:        []string{"shard.data-handler.multigres.com/finalizer"},
+			Finalizers:        []string{"multigres.com/shard-data-protection"},
 			DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 		},
 		Spec: multigresv1alpha1.ShardSpec{

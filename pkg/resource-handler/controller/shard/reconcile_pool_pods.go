@@ -32,7 +32,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 	poolSpec multigresv1alpha1.PoolSpec,
 ) error {
 	logger := log.FromContext(ctx)
-	logger.Info("TRACE: reconcilePoolPods started", "pool", poolName, "cell", cellName)
+	logger.V(1).Info("reconcilePoolPods started", "pool", poolName, "cell", cellName)
 
 	replicas := DefaultPoolReplicas
 	if poolSpec.ReplicasPerCell != nil {
@@ -40,7 +40,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 	}
 
 	// List existing pods and PVCs for this pool
-	labels := buildPoolLabelsWithCell(shard, poolName, cellName, poolSpec)
+	labels := buildPoolLabelsWithCell(shard, poolName, cellName)
 	selector := metadata.GetSelectorLabels(labels)
 
 	podList := &corev1.PodList{}
@@ -252,19 +252,20 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 	}
 
-	// Cleanup pods ready for deletion
+	// Cleanup pods ready for deletion: remove finalizer first, then delete
 	for _, pod := range readyForDeletion {
-		logger.Info("Deleting pod in ready-for-deletion state", "pod", pod.Name)
-		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
-			return actionTaken, inProgress, fmt.Errorf("failed to delete ready-for-deletion pod %s: %w", pod.Name, err)
-		}
+		logger.Info("Cleaning up pod in ready-for-deletion state", "pod", pod.Name)
 		if err := r.cleanupDrainedPod(ctx, shard, pod, poolName, poolSpec); err != nil {
 			return actionTaken, inProgress, fmt.Errorf("failed to cleanup drained pod %s: %w", pod.Name, err)
+		}
+		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+			return actionTaken, inProgress, fmt.Errorf("failed to delete ready-for-deletion pod %s: %w", pod.Name, err)
 		}
 	}
 
 	// Replace DRAINED pods
-	for _, pod := range existingPods {
+	for _, name := range podNames {
+		pod := existingPods[name]
 		if actionTaken {
 			break
 		}
@@ -283,7 +284,7 @@ func (r *ShardReconciler) handleScaleDown(
 	}
 
 	// Drain extra pods (scale-down)
-	logger.Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "desiredReplicas", replicas)
+	logger.V(1).Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "desiredReplicas", replicas)
 	if !actionTaken && len(extraPods) > 0 {
 		podToDrain := r.selectPodToDrain(ctx, extraPods, shard)
 		if podToDrain != nil && podToDrain.Annotations[metadata.AnnotationDrainState] == "" {
@@ -413,7 +414,7 @@ func (r *ShardReconciler) selectPodToDrain(
 			score += 500
 		}
 
-		logger.Info("Pod score for drain", "pod", pod.Name, "score", score, "isReady", isReady, "role", role)
+		logger.V(1).Info("Pod score for drain", "pod", pod.Name, "score", score, "isReady", isReady, "role", role)
 		if bestPod == nil || score > bestScore {
 			bestPod = pod
 			bestScore = score
@@ -461,7 +462,11 @@ func (r *ShardReconciler) cleanupDrainedPod(
 		pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
 		pvc := &corev1.PersistentVolumeClaim{}
 		err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pvcName}, pvc)
-		if err == nil {
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
+			}
+		} else {
 			if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
 				logger.Error(err, "Failed to delete PVC for scaled down pod", "pvc", pvcName)
 			} else {
@@ -509,11 +514,11 @@ func podNeedsUpdate(
 func resolvePodIndex(podName string) int {
 	lastDash := strings.LastIndex(podName, "-")
 	if lastDash == -1 {
-		return 0
+		return -1
 	}
 	index, err := strconv.Atoi(podName[lastDash+1:])
 	if err != nil {
-		return 0
+		return -1
 	}
 	return index
 }

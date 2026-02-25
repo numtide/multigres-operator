@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	finalizerName = "shard.data-handler.multigres.com/finalizer"
+	finalizerName = "multigres.com/shard-data-protection"
 )
 
 func TestReconcile(t *testing.T) {

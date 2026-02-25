@@ -54,7 +54,7 @@ func (r *ShardReconciler) Reconcile(
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
 	logger := log.FromContext(ctx)
-	logger.Info("TRACE: Reconcile started for shard", "shard", req.Name)
+	logger.V(1).Info("Reconcile started for shard", "shard", req.Name)
 
 	// Fetch the Shard instance
 	shard := &multigresv1alpha1.Shard{}
@@ -118,25 +118,19 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	// Compute active cells once for MultiOrch and backup PVCs
+	activeCells, err := getMultiOrchCells(shard)
+	if err != nil {
+		monitoring.RecordSpanError(span, err)
+		logger.Error(err, "Failed to determine active cells")
+		r.Recorder.Eventf(shard, "Warning", "ConfigError", "Failed to determine active cells: %v", err)
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileMultiOrch")
-		multiOrchCells, err := getMultiOrchCells(shard)
-		if err != nil {
-			monitoring.RecordSpanError(childSpan, err)
-			childSpan.End()
-			logger.Error(err, "Failed to determine MultiOrch cells")
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"ConfigError",
-				"Failed to determine MultiOrch cells: %v",
-				err,
-			)
-			return ctrl.Result{}, err
-		}
-
-		for _, cell := range multiOrchCells {
+		for _, cell := range activeCells {
 			cellName := string(cell)
 
 			// Reconcile MultiOrch Deployment for this cell
@@ -177,21 +171,7 @@ func (r *ShardReconciler) Reconcile(
 	// Reconcile Shared Backup PVCs (one per cell)
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileBackupPVCs")
-		// Determine all cells where pools are running (or multiorch)
-		// We can reuse getMultiOrchCells logic or just iterate pools?
-		// getMultiOrchCells returns explicit MultiOrch cells OR union of pool cells.
-		// This serves as a good proxy for "active cells".
-		cells, err := getMultiOrchCells(shard)
-		if err != nil {
-			// If we can't determine cells, we can't create PVCs.
-			// But getMultiOrchCells errors if NO cells found.
-			// Try to proceed if possible? No, consume error.
-			monitoring.RecordSpanError(childSpan, err)
-			childSpan.End()
-			return ctrl.Result{}, err
-		}
-
-		for _, cell := range cells {
+		for _, cell := range activeCells {
 			cellName := string(cell)
 			if err := r.reconcileSharedBackupPVC(ctx, shard, cellName); err != nil {
 				monitoring.RecordSpanError(childSpan, err)
