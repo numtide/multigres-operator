@@ -75,7 +75,8 @@ func (rw *ResourceWatcher) waitForSingleDeletion(obj client.Object, deadline tim
 	namespace := obj.GetNamespace()
 
 	predicate := func(evt ResourceEvent) bool {
-		return evt.Kind == kind && evt.Name == name && evt.Namespace == namespace && evt.Type == "DELETED"
+		return evt.Kind == kind && evt.Name == name && evt.Namespace == namespace &&
+			evt.Type == "DELETED"
 	}
 
 	// Subscribe BEFORE checking existing events to avoid TOCTOU race:
