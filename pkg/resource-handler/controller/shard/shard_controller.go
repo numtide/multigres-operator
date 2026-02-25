@@ -123,7 +123,13 @@ func (r *ShardReconciler) Reconcile(
 	if err != nil {
 		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to determine active cells")
-		r.Recorder.Eventf(shard, "Warning", "ConfigError", "Failed to determine active cells: %v", err)
+		r.Recorder.Eventf(
+			shard,
+			"Warning",
+			"ConfigError",
+			"Failed to determine active cells: %v",
+			err,
+		)
 		return ctrl.Result{}, err
 	}
 
@@ -232,7 +238,10 @@ func (r *ShardReconciler) Reconcile(
 
 // handleDeletion ensures all child resources (Pods) have their finalizers removed
 // before the Shard itself is allowed to be deleted.
-func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1alpha1.Shard) (ctrl.Result, error) {
+func (r *ShardReconciler) handleDeletion(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Determine matching labels for all pods belonging to this shard
@@ -245,21 +254,39 @@ func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1
 	}
 
 	podList := &corev1.PodList{}
-	if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+	if err := r.List(
+		ctx,
+		podList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list pods for deletion: %w", err)
 	}
 
 	// Delete all Deployments owned by this shard
 	deployList := &appsv1.DeploymentList{}
-	if err := r.List(ctx, deployList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+	if err := r.List(
+		ctx,
+		deployList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list deployments for deletion: %w", err)
 	}
 	for i := range deployList.Items {
 		deploy := &deployList.Items[i]
 		if deploy.DeletionTimestamp.IsZero() {
-			logger.Info("Initiating deployment deletion during shard cleanup", "deployment", deploy.Name)
+			logger.Info(
+				"Initiating deployment deletion during shard cleanup",
+				"deployment",
+				deploy.Name,
+			)
 			if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to delete deployment %s: %w", deploy.Name, err)
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to delete deployment %s: %w",
+					deploy.Name,
+					err,
+				)
 			}
 		}
 	}
@@ -284,7 +311,11 @@ func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1
 		if controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
 			if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
 				if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
+					return ctrl.Result{}, fmt.Errorf(
+						"failed to remove finalizer from pod %s: %w",
+						pod.Name,
+						err,
+					)
 				}
 				logger.Info("Removed finalizer from pod during shard deletion", "pod", pod.Name)
 			}
@@ -292,9 +323,15 @@ func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1
 
 		// Check if the pod still exists after cleanup
 		checkPod := &corev1.Pod{}
-		if err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pod.Name}, checkPod); err == nil {
+		if err := r.Get(
+			ctx,
+			client.ObjectKey{Namespace: pod.Namespace, Name: pod.Name},
+			checkPod,
+		); err == nil {
 			podsStillPresent++
-		} else if !errors.IsNotFound(err) {
+		} else if !errors.IsNotFound(
+			err,
+		) {
 			return ctrl.Result{}, fmt.Errorf("failed to check pod status: %w", err)
 		}
 	}

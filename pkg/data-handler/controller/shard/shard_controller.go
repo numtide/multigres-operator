@@ -172,7 +172,12 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
 			metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
 		}
-		if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(lbls)); err != nil {
+		if err := r.List(
+			ctx,
+			podList,
+			client.InNamespace(shard.Namespace),
+			client.MatchingLabels(lbls),
+		); err != nil {
 			logger.Error(err, "Failed to list pods for shard")
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
@@ -192,12 +197,13 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				if cerr == nil {
 					for _, p := range poolers {
 						roleName := "REPLICA"
-						if p.Type == clustermetadatapb.PoolerType_PRIMARY {
+						switch p.Type {
+						case clustermetadatapb.PoolerType_PRIMARY:
 							roleName = "PRIMARY"
-						} else if p.Type == clustermetadatapb.PoolerType_DRAINED {
+						case clustermetadatapb.PoolerType_DRAINED:
 							roleName = "DRAINED"
 						}
-						hostname := p.MultiPooler.GetHostname()
+						hostname := p.GetHostname()
 						if hostname == "" {
 							hostname = fmt.Sprintf("%v", p.Id)
 						}
@@ -235,7 +241,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 					}
 				}
 			}
-			store.Close()
+			_ = store.Close()
 			if requeue {
 				childSpan.End()
 				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
@@ -377,11 +383,15 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 			// Database already exists — update its fields to propagate any changes
 			// to backup location or cells since initial creation. UpdateDatabaseFields
 			// uses atomic read-modify-write with automatic retry on version conflicts.
-			if err := store.UpdateDatabaseFields(ctx, dbName, func(existing *clustermetadatapb.Database) error {
-				existing.BackupLocation = dbMetadata.BackupLocation
-				existing.Cells = dbMetadata.Cells
-				return nil
-			}); err != nil {
+			if err := store.UpdateDatabaseFields(
+				ctx,
+				dbName,
+				func(existing *clustermetadatapb.Database) error {
+					existing.BackupLocation = dbMetadata.BackupLocation
+					existing.Cells = dbMetadata.Cells
+					return nil
+				},
+			); err != nil {
 				return fmt.Errorf("updating existing database %s in topology: %w", dbName, err)
 			}
 			logger.V(1).Info("Updated existing database in topology", "database", dbName)

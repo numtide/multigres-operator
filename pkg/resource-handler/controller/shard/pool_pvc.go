@@ -20,7 +20,11 @@ const (
 )
 
 // BuildPoolDataPVCName constructs the PVC name for a specific pod index.
-func BuildPoolDataPVCName(shard *multigresv1alpha1.Shard, poolName, cellName string, index int) string {
+func BuildPoolDataPVCName(
+	shard *multigresv1alpha1.Shard,
+	poolName, cellName string,
+	index int,
+) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
 	baseName := nameutil.JoinWithConstraints(
 		nameutil.PodConstraints,
@@ -106,7 +110,11 @@ func BuildSharedBackupPVCName(shard *multigresv1alpha1.Shard, cellName string) s
 
 // BuildSharedBackupPVC creates a ReadWriteMany PersistentVolumeClaim
 // shared by all pods in the cell.
-func BuildSharedBackupPVC(shard *multigresv1alpha1.Shard, cellName string, scheme *runtime.Scheme) (*corev1.PersistentVolumeClaim, error) {
+func BuildSharedBackupPVC(
+	shard *multigresv1alpha1.Shard,
+	cellName string,
+	scheme *runtime.Scheme,
+) (*corev1.PersistentVolumeClaim, error) {
 	pvcName := BuildSharedBackupPVCName(shard, cellName)
 
 	clusterName := shard.Labels["multigres.com/cluster"]

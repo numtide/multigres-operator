@@ -66,7 +66,9 @@ func BuildShard(
 	return shardCR, nil
 }
 
-func calculateTotalReplicas(pools map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec) *int32 {
+func calculateTotalReplicas(
+	pools map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec,
+) *int32 {
 	var total int32
 	for _, pool := range pools {
 		// Default matches pkg/resource-handler/controller/shard/pool_pod.go
@@ -74,7 +76,7 @@ func calculateTotalReplicas(pools map[multigresv1alpha1.PoolName]multigresv1alph
 		if pool.ReplicasPerCell != nil {
 			replicas = *pool.ReplicasPerCell
 		}
-		total += replicas * int32(len(pool.Cells))
+		total += replicas * int32(len(pool.Cells)) // #nosec G115
 	}
 	return &total
 }

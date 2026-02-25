@@ -647,10 +647,16 @@ func TestParseBackupTime(t *testing.T) {
 		input string
 		want  time.Time
 	}{
-		"valid":       {input: "20260224-143055", want: time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC)},
-		"with suffix": {input: "20260224-143055F123456", want: time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC)},
-		"too short":   {input: "20260224", want: time.Time{}},
-		"empty":       {input: "", want: time.Time{}},
+		"valid": {
+			input: "20260224-143055",
+			want:  time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC),
+		},
+		"with suffix": {
+			input: "20260224-143055F123456",
+			want:  time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC),
+		},
+		"too short": {input: "20260224", want: time.Time{}},
+		"empty":     {input: "", want: time.Time{}},
 	}
 
 	for name, tc := range tests {

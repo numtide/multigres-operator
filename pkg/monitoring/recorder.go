@@ -26,8 +26,10 @@ func SetCellGatewayReplicas(cell, namespace string, desired, ready int32) {
 
 // SetShardPoolReplicas sets the desired and ready replica gauges for a shard pool.
 func SetShardPoolReplicas(cluster, shard, pool, cell, namespace string, desired, ready int32) {
-	shardPoolReplicas.WithLabelValues(cluster, shard, pool, cell, namespace, "desired").Set(float64(desired))
-	shardPoolReplicas.WithLabelValues(cluster, shard, pool, cell, namespace, "ready").Set(float64(ready))
+	shardPoolReplicas.WithLabelValues(cluster, shard, pool, cell, namespace, "desired").
+		Set(float64(desired))
+	shardPoolReplicas.WithLabelValues(cluster, shard, pool, cell, namespace, "ready").
+		Set(float64(ready))
 }
 
 // SetPoolPodsDrifted sets the count of pods with spec-hash mismatch in a pool/cell.

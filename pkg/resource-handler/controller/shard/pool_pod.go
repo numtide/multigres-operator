@@ -150,25 +150,25 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 	for _, v := range spec.Volumes {
 		if b, err := json.Marshal(v); err == nil {
-			h.Write(b)
+			_, _ = h.Write(b)
 		}
 	}
 
 	if spec.Affinity != nil {
 		if b, err := json.Marshal(spec.Affinity); err == nil {
-			h.Write(b)
+			_, _ = h.Write(b)
 		}
 	}
 
 	if spec.NodeSelector != nil {
 		keys := sortedKeys(spec.NodeSelector)
 		for _, k := range keys {
-			fmt.Fprintf(h, "%s=%s", k, spec.NodeSelector[k])
+			_, _ = fmt.Fprintf(h, "%s=%s", k, spec.NodeSelector[k])
 		}
 	}
 
 	if spec.TerminationGracePeriodSeconds != nil {
-		fmt.Fprintf(h, "tgp=%d", *spec.TerminationGracePeriodSeconds)
+		_, _ = fmt.Fprintf(h, "tgp=%d", *spec.TerminationGracePeriodSeconds)
 	}
 
 	return hex.EncodeToString(h.Sum(nil))
@@ -176,26 +176,26 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 func hashContainers(h hash.Hash32, containers []corev1.Container) {
 	for _, c := range containers {
-		fmt.Fprintf(h, "name=%s", c.Name)
-		fmt.Fprintf(h, "image=%s", c.Image)
+		_, _ = fmt.Fprintf(h, "name=%s", c.Name)
+		_, _ = fmt.Fprintf(h, "image=%s", c.Image)
 		for _, cmd := range c.Command {
-			fmt.Fprintf(h, "cmd=%s", cmd)
+			_, _ = fmt.Fprintf(h, "cmd=%s", cmd)
 		}
 		for _, arg := range c.Args {
-			fmt.Fprintf(h, "arg=%s", arg)
+			_, _ = fmt.Fprintf(h, "arg=%s", arg)
 		}
 		for _, e := range c.Env {
-			fmt.Fprintf(h, "env=%s=%s", e.Name, e.Value)
+			_, _ = fmt.Fprintf(h, "env=%s=%s", e.Name, e.Value)
 		}
 		if b, err := json.Marshal(c.Resources); err == nil {
-			fmt.Fprintf(h, "res=%s", b)
+			_, _ = fmt.Fprintf(h, "res=%s", b)
 		}
 		for _, vm := range c.VolumeMounts {
-			fmt.Fprintf(h, "vm=%s:%s", vm.Name, vm.MountPath)
+			_, _ = fmt.Fprintf(h, "vm=%s:%s", vm.Name, vm.MountPath)
 		}
 		if c.SecurityContext != nil {
 			if b, err := json.Marshal(c.SecurityContext); err == nil {
-				fmt.Fprintf(h, "sc=%s", b)
+				_, _ = fmt.Fprintf(h, "sc=%s", b)
 			}
 		}
 	}
