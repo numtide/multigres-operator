@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	finalizerName = "shard.data-handler.multigres.com/finalizer"
+	finalizerName = "multigres.com/shard-protection"
 
 	// topoUnavailableGracePeriod is the duration after resource creation during
 	// which topology UNAVAILABLE errors are silently requeued instead of being
@@ -162,8 +162,10 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	{
 		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.DrainStateMachine")
 		podList := &corev1.PodList{}
+		// Match pods belonging to this Shard CR specifically
 		lbls := map[string]string{
-			metadata.LabelMultigresShard: shard.Name,
+			metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
+			metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
 		}
 		if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(lbls)); err != nil {
 			logger.Error(err, "Failed to list pods for shard")
@@ -568,14 +570,15 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 }
 
 func (r *ShardReconciler) podToShard(ctx context.Context, o client.Object) []ctrl.Request {
-	shardName := o.GetLabels()[metadata.LabelMultigresShard]
-	if shardName == "" {
-		return nil
+	for _, owner := range o.GetOwnerReferences() {
+		if owner.Kind == "Shard" && strings.HasPrefix(owner.APIVersion, "multigres.com/") {
+			return []ctrl.Request{
+				{NamespacedName: types.NamespacedName{
+					Name:      owner.Name,
+					Namespace: o.GetNamespace(),
+				}},
+			}
+		}
 	}
-	return []ctrl.Request{
-		{NamespacedName: types.NamespacedName{
-			Name:      shardName,
-			Namespace: o.GetNamespace(),
-		}},
-	}
+	return nil
 }

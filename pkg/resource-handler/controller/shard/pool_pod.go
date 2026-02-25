@@ -22,6 +22,10 @@ const (
 	// operator can clean up etcd topology entries.
 	PoolPodFinalizer = "multigres.com/pool-pod-protection"
 
+	// ShardFinalizer ensures the operator cleans up child resources (Pods, PVCs)
+	// that have their own finalizers before the Shard resource is removed.
+	ShardFinalizer = "multigres.com/shard-protection"
+
 	// AnnotationSpecHash stores the FNV-1a hash of operator-managed pod spec
 	// fields, enabling O(1) drift detection without deep comparison.
 	AnnotationSpecHash = "multigres.com/spec-hash"
@@ -93,10 +97,8 @@ func BuildPoolPod(
 				FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
 			},
 			TerminationGracePeriodSeconds: ptr.To(defaultTerminationGracePeriod),
-			InitContainers: []corev1.Container{
-				buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
-			},
 			Containers: []corev1.Container{
+				buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
 				buildPgctldContainer(shard, poolSpec),
 			},
 			Volumes:      volumes,

@@ -108,10 +108,18 @@ func BuildSharedBackupPVCName(shard *multigresv1alpha1.Shard, cellName string) s
 // shared by all pods in the cell.
 func BuildSharedBackupPVC(shard *multigresv1alpha1.Shard, cellName string, scheme *runtime.Scheme) (*corev1.PersistentVolumeClaim, error) {
 	pvcName := BuildSharedBackupPVCName(shard, cellName)
-	labels := buildMultiOrchLabelsWithCell(shard, cellName)
 
-	storageSize := DefaultDataVolumeSize
+	clusterName := shard.Labels["multigres.com/cluster"]
+	labels := metadata.BuildStandardLabels(clusterName, PoolComponentName)
+	metadata.AddClusterLabel(labels, clusterName)
+	metadata.AddDatabaseLabel(labels, shard.Spec.DatabaseName)
+	metadata.AddTableGroupLabel(labels, shard.Spec.TableGroupName)
+	metadata.AddShardLabel(labels, shard.Spec.ShardName)
+	metadata.AddCellLabel(labels, multigresv1alpha1.CellName(cellName))
+
+	storageSize := "10Gi"
 	var pvcClass *string
+	accessModes := []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 
 	if shard.Spec.Backup != nil &&
 		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem &&
@@ -122,6 +130,9 @@ func BuildSharedBackupPVC(shard *multigresv1alpha1.Shard, cellName string, schem
 		}
 		if shard.Spec.Backup.Filesystem.Storage.Class != "" {
 			pvcClass = &shard.Spec.Backup.Filesystem.Storage.Class
+		}
+		if len(shard.Spec.Backup.Filesystem.Storage.AccessModes) > 0 {
+			accessModes = shard.Spec.Backup.Filesystem.Storage.AccessModes
 		}
 	}
 
@@ -137,7 +148,7 @@ func BuildSharedBackupPVC(shard *multigresv1alpha1.Shard, cellName string, schem
 			Labels:    labels,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+			AccessModes: accessModes,
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: qty,
