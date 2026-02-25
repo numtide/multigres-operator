@@ -115,55 +115,85 @@ func (r *ShardReconciler) createMissingResources(
 
 		// Create PVC if missing
 		if _, exists := existingPVCs[pvcName]; !exists {
-			desiredPVC, buildErr := BuildPoolDataPVC(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
-			if buildErr != nil {
-				return 0, false, fmt.Errorf("failed to build PVC %s: %w", pvcName, buildErr)
+			if !actionTaken {
+				desiredPVC, buildErr := BuildPoolDataPVC(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
+				if buildErr != nil {
+					return 0, false, fmt.Errorf("failed to build PVC %s: %w", pvcName, buildErr)
+				}
+				if createErr := r.Create(ctx, desiredPVC); createErr != nil && !errors.IsAlreadyExists(createErr) {
+					return 0, false, fmt.Errorf("failed to create PVC %s: %w", pvcName, createErr)
+				}
+				logger.Info("Created missing pool PVC", "pvc", pvcName)
 			}
-			if createErr := r.Create(ctx, desiredPVC); createErr != nil && !errors.IsAlreadyExists(createErr) {
-				return 0, false, fmt.Errorf("failed to create PVC %s: %w", pvcName, createErr)
-			}
-			logger.Info("Created missing pool PVC", "pvc", pvcName)
 		}
 
 		// Create Pod if missing
 		pod, exists := existingPods[podName]
 		if !exists {
-			desiredPod, buildErr := BuildPoolPod(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
-			if buildErr != nil {
-				return 0, false, fmt.Errorf("failed to build pod %s: %w", podName, buildErr)
+			if !actionTaken {
+				desiredPod, buildErr := BuildPoolPod(shard, poolName, cellName, poolSpec, int(i), r.Scheme)
+				if buildErr != nil {
+					return 0, false, fmt.Errorf("failed to build pod %s: %w", podName, buildErr)
+				}
+				if createErr := r.Create(ctx, desiredPod); createErr != nil && !errors.IsAlreadyExists(createErr) {
+					return 0, false, fmt.Errorf("failed to create pod %s: %w", podName, createErr)
+				}
+				logger.Info("Created missing pool pod", "pod", podName)
+				r.Recorder.Eventf(shard, "Normal", "PodCreated", "Created pod %s for pool %s", podName, poolName)
+				actionTaken = true
 			}
-			if createErr := r.Create(ctx, desiredPod); createErr != nil && !errors.IsAlreadyExists(createErr) {
-				return 0, false, fmt.Errorf("failed to create pod %s: %w", podName, createErr)
-			}
-			logger.Info("Created missing pool pod", "pod", podName)
-			r.Recorder.Eventf(shard, "Normal", "PodCreated", "Created pod %s for pool %s", podName, poolName)
 			continue
 		}
 
 		// Handle terminal pods (Failed/Succeeded) — delete for recreation
 		if (pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded) && pod.DeletionTimestamp.IsZero() {
-			logger.Info("Deleting terminal pool pod for recreation", "pod", pod.Name, "phase", pod.Status.Phase)
-			if delErr := r.Delete(ctx, pod); delErr != nil && !errors.IsNotFound(delErr) {
-				return 0, false, fmt.Errorf("failed to delete terminal pod %s: %w", pod.Name, delErr)
+			if !actionTaken {
+				logger.Info("Deleting terminal pool pod for recreation", "pod", pod.Name, "phase", pod.Status.Phase)
+				if delErr := r.Delete(ctx, pod); delErr != nil && !errors.IsNotFound(delErr) {
+					return 0, false, fmt.Errorf("failed to delete terminal pod %s: %w", pod.Name, delErr)
+				}
+				actionTaken = true
 			}
-			actionTaken = true
 			continue
 		}
 
 		// Handle pods being deleted externally
 		if !pod.DeletionTimestamp.IsZero() && controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
-			if handleErr := r.handleExternalDeletion(ctx, shard, pod); handleErr != nil {
-				return 0, false, handleErr
+			if !actionTaken {
+				if handleErr := r.handleExternalDeletion(ctx, shard, pod); handleErr != nil {
+					return 0, false, handleErr
+				}
+				actionTaken = true
 			}
+			continue
 		}
 
 		// Check if it's drifted
-		if podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, int(i), r.Scheme) {
+		isDrifted := podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, int(i), r.Scheme)
+		if isDrifted {
 			driftedCount++
+		}
+
+		// Block subsequent creations or updates if this pod is not ready and not already pending an update.
+		if pod.DeletionTimestamp.IsZero() && !isPodReady(pod) && !isDrifted {
+			actionTaken = true
 		}
 	}
 
 	return driftedCount, actionTaken, nil
+}
+
+// isPodReady returns true if a pod is fully ready
+func isPodReady(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 // handleExternalDeletion handles a pod that has been deleted externally (e.g. kubectl delete).
@@ -261,6 +291,7 @@ func (r *ShardReconciler) handleScaleDown(
 		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
 			return actionTaken, inProgress, fmt.Errorf("failed to delete ready-for-deletion pod %s: %w", pod.Name, err)
 		}
+		actionTaken = true
 	}
 
 	// Replace DRAINED pods

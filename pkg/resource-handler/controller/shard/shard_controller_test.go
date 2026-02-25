@@ -1042,17 +1042,30 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				},
 			}
 
-			result, err := reconciler.Reconcile(t.Context(), req)
-			if (err != nil) != tc.wantErr {
-				t.Errorf("Reconcile() error = %v, wantErr %v", err, tc.wantErr)
-				return
-			}
-			if tc.wantErr {
-				return
-			}
+			// Reconcile in a loop to allow sequential pod creation to converge.
+			// Each reconcile creates at most one pod per pool/cell combination.
+			// After each iteration, restore the shard spec because the fake client's
+			// SSA status patch implementation incorrectly clears unmanaged fields.
+			const maxReconciles = 20
+			for i := 0; i < maxReconciles; i++ {
+				result, err := reconciler.Reconcile(t.Context(), req)
+				if (err != nil) != tc.wantErr {
+					t.Errorf("Reconcile() iteration %d error = %v, wantErr %v", i, err, tc.wantErr)
+					return
+				}
+				if tc.wantErr {
+					return
+				}
+				_ = result
 
-			// NOTE: Check for requeue delay when we need to support such setup.
-			_ = result
+				// Restore the shard spec: the fake client's SSA status patch
+				// incorrectly clears spec fields that weren't in the patch object.
+				stored := &multigresv1alpha1.Shard{}
+				if err := fakeClient.Get(t.Context(), req.NamespacedName, stored); err == nil {
+					stored.Spec = tc.shard.Spec
+					_ = fakeClient.Update(t.Context(), stored)
+				}
+			}
 
 			// Run custom assertions if provided
 			if tc.assertFunc != nil {
