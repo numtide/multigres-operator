@@ -30,14 +30,15 @@ For high-volume resources in regular user namespaces, we strictly filter the cac
 **Filtered Resources:**
 - `Secret`
 - `Service`
-- `StatefulSet`
+- `StatefulSet` (still used for TopoServer)
+- `Pod`
 
 **Mechanism:**
 We use `cache.AllNamespaces` with a `LabelSelector`:
 ```go
 app.kubernetes.io/managed-by = multigres-operator
 ```
-This effectively ignores any Secret/Service/StatefulSet that does not belong to us.
+This effectively ignores any Secret/Service/StatefulSet/Pod that does not belong to us.
 
 #### Local Exception (The "Safe Zone")
 Some critical resources *must* be seen even if they don't have our label.
@@ -71,8 +72,10 @@ Since ConfigMaps are generally lower volume and lower security risk than Secrets
 | **Secret** | Operator NS | **NONE (All)** | Cert-Manager compatibility. |
 | **Service** | All Namespaces | `managed-by=multigres` | Noise reduction. |
 | **Service** | Operator NS | **NONE (All)** | Self-discovery. |
-| **StatefulSet** | All Namespaces | `managed-by=multigres` | Noise reduction. |
+| **StatefulSet** | All Namespaces | `managed-by=multigres` | Noise reduction (still used for TopoServer). |
 | **StatefulSet** | Operator NS | **NONE (All)** | Self-discovery. |
+| **Pod** | All Namespaces | `managed-by=multigres` | Pool pods are now operator-managed directly. |
+| **Pod** | Operator NS | **NONE (All)** | Self-discovery. |
 | **ConfigMap** | All Namespaces | **NONE (All)** | User Configs (postgresql.conf). |
 
 ### Developer Guide: Reading Secrets
@@ -316,7 +319,7 @@ If the controller logic *depended* on reading its own status to make decisions (
 *   *Current design:* Our controllers are level-triggered based on `Spec` and child resources. We do not use the primary resource's `Status` as a state machine driver; `Status` is purely an output observation.
 
 **Child Resources (Why we don't use it there):**
-We do *not* apply this predicate to child resources (`Owns`). We must react to child resource status transitions (e.g., a Deployment becoming Ready, a Pod changing state) to update the parent's status. Each parent only monitors the status of its *immediate* children (e.g. `MultigresCluster` watches `Cell`, but not `StatefulSet` directly if `Cell` owns it).
+We do *not* apply this predicate to child resources (`Owns`). We must react to child resource status transitions (e.g., a Deployment becoming Ready, a Pod changing state) to update the parent's status. Each parent only monitors the status of its *immediate* children (e.g. `MultigresCluster` watches `Cell`, and `Shard` watches `Pod` and `Deployment` directly).
 
 ### Server-Side Apply (SSA) & Idempotency
 
@@ -369,8 +372,8 @@ We use a **hierarchical naming scheme** where child resource names are built by 
 **Examples:**
 - **Cell:** `inline-z1-8a4f2b1c` (cluster: `inline`, cell: `z1`, hash for uniqueness)
 - **Shard:** `inline-postgres-default-0-inf-a7c3d9e2` (cluster: `inline`, database: `postgres`, tablegroup: `default`, shard: `0-inf`, hash)
-- **Pool StatefulSet:** `inline-postgres-default-0-inf---d8f1a` (truncated with `---` separator, then hash)
-- **Pod (from StatefulSet):** `inline-postgres-default-0-inf---d8f1a-0` (StatefulSet name + ordinal suffix)
+- **Pool Pod:** `inline-postgres-default-0-inf-pool-main-z1-a7c3d9e2-0` (base name with PodConstraints + index suffix)
+- **Data PVC:** `data-inline-postgres-default-0-inf-pool-main-z1-a7c3d9e2-0` (same as pod, prefixed with `data-`)
 
 ### The `name` Package
 
@@ -407,8 +410,9 @@ Different Kubernetes resources have different name length limits:
 | Constraint | MaxLength | ValidFirstChar | Used For |
 |:---|:---:|:---|:---|
 | `DefaultConstraints` | 253 | alphanumeric | CRDs, most resources |
-| `ServiceConstraints` | 63 | lowercase letter | Services, PVCs |
-| `StatefulSetConstraints` | 52 | lowercase letter | StatefulSets (reserves 11 chars for pod suffix + controller hash) |
+| `ServiceConstraints` | 63 | lowercase letter | Services, PVCs, PDBs |
+| `PodConstraints` | 60 | lowercase letter | Pool pods (reserves 3 chars for `-{index}` suffix) |
+| `StatefulSetConstraints` | 52 | lowercase letter | TopoServer StatefulSets (reserves 11 chars for pod suffix + controller hash) |
 
 ### Character Limits on User-Provided Names
 
@@ -420,7 +424,7 @@ To ensure generated resource names stay within Kubernetes limits even after addi
 | **Database Name** | 30 | Typically short; allows deep nesting |
 | **TableGroup Name** | 25 | Reduces risk of truncation in shard/pool names |
 | **Shard Name** | 25 | Often simple (e.g., `0-inf`, `shard1`) |
-| **Pool Name** | 25 | Conservative to prevent StatefulSet truncation |
+| **Pool Name** | 25 | Conservative to prevent pod name truncation |
 | **Cell Name** | 30 | Typically az names (e.g., `us-east-1a`, `z1`) |
 
 These limits are enforced via **CRD validation** (`+kubebuilder:validation:MaxLength=X`) in `api/v1alpha1/common_types.go`.
@@ -449,7 +453,7 @@ Some resources use **simple string concatenation** without hashes:
 
 **1. Deeply Nested Names Become Abbreviated**
 
-For resources like pools with long hierarchical paths, the generated names can exceed 63 (Service) or 52 (StatefulSet) characters, triggering truncation:
+For resources like pools with long hierarchical paths, the generated names can exceed 63 (Service) or 60 (Pod base) characters, triggering truncation:
 ```
 Original intent:  inline-postgres-default-0-inf-pool-main-z1
 After truncation: inline-postgres-default-0-inf---d8f1a
@@ -475,16 +479,17 @@ Users cannot use very descriptive names for databases, tablegroups, shards, or p
 - Kubernetes DNS label limit (RFC 1123)
 - Service names become DNS records: `{service-name}.{namespace}.svc.cluster.local`
 
-**StatefulSets: 52 Characters**
-- Reserve 11 characters for Pod ordinal suffix and controller hash
-  - Pod name format: `{statefulset-name}-{ordinal}` (e.g., `-0`, `-1`, ..., `-999`)
-  - Controller-revision-hash label: appended by Kubernetes, adds ~10 chars
-- Without this reservation, long StatefulSet names would produce invalid Pod names (>63 chars)
+**Pool Pods: 60 Characters (Base) + Index Suffix**
+- Reserve 3 characters for the `-{index}` suffix (e.g., `-0`, `-1`)
+- Pool pods are created directly by the operator with `PodConstraints` (60 char base)
+- Final pod name: `{base-name}-{index}` (max 63 chars)
 
-**Pods: 63 Characters (Derived)**
-- Pods don't have a separate constraint in our naming package
-- Their names are auto-generated by the owning controller (StatefulSet, Deployment)
-- StatefulSet pods: `{sts-name}-{ordinal}`
+**StatefulSets: 52 Characters (TopoServer only)**
+- Reserve 11 characters for Pod ordinal suffix and controller hash
+- TopoServer still uses StatefulSets; pool pods no longer do
+
+**Deployment Pods: 63 Characters (Derived)**
+- Their names are auto-generated by the Deployment controller
 - Deployment pods: `{deployment-name}-{replicaset-hash}-{pod-hash}`
 
 **CRDs and most other resources: 253 Characters**
@@ -496,7 +501,7 @@ Users cannot use very descriptive names for databases, tablegroups, shards, or p
 
 ### Overview
 
-The operator supports fine-grained control over PVC lifecycle through the `PVCDeletionPolicy` type, which is embedded at multiple levels of the resource hierarchy. This feature maps directly to Kubernetes StatefulSet's `persistentVolumeClaimRetentionPolicy` (available since Kubernetes 1.23).
+The operator supports fine-grained control over PVC lifecycle through the `PVCDeletionPolicy` type, which is embedded at multiple levels of the resource hierarchy. For pool pods, PVC deletion is handled directly by the operator's reconcile loop. For TopoServer StatefulSets, it maps to Kubernetes's `persistentVolumeClaimRetentionPolicy`.
 
 ### API Design
 
@@ -516,7 +521,7 @@ const (
 
 **Fields**:
 - `WhenDeleted`: Controls PVC deletion when the parent resource (Cluster, TopoServer, Shard) is deleted
-- `WhenScaled`: Controls PVC deletion when StatefulSets are scaled down (replicas reduced)
+- `WhenScaled`: Controls PVC deletion when replicas are reduced (scale-down)
 
 **Default Values**: Both fields default to `Retain` (safest option). This is enforced via:
 1. CRD-level defaults: `+kubebuilder:default=Retain`
@@ -567,38 +572,22 @@ sts.Spec.PersistentVolumeClaimRetentionPolicy = pvc.BuildRetentionPolicy(
 )
 ```
 
-**Shard Pool StatefulSets** (`pkg/resource-handler/controller/shard/pool_statefulset.go`):
-```go
-sts.Spec.PersistentVolumeClaimRetentionPolicy = pvc.BuildRetentionPolicy(
-    shard.Spec.PVCDeletionPolicy,
-)
-```
+**Shard Pool Pods** (`pkg/resource-handler/controller/shard/reconcile_pool_pods.go`):
+Pool pod PVCs are managed directly by the operator. During scale-down, the `cleanupDrainedPod` function checks `shard.Spec.PVCDeletionPolicy.WhenScaled` and deletes the data PVC if the policy is `Delete`. During shard deletion, the `handleDeletion` function removes pod finalizers and PVCs are garbage-collected via owner references.
 
 **Utility Function** (`pkg/util/pvc/retention.go:BuildRetentionPolicy`):
-- Converts operator's `PVCDeletionPolicy` to Kubernetes `StatefulSetPersistentVolumeClaimRetentionPolicy`
+- Used by TopoServer StatefulSets to convert operator's `PVCDeletionPolicy` to Kubernetes `StatefulSetPersistentVolumeClaimRetentionPolicy`
+- For pool pods, the operator checks the policy directly in the reconcile loop
 - Handles nil input by returning safe `Retain/Retain` default
 - Maps enum values: `Delete` → `Delete`, anything else → `Retain`
 
 ### Critical Caveats for Future Developers
 
-#### 1. StatefulSet Spec Changes Trigger Recreation
+#### 1. TopoServer StatefulSet Spec Changes Trigger Recreation
 
-**Issue**: Modifying `spec.persistentVolumeClaimRetentionPolicy` on an existing StatefulSet requires recreation (not supported by in-place updates).
+**Issue**: Modifying `spec.persistentVolumeClaimRetentionPolicy` on an existing TopoServer StatefulSet requires recreation (not supported by in-place updates). This caveat does not apply to pool pods, which the operator manages directly.
 
-**Current Behavior**: The operator uses **Server-Side Apply (SSA)**, which will:
-- Detect the conflict
-- Return an error if the field is immutable
-- Require manual intervention (delete + recreate StatefulSet)
-
-**Mitigation**:
-- Document this as a known limitation in README
-- Consider implementing a controller that detects policy changes and:
-  1. Gracefully drains pods
-  2. Deletes the StatefulSet (keeping pods via `orphan` deletion)
-  3. Recreates StatefulSet with new policy
-  4. Lets Kubernetes re-adopt pods
-
-**Decision**: Deferred to future implementation. Current behavior (requiring manual intervention) is acceptable for v1alpha1.
+**Decision**: Deferred to future implementation. Current behavior (requiring manual intervention for TopoServer) is acceptable for v1alpha1.
 
 #### 2. No Validation of Policy vs. Cluster Intent
 
@@ -1218,7 +1207,7 @@ The components receiving this injection are:
 | Component | Injection Logic |
 |---|---|
 | **MultiGateway Deployment** | Determined directly from the Cell CR `Spec.Zone` / `Spec.Region` |
-| **Pool StatefulSets** | Looked up via `CellTopologyLabels` in `ShardSpec` |
+| **Pool Pods** | Looked up via `CellTopologyLabels` in `ShardSpec` |
 | **MultiOrch Deployment** | Looked up via `CellTopologyLabels` in `ShardSpec` |
 
 *(Note: PVCs for backups don't need explicit injection, as Kubernetes binds dynamically provisioned PersistentVolumes based on the pod's scheduling decision through topology-aware volume provisioning).*

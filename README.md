@@ -5,10 +5,11 @@ The **[Multigres](https://github.com/multigres/multigres) Operator** is a Kubern
 ## Features
 - **Global Cluster Management**: Single source of truth (`MultigresCluster`) for the entire database topology.
 - **Automated Sharding**: Manages `TableGroups` and `Shards` as first-class citizens.
+- **Direct Pod Management**: Manages individual Pods and PVCs directly (no StatefulSets), enabling targeted decommissioning, rolling updates with primary awareness, and granular PVC lifecycle control.
 - **Failover & High Availability**: Orchestrates Primary/Standby failovers across defined Cells.
 - **Template System**: Define configuration once (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) and reuse it across the cluster.
 - **Hierarchical Defaults**: Smart override logic allowing for global defaults, namespace defaults, and granular overrides.
-- **Integrated Cert Management**: Built-in self-signed certificate generation and rotation for validatating webhooks, with optional support for `cert-manager`.
+- **Integrated Cert Management**: Built-in self-signed certificate generation and rotation for validating webhooks, with optional support for `cert-manager`.
 
 ---
 
@@ -121,8 +122,8 @@ The Multigres Operator follows a **Parent/Child** architecture. You, the user, m
            │
            └── 📦 [Shard] (Child CR) ← 📄 Uses [ShardTemplate] OR inline [spec]
                 │
-                ├── 🧠 MultiOrch Resources (Deployment/Pod)
-                └── 🏊 Pools (StatefulSets for Postgres+MultiPooler)
+                ├── 🧠 MultiOrch Resources (Deployment)
+                └── 🏊 Pools (Operator-managed Pods + PVCs)
 
 📄 [CoreTemplate] (User-editable, scoped config)
    ├── globalTopoServer
@@ -222,7 +223,7 @@ The `pvcDeletionPolicy` field has two settings:
 
 **By default, the operator uses `Retain/Retain`** for maximum data safety. This means:
 - Deleting a cluster will **not** delete your data volumes
-- Scaling down a StatefulSet will **not** delete the PVCs from removed pods
+- Scaling down will **not** delete the PVCs from removed pods
 
 This is a deliberate choice to prevent accidental data loss.
 
@@ -305,7 +306,7 @@ spec:
 - Ephemeral clusters
 - Scenarios where data is backed up externally
 
-⚠️ **Replica Scale-Down Behavior**: Setting `whenScaled: Delete` will **immediately delete PVCs** when reducing the number of replicas (pod count). If you scale the replica count back up, new pods will start with **empty volumes**. This is useful for:
+⚠️ **Replica Scale-Down Behavior**: Setting `whenScaled: Delete` will **immediately delete PVCs** when the operator removes pods during scale-down. If you scale the replica count back up, new pods will start with **empty volumes** and will need to restore from backup. This is useful for:
 - Reducing storage costs in non-production environments
 - Stateless-like workloads where data is ephemeral
 
@@ -614,6 +615,7 @@ Please be aware of the following constraints in the current version:
 *   **Database Limit**: Only **1** database is supported per cluster. It must be named `postgres` and marked `default: true`.
 *   **Shard Naming**: Shards currently must be named `0-inf` - this is a limitation of the current implementation of Multigres.
 *   **Naming Lengths**:
-    *   **TableGroup Names**: If the combined name (`cluster-db-tg`) exceeds **28 characters**, the operator automatically hashes the database and tablegroup names to ensure that the resulting child resource names (Shards, Pods, StatefulSets) stay within Kubernetes limits (63 chars).
+    *   **TableGroup Names**: If the combined name (`cluster-db-tg`) exceeds **28 characters**, the operator automatically hashes the database and tablegroup names to ensure that the resulting child resource names (Shards, Pods, PVCs) stay within Kubernetes limits (63 chars).
     *   **Cluster Name**: Recommended to be under **20 characters** to ensure that even with hashing, suffixes fit comfortably.
 *   **Immutable Fields**: Some fields like `zone` and `region` in Cell definitions are immutable after creation.
+*   **Append-Only Pools and Cells**: Pools and cells cannot be renamed or removed from a cluster. This prevents orphaned pods and stale etcd registrations.
