@@ -89,6 +89,14 @@ var (
 		MaxLength:      52,
 		ValidFirstChar: isLowercaseLetter,
 	}
+	// PodConstraints are name constraints for directly-managed Pod objects.
+	// Pods are DNS labels (max 63 chars). We reserve 3 characters for the
+	// "-{index}" suffix (supports indices 0-99, matching ReplicasPerCell max).
+	// 63 - 3 = 60.
+	PodConstraints = Constraints{
+		MaxLength:      60,
+		ValidFirstChar: isLowercaseLetter,
+	}
 )
 
 // Hash computes a hash suffix for the given name parts.

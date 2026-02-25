@@ -48,6 +48,7 @@ func BuildShard(
 			GlobalTopoServer: tg.Spec.GlobalTopoServer,
 			MultiOrch:        shardSpec.MultiOrch,
 			Pools:            shardSpec.Pools,
+			Replicas:         calculateTotalReplicas(shardSpec.Pools),
 			// Merge hierarchy: Shard → TableGroup
 			PVCDeletionPolicy: multigresv1alpha1.MergePVCDeletionPolicy(
 				shardSpec.PVCDeletionPolicy,
@@ -63,4 +64,17 @@ func BuildShard(
 	}
 
 	return shardCR, nil
+}
+
+func calculateTotalReplicas(pools map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec) *int32 {
+	var total int32
+	for _, pool := range pools {
+		// Default matches pkg/resource-handler/controller/shard/pool_pod.go
+		replicas := int32(1)
+		if pool.ReplicasPerCell != nil {
+			replicas = *pool.ReplicasPerCell
+		}
+		total += replicas * int32(len(pool.Cells))
+	}
+	return &total
 }

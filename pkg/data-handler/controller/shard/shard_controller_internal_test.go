@@ -10,6 +10,7 @@ import (
 	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
+	"github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -309,7 +310,7 @@ func TestReconcile_ErrorRegisteringDatabase(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-shard",
 			Namespace:         "default",
-			Finalizers:        []string{"shard.data-handler.multigres.com/finalizer"},
+			Finalizers:        []string{"multigres.com/shard-data-protection"},
 			CreationTimestamp: metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
@@ -369,7 +370,7 @@ func TestReconcile_ErrorDeletingDatabase(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-shard",
 			Namespace:         "default",
-			Finalizers:        []string{"shard.data-handler.multigres.com/finalizer"},
+			Finalizers:        []string{"multigres.com/shard-data-protection"},
 			DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
@@ -438,5 +439,282 @@ func TestIsTopoUnavailable(t *testing.T) {
 				t.Errorf("isTopoUnavailable(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEvaluateBackups_Healthy(t *testing.T) {
+	t.Parallel()
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+	}
+
+	recentID := time.Now().Add(-1 * time.Hour).Format("20060102-150405")
+	backups := []*multipoolermanagerdata.BackupMetadata{
+		{
+			BackupId: recentID,
+			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+	}
+
+	result := evaluateBackups(shard, backups)
+	if !result.Healthy {
+		t.Errorf("expected healthy, got message: %s", result.Message)
+	}
+	if result.LastBackupType != "full" {
+		t.Errorf("expected type=full, got %s", result.LastBackupType)
+	}
+	if result.LastBackupTime == nil {
+		t.Error("expected LastBackupTime to be set")
+	}
+}
+
+func TestEvaluateBackups_Stale(t *testing.T) {
+	t.Parallel()
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+	}
+
+	oldID := time.Now().Add(-48 * time.Hour).Format("20060102-150405")
+	backups := []*multipoolermanagerdata.BackupMetadata{
+		{
+			BackupId: oldID,
+			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
+			Type:     "diff",
+		},
+	}
+
+	result := evaluateBackups(shard, backups)
+	if result.Healthy {
+		t.Error("expected unhealthy for 48h-old backup")
+	}
+	if result.LastBackupType != "diff" {
+		t.Errorf("expected type=diff, got %s", result.LastBackupType)
+	}
+}
+
+func TestEvaluateBackups_NoBackups(t *testing.T) {
+	t.Parallel()
+
+	shard := &multigresv1alpha1.Shard{}
+	result := evaluateBackups(shard, nil)
+	if result.Healthy {
+		t.Error("expected unhealthy when no backups")
+	}
+	if result.Message != "No backups found" {
+		t.Errorf("unexpected message: %s", result.Message)
+	}
+}
+
+func TestEvaluateBackups_NoCompleted(t *testing.T) {
+	t.Parallel()
+
+	shard := &multigresv1alpha1.Shard{}
+	backups := []*multipoolermanagerdata.BackupMetadata{
+		{
+			BackupId: "20260224-120000",
+			Status:   multipoolermanagerdata.BackupMetadata_INCOMPLETE,
+			Type:     "full",
+		},
+	}
+
+	result := evaluateBackups(shard, backups)
+	if result.Healthy {
+		t.Error("expected unhealthy when no completed backups")
+	}
+	if result.Message != "No completed backups found" {
+		t.Errorf("unexpected message: %s", result.Message)
+	}
+}
+
+func TestEvaluateBackups_SelectsMostRecent(t *testing.T) {
+	t.Parallel()
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+	}
+
+	recentID := time.Now().Add(-1 * time.Hour).Format("20060102-150405")
+	olderID := time.Now().Add(-5 * time.Hour).Format("20060102-150405")
+	backups := []*multipoolermanagerdata.BackupMetadata{
+		{
+			BackupId: olderID,
+			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+		{
+			BackupId: recentID,
+			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
+			Type:     "incr",
+		},
+	}
+
+	result := evaluateBackups(shard, backups)
+	if result.LastBackupType != "incr" {
+		t.Errorf("expected most recent backup type=incr, got %s", result.LastBackupType)
+	}
+}
+
+func TestApplyBackupHealth(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sets healthy condition", func(t *testing.T) {
+		t.Parallel()
+
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Generation: 5},
+		}
+		now := metav1.Now()
+		result := &backupHealthResult{
+			Healthy:        true,
+			LastBackupTime: &now,
+			LastBackupType: "full",
+			Message:        "backup is healthy",
+		}
+
+		applyBackupHealth(shard, result)
+
+		if len(shard.Status.Conditions) != 1 {
+			t.Fatalf("expected 1 condition, got %d", len(shard.Status.Conditions))
+		}
+		c := shard.Status.Conditions[0]
+		if c.Type != conditionBackupHealthy {
+			t.Errorf("expected condition type %s, got %s", conditionBackupHealthy, c.Type)
+		}
+		if c.Status != metav1.ConditionTrue {
+			t.Errorf("expected True, got %s", c.Status)
+		}
+		if c.Reason != "BackupRecent" {
+			t.Errorf("expected reason BackupRecent, got %s", c.Reason)
+		}
+		if shard.Status.LastBackupType != "full" {
+			t.Errorf("expected LastBackupType=full, got %s", shard.Status.LastBackupType)
+		}
+	})
+
+	t.Run("sets unhealthy condition", func(t *testing.T) {
+		t.Parallel()
+
+		shard := &multigresv1alpha1.Shard{}
+		result := &backupHealthResult{
+			Healthy: false,
+			Message: "backup is stale",
+		}
+
+		applyBackupHealth(shard, result)
+
+		if len(shard.Status.Conditions) != 1 {
+			t.Fatalf("expected 1 condition, got %d", len(shard.Status.Conditions))
+		}
+		c := shard.Status.Conditions[0]
+		if c.Status != metav1.ConditionFalse {
+			t.Errorf("expected False, got %s", c.Status)
+		}
+		if c.Reason != "BackupStale" {
+			t.Errorf("expected reason BackupStale, got %s", c.Reason)
+		}
+	})
+
+	t.Run("nil result is no-op", func(t *testing.T) {
+		t.Parallel()
+
+		shard := &multigresv1alpha1.Shard{}
+		applyBackupHealth(shard, nil)
+		if len(shard.Status.Conditions) != 0 {
+			t.Error("expected no conditions for nil result")
+		}
+	})
+}
+
+func TestParseBackupTime(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		input string
+		want  time.Time
+	}{
+		"valid":       {input: "20260224-143055", want: time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC)},
+		"with suffix": {input: "20260224-143055F123456", want: time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC)},
+		"too short":   {input: "20260224", want: time.Time{}},
+		"empty":       {input: "", want: time.Time{}},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := parseBackupTime(tc.input)
+			if !got.Equal(tc.want) {
+				t.Errorf("parseBackupTime(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsConditionTrue(t *testing.T) {
+	t.Parallel()
+
+	conditions := []metav1.Condition{
+		{Type: "Ready", Status: metav1.ConditionTrue},
+		{Type: "BackupHealthy", Status: metav1.ConditionFalse},
+	}
+
+	tests := map[string]struct {
+		condType string
+		want     bool
+	}{
+		"true condition":    {condType: "Ready", want: true},
+		"false condition":   {condType: "BackupHealthy", want: false},
+		"missing condition": {condType: "Missing", want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := isConditionTrue(conditions, tc.condType); got != tc.want {
+				t.Errorf("isConditionTrue(%q) = %v, want %v", tc.condType, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCollectCells(t *testing.T) {
+	t.Parallel()
+
+	shard := &multigresv1alpha1.Shard{
+		Spec: multigresv1alpha1.ShardSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"}},
+				"replica": {Cells: []multigresv1alpha1.CellName{"zone-b", "zone-c"}},
+			},
+		},
+	}
+
+	cells := collectCells(shard)
+	if len(cells) != 3 {
+		t.Errorf("expected 3 unique cells, got %d: %v", len(cells), cells)
+	}
+
+	cellSet := make(map[string]bool)
+	for _, c := range cells {
+		cellSet[c] = true
+	}
+	for _, want := range []string{"zone-a", "zone-b", "zone-c"} {
+		if !cellSet[want] {
+			t.Errorf("expected cell %q in result", want)
+		}
 	}
 }

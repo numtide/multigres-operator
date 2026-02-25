@@ -45,7 +45,7 @@ func buildMultiPoolerContainerPorts() []corev1.ContainerPort {
 }
 
 // buildPoolHeadlessServicePorts creates service ports for the pool headless service.
-// Includes HTTP, gRPC, and PostgreSQL ports for StatefulSet pod discovery.
+// Includes HTTP, gRPC, and PostgreSQL ports for pool pod discovery.
 func buildPoolHeadlessServicePorts() []corev1.ServicePort {
 	return []corev1.ServicePort{
 		{

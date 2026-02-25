@@ -122,6 +122,12 @@ func IgnorePodSpecDefaults() cmp.Option {
 			"DNSPolicy",                     // Defaults to "ClusterFirst"
 			"SchedulerName",                 // Defaults to "default-scheduler"
 			"SecurityContext",               // Default PodSecurityContext applied
+			"Tolerations",                   // Default unreachable/not-ready tolerations
+			"Priority",                      // Default priority
+			"EnableServiceLinks",            // Defaults to true
+			"PreemptionPolicy",              // Defaults to PreemptLowerPriority
+			"ServiceAccountName",            // Defaults to default
+			"DeprecatedServiceAccount",      // Legacy field
 		),
 		cmpopts.IgnoreFields(corev1.Container{},
 			// Container defaults
@@ -129,6 +135,10 @@ func IgnorePodSpecDefaults() cmp.Option {
 			"TerminationMessagePolicy", // Defaults to "File"
 			"ImagePullPolicy",          // Defaults: Always for :latest, IfNotPresent otherwise
 		),
+		cmpopts.IgnoreFields(corev1.ConfigMapVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.SecretVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.ProjectedVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.ObjectFieldSelector{}, "APIVersion"),
 	}
 }
 
@@ -144,6 +154,12 @@ func IgnorePodSpecDefaultsExceptPullPolicy() cmp.Option {
 			"DNSPolicy",                     // Defaults to "ClusterFirst"
 			"SchedulerName",                 // Defaults to "default-scheduler"
 			"SecurityContext",               // Default PodSecurityContext applied
+			"Tolerations",
+			"Priority",
+			"EnableServiceLinks",
+			"PreemptionPolicy",
+			"ServiceAccountName",
+			"DeprecatedServiceAccount",
 		),
 		cmpopts.IgnoreFields(corev1.Container{},
 			// Container termination logging
@@ -151,6 +167,10 @@ func IgnorePodSpecDefaultsExceptPullPolicy() cmp.Option {
 			"TerminationMessagePolicy", // Defaults to "File"
 			// Note: ImagePullPolicy NOT ignored - preserved for assertions
 		),
+		cmpopts.IgnoreFields(corev1.ConfigMapVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.SecretVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.ProjectedVolumeSource{}, "DefaultMode"),
+		cmpopts.IgnoreFields(corev1.ObjectFieldSelector{}, "APIVersion"),
 	}
 }
 
@@ -222,6 +242,15 @@ func IgnoreObjectMetaCompletely() cmp.Option {
 // type, this uses a filter function to match any struct field named "Status".
 func IgnoreStatus() cmp.Option {
 	return cmp.FilterPath(filterByFieldName("Status"), cmp.Ignore())
+}
+
+// IgnorePVCRuntimeFields ignores PVC fields that are set by Kubernetes at
+// runtime: the pvc-protection finalizer and the default VolumeMode.
+func IgnorePVCRuntimeFields() cmp.Option {
+	return cmp.Options{
+		cmpopts.IgnoreFields(metav1.ObjectMeta{}, "Finalizers"),
+		cmpopts.IgnoreFields(corev1.PersistentVolumeClaimSpec{}, "VolumeMode"),
+	}
 }
 
 // CompareOptions returns common options for comparing Kubernetes objects.

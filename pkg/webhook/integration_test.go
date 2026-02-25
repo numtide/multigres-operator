@@ -336,6 +336,112 @@ func TestWebhook_ChildResourceProtection(t *testing.T) {
 }
 
 // ============================================================================
+// Cell Validation Tests
+// ============================================================================
+
+func TestWebhook_CellAppendOnly(t *testing.T) {
+	t.Run("Should Reject Cell Removal", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cell-removal-test",
+				Namespace: testNamespace,
+			},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "cell-a", Zone: "us-east-1a"},
+					{Name: "cell-b", Zone: "us-east-1b"},
+				},
+			},
+		}
+
+		if err := k8sClient.Create(ctx, cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		fetched := &multigresv1alpha1.MultigresCluster{}
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), fetched); err != nil {
+			t.Fatalf("Failed to get cluster: %v", err)
+		}
+
+		fetched.Spec.Cells = []multigresv1alpha1.CellConfig{
+			{Name: "cell-a", Zone: "us-east-1a"},
+		}
+		err := k8sClient.Update(ctx, fetched)
+		if err == nil {
+			t.Fatal("Expected error removing a cell, got nil")
+		}
+		if !strings.Contains(err.Error(), "Append-Only") {
+			t.Fatalf("Expected 'Append-Only' in error, got: %v", err)
+		}
+	})
+
+	t.Run("Should Reject Cell Rename", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cell-rename-test",
+				Namespace: testNamespace,
+			},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "original-cell", Zone: "us-east-1a"},
+				},
+			},
+		}
+
+		if err := k8sClient.Create(ctx, cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		fetched := &multigresv1alpha1.MultigresCluster{}
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), fetched); err != nil {
+			t.Fatalf("Failed to get cluster: %v", err)
+		}
+
+		// Replace the cell with a different name — effectively a rename
+		fetched.Spec.Cells = []multigresv1alpha1.CellConfig{
+			{Name: "renamed-cell", Zone: "us-east-1a"},
+		}
+		err := k8sClient.Update(ctx, fetched)
+		if err == nil {
+			t.Fatal("Expected error renaming a cell, got nil")
+		}
+		if !strings.Contains(err.Error(), "Append-Only") {
+			t.Fatalf("Expected 'Append-Only' in error, got: %v", err)
+		}
+	})
+
+	t.Run("Should Allow Adding New Cells", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cell-add-test",
+				Namespace: testNamespace,
+			},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "cell-x", Zone: "us-east-1a"},
+				},
+			},
+		}
+
+		if err := k8sClient.Create(ctx, cluster); err != nil {
+			t.Fatalf("Failed to create cluster: %v", err)
+		}
+
+		fetched := &multigresv1alpha1.MultigresCluster{}
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), fetched); err != nil {
+			t.Fatalf("Failed to get cluster: %v", err)
+		}
+
+		fetched.Spec.Cells = append(fetched.Spec.Cells, multigresv1alpha1.CellConfig{
+			Name: "cell-y", Zone: "us-east-1b",
+		})
+		if err := k8sClient.Update(ctx, fetched); err != nil {
+			t.Fatalf("Expected appending a cell to succeed, got: %v", err)
+		}
+	})
+}
+
+// ============================================================================
 // Advanced / Edge Case Tests
 // ============================================================================
 

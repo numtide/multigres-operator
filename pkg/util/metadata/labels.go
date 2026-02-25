@@ -90,6 +90,26 @@ const (
 
 	// DefaultCellName is the default cell name when none is specified.
 	DefaultCellName = "multigres-global-topo"
+
+	// AnnotationSpecHash stores the hash of operator-managed pod spec fields.
+	AnnotationSpecHash = "multigres.com/spec-hash"
+
+	// AnnotationDrainState is used to coordinate graceful scale down between
+	// the resource-handler (Kubernetes) and data-handler (etcd).
+	AnnotationDrainState = "drain.multigres.com/state"
+
+	// DrainStateRequested indicates the resource-handler wants this pod removed.
+	DrainStateRequested = "requested"
+	// DrainStateDraining indicates the data-handler is removing the pod from synchronous standby.
+	DrainStateDraining = "draining"
+	// DrainStateAcknowledged indicates the data-handler verified removal from synchronous standby.
+	DrainStateAcknowledged = "acknowledged"
+	// DrainStateReadyForDeletion indicates the data-handler unregistered the pod from etcd.
+	DrainStateReadyForDeletion = "ready-for-deletion"
+
+	// AnnotationDrainRequestedAt stores the RFC3339 timestamp of when the drain
+	// was first requested. Used to detect failover timeouts.
+	AnnotationDrainRequestedAt = "drain.multigres.com/requested-at"
 )
 
 const (

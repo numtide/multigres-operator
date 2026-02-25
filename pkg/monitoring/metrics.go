@@ -48,7 +48,15 @@ var (
 			Name: "multigres_operator_shard_pool_replicas",
 			Help: "Pool replica counts for a Shard.",
 		},
-		[]string{"shard", "pool", "namespace", "state"},
+		[]string{"cluster", "shard", "pool", "cell", "namespace", "state"},
+	)
+
+	poolPodsDrifted = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "multigres_operator_pool_pods_drifted",
+			Help: "Number of pool pods with spec-hash mismatch requiring rolling update.",
+		},
+		[]string{"cluster", "shard", "pool", "cell", "namespace"},
 	)
 
 	toposerverReplicas = prometheus.NewGaugeVec(
@@ -75,6 +83,30 @@ var (
 		},
 		[]string{"operation", "resource"},
 	)
+
+	lastBackupAgeSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "multigres_operator_last_backup_age_seconds",
+			Help: "Age of the most recent completed backup in seconds.",
+		},
+		[]string{"cluster", "shard", "namespace"},
+	)
+
+	drainOperationsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "multigres_operator_drain_operations_total",
+			Help: "Total number of graceful pod drain operations.",
+		},
+		[]string{"cluster", "shard", "result"},
+	)
+
+	rollingUpdateInProgress = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "multigres_operator_rolling_update_in_progress",
+			Help: "Indicates if a rolling update is currently in progress for a pool.",
+		},
+		[]string{"cluster", "shard", "pool", "cell", "namespace"},
+	)
 )
 
 func init() {
@@ -84,9 +116,13 @@ func init() {
 		clusterShardsTotal,
 		cellGatewayReplicas,
 		shardPoolReplicas,
+		poolPodsDrifted,
 		toposerverReplicas,
 		webhookRequestTotal,
 		webhookRequestDuration,
+		lastBackupAgeSeconds,
+		drainOperationsTotal,
+		rollingUpdateInProgress,
 	)
 }
 
@@ -99,8 +135,12 @@ func Collectors() []prometheus.Collector {
 		clusterShardsTotal,
 		cellGatewayReplicas,
 		shardPoolReplicas,
+		poolPodsDrifted,
 		toposerverReplicas,
 		webhookRequestTotal,
 		webhookRequestDuration,
+		lastBackupAgeSeconds,
+		drainOperationsTotal,
+		rollingUpdateInProgress,
 	}
 }

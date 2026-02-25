@@ -23,12 +23,12 @@ limitations under the License.
 // # PostgreSQL Pools
 //
 // For each pool defined in the Shard spec, the controller creates:
-//   - StatefulSet: Runs PostgreSQL replicas with proper volume claims and configuration.
+//   - Pod: Runs PostgreSQL replicas (operator-managed) with proper volume claims and configuration.
 //   - Headless Service: Enables direct pod addressing for replication.
 //   - Backup PVC: Shared persistent volume for backup storage (when configured).
 //
 // Pools can span multiple cells for high availability. In multi-cell configurations,
-// the controller creates separate StatefulSets per cell while maintaining a unified
+// the controller creates separate Pods per cell while maintaining a unified
 // view in the Shard status.
 //
 // # MultiOrch Orchestrator

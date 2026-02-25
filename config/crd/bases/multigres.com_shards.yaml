@@ -2284,10 +2284,13 @@ spec:
                         maxLength: 30
                         minLength: 1
                         type: string
-                      maxItems: 50
+                      maxItems: 10
                       minItems: 1
                       type: array
                       x-kubernetes-list-type: set
+                      x-kubernetes-validations:
+                      - message: Cells cannot be removed from a pool (Append-Only)
+                        rule: oldSelf.all(c, c in self)
                     multipooler:
                       description: Multipooler container configuration.
                       properties:
@@ -2515,6 +2518,13 @@ spec:
                     - Delete
                     type: string
                 type: object
+              replicas:
+                description: |-
+                  Replicas is the total number of desired replicas across all pools in this shard.
+                  This field is used by the scale subresource to support HPA and PDBs.
+                  It is automatically populated by the cluster-handler based on the sum of ReplicasPerCell.
+                format: int32
+                type: integer
               shardName:
                 description: ShardName is the specific identifier for this shard (e.g.
                   "0").
@@ -2609,6 +2619,19 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              lastBackupTime:
+                description: LastBackupTime is the timestamp of the most recent completed
+                  backup.
+                format: date-time
+                type: string
+              lastBackupType:
+                description: LastBackupType is the type of the most recent completed
+                  backup (full, diff, incr).
+                enum:
+                - full
+                - diff
+                - incr
+                type: string
               message:
                 description: Message provides details about the current phase.
                 type: string
@@ -2629,9 +2652,20 @@ spec:
                 - Degraded
                 - Unknown
                 type: string
+              podRoles:
+                additionalProperties:
+                  type: string
+                description: PodRoles maps pod names to their database roles (e.g.
+                  PRIMARY, REPLICA, DRAINED).
+                type: object
               poolsReady:
                 description: PoolsReady indicates if all data pools are ready.
                 type: boolean
+              readyReplicas:
+                description: ReadyReplicas is the total number of ready pods across
+                  all pools in this shard.
+                format: int32
+                type: integer
             required:
             - orchReady
             - poolsReady
@@ -2640,4 +2674,7 @@ spec:
     served: true
     storage: true
     subresources:
+      scale:
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.readyReplicas
       status: {}

@@ -12,6 +12,7 @@ import (
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,7 +28,7 @@ import (
 )
 
 const (
-	finalizerName = "shard.data-handler.multigres.com/finalizer"
+	finalizerName = "multigres.com/shard-data-protection"
 )
 
 func TestReconcile(t *testing.T) {
@@ -35,6 +36,7 @@ func TestReconcile(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
 
 	tests := map[string]struct {
 		shard               *multigresv1alpha1.Shard

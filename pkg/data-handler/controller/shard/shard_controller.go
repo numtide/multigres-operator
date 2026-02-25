@@ -8,24 +8,32 @@ import (
 	"strings"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
-	"github.com/multigres/multigres/go/pb/clustermetadata"
+	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"k8s.io/client-go/tools/record"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 const (
-	finalizerName = "shard.data-handler.multigres.com/finalizer"
+	finalizerName = "multigres.com/shard-data-protection"
 
 	// topoUnavailableGracePeriod is the duration after resource creation during
 	// which topology UNAVAILABLE errors are silently requeued instead of being
@@ -51,6 +59,7 @@ type ShardReconciler struct {
 	Scheme          *runtime.Scheme
 	Recorder        record.EventRecorder
 	createTopoStore func(*multigresv1alpha1.Shard) (topoclient.Store, error)
+	rpcClient       rpcclient.MultiPoolerClient
 }
 
 // Reconcile handles Shard resource reconciliation for data plane operations.
@@ -96,6 +105,11 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if !slices.Contains(shard.Finalizers, finalizerName) {
 		shard.Finalizers = append(shard.Finalizers, finalizerName)
 		if err := r.Update(ctx, shard); err != nil {
+			if apierrors.IsConflict(err) {
+				// Requeue on conflict without emitting a warning event.
+				// This is expected in Kubernetes when multiple controllers reconcile the same object.
+				return ctrl.Result{Requeue: true}, nil
+			}
 			monitoring.RecordSpanError(span, err)
 			r.Recorder.Eventf(
 				shard,
@@ -149,8 +163,133 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		childSpan.End()
 	}
 
+	// Update PodRoles and execute Drain State Machine
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.DrainStateMachine")
+		podList := &corev1.PodList{}
+		// Match pods belonging to this Shard CR specifically
+		lbls := map[string]string{
+			metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
+			metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
+		}
+		if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(lbls)); err != nil {
+			logger.Error(err, "Failed to list pods for shard")
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			return ctrl.Result{}, err
+		}
+
+		store, err := r.getTopoStore(shard)
+		if err == nil {
+			if shard.Status.PodRoles == nil {
+				shard.Status.PodRoles = make(map[string]string)
+			}
+			rolesChanged := false
+
+			cells := collectCells(shard)
+			for _, cell := range cells {
+				poolers, cerr := store.GetMultiPoolersByCell(ctx, cell, nil)
+				if cerr == nil {
+					for _, p := range poolers {
+						roleName := "REPLICA"
+						if p.Type == clustermetadatapb.PoolerType_PRIMARY {
+							roleName = "PRIMARY"
+						} else if p.Type == clustermetadatapb.PoolerType_DRAINED {
+							roleName = "DRAINED"
+						}
+						hostname := p.MultiPooler.GetHostname()
+						if hostname == "" {
+							hostname = fmt.Sprintf("%v", p.Id)
+						}
+
+						if shard.Status.PodRoles[hostname] != roleName {
+							shard.Status.PodRoles[hostname] = roleName
+							rolesChanged = true
+						}
+					}
+				}
+			}
+
+			if rolesChanged {
+				if err := r.Status().Update(ctx, shard); err != nil {
+					if apierrors.IsConflict(err) {
+						logger.V(1).Info("Conflict updating shard pod roles, retrying")
+						childSpan.End()
+						return ctrl.Result{Requeue: true}, nil
+					}
+					logger.Error(err, "Failed to update shard pod roles")
+					// continue, non-fatal for drain
+				}
+			}
+
+			requeue := false
+			for i := range podList.Items {
+				pod := &podList.Items[i]
+				if pod.Annotations[metadata.AnnotationDrainState] != "" {
+					shouldRequeue, derr := r.executeDrainStateMachine(ctx, shard, pod)
+					if derr != nil {
+						logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
+					}
+					if shouldRequeue {
+						requeue = true
+					}
+				}
+			}
+			store.Close()
+			if requeue {
+				childSpan.End()
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+			}
+		} else {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to get topo store, cannot update roles or execute drain")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		childSpan.End()
+	}
+
+	// Evaluate backup health via gRPC to the primary pooler.
+	if r.rpcClient != nil {
+		_, childSpan := monitoring.StartChildSpan(ctx, "ShardData.EvaluateBackupHealth")
+		result, err := r.evaluateBackupHealth(ctx, shard)
+		if err != nil {
+			// Backup health is observational — log and emit a warning event,
+			// but do not fail the reconcile.
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to evaluate backup health")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"BackupCheckFailed",
+				"Failed to check backup health: %v",
+				err,
+			)
+		} else if result != nil {
+			prevHealthy := isConditionTrue(shard.Status.Conditions, conditionBackupHealthy)
+			applyBackupHealth(shard, result)
+
+			// Emit transition events.
+			if result.Healthy && !prevHealthy {
+				r.Recorder.Event(shard, "Normal", "BackupHealthy", result.Message)
+			} else if !result.Healthy {
+				r.Recorder.Eventf(shard, "Warning", "BackupStale", result.Message)
+			}
+
+			if err := r.Status().Update(ctx, shard); err != nil {
+				monitoring.RecordSpanError(childSpan, err)
+				childSpan.End()
+				logger.Error(err, "Failed to update shard backup status")
+				return ctrl.Result{}, err
+			}
+			childSpan.End()
+		} else {
+			childSpan.End()
+		}
+	}
+
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
-	logger.Info("Database registered in topology successfully")
 	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled database topology")
 	return ctrl.Result{}, nil
 }
@@ -185,6 +324,9 @@ func (r *ShardReconciler) handleDeletion(
 			return s == finalizerName
 		})
 		if err := r.Update(ctx, shard); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			logger.Error(err, "Failed to remove finalizer")
 			r.Recorder.Eventf(
 				shard,
@@ -216,22 +358,11 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 
 	dbName := string(shard.Spec.DatabaseName)
 
-	// Collect cells from pools
-	cellsMap := make(map[string]bool)
-	for _, pool := range shard.Spec.Pools {
-		for _, cell := range pool.Cells {
-			cellsMap[string(cell)] = true
-		}
-	}
-
-	cells := make([]string, 0, len(cellsMap))
-	for cell := range cellsMap {
-		cells = append(cells, cell)
-	}
-	slices.Sort(cells) // Sort for deterministic output
+	cells := collectCells(shard)
+	slices.Sort(cells)
 
 	// Build database metadata
-	dbMetadata := &clustermetadata.Database{
+	dbMetadata := &clustermetadatapb.Database{
 		Name:             dbName,
 		BackupLocation:   r.getBackupLocation(shard),
 		DurabilityPolicy: r.getDurabilityPolicy(shard),
@@ -243,8 +374,17 @@ func (r *ShardReconciler) registerDatabaseInTopology(
 		// Check if the error is because the database already exists
 		var topoErr topoclient.TopoError
 		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NodeExists {
-			logger.V(1).
-				Info("Database already exists in topology, skipping creation", "database", dbName)
+			// Database already exists — update its fields to propagate any changes
+			// to backup location or cells since initial creation. UpdateDatabaseFields
+			// uses atomic read-modify-write with automatic retry on version conflicts.
+			if err := store.UpdateDatabaseFields(ctx, dbName, func(existing *clustermetadatapb.Database) error {
+				existing.BackupLocation = dbMetadata.BackupLocation
+				existing.Cells = dbMetadata.Cells
+				return nil
+			}); err != nil {
+				return fmt.Errorf("updating existing database %s in topology: %w", dbName, err)
+			}
+			logger.V(1).Info("Updated existing database in topology", "database", dbName)
 			return nil
 		}
 		r.Recorder.Eventf(
@@ -319,13 +459,13 @@ func (r *ShardReconciler) unregisterDatabaseFromTopology(
 // getBackupLocation extracts the backup location from the shard config.
 func (r *ShardReconciler) getBackupLocation(
 	shard *multigresv1alpha1.Shard,
-) *clustermetadata.BackupLocation {
+) *clustermetadatapb.BackupLocation {
 	if shard.Spec.Backup != nil &&
 		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 &&
 		shard.Spec.Backup.S3 != nil {
-		return &clustermetadata.BackupLocation{
-			Location: &clustermetadata.BackupLocation_S3{
-				S3: &clustermetadata.S3Backup{
+		return &clustermetadatapb.BackupLocation{
+			Location: &clustermetadatapb.BackupLocation_S3{
+				S3: &clustermetadatapb.S3Backup{
 					Bucket:            shard.Spec.Backup.S3.Bucket,
 					Region:            shard.Spec.Backup.S3.Region,
 					Endpoint:          shard.Spec.Backup.S3.Endpoint,
@@ -345,9 +485,9 @@ func (r *ShardReconciler) getBackupLocation(
 		path = shard.Spec.Backup.Filesystem.Path
 	}
 
-	return &clustermetadata.BackupLocation{
-		Location: &clustermetadata.BackupLocation_Filesystem{
-			Filesystem: &clustermetadata.FilesystemBackup{
+	return &clustermetadatapb.BackupLocation{
+		Location: &clustermetadatapb.BackupLocation_Filesystem{
+			Filesystem: &clustermetadatapb.FilesystemBackup{
 				Path: path,
 			},
 		},
@@ -424,5 +564,36 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 		Named("shard-datahandler").
 		For(&multigresv1alpha1.Shard{}).
 		WithOptions(controllerOpts).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(r.podToShard),
+			builder.WithPredicates(predicate.Funcs{
+				CreateFunc: func(e event.CreateEvent) bool {
+					return e.Object.GetAnnotations()[metadata.AnnotationDrainState] != ""
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldState := e.ObjectOld.GetAnnotations()[metadata.AnnotationDrainState]
+					newState := e.ObjectNew.GetAnnotations()[metadata.AnnotationDrainState]
+					return newState != "" && oldState != newState
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					return false
+				},
+			}),
+		).
 		Complete(r)
+}
+
+func (r *ShardReconciler) podToShard(ctx context.Context, o client.Object) []ctrl.Request {
+	for _, owner := range o.GetOwnerReferences() {
+		if owner.Kind == "Shard" && strings.HasPrefix(owner.APIVersion, "multigres.com/") {
+			return []ctrl.Request{
+				{NamespacedName: types.NamespacedName{
+					Name:      owner.Name,
+					Namespace: o.GetNamespace(),
+				}},
+			}
+		}
+	}
+	return nil
 }

@@ -33,10 +33,12 @@ import (
 // +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=shards/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=multigres.com,resources=shards/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=deployments;statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // ============================================================================
 // Shard Component Specs (Reusable)
@@ -69,7 +71,8 @@ type PoolSpec struct {
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:rule="oldSelf.all(c, c in self)",message="Cells cannot be removed from a pool (Append-Only)"
 	Cells []CellName `json:"cells,omitempty"`
 
 	// ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
@@ -154,6 +157,12 @@ type ShardSpec struct {
 	// can inject nodeSelector without looking up Cell CRs.
 	// +optional
 	CellTopologyLabels map[CellName]map[string]string `json:"cellTopologyLabels,omitempty"`
+
+	// Replicas is the total number of desired replicas across all pools in this shard.
+	// This field is used by the scale subresource to support HPA and PDBs.
+	// It is automatically populated by the cluster-handler based on the sum of ReplicasPerCell.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // ShardImages defines the images required for a Shard.
@@ -212,6 +221,23 @@ type ShardStatus struct {
 
 	// PoolsReady indicates if all data pools are ready.
 	PoolsReady bool `json:"poolsReady"`
+
+	// LastBackupTime is the timestamp of the most recent completed backup.
+	// +optional
+	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
+
+	// LastBackupType is the type of the most recent completed backup (full, diff, incr).
+	// +optional
+	// +kubebuilder:validation:Enum=full;diff;incr
+	LastBackupType string `json:"lastBackupType,omitempty"`
+
+	// PodRoles maps pod names to their database roles (e.g. PRIMARY, REPLICA, DRAINED).
+	// +optional
+	PodRoles map[string]string `json:"podRoles,omitempty"`
+
+	// ReadyReplicas is the total number of ready pods across all pools in this shard.
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
 }
 
 // ============================================================================
@@ -225,6 +251,7 @@ type ShardStatus struct {
 // Shard is the Schema for the shards API
 // +kubebuilder:resource:shortName=srd
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.readyReplicas
 type Shard struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

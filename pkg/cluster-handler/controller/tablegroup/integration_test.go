@@ -177,6 +177,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 								Cells:           []multigresv1alpha1.CellName{"zone-a"},
 							},
 						},
+						Replicas: ptr.To(int32(1)),
 					},
 				},
 				// Shard 2
@@ -212,6 +213,7 @@ func TestTableGroupReconciliation(t *testing.T) {
 								Cells:           []multigresv1alpha1.CellName{"zone-b"},
 							},
 						},
+						Replicas: ptr.To(int32(1)),
 					},
 				},
 			},

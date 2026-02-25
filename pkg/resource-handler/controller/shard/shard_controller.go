@@ -2,32 +2,26 @@ package shard
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cert"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
-	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // ShardReconciler reconciles a Shard object.
@@ -60,7 +54,7 @@ func (r *ShardReconciler) Reconcile(
 	ctx = monitoring.EnrichLoggerWithTrace(ctx)
 
 	logger := log.FromContext(ctx)
-	logger.V(1).Info("reconcile started")
+	logger.V(1).Info("Reconcile started for shard", "shard", req.Name)
 
 	// Fetch the Shard instance
 	shard := &multigresv1alpha1.Shard{}
@@ -74,12 +68,21 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// If being deleted, let Kubernetes GC handle cleanup
-	if !shard.DeletionTimestamp.IsZero() {
-		return ctrl.Result{}, nil
+	// Add finalizer if missing
+	if !controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
+		controllerutil.AddFinalizer(shard, ShardFinalizer)
+		if err := r.Update(ctx, shard); err != nil {
+			monitoring.RecordSpanError(span, err)
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
+		}
 	}
 
-	// Reconcile pg_hba ConfigMap first (required by all pools before StatefulSets start)
+	// Handle deletion
+	if !shard.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, shard)
+	}
+
+	// Reconcile pg_hba ConfigMap first (required by all pools before starting)
 	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
 		monitoring.RecordSpanError(span, err)
 		logger.Error(err, "Failed to reconcile pg_hba ConfigMap")
@@ -115,25 +118,19 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	// Compute active cells once for MultiOrch and backup PVCs
+	activeCells, err := getMultiOrchCells(shard)
+	if err != nil {
+		monitoring.RecordSpanError(span, err)
+		logger.Error(err, "Failed to determine active cells")
+		r.Recorder.Eventf(shard, "Warning", "ConfigError", "Failed to determine active cells: %v", err)
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileMultiOrch")
-		multiOrchCells, err := getMultiOrchCells(shard)
-		if err != nil {
-			monitoring.RecordSpanError(childSpan, err)
-			childSpan.End()
-			logger.Error(err, "Failed to determine MultiOrch cells")
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"ConfigError",
-				"Failed to determine MultiOrch cells: %v",
-				err,
-			)
-			return ctrl.Result{}, err
-		}
-
-		for _, cell := range multiOrchCells {
+		for _, cell := range activeCells {
 			cellName := string(cell)
 
 			// Reconcile MultiOrch Deployment for this cell
@@ -174,21 +171,7 @@ func (r *ShardReconciler) Reconcile(
 	// Reconcile Shared Backup PVCs (one per cell)
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileBackupPVCs")
-		// Determine all cells where pools are running (or multiorch)
-		// We can reuse getMultiOrchCells logic or just iterate pools?
-		// getMultiOrchCells returns explicit MultiOrch cells OR union of pool cells.
-		// This serves as a good proxy for "active cells".
-		cells, err := getMultiOrchCells(shard)
-		if err != nil {
-			// If we can't determine cells, we can't create PVCs.
-			// But getMultiOrchCells errors if NO cells found.
-			// Try to proceed if possible? No, consume error.
-			monitoring.RecordSpanError(childSpan, err)
-			childSpan.End()
-			return ctrl.Result{}, err
-		}
-
-		for _, cell := range cells {
+		for _, cell := range activeCells {
 			cellName := string(cell)
 			if err := r.reconcileSharedBackupPVC(ctx, shard, cellName); err != nil {
 				monitoring.RecordSpanError(childSpan, err)
@@ -247,204 +230,94 @@ func (r *ShardReconciler) Reconcile(
 	return ctrl.Result{}, nil
 }
 
-// reconcileMultiOrchDeployment creates or updates the MultiOrch Deployment for a specific cell.
-func (r *ShardReconciler) reconcileMultiOrchDeployment(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-	cellName string,
-) error {
-	desired, err := BuildMultiOrchDeployment(shard, cellName, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build MultiOrch Deployment: %w", err)
+// handleDeletion ensures all child resources (Pods) have their finalizers removed
+// before the Shard itself is allowed to be deleted.
+func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1alpha1.Shard) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Determine matching labels for all pods belonging to this shard
+	clusterName := shard.Labels[metadata.LabelMultigresCluster]
+	selector := map[string]string{
+		metadata.LabelMultigresCluster:    clusterName,
+		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
+		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
+		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
 	}
 
-	// Server Side Apply
-	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
-	if err := r.Patch(
-		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
-	); err != nil {
-		return fmt.Errorf("failed to apply MultiOrch Deployment: %w", err)
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list pods for deletion: %w", err)
 	}
 
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
-	return nil
-}
-
-// reconcilePgHbaConfigMap creates or updates the pg_hba ConfigMap for a shard.
-// This ConfigMap is shared across all pools and contains the authentication template.
-func (r *ShardReconciler) reconcilePgHbaConfigMap(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) error {
-	desired, err := BuildPgHbaConfigMap(shard, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build pg_hba ConfigMap: %w", err)
+	// Delete all Deployments owned by this shard
+	deployList := &appsv1.DeploymentList{}
+	if err := r.List(ctx, deployList, client.InNamespace(shard.Namespace), client.MatchingLabels(selector)); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list deployments for deletion: %w", err)
 	}
-
-	// Server Side Apply
-	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMap"))
-	if err := r.Patch(
-		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
-	); err != nil {
-		return fmt.Errorf("failed to apply pg_hba ConfigMap: %w", err)
-	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
-	return nil
-}
-
-// reconcilePostgresPasswordSecret creates or updates the postgres password Secret for a shard.
-// This Secret is shared across all pools and provides credentials to pgctld and multipooler.
-func (r *ShardReconciler) reconcilePostgresPasswordSecret(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) error {
-	desired, err := BuildPostgresPasswordSecret(shard, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build postgres password Secret: %w", err)
-	}
-
-	// Server Side Apply
-	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
-	if err := r.Patch(
-		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
-	); err != nil {
-		return fmt.Errorf("failed to apply postgres password Secret: %w", err)
-	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
-	return nil
-}
-
-// reconcilePgBackRestCerts ensures pgBackRest TLS certificates are available.
-// For user-provided certs, validates the Secret exists and has the required keys
-// using an uncached API reader (the informer cache filters by managed-by label).
-// For auto-generated certs, uses pkg/cert to create and rotate CA + server Secrets.
-func (r *ShardReconciler) reconcilePgBackRestCerts(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) error {
-	if shard.Spec.Backup == nil {
-		return nil
-	}
-
-	// User-provided Secret: validate via uncached API reader.
-	// We use APIReader instead of the cached client because the informer cache
-	// only stores operator-labeled Secrets, making external Secrets (e.g.,
-	// cert-manager) invisible to the cached r.Get().
-	if shard.Spec.Backup.PgBackRestTLS != nil &&
-		shard.Spec.Backup.PgBackRestTLS.SecretName != "" {
-		secretName := shard.Spec.Backup.PgBackRestTLS.SecretName
-		secret := &corev1.Secret{}
-		if err := r.APIReader.Get(ctx, types.NamespacedName{
-			Name:      secretName,
-			Namespace: shard.Namespace,
-		}, secret); err != nil {
-			return fmt.Errorf("pgbackrest TLS secret %q not found: %w", secretName, err)
-		}
-		for _, key := range []string{"ca.crt", "tls.crt", "tls.key"} {
-			if _, ok := secret.Data[key]; !ok {
-				return fmt.Errorf(
-					"pgbackrest TLS secret %q missing required key %q",
-					secretName,
-					key,
-				)
+	for i := range deployList.Items {
+		deploy := &deployList.Items[i]
+		if deploy.DeletionTimestamp.IsZero() {
+			logger.Info("Initiating deployment deletion during shard cleanup", "deployment", deploy.Name)
+			if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete deployment %s: %w", deploy.Name, err)
 			}
 		}
-		return nil
 	}
 
-	// Auto-generate: use pkg/cert to create CA + server cert Secrets.
-	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	rotator := cert.NewManager(r.Client, r.Recorder, cert.Options{
-		Namespace:        shard.Namespace,
-		CASecretName:     shard.Name + "-pgbackrest-ca",
-		ServerSecretName: shard.Name + "-pgbackrest-tls",
-		ServiceName:      "pgbackrest",
-		ExtKeyUsages: []x509.ExtKeyUsage{
-			x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth,
-		},
-		Organization:  "Multigres",
-		Owner:         shard,
-		ComponentName: "pgbackrest",
-		Labels:        metadata.BuildStandardLabels(clusterName, "pgbackrest-tls"),
-	})
-	return rotator.Bootstrap(ctx)
+	// Remove finalizers from all pods to allow them to be deleted by GC
+	podsStillPresent := 0
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+
+		// Initiate pod deletion if not already deleting.
+		// We can't rely solely on ownerReference propagation because:
+		// 1. If propagation is Background, children are deleted AFTER parent (blocked by finalizers).
+		// 2. If propagation is Foreground, children are deleted BEFORE parent, but we might reach
+		//    this code before GC has marked them for deletion.
+		if pod.DeletionTimestamp.IsZero() {
+			logger.Info("Initiating pod deletion during shard cleanup", "pod", pod.Name)
+			if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+			}
+		}
+
+		if controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
+			if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
+				if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
+					return ctrl.Result{}, fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
+				}
+				logger.Info("Removed finalizer from pod during shard deletion", "pod", pod.Name)
+			}
+		}
+
+		// Check if the pod still exists after cleanup
+		checkPod := &corev1.Pod{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pod.Name}, checkPod); err == nil {
+			podsStillPresent++
+		} else if !errors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("failed to check pod status: %w", err)
+		}
+	}
+
+	if podsStillPresent > 0 {
+		logger.V(1).Info("Waiting for pods to be removed", "count", podsStillPresent)
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
+
+	// Remove Shard finalizer
+	if controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
+		controllerutil.RemoveFinalizer(shard, ShardFinalizer)
+		if err := r.Update(ctx, shard); err != nil && !errors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("failed to remove shard finalizer: %w", err)
+		}
+	}
+
+	logger.Info("Shard cleanup complete, finalizer removed")
+	return ctrl.Result{}, nil
 }
 
-// reconcileMultiOrchService creates or updates the MultiOrch Service for a specific cell.
-func (r *ShardReconciler) reconcileMultiOrchService(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-	cellName string,
-) error {
-	desired, err := BuildMultiOrchService(shard, cellName, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build MultiOrch Service: %w", err)
-	}
-
-	// Server Side Apply
-	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
-	if err := r.Patch(
-		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
-	); err != nil {
-		return fmt.Errorf("failed to apply MultiOrch Service: %w", err)
-	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
-	return nil
-}
-
-// reconcilePool creates or updates the StatefulSet and headless Service for a pool.
-// For pools spanning multiple cells, this creates one StatefulSet per cell.
+// reconcilePool creates or updates the Pods, PVCs and headless Service for a pool.
+// For pools spanning multiple cells, this creates resources per cell.
 func (r *ShardReconciler) reconcilePool(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -459,14 +332,19 @@ func (r *ShardReconciler) reconcilePool(
 		)
 	}
 
-	// Create one StatefulSet per cell
+	// Create Pods and PVCs per cell
 	// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
 	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
 
-		// Reconcile pool StatefulSet for this cell
-		if err := r.reconcilePoolStatefulSet(ctx, shard, poolName, cellName, poolSpec); err != nil {
-			return fmt.Errorf("failed to reconcile pool StatefulSet for cell %s: %w", cellName, err)
+		// Reconcile pool Pods and PVCs for this cell
+		if err := r.reconcilePoolPods(ctx, shard, poolName, cellName, poolSpec); err != nil {
+			return fmt.Errorf("failed to reconcile pool pods for cell %s: %w", cellName, err)
+		}
+
+		// Reconcile pool PDB for this cell
+		if err := r.reconcilePoolPDB(ctx, shard, poolName, cellName); err != nil {
+			return fmt.Errorf("failed to reconcile pool PDB for cell %s: %w", cellName, err)
 		}
 
 		// Reconcile pool headless Service for this cell
@@ -486,336 +364,6 @@ func (r *ShardReconciler) reconcilePool(
 	}
 
 	return nil
-}
-
-// reconcilePoolStatefulSet creates or updates the StatefulSet for a pool in a specific cell.
-func (r *ShardReconciler) reconcilePoolStatefulSet(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-	poolName string,
-	cellName string,
-	poolSpec multigresv1alpha1.PoolSpec,
-) error {
-	desired, err := BuildPoolStatefulSet(shard, poolName, cellName, poolSpec, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build pool StatefulSet: %w", err)
-	}
-
-	// Server Side Apply
-	desired.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("StatefulSet"))
-	if err := r.Patch(
-		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
-	); err != nil {
-		return fmt.Errorf("failed to apply pool StatefulSet: %w", err)
-	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
-	return nil
-}
-
-// reconcileSharedBackupPVC creates or updates the shared backup PVC for a specific cell.
-func (r *ShardReconciler) reconcileSharedBackupPVC(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-	cellName string,
-) error {
-	// S3 backups use object storage; no shared PVC is needed.
-	// TODO: Consider cleaning up orphaned backup PVCs when migrating from filesystem to S3.
-	if shard.Spec.Backup != nil && shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 {
-		return nil
-	}
-
-	desired, err := BuildSharedBackupPVC(shard, cellName, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build shared backup PVC: %w", err)
-	}
-	if desired == nil {
-		return nil
-	}
-
-	// Server Side Apply
-	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"))
-	if err := r.Patch(
-		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
-	); err != nil {
-		return fmt.Errorf("failed to apply shared backup PVC: %w", err)
-	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
-	return nil
-}
-
-// reconcilePoolHeadlessService creates or updates the headless Service for a pool in a specific cell.
-func (r *ShardReconciler) reconcilePoolHeadlessService(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-	poolName string,
-	cellName string,
-	poolSpec multigresv1alpha1.PoolSpec,
-) error {
-	desired, err := BuildPoolHeadlessService(shard, poolName, cellName, poolSpec, r.Scheme)
-	if err != nil {
-		return fmt.Errorf("failed to build pool headless Service: %w", err)
-	}
-
-	// Server Side Apply
-	desired.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
-	if err := r.Patch(
-		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
-	); err != nil {
-		return fmt.Errorf("failed to apply pool headless Service: %w", err)
-	}
-
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"Applied",
-		"Applied %s %s",
-		desired.GroupVersionKind().Kind,
-		desired.Name,
-	)
-
-	return nil
-}
-
-// updateStatus updates the Shard status based on observed state.
-func (r *ShardReconciler) updateStatus(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) error {
-	oldPhase := shard.Status.Phase
-	cellsSet := make(map[multigresv1alpha1.CellName]bool)
-
-	// Update pools status
-	totalPods, readyPods, err := r.updatePoolsStatus(ctx, shard, cellsSet)
-	if err != nil {
-		return err
-	}
-
-	// Update MultiOrch status
-	if err := r.updateMultiOrchStatus(ctx, shard, cellsSet); err != nil {
-		return err
-	}
-
-	// Update cells list from all observed cells
-	shard.Status.Cells = cellSetToSlice(cellsSet)
-
-	// Update aggregate status fields
-	shard.Status.PoolsReady = (totalPods > 0 && totalPods == readyPods)
-
-	// Update Phase
-	if shard.Status.PoolsReady && shard.Status.OrchReady {
-		shard.Status.Phase = multigresv1alpha1.PhaseHealthy
-		shard.Status.Message = "Ready"
-	} else {
-		shard.Status.Phase = multigresv1alpha1.PhaseProgressing
-		shard.Status.Message = fmt.Sprintf(
-			"PoolsReady: %v, OrchReady: %v",
-			shard.Status.PoolsReady,
-			shard.Status.OrchReady,
-		)
-	}
-
-	// Update conditions
-	r.setConditions(shard, totalPods, readyPods)
-
-	shard.Status.ObservedGeneration = shard.Generation
-
-	// 1. Construct the Patch Object
-	patchObj := &multigresv1alpha1.Shard{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: multigresv1alpha1.GroupVersion.String(),
-			Kind:       "Shard",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      shard.Name,
-			Namespace: shard.Namespace,
-		},
-		Status: shard.Status,
-	}
-
-	// 2. Apply the Patch
-	if oldPhase != shard.Status.Phase {
-		r.Recorder.Eventf(
-			shard,
-			"Normal",
-			"PhaseChange",
-			"Transitioned from '%s' to '%s'",
-			oldPhase,
-			shard.Status.Phase,
-		)
-	}
-
-	// Note: We rely on Server-Side Apply (SSA) to handle idempotency.
-	// If the status hasn't changed, the API server will treat this Patch as a no-op,
-	// so we don't need a manual DeepEqual check here.
-	if err := r.Status().Patch(
-		ctx,
-		patchObj,
-		client.Apply,
-		client.FieldOwner("multigres-operator"),
-		client.ForceOwnership,
-	); err != nil {
-		return fmt.Errorf("failed to patch status: %w", err)
-	}
-
-	return nil
-}
-
-// updatePoolsStatus aggregates status from all pool StatefulSets.
-// Returns total pods, ready pods, and tracks cells in the cellsSet.
-func (r *ShardReconciler) updatePoolsStatus(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-	cellsSet map[multigresv1alpha1.CellName]bool,
-) (int32, int32, error) {
-	var totalPods, readyPods int32
-
-	for poolName, poolSpec := range shard.Spec.Pools {
-		var poolTotal, poolReady int32
-
-		// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
-		for _, cell := range poolSpec.Cells {
-			cellName := string(cell)
-			cellsSet[cell] = true
-
-			stsName := buildPoolNameWithCell(shard, string(poolName), cellName)
-			sts := &appsv1.StatefulSet{}
-			err := r.Get(
-				ctx,
-				client.ObjectKey{Namespace: shard.Namespace, Name: stsName},
-				sts,
-			)
-			if err != nil {
-				if errors.IsNotFound(err) {
-					continue
-				}
-				return 0, 0, fmt.Errorf("failed to get pool StatefulSet for status: %w", err)
-			}
-
-			totalPods += sts.Status.Replicas
-			poolTotal += sts.Status.Replicas
-			if sts.Status.ObservedGeneration == sts.Generation {
-				readyPods += sts.Status.ReadyReplicas
-				poolReady += sts.Status.ReadyReplicas
-			} // else treat as 0 ready pods because it is stale/progressing
-		}
-
-		monitoring.SetShardPoolReplicas(
-			shard.Name, string(poolName), shard.Namespace,
-			poolTotal, poolReady,
-		)
-	}
-
-	return totalPods, readyPods, nil
-}
-
-// updateMultiOrchStatus checks MultiOrch Deployments and sets OrchReady status.
-// Also tracks cells in the cellsSet.
-func (r *ShardReconciler) updateMultiOrchStatus(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-	cellsSet map[multigresv1alpha1.CellName]bool,
-) error {
-	multiOrchCells, err := getMultiOrchCells(shard)
-	if err != nil {
-		shard.Status.OrchReady = false
-		return nil
-	}
-
-	orchReady := true
-	for _, cell := range multiOrchCells {
-		cellName := string(cell)
-		cellsSet[cell] = true
-
-		// Check MultiOrch Deployment status (deployments use long names)
-		deployName := buildMultiOrchNameWithCell(shard, cellName, name.DefaultConstraints)
-		deploy := &appsv1.Deployment{}
-		err := r.Get(
-			ctx,
-			client.ObjectKey{Namespace: shard.Namespace, Name: deployName},
-			deploy,
-		)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				orchReady = false
-				break
-			}
-			return fmt.Errorf("failed to get MultiOrch Deployment for status: %w", err)
-		}
-
-		// Check if deployment is ready
-		if deploy.Spec.Replicas == nil ||
-			deploy.Status.ObservedGeneration != deploy.Generation ||
-			deploy.Status.ReadyReplicas != *deploy.Spec.Replicas {
-			orchReady = false
-			break
-		}
-	}
-
-	shard.Status.OrchReady = orchReady
-	return nil
-}
-
-// cellSetToSlice converts a cell set (map) to a slice.
-func cellSetToSlice(cellsSet map[multigresv1alpha1.CellName]bool) []multigresv1alpha1.CellName {
-	cells := make([]multigresv1alpha1.CellName, 0, len(cellsSet))
-	for cell := range cellsSet {
-		cells = append(cells, cell)
-	}
-	slices.Sort(cells)
-	return cells
-}
-
-// setConditions creates status conditions based on observed state.
-func (r *ShardReconciler) setConditions(
-	shard *multigresv1alpha1.Shard,
-	totalPods, readyPods int32,
-) {
-	// Available condition
-	availableCondition := metav1.Condition{
-		Type:               "Available",
-		ObservedGeneration: shard.Generation,
-		Status:             metav1.ConditionFalse,
-		Reason:             "NotAllPodsReady",
-		Message:            fmt.Sprintf("%d/%d pods ready", readyPods, totalPods),
-	}
-
-	if readyPods == totalPods && totalPods > 0 {
-		availableCondition.Status = metav1.ConditionTrue
-		availableCondition.Reason = "AllPodsReady"
-		availableCondition.Message = fmt.Sprintf("All %d pods are ready", readyPods)
-	}
-
-	meta.SetStatusCondition(&shard.Status.Conditions, availableCondition)
 }
 
 // getMultiOrchCells returns the list of cells where MultiOrch should be deployed.
@@ -865,13 +413,14 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&multigresv1alpha1.Shard{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&multigresv1alpha1.Shard{}).
 		Owns(&appsv1.Deployment{}).
-		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Pod{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		WithOptions(controllerOpts).
 		Complete(r)
 }

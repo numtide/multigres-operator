@@ -1991,10 +1991,13 @@ spec:
                         maxLength: 30
                         minLength: 1
                         type: string
-                      maxItems: 50
+                      maxItems: 10
                       minItems: 1
                       type: array
                       x-kubernetes-list-type: set
+                      x-kubernetes-validations:
+                      - message: Cells cannot be removed from a pool (Append-Only)
+                        rule: oldSelf.all(c, c in self)
                     multipooler:
                       description: Multipooler container configuration.
                       properties:
