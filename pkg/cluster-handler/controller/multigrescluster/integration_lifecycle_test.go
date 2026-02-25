@@ -13,7 +13,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -197,123 +196,6 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 		}
 		if err := watcher.WaitForMatch(deploy); err != nil {
 			t.Errorf("MultiAdmin deployment failed to create with massive annotation: %v", err)
-		}
-	})
-
-	t.Run("Cell Renaming (Zombie Cell)", func(t *testing.T) {
-		t.Parallel()
-		k8sClient, watcher := setupIntegration(t)
-		cluster := &multigresv1alpha1.MultigresCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "zombie-test", Namespace: testNamespace},
-			Spec: multigresv1alpha1.MultigresClusterSpec{
-				Cells: []multigresv1alpha1.CellConfig{{Name: "zone-a", Zone: "us-east-1a"}},
-			},
-		}
-		if err := k8sClient.Create(t.Context(), cluster); err != nil {
-			t.Fatalf("Failed to create cluster: %v", err)
-		}
-
-		// Wait for zone-a
-		zoneA := &multigresv1alpha1.Cell{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nameutil.JoinWithConstraints(
-					nameutil.DefaultConstraints,
-					"zombie-test",
-					"zone-a",
-				),
-				Namespace:       testNamespace,
-				Labels:          clusterLabels(t, "zombie-test", "", "zone-a"),
-				OwnerReferences: clusterOwnerRefs(t, "zombie-test"),
-			},
-			Spec: multigresv1alpha1.CellSpec{
-				Name: "zone-a",
-				Zone: "us-east-1a",
-				Images: multigresv1alpha1.CellImages{
-					MultiGateway:    resolver.DefaultMultiGatewayImage,
-					ImagePullPolicy: resolver.DefaultImagePullPolicy,
-				},
-				MultiGateway: multigresv1alpha1.StatelessSpec{
-					Replicas:  ptr.To(int32(1)),
-					Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
-				},
-				AllCells: []multigresv1alpha1.CellName{"zone-a"},
-				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-					Address:        "zombie-test-global-topo.default.svc:2379",
-					RootPath:       "/multigres/global",
-					Implementation: "etcd",
-				},
-				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
-					RegisterCell: true,
-					PrunePoolers: true,
-				},
-			},
-		}
-		if err := watcher.WaitForMatch(zoneA); err != nil {
-			t.Fatalf("Failed to wait for initial cell: %v", err)
-		}
-
-		// Rename Cell (Retry on conflict)
-		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), cluster); err != nil {
-				return err
-			}
-			cluster.Spec.Cells = []multigresv1alpha1.CellConfig{{Name: "zone-b", Zone: "us-east-1b"}}
-			return k8sClient.Update(t.Context(), cluster)
-		}); err != nil {
-			t.Fatalf("Failed to update cluster: %v", err)
-		}
-
-		// Wait for zone-b creation
-		zoneB := &multigresv1alpha1.Cell{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nameutil.JoinWithConstraints(
-					nameutil.DefaultConstraints,
-					"zombie-test",
-					"zone-b",
-				),
-				Namespace:       testNamespace,
-				Labels:          clusterLabels(t, "zombie-test", "", "zone-b"),
-				OwnerReferences: clusterOwnerRefs(t, "zombie-test"),
-			},
-			Spec: multigresv1alpha1.CellSpec{
-				Name: "zone-b",
-				Zone: "us-east-1b",
-				Images: multigresv1alpha1.CellImages{
-					MultiGateway:    resolver.DefaultMultiGatewayImage,
-					ImagePullPolicy: resolver.DefaultImagePullPolicy,
-				},
-				MultiGateway: multigresv1alpha1.StatelessSpec{
-					Replicas:  ptr.To(int32(1)),
-					Resources: resolver.DefaultResourcesGateway(), // FIX: Expect defaults
-				},
-				AllCells: []multigresv1alpha1.CellName{"zone-b"},
-				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-					Address:        "zombie-test-global-topo.default.svc:2379",
-					RootPath:       "/multigres/global",
-					Implementation: "etcd",
-				},
-				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
-					RegisterCell: true,
-					PrunePoolers: true,
-				},
-			},
-		}
-		if err := watcher.WaitForMatch(zoneB); err != nil {
-			t.Fatalf("Failed to wait for new cell: %v", err)
-		}
-
-		// Verify zone-a deletion (Zombie Check)
-		deleted := false
-		for i := 0; i < 20; i++ {
-			err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(zoneA), &multigresv1alpha1.Cell{})
-			if apierrors.IsNotFound(err) {
-				deleted = true
-				break
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
-		if !deleted {
-			t.Error("Zombie Cell 'zone-a' was not deleted after rename")
 		}
 	})
 

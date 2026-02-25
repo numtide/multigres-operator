@@ -122,6 +122,7 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				},
 				MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
 				Pools:     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
+				Replicas:  ptr.To(int32(0)),
 			},
 		}
 		shard2 := &multigresv1alpha1.Shard{
@@ -141,13 +142,14 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				},
 				MultiOrch: multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
 				Pools:     map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
+				Replicas:  ptr.To(int32(0)),
 			},
 		}
 
 		// Using WaitForMatch with CompareSpecOnly to avoid needing full metadata/status matching
 		watcher.SetCmpOpts(testutil.CompareSpecOnly()...)
 		if err := watcher.WaitForMatch(shard1, shard2); err != nil {
-			t.Fatal("Failed to create initial shards")
+			t.Fatalf("Failed to create initial shards: %v", err)
 		}
 
 		// 2. Update TG to remove "delete-me"
@@ -237,11 +239,12 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 				MultiOrch: multigresv1alpha1.MultiOrchSpec{
 					StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 				},
-				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
+				Pools:    map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{},
+				Replicas: ptr.To(int32(0)),
 			},
 		}
 		if err := watcher.WaitForMatch(goodShard); err != nil {
-			t.Fatal("Initial shard creation failed")
+			t.Fatalf("Initial shard creation failed: %v", err)
 		}
 
 		// 2. Tamper with Shard (Scale up manually)

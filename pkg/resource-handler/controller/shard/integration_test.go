@@ -11,7 +11,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,6 +34,7 @@ func TestSetupWithManager(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 
 	mgr := testutil.SetUpEnvtestManager(t, scheme,
 		testutil.WithCRDPaths(
@@ -59,6 +60,7 @@ func TestShardReconciliation(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 
 	tests := map[string]struct {
 		shard         *multigresv1alpha1.Shard
@@ -283,272 +285,6 @@ func TestShardReconciliation(t *testing.T) {
 						Selector: metadata.GetSelectorLabels(shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b")),
 					},
 				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "test-shard-pool-primary-zone-a",
-						Namespace:       "default",
-						Labels:          shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
-						OwnerReferences: shardOwnerRefs(t, "test-shard"),
-					},
-					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "test-shard-pool-primary-zone-a-headless",
-						Replicas:    ptr.To(int32(2)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a")),
-						},
-						PodManagementPolicy: appsv1.ParallelPodManagement,
-						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-							Type: appsv1.RollingUpdateStatefulSetStrategyType,
-						},
-						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
-							WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
-							WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "test-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
-							},
-							Spec: corev1.PodSpec{
-								InitContainers: []corev1.Container{
-									// ALTERNATIVE: Uncomment for binary-copy approach
-									// {
-									// 	Name:    "pgctld-init",
-									// 	Image:   "ghcr.io/multigres/pgctld:main",
-									// 	Command: []string{"/bin/sh", "-c"},
-									// 	Args: []string{
-									// 		"cp /usr/local/bin/pgctld /shared/pgctld",
-									// 	},
-									// 	VolumeMounts: []corev1.VolumeMount{
-									// 		{Name: "pgctld-bin", MountPath: "/shared"},
-									// 	},
-									// },
-									{
-										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multigres:main",
-										Args: []string{
-											"multipooler",
-											"--http-port=15200",
-											"--grpc-port=15270",
-											"--pooler-dir=/var/lib/pooler",
-											"--socket-file=/var/lib/pooler/pg_sockets/.s.PGSQL.5432",
-											"--service-map=grpc-pooler",
-											"--topo-global-server-addresses=global-topo:2379",
-											"--topo-global-root=/multigres/global",
-											"--cell=zone-a",
-											"--database=testdb",
-											"--table-group=default",
-											"--shard=0",
-											"--service-id=$(POD_NAME)",
-											"--pgctld-addr=localhost:15470",
-											"--pg-port=5432",
-											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
-											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
-											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
-											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
-										},
-										Ports:         multipoolerPorts(t),
-										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										StartupProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds:    5,
-											FailureThreshold: 30,
-										},
-										LivenessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/live",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 10,
-										},
-										ReadinessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 5,
-										},
-										Env: []corev1.EnvVar{
-											{
-												Name: "POD_NAME",
-												ValueFrom: &corev1.EnvVarSource{
-													FieldRef: &corev1.ObjectFieldSelector{
-														APIVersion: "v1",
-														FieldPath:  "metadata.name",
-													},
-												},
-											},
-											{
-												Name: "CONNPOOL_ADMIN_PASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("test-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-								Containers: []corev1.Container{
-									{
-										Name:    "postgres",
-										Image:   "postgres:17",
-										Command: []string{"/usr/local/bin/pgctld"},
-										Args: []string{
-											"server",
-											"--pooler-dir=/var/lib/pooler",
-											"--grpc-port=15470",
-											"--pg-port=5432",
-											"--pg-listen-addresses=*",
-											"--pg-database=postgres",
-											"--pg-user=postgres",
-											"--timeout=30",
-											"--log-level=info",
-											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
-											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
-											"--pgbackrest-cert-dir=/certs/pgbackrest",
-											"--pgbackrest-port=8432",
-										},
-										Env: []corev1.EnvVar{
-											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
-											{
-												Name: "PGPASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("test-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											// ALTERNATIVE: Uncomment for binary-copy approach
-											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-								Volumes: []corev1.Volume{
-									// ALTERNATIVE: Uncomment for binary-copy approach
-									// {
-									// 	Name: "pgctld-bin",
-									// 	VolumeSource: corev1.VolumeSource{
-									// 		EmptyDir: &corev1.EmptyDirVolumeSource{},
-									// 	},
-									// },
-									{
-										Name: "backup-data",
-										VolumeSource: corev1.VolumeSource{
-											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-												ClaimName: "backup-data-test-shard-pool-primary-zone-a",
-											},
-										},
-									},
-									{
-										Name: "socket-dir",
-										VolumeSource: corev1.VolumeSource{
-											EmptyDir: &corev1.EmptyDirVolumeSource{},
-										},
-									},
-									{
-										Name: "pg-hba-template",
-										VolumeSource: corev1.VolumeSource{
-											ConfigMap: &corev1.ConfigMapVolumeSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: shardcontroller.PgHbaConfigMapName("test-shard"),
-												},
-												DefaultMode: ptr.To(int32(420)),
-											},
-										},
-									},
-									{
-										Name: "pgbackrest-certs",
-										VolumeSource: corev1.VolumeSource{
-											Projected: &corev1.ProjectedVolumeSource{
-												DefaultMode: ptr.To(int32(288)),
-												Sources: []corev1.VolumeProjection{
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "test-shard-pgbackrest-ca",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "ca.crt", Path: "ca.crt"},
-															},
-														},
-													},
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "test-shard-pgbackrest-tls",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "tls.crt", Path: "pgbackrest.crt"},
-																{Key: "tls.key", Path: "pgbackrest.key"},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-							{
-								ObjectMeta: metav1.ObjectMeta{
-									Name: "pgdata",
-								},
-								Spec: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: corev1.ResourceList{
-											corev1.ResourceStorage: resource.MustParse("10Gi"),
-										},
-									},
-									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
-								},
-								Status: corev1.PersistentVolumeClaimStatus{
-									Phase: corev1.ClaimPending,
-								},
-							},
-						},
-					},
-				},
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "test-shard-pool-primary-zone-a-headless",
@@ -702,249 +438,6 @@ func TestShardReconciliation(t *testing.T) {
 							tcpServicePort(t, "grpc", 15370),
 						},
 						Selector: metadata.GetSelectorLabels(shardLabels(t, "delete-policy-shard-multiorch-zone-a", "multiorch", "zone-a")),
-					},
-				},
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "delete-policy-shard-pool-primary-zone-a",
-						Namespace:       "default",
-						Labels:          shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
-						OwnerReferences: shardOwnerRefs(t, "delete-policy-shard"),
-					},
-					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "delete-policy-shard-pool-primary-zone-a-headless",
-						Replicas:    ptr.To(int32(1)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a")),
-						},
-						PodManagementPolicy: appsv1.ParallelPodManagement,
-						UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-							Type: appsv1.RollingUpdateStatefulSetStrategyType,
-						},
-						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
-							WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
-							WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "delete-policy-shard-pool-primary-zone-a", "shard-pool", "zone-a"),
-							},
-							Spec: corev1.PodSpec{
-								InitContainers: []corev1.Container{
-									{
-										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multigres:main",
-										Args: []string{
-											"multipooler",
-											"--http-port=15200",
-											"--grpc-port=15270",
-											"--pooler-dir=/var/lib/pooler",
-											"--socket-file=/var/lib/pooler/pg_sockets/.s.PGSQL.5432",
-											"--service-map=grpc-pooler",
-											"--topo-global-server-addresses=global-topo:2379",
-											"--topo-global-root=/multigres/global",
-											"--cell=zone-a",
-											"--database=testdb",
-											"--table-group=default",
-											"--shard=0",
-											"--service-id=$(POD_NAME)",
-											"--pgctld-addr=localhost:15470",
-											"--pg-port=5432",
-											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
-											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
-											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
-											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
-										},
-										Ports:         multipoolerPorts(t),
-										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										StartupProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds:    5,
-											FailureThreshold: 30,
-										},
-										LivenessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/live",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 10,
-										},
-										ReadinessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 5,
-										},
-										Env: []corev1.EnvVar{
-											{
-												Name: "POD_NAME",
-												ValueFrom: &corev1.EnvVarSource{
-													FieldRef: &corev1.ObjectFieldSelector{
-														APIVersion: "v1",
-														FieldPath:  "metadata.name",
-													},
-												},
-											},
-											{
-												Name: "CONNPOOL_ADMIN_PASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("delete-policy-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-								Containers: []corev1.Container{
-									{
-										Name:    "postgres",
-										Image:   "postgres:17",
-										Command: []string{"/usr/local/bin/pgctld"},
-										Args: []string{
-											"server",
-											"--pooler-dir=/var/lib/pooler",
-											"--grpc-port=15470",
-											"--pg-port=5432",
-											"--pg-listen-addresses=*",
-											"--pg-database=postgres",
-											"--pg-user=postgres",
-											"--timeout=30",
-											"--log-level=info",
-											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
-											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
-											"--pgbackrest-cert-dir=/certs/pgbackrest",
-											"--pgbackrest-port=8432",
-										},
-										Env: []corev1.EnvVar{
-											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
-											{
-												Name: "PGPASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("delete-policy-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											// ALTERNATIVE: Uncomment for binary-copy approach
-											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-								Volumes: []corev1.Volume{
-									{
-										Name: "backup-data",
-										VolumeSource: corev1.VolumeSource{
-											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-												ClaimName: "backup-data-delete-policy-shard-pool-primary-zone-a",
-											},
-										},
-									},
-									{
-										Name: "socket-dir",
-										VolumeSource: corev1.VolumeSource{
-											EmptyDir: &corev1.EmptyDirVolumeSource{},
-										},
-									},
-									{
-										Name: "pg-hba-template",
-										VolumeSource: corev1.VolumeSource{
-											ConfigMap: &corev1.ConfigMapVolumeSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: shardcontroller.PgHbaConfigMapName("delete-policy-shard"),
-												},
-												DefaultMode: ptr.To(int32(420)),
-											},
-										},
-									},
-									{
-										Name: "pgbackrest-certs",
-										VolumeSource: corev1.VolumeSource{
-											Projected: &corev1.ProjectedVolumeSource{
-												DefaultMode: ptr.To(int32(288)),
-												Sources: []corev1.VolumeProjection{
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "delete-policy-shard-pgbackrest-ca",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "ca.crt", Path: "ca.crt"},
-															},
-														},
-													},
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "delete-policy-shard-pgbackrest-tls",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "tls.crt", Path: "pgbackrest.crt"},
-																{Key: "tls.key", Path: "pgbackrest.key"},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-							{
-								ObjectMeta: metav1.ObjectMeta{Name: "pgdata"},
-								Spec: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
-									},
-									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
-								},
-								Status: corev1.PersistentVolumeClaimStatus{
-									Phase: corev1.ClaimPending,
-								},
-							},
-						},
 					},
 				},
 				&corev1.Service{
@@ -1187,264 +680,6 @@ func TestShardReconciliation(t *testing.T) {
 						Selector: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2")),
 					},
 				},
-				// StatefulSet for zone1
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "multi-cell-shard-pool-primary-zone1",
-						Namespace:       "default",
-						Labels:          shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
-						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
-					},
-					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "multi-cell-shard-pool-primary-zone1-headless",
-						Replicas:    ptr.To(int32(2)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1")),
-						},
-						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
-							WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
-							WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1"),
-							},
-							Spec: corev1.PodSpec{
-								SecurityContext: &corev1.PodSecurityContext{
-									FSGroup: ptr.To(int64(999)),
-								},
-								Volumes: []corev1.Volume{
-									// ALTERNATIVE: Uncomment for binary-copy approach
-									// {
-									// 	Name: "pgctld-bin",
-									// 	VolumeSource: corev1.VolumeSource{
-									// 		EmptyDir: &corev1.EmptyDirVolumeSource{},
-									// 	},
-									// },
-									{
-										Name: "backup-data",
-										VolumeSource: corev1.VolumeSource{
-											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-												ClaimName: "backup-data-multi-cell-shard-pool-primary-zone1",
-											},
-										},
-									},
-									{
-										Name: "socket-dir",
-										VolumeSource: corev1.VolumeSource{
-											EmptyDir: &corev1.EmptyDirVolumeSource{},
-										},
-									},
-									{
-										Name: "pg-hba-template",
-										VolumeSource: corev1.VolumeSource{
-											ConfigMap: &corev1.ConfigMapVolumeSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: shardcontroller.PgHbaConfigMapName("multi-cell-shard"),
-												},
-												DefaultMode: ptr.To(int32(420)),
-											},
-										},
-									},
-									{
-										Name: "pgbackrest-certs",
-										VolumeSource: corev1.VolumeSource{
-											Projected: &corev1.ProjectedVolumeSource{
-												DefaultMode: ptr.To(int32(288)),
-												Sources: []corev1.VolumeProjection{
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "multi-cell-shard-pgbackrest-ca",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "ca.crt", Path: "ca.crt"},
-															},
-														},
-													},
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "multi-cell-shard-pgbackrest-tls",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "tls.crt", Path: "pgbackrest.crt"},
-																{Key: "tls.key", Path: "pgbackrest.key"},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-								InitContainers: []corev1.Container{
-									{
-										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multigres:main",
-										Args: []string{
-											"multipooler",
-											"--http-port=15200",
-											"--grpc-port=15270",
-											"--pooler-dir=/var/lib/pooler",
-											"--socket-file=/var/lib/pooler/pg_sockets/.s.PGSQL.5432",
-											"--service-map=grpc-pooler",
-											"--topo-global-server-addresses=global-topo:2379",
-											"--topo-global-root=/multigres/global",
-											"--cell=zone1",
-											"--database=testdb",
-											"--table-group=default",
-											"--shard=0",
-											"--service-id=$(POD_NAME)",
-											"--pgctld-addr=localhost:15470",
-											"--pg-port=5432",
-											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
-											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
-											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
-											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
-										},
-										Ports: []corev1.ContainerPort{
-											tcpPort(t, "http", 15200),
-											tcpPort(t, "grpc", 15270),
-											tcpPort(t, "postgres", 5432),
-										},
-										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										StartupProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds:    5,
-											FailureThreshold: 30,
-										},
-										LivenessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/live",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 10,
-										},
-										ReadinessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 5,
-										},
-										Env: []corev1.EnvVar{
-											{
-												Name: "POD_NAME",
-												ValueFrom: &corev1.EnvVarSource{
-													FieldRef: &corev1.ObjectFieldSelector{
-														APIVersion: "v1",
-														FieldPath:  "metadata.name",
-													},
-												},
-											},
-											{
-												Name: "CONNPOOL_ADMIN_PASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-								Containers: []corev1.Container{
-									{
-										Name:    "postgres",
-										Image:   "postgres:17",
-										Command: []string{"/usr/local/bin/pgctld"},
-										Args: []string{
-											"server",
-											"--pooler-dir=/var/lib/pooler",
-											"--grpc-port=15470",
-											"--pg-port=5432",
-											"--pg-listen-addresses=*",
-											"--pg-database=postgres",
-											"--pg-user=postgres",
-											"--timeout=30",
-											"--log-level=info",
-											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
-											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
-											"--pgbackrest-cert-dir=/certs/pgbackrest",
-											"--pgbackrest-port=8432",
-										},
-										Env: []corev1.EnvVar{
-											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
-											{
-												Name: "PGPASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											// ALTERNATIVE: Uncomment for binary-copy approach
-											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-							},
-						},
-						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-							{
-								ObjectMeta: metav1.ObjectMeta{Name: "pgdata"},
-								Spec: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{
-										corev1.ReadWriteOnce,
-									},
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: corev1.ResourceList{
-											corev1.ResourceStorage: resource.MustParse("10Gi"),
-										},
-									},
-									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
-								},
-								Status: corev1.PersistentVolumeClaimStatus{
-									Phase: corev1.ClaimPending,
-								},
-							},
-						},
-					},
-				},
 				// Headless Service for zone1
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1463,264 +698,6 @@ func TestShardReconciliation(t *testing.T) {
 						},
 						Selector:                 metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone1", "shard-pool", "zone1")),
 						PublishNotReadyAddresses: true,
-					},
-				},
-				// StatefulSet for zone2
-				&appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:            "multi-cell-shard-pool-primary-zone2",
-						Namespace:       "default",
-						Labels:          shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
-						OwnerReferences: shardOwnerRefs(t, "multi-cell-shard"),
-					},
-					Spec: appsv1.StatefulSetSpec{
-						ServiceName: "multi-cell-shard-pool-primary-zone2-headless",
-						Replicas:    ptr.To(int32(2)),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: metadata.GetSelectorLabels(shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2")),
-						},
-						PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
-							WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
-							WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
-						},
-						Template: corev1.PodTemplateSpec{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels: shardLabels(t, "multi-cell-shard-pool-primary-zone2", "shard-pool", "zone2"),
-							},
-							Spec: corev1.PodSpec{
-								SecurityContext: &corev1.PodSecurityContext{
-									FSGroup: ptr.To(int64(999)),
-								},
-								Volumes: []corev1.Volume{
-									// ALTERNATIVE: Uncomment for binary-copy approach
-									// {
-									// 	Name: "pgctld-bin",
-									// 	VolumeSource: corev1.VolumeSource{
-									// 		EmptyDir: &corev1.EmptyDirVolumeSource{},
-									// 	},
-									// },
-									{
-										Name: "backup-data",
-										VolumeSource: corev1.VolumeSource{
-											PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-												ClaimName: "backup-data-multi-cell-shard-pool-primary-zone2",
-											},
-										},
-									},
-									{
-										Name: "socket-dir",
-										VolumeSource: corev1.VolumeSource{
-											EmptyDir: &corev1.EmptyDirVolumeSource{},
-										},
-									},
-									{
-										Name: "pg-hba-template",
-										VolumeSource: corev1.VolumeSource{
-											ConfigMap: &corev1.ConfigMapVolumeSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: shardcontroller.PgHbaConfigMapName("multi-cell-shard"),
-												},
-												DefaultMode: ptr.To(int32(420)),
-											},
-										},
-									},
-									{
-										Name: "pgbackrest-certs",
-										VolumeSource: corev1.VolumeSource{
-											Projected: &corev1.ProjectedVolumeSource{
-												DefaultMode: ptr.To(int32(288)),
-												Sources: []corev1.VolumeProjection{
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "multi-cell-shard-pgbackrest-ca",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "ca.crt", Path: "ca.crt"},
-															},
-														},
-													},
-													{
-														Secret: &corev1.SecretProjection{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "multi-cell-shard-pgbackrest-tls",
-															},
-															Items: []corev1.KeyToPath{
-																{Key: "tls.crt", Path: "pgbackrest.crt"},
-																{Key: "tls.key", Path: "pgbackrest.key"},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-								InitContainers: []corev1.Container{
-									{
-										Name:  "multipooler",
-										Image: "ghcr.io/multigres/multigres:main",
-										Args: []string{
-											"multipooler",
-											"--http-port=15200",
-											"--grpc-port=15270",
-											"--pooler-dir=/var/lib/pooler",
-											"--socket-file=/var/lib/pooler/pg_sockets/.s.PGSQL.5432",
-											"--service-map=grpc-pooler",
-											"--topo-global-server-addresses=global-topo:2379",
-											"--topo-global-root=/multigres/global",
-											"--cell=zone2",
-											"--database=testdb",
-											"--table-group=default",
-											"--shard=0",
-											"--service-id=$(POD_NAME)",
-											"--pgctld-addr=localhost:15470",
-											"--pg-port=5432",
-											"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
-											"--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt",
-											"--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key",
-											"--pgbackrest-ca-file=/certs/pgbackrest/ca.crt",
-										},
-										Ports: []corev1.ContainerPort{
-											tcpPort(t, "http", 15200),
-											tcpPort(t, "grpc", 15270),
-											tcpPort(t, "postgres", 5432),
-										},
-										RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										StartupProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds:    5,
-											FailureThreshold: 30,
-										},
-										LivenessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/live",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 10,
-										},
-										ReadinessProbe: &corev1.Probe{
-											ProbeHandler: corev1.ProbeHandler{
-												HTTPGet: &corev1.HTTPGetAction{
-													Path: "/ready",
-													Port: intstr.FromInt32(15200),
-												},
-											},
-											PeriodSeconds: 5,
-										},
-										Env: []corev1.EnvVar{
-											{
-												Name: "POD_NAME",
-												ValueFrom: &corev1.EnvVarSource{
-													FieldRef: &corev1.ObjectFieldSelector{
-														APIVersion: "v1",
-														FieldPath:  "metadata.name",
-													},
-												},
-											},
-											{
-												Name: "CONNPOOL_ADMIN_PASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-								Containers: []corev1.Container{
-									{
-										Name:    "postgres",
-										Image:   "postgres:17",
-										Command: []string{"/usr/local/bin/pgctld"},
-										Args: []string{
-											"server",
-											"--pooler-dir=/var/lib/pooler",
-											"--grpc-port=15470",
-											"--pg-port=5432",
-											"--pg-listen-addresses=*",
-											"--pg-database=postgres",
-											"--pg-user=postgres",
-											"--timeout=30",
-											"--log-level=info",
-											"--grpc-socket-file=/var/lib/pooler/pgctld.sock",
-											"--pg-hba-template=/etc/pgctld/pg_hba_template.conf",
-											"--pgbackrest-cert-dir=/certs/pgbackrest",
-											"--pgbackrest-port=8432",
-										},
-										Env: []corev1.EnvVar{
-											{Name: "PGDATA", Value: "/var/lib/pooler/pg_data"},
-											{
-												Name: "PGPASSWORD",
-												ValueFrom: &corev1.EnvVarSource{
-													SecretKeyRef: &corev1.SecretKeySelector{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: shardcontroller.PostgresPasswordSecretName("multi-cell-shard"),
-														},
-														Key: shardcontroller.PostgresPasswordSecretKey,
-													},
-												},
-											},
-										},
-										SecurityContext: &corev1.SecurityContext{
-											RunAsUser:    ptr.To(int64(999)),
-											RunAsGroup:   ptr.To(int64(999)),
-											RunAsNonRoot: ptr.To(true),
-										},
-										VolumeMounts: []corev1.VolumeMount{
-											{Name: "pgdata", MountPath: "/var/lib/pooler"},
-											// ALTERNATIVE: Uncomment for binary-copy approach
-											// {Name: "pgctld-bin", MountPath: "/usr/local/bin/multigres"},
-											{Name: "backup-data", MountPath: "/backups"},
-											{Name: "socket-dir", MountPath: "/var/run/postgresql"},
-											{Name: "pg-hba-template", MountPath: "/etc/pgctld", ReadOnly: true},
-											{Name: "pgbackrest-certs", MountPath: "/certs/pgbackrest", ReadOnly: true},
-										},
-									},
-								},
-							},
-						},
-						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-							{
-								ObjectMeta: metav1.ObjectMeta{Name: "pgdata"},
-								Spec: corev1.PersistentVolumeClaimSpec{
-									AccessModes: []corev1.PersistentVolumeAccessMode{
-										corev1.ReadWriteOnce,
-									},
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: corev1.ResourceList{
-											corev1.ResourceStorage: resource.MustParse("10Gi"),
-										},
-									},
-									VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
-								},
-								Status: corev1.PersistentVolumeClaimStatus{
-									Phase: corev1.ClaimPending,
-								},
-							},
-						},
 					},
 				},
 				// Headless Service for zone2
@@ -1762,15 +739,54 @@ func TestShardReconciliation(t *testing.T) {
 					testutil.IgnoreMetaRuntimeFields(),
 					testutil.IgnoreServiceRuntimeFields(),
 					testutil.IgnoreDeploymentRuntimeFields(),
-					testutil.IgnoreStatefulSetRuntimeFields(),
+					testutil.IgnorePVCRuntimeFields(),
+
 					testutil.IgnorePodSpecDefaults(),
 					testutil.IgnoreProbeDefaults(),
 					testutil.IgnoreDeploymentSpecDefaults(),
-					testutil.IgnoreStatefulSetSpecDefaults(),
+					testutil.IgnoreStatus(),
 				),
 				testutil.WithExtraResource(&multigresv1alpha1.Shard{}),
+				testutil.WithExtraResource(&corev1.Pod{}),
+				testutil.WithExtraResource(&corev1.PersistentVolumeClaim{}),
+				testutil.WithTimeout(30*time.Second),
 			)
-			client := mgr.GetClient()
+			k8sClient := mgr.GetClient()
+
+			// Mark pods as Ready in the background so the controller can
+			// create subsequent replicas (it blocks when pods aren't Ready).
+			go func() {
+				ticker := time.NewTicker(200 * time.Millisecond)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						podList := &corev1.PodList{}
+						if err := k8sClient.List(ctx, podList, client.InNamespace(tc.shard.Namespace)); err != nil {
+							continue
+						}
+						for i := range podList.Items {
+							p := &podList.Items[i]
+							ready := false
+							for _, c := range p.Status.Conditions {
+								if c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue {
+									ready = true
+									break
+								}
+							}
+							if !ready {
+								p.Status.Phase = corev1.PodRunning
+								p.Status.Conditions = []corev1.PodCondition{
+									{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+								}
+								_ = k8sClient.Status().Update(ctx, p)
+							}
+						}
+					}
+				}
+			}()
 
 			// 3. Setup and Start Controller
 			shardReconciler := &shardcontroller.ShardReconciler{
@@ -1785,7 +801,7 @@ func TestShardReconciliation(t *testing.T) {
 				t.Fatalf("Failed to create controller, %v", err)
 			}
 
-			if err := client.Create(ctx, tc.shard); err != nil {
+			if err := k8sClient.Create(ctx, tc.shard); err != nil {
 				t.Fatalf("Failed to create the initial item, %v", err)
 			}
 
@@ -1832,16 +848,6 @@ func TestShardReconciliation(t *testing.T) {
 					}
 				} else if component == "shard-pool" {
 					poolName := "primary" // Hardcoded as per tests
-					hashedSSName := nameutil.JoinWithConstraints(
-						nameutil.StatefulSetConstraints,
-						clusterName,
-						string(tc.shard.Spec.DatabaseName),
-						string(tc.shard.Spec.TableGroupName),
-						string(tc.shard.Spec.ShardName),
-						"pool",
-						poolName,
-						cellName,
-					)
 					hashedSvcName := nameutil.JoinWithConstraints(
 						nameutil.ServiceConstraints,
 						clusterName,
@@ -1854,48 +860,53 @@ func TestShardReconciliation(t *testing.T) {
 						"headless",
 					)
 
-					if _, ok := obj.(*appsv1.StatefulSet); ok {
-						obj.SetName(hashedSSName)
-						labels["app.kubernetes.io/instance"] = clusterName // Instance is cluster name
-						obj.SetLabels(labels)
-
-						ss := obj.(*appsv1.StatefulSet)
-						ss.Spec.ServiceName = hashedSvcName
-						ss.Spec.Selector.MatchLabels["app.kubernetes.io/instance"] = clusterName
-						ss.Spec.Template.ObjectMeta.Labels["app.kubernetes.io/instance"] = clusterName
-
-						// Update Backup PVC ClaimName in Volumes
-						hashedPVCName := nameutil.JoinWithConstraints(
-							nameutil.ServiceConstraints,
-							"backup-data",
-							clusterName,
-							string(tc.shard.Spec.DatabaseName),
-							string(tc.shard.Spec.TableGroupName),
-							string(tc.shard.Spec.ShardName),
-							cellName,
-						)
-						for i, vol := range ss.Spec.Template.Spec.Volumes {
-							if vol.Name == "backup-data" && vol.PersistentVolumeClaim != nil {
-								ss.Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = hashedPVCName
-							}
-						}
-					}
-
 					if svc, ok := obj.(*corev1.Service); ok {
-						// Headless service
 						obj.SetName(hashedSvcName)
-						// Headless service uses same labels/selector as SS?
-						// In original test: Labels instance = "test-shard-pool-primary-zone-a" (SS name)
-						// Selector instance = "test-shard-pool-primary-zone-a"
-						// NEW: Instance label is CLUSTER NAME.
 						labels["app.kubernetes.io/instance"] = clusterName
 						obj.SetLabels(labels)
 						svc.Spec.Selector["app.kubernetes.io/instance"] = clusterName
 					}
 				}
+
 			}
 
-			if err := watcher.WaitForMatch(tc.wantResources...); err != nil {
+			filteredResources := append([]client.Object{}, tc.wantResources...)
+
+			// Append literal expected Pods and PVCs based on Shard Spec
+			backupCells := map[string]bool{}
+			for poolName, poolSpec := range tc.shard.Spec.Pools {
+				for _, cellName := range poolSpec.Cells {
+					replicas := shardcontroller.DefaultPoolReplicas
+					if poolSpec.ReplicasPerCell != nil {
+						replicas = *poolSpec.ReplicasPerCell
+					}
+					for i := 0; i < int(replicas); i++ {
+						pod, err := shardcontroller.BuildPoolPod(tc.shard, string(poolName), string(cellName), poolSpec, i, mgr.GetScheme())
+						if err != nil {
+							t.Fatalf("Failed to build pod: %v", err)
+						}
+						filteredResources = append(filteredResources, pod)
+
+						pvc, err := shardcontroller.BuildPoolDataPVC(tc.shard, string(poolName), string(cellName), poolSpec, i, mgr.GetScheme())
+						if err != nil {
+							t.Fatalf("Failed to build pvc: %v", err)
+						}
+						filteredResources = append(filteredResources, pvc)
+					}
+
+					// Shared backup PVC is per-cell, not per-pod
+					if tc.shard.Spec.Backup != nil && tc.shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem && !backupCells[string(cellName)] {
+						backupPVC, err := shardcontroller.BuildSharedBackupPVC(tc.shard, string(cellName), mgr.GetScheme())
+						if err != nil {
+							t.Fatalf("Failed to build backup pvc: %v", err)
+						}
+						filteredResources = append(filteredResources, backupPVC)
+						backupCells[string(cellName)] = true
+					}
+				}
+			}
+
+			if err := watcher.WaitForMatch(filteredResources...); err != nil {
 				t.Errorf("Resources mismatch:\n%v", err)
 			}
 		})
@@ -1928,6 +939,7 @@ func shardLabels(t testing.TB, instanceName, component, cell string) map[string]
 
 	if component == "shard-pool" {
 		labels["multigres.com/pool"] = "primary"
+		labels["multigres.com/shard"] = "0"
 	}
 
 	return labels
@@ -1974,6 +986,7 @@ func TestReconcileDeletions(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 
 	mgr := testutil.SetUpEnvtestManager(t, scheme,
 		testutil.WithCRDPaths(

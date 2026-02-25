@@ -989,6 +989,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				WithStatusSubresource(&multigresv1alpha1.Shard{}).
 				WithStatusSubresource(&appsv1.StatefulSet{}).
 				WithStatusSubresource(&appsv1.Deployment{}).
+				WithStatusSubresource(&corev1.Pod{}).
 				Build()
 
 			fakeClient := client.Client(baseClient)
@@ -1064,6 +1065,22 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				if err := fakeClient.Get(t.Context(), req.NamespacedName, stored); err == nil {
 					stored.Spec = tc.shard.Spec
 					_ = fakeClient.Update(t.Context(), stored)
+				}
+
+				// Mark all pods as Ready so the next iteration can create more pods.
+				// The reconciler blocks creation when existing pods aren't Ready.
+				podList := &corev1.PodList{}
+				if err := fakeClient.List(t.Context(), podList, client.InNamespace(tc.shard.Namespace)); err == nil {
+					for idx := range podList.Items {
+						p := &podList.Items[idx]
+						if isPodReady(p) {
+							continue
+						}
+						p.Status.Conditions = []corev1.PodCondition{
+							{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+						}
+						_ = fakeClient.Status().Update(t.Context(), p)
+					}
 				}
 			}
 
@@ -1613,6 +1630,11 @@ func TestDrainedPodReplacement(t *testing.T) {
 			},
 			Annotations: map[string]string{
 				// We need the hash to match so it doesn't get deleted as drifted
+			},
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
 			},
 		},
 	}
