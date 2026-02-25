@@ -175,7 +175,9 @@ func (r *ShardReconciler) createMissingResources(
 		}
 
 		// Block subsequent creations or updates if this pod is not ready and not already pending an update.
-		if pod.DeletionTimestamp.IsZero() && !isPodReady(pod) && !isDrifted {
+		// DRAINED pods are naturally not ready, so we allow them to proceed so they can be replaced.
+		role := resolvePodRole(shard, pod.Name)
+		if pod.DeletionTimestamp.IsZero() && !isPodReady(pod) && !isDrifted && role != "DRAINED" {
 			actionTaken = true
 		}
 	}
@@ -480,11 +482,10 @@ func (r *ShardReconciler) cleanupDrainedPod(
 	}
 
 	// Handle PVC deletion based on policy
+	mergedPolicy := multigresv1alpha1.MergePVCDeletionPolicy(poolSpec.PVCDeletionPolicy, shard.Spec.PVCDeletionPolicy)
 	policy := multigresv1alpha1.PVCDeletionPolicy{WhenScaled: multigresv1alpha1.RetainPVCRetentionPolicy}
-	if poolSpec.PVCDeletionPolicy != nil && poolSpec.PVCDeletionPolicy.WhenScaled != "" {
-		policy = *poolSpec.PVCDeletionPolicy
-	} else if shard.Spec.PVCDeletionPolicy != nil && shard.Spec.PVCDeletionPolicy.WhenScaled != "" {
-		policy = *shard.Spec.PVCDeletionPolicy
+	if mergedPolicy != nil && mergedPolicy.WhenScaled != "" {
+		policy = *mergedPolicy
 	}
 
 	if policy.WhenScaled == multigresv1alpha1.DeletePVCRetentionPolicy {

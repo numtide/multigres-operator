@@ -289,7 +289,14 @@ func (r *ShardReconciler) handleDeletion(ctx context.Context, shard *multigresv1
 				logger.Info("Removed finalizer from pod during shard deletion", "pod", pod.Name)
 			}
 		}
-		podsStillPresent++
+
+		// Check if the pod still exists after cleanup
+		checkPod := &corev1.Pod{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pod.Name}, checkPod); err == nil {
+			podsStillPresent++
+		} else if !errors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("failed to check pod status: %w", err)
+		}
 	}
 
 	if podsStillPresent > 0 {
