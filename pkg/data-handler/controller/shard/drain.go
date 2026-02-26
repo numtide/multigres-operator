@@ -194,19 +194,23 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			return true, nil
 		}
 		if primary != nil && myPooler != nil {
-			req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
-				Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
-				StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
-			}
-			_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
-			if rpcErr != nil {
-				logger.Error(
-					rpcErr,
-					"Standby removal verification failed, will retry",
-					"pod",
-					pod.Name,
-				)
-				return true, nil
+			if r.rpcClient == nil {
+				logger.Info("RPC client not configured, skipping standby removal verification", "pod", pod.Name)
+			} else {
+				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
+					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
+					StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
+				}
+				_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
+				if rpcErr != nil {
+					logger.Error(
+						rpcErr,
+						"Standby removal verification failed, will retry",
+						"pod",
+						pod.Name,
+					)
+					return true, nil
+				}
 			}
 		}
 		return r.updateDrainState(ctx, pod, metadata.DrainStateAcknowledged)
