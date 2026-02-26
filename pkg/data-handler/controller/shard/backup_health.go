@@ -51,7 +51,7 @@ func (r *ShardReconciler) evaluateBackupHealth(
 	defer func() { _ = store.Close() }()
 
 	cells := collectCells(shard)
-	primary, err := findPrimaryPooler(ctx, store, cells)
+	primary, err := findPrimaryPooler(ctx, store, shard, cells)
 	if err != nil {
 		return nil, fmt.Errorf("finding primary pooler: %w", err)
 	}
@@ -87,10 +87,18 @@ func (r *ShardReconciler) getBackups(
 func findPrimaryPooler(
 	ctx context.Context,
 	store topoclient.Store,
+	shard *multigresv1alpha1.Shard,
 	cells []string,
 ) (*clustermetadatapb.MultiPooler, error) {
 	for _, cell := range cells {
-		poolers, err := store.GetMultiPoolersByCell(ctx, cell, nil)
+		opt := &topoclient.GetMultiPoolersByCellOptions{
+			DatabaseShard: &topoclient.DatabaseShard{
+				Database:   string(shard.Spec.DatabaseName),
+				TableGroup: string(shard.Spec.TableGroupName),
+				Shard:      string(shard.Spec.ShardName),
+			},
+		}
+		poolers, err := store.GetMultiPoolersByCell(ctx, cell, opt)
 		if err != nil {
 			if isTopoUnavailable(err) {
 				continue

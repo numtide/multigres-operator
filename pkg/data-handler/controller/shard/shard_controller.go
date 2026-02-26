@@ -190,10 +190,19 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				shard.Status.PodRoles = make(map[string]string)
 			}
 			rolesChanged := false
+			seenHostnames := make(map[string]bool)
+			topoQuerySuccess := true
 
 			cells := collectCells(shard)
 			for _, cell := range cells {
-				poolers, cerr := store.GetMultiPoolersByCell(ctx, cell, nil)
+				opt := &topoclient.GetMultiPoolersByCellOptions{
+					DatabaseShard: &topoclient.DatabaseShard{
+						Database:   string(shard.Spec.DatabaseName),
+						TableGroup: string(shard.Spec.TableGroupName),
+						Shard:      string(shard.Spec.ShardName),
+					},
+				}
+				poolers, cerr := store.GetMultiPoolersByCell(ctx, cell, opt)
 				if cerr == nil {
 					for _, p := range poolers {
 						roleName := "REPLICA"
@@ -208,10 +217,24 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 							hostname = fmt.Sprintf("%v", p.Id)
 						}
 
+						seenHostnames[hostname] = true
+
 						if shard.Status.PodRoles[hostname] != roleName {
 							shard.Status.PodRoles[hostname] = roleName
 							rolesChanged = true
 						}
+					}
+				} else {
+					topoQuerySuccess = false
+				}
+			}
+
+			// Prune entries for poolers that no longer exist in the topology.
+			if topoQuerySuccess {
+				for hostname := range shard.Status.PodRoles {
+					if !seenHostnames[hostname] {
+						delete(shard.Status.PodRoles, hostname)
+						rolesChanged = true
 					}
 				}
 			}

@@ -301,6 +301,9 @@ func TestReplicaDrainFlow(t *testing.T) {
 			},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:     "test-db",
+			TableGroupName:   "test-tg",
+			ShardName:        "0",
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
 			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
@@ -348,15 +351,21 @@ func TestReplicaDrainFlow(t *testing.T) {
 
 	// Add primary
 	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
-		Id:       &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
-		Hostname: "primary-pod",
-		Type:     clustermetadata.PoolerType_PRIMARY,
+		Id:         &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		Hostname:   "primary-pod",
+		Type:       clustermetadata.PoolerType_PRIMARY,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
 	}, false)
 	// Add our replica pod
 	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
-		Id:       &clustermetadata.ID{Cell: "cell1", Name: "test-pod-0"},
-		Hostname: "test-pod-0",
-		Type:     clustermetadata.PoolerType_REPLICA,
+		Id:         &clustermetadata.ID{Cell: "cell1", Name: "test-pod-0"},
+		Hostname:   "test-pod-0",
+		Type:       clustermetadata.PoolerType_REPLICA,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
 	}, false)
 
 	// Step 1: Requested -> Draining
@@ -420,6 +429,9 @@ func TestPrimaryDrainFlow(t *testing.T) {
 			Labels: map[string]string{metadata.LabelMultigresCluster: "test"},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:     "test-db",
+			TableGroupName:   "test-tg",
+			ShardName:        "0",
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
 			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
@@ -465,10 +477,16 @@ func TestPrimaryDrainFlow(t *testing.T) {
 	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
 		Id:       &clustermetadata.ID{Cell: "cell1", Name: "test-pod-0"},
 		Hostname: "test-pod-0", Type: clustermetadata.PoolerType_PRIMARY,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
 	}, false)
 	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
 		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod"},
 		Hostname: "replica-pod", Type: clustermetadata.PoolerType_REPLICA,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
 	}, false)
 
 	requeue, err := reconciler.executeDrainStateMachine(ctx, shardObj, pod)
@@ -494,6 +512,9 @@ func TestStuckTerminatingPod(t *testing.T) {
 			Labels: map[string]string{metadata.LabelMultigresCluster: "test"},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:     "test-db",
+			TableGroupName:   "test-tg",
+			ShardName:        "0",
 			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
 			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
@@ -530,6 +551,9 @@ func TestStuckTerminatingPod(t *testing.T) {
 	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
 		Id:       &clustermetadata.ID{Cell: "cell1", Name: "test-pod-0"},
 		Hostname: "test-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
 	}, false)
 
 	// Delete the pod using the client to set DeletionTimestamp
