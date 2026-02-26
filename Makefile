@@ -43,6 +43,16 @@ IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
 print-img: ## Print the full operator container image reference
 	@echo $(IMG)
 
+# Images required by MultigresCluster pods (must match pkg/testutil/e2e.go MultigresImages)
+E2E_IMAGES ?= ghcr.io/multigres/multigres:main ghcr.io/multigres/pgctld:main ghcr.io/multigres/multiadmin-web:main gcr.io/etcd-development/etcd:v3.6.7
+
+.PHONY: pull-e2e-images
+pull-e2e-images: ## Pull container images needed by e2e tests
+	@for img in $(E2E_IMAGES); do \
+		echo "Pulling $$img..."; \
+		docker pull $$img; \
+	done
+
 # Build metadata
 BUILD_DATE ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")

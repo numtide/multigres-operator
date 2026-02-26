@@ -52,6 +52,9 @@ jobs:
       - name: Build operator image
         run: make container
 
+      - name: Pull e2e images
+        run: make pull-e2e-images
+
       - name: Run e2e tests
         run: |
           OPERATOR_IMG=$(make -s print-img) \
