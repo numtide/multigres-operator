@@ -367,7 +367,7 @@ func (r *ShardReconciler) handleScaleDown(
 	// Cleanup pods ready for deletion: remove finalizer first, then delete
 	for _, pod := range readyForDeletion {
 		logger.Info("Cleaning up pod in ready-for-deletion state", "pod", pod.Name)
-		if err := r.cleanupDrainedPod(ctx, shard, pod, poolName, poolSpec); err != nil {
+		if err := r.cleanupDrainedPod(ctx, shard, pod, poolName, poolSpec, replicas); err != nil {
 			return actionTaken, inProgress, fmt.Errorf(
 				"failed to cleanup drained pod %s: %w",
 				pod.Name,
@@ -609,6 +609,7 @@ func (r *ShardReconciler) cleanupDrainedPod(
 	pod *corev1.Pod,
 	poolName string,
 	poolSpec multigresv1alpha1.PoolSpec,
+	replicas int32,
 ) error {
 	logger := log.FromContext(ctx)
 
@@ -635,20 +636,24 @@ func (r *ShardReconciler) cleanupDrainedPod(
 
 	if policy.WhenScaled == multigresv1alpha1.DeletePVCRetentionPolicy {
 		idx := resolvePodIndex(pod.Name)
-		cellName := pod.Labels[metadata.LabelMultigresCell]
-		pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
-		pvc := &corev1.PersistentVolumeClaim{}
-		err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pvcName}, pvc)
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
+		if idx >= int(replicas) {
+			cellName := pod.Labels[metadata.LabelMultigresCell]
+			pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
+			pvc := &corev1.PersistentVolumeClaim{}
+			err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pvcName}, pvc)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
+				}
+			} else {
+				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
+					logger.Error(err, "Failed to delete PVC for scaled down pod", "pvc", pvcName)
+				} else {
+					logger.Info("Deleted PVC for scaled down pod", "pvc", pvcName)
+				}
 			}
 		} else {
-			if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
-				logger.Error(err, "Failed to delete PVC for scaled down pod", "pvc", pvcName)
-			} else {
-				logger.Info("Deleted PVC for scaled down pod", "pvc", pvcName)
-			}
+			logger.Info("Retaining PVC for pod during rolling update", "pod", pod.Name, "index", idx, "replicas", replicas)
 		}
 	}
 
