@@ -104,7 +104,7 @@ func (r *ShardReconciler) updateStatus(
 }
 
 // updatePoolsStatus aggregates status from all pool pods.
-// Returns total pods, ready pods, and tracks cells in the cellsSet.
+// Returns total desired pods, ready pods, and tracks cells in the cellsSet.
 func (r *ShardReconciler) updatePoolsStatus(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -114,7 +114,7 @@ func (r *ShardReconciler) updatePoolsStatus(
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 
 	for poolName, poolSpec := range shard.Spec.Pools {
-		var poolTotal, poolReady int32
+		var poolDesired, poolReady int32
 
 		// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
 		for _, cell := range poolSpec.Cells {
@@ -134,7 +134,7 @@ func (r *ShardReconciler) updatePoolsStatus(
 				return 0, 0, fmt.Errorf("failed to list pods for status: %w", err)
 			}
 
-			var cellTotal, cellReady int32
+			var cellReady int32
 			for i := range podList.Items {
 				pod := &podList.Items[i]
 
@@ -142,8 +142,6 @@ func (r *ShardReconciler) updatePoolsStatus(
 				if !pod.DeletionTimestamp.IsZero() {
 					continue
 				}
-
-				cellTotal++
 
 				// Check if pod is ready
 				isReady := false
@@ -174,16 +172,16 @@ func (r *ShardReconciler) updatePoolsStatus(
 				)
 			}
 
-			poolTotal += cellTotal
+			poolDesired += replicas
 			poolReady += cellReady
 		}
 
-		totalPods += poolTotal
+		totalPods += poolDesired
 		readyPods += poolReady
 
 		monitoring.SetShardPoolReplicas(
 			clusterName, shard.Name, string(poolName), "", shard.Namespace,
-			poolTotal, poolReady,
+			poolDesired, poolReady,
 		)
 	}
 
