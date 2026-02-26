@@ -7,7 +7,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
@@ -87,10 +86,6 @@ func BuildPoolDataPVC(
 		pvc.Spec.StorageClassName = storageClass
 	}
 
-	if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
-		return nil, fmt.Errorf("failed to set controller reference: %w", err)
-	}
-
 	return pvc, nil
 }
 
@@ -167,10 +162,6 @@ func BuildSharedBackupPVC(
 
 	if pvcClass != nil && *pvcClass != "" {
 		pvc.Spec.StorageClassName = pvcClass
-	}
-
-	if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
-		return nil, fmt.Errorf("failed to set controller reference on backup PVC: %w", err)
 	}
 
 	return pvc, nil

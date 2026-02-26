@@ -291,6 +291,57 @@ func (r *ShardReconciler) handleDeletion(
 		}
 	}
 
+	// Evaluate and process PVC deletions based on PVCDeletionPolicy before pod finalizers are removed
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(
+		ctx,
+		pvcList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list PVCs for deletion: %w", err)
+	}
+
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+
+		// Determine the PVC policy
+		poolName := pvc.Labels[metadata.LabelMultigresPool]
+		var policy *multigresv1alpha1.PVCDeletionPolicy
+
+		if poolName != "" {
+			// Pool Data PVC
+			if poolSpec, exists := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]; exists {
+				policy = multigresv1alpha1.MergePVCDeletionPolicy(
+					poolSpec.PVCDeletionPolicy,
+					shard.Spec.PVCDeletionPolicy,
+				)
+			} else {
+				policy = shard.Spec.PVCDeletionPolicy
+			}
+		} else {
+			// Shared Backup PVC
+			policy = shard.Spec.PVCDeletionPolicy
+		}
+
+		// Default to Retain
+		whenDeleted := multigresv1alpha1.RetainPVCRetentionPolicy
+		if policy != nil && policy.WhenDeleted != "" {
+			whenDeleted = policy.WhenDeleted
+		}
+
+		if whenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy {
+			if pvc.DeletionTimestamp.IsZero() {
+				logger.Info("Deleting PVC per WhenDeleted: Delete policy", "pvc", pvc.Name)
+				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
+					return ctrl.Result{}, fmt.Errorf("failed to delete PVC %s: %w", pvc.Name, err)
+				}
+			}
+		} else {
+			logger.Info("Retaining PVC per WhenDeleted: Retain policy", "pvc", pvc.Name)
+		}
+	}
+
 	// Remove finalizers from all pods to allow them to be deleted by GC
 	podsStillPresent := 0
 	for i := range podList.Items {

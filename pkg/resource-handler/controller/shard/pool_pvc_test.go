@@ -23,11 +23,8 @@ func TestBuildPoolDataPVC_BasicStructure(t *testing.T) {
 		t.Errorf("namespace = %q, want %q", pvc.Namespace, "default")
 	}
 
-	if len(pvc.OwnerReferences) != 1 {
-		t.Fatalf("expected 1 owner reference, got %d", len(pvc.OwnerReferences))
-	}
-	if pvc.OwnerReferences[0].Name != "test-shard" {
-		t.Errorf("owner name = %q, want %q", pvc.OwnerReferences[0].Name, "test-shard")
+	if len(pvc.OwnerReferences) != 0 {
+		t.Fatalf("expected 0 owner references, got %d. OwnerReference overrides WhenDeleted policies.", len(pvc.OwnerReferences))
 	}
 
 	expectedLabels := map[string]string{
