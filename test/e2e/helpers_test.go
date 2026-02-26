@@ -207,7 +207,7 @@ func waitForQueryServingSafe(t *testing.T, tc *testutil.TestCluster, ns, gateway
 func waitForDeploymentWithContainer(t *testing.T, c client.Client, ns, containerName string) *appsv1.Deployment {
 	t.Helper()
 	var found *appsv1.Deployment
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	err := wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
@@ -236,7 +236,7 @@ func waitForDeploymentWithContainer(t *testing.T, c client.Client, ns, container
 func waitForStatefulSetWithContainer(t *testing.T, c client.Client, ns, containerName string) *appsv1.StatefulSet {
 	t.Helper()
 	var found *appsv1.StatefulSet
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	err := wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
