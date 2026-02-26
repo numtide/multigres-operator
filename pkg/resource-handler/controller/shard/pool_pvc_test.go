@@ -24,7 +24,10 @@ func TestBuildPoolDataPVC_BasicStructure(t *testing.T) {
 	}
 
 	if len(pvc.OwnerReferences) != 0 {
-		t.Fatalf("expected 0 owner references, got %d. OwnerReference overrides WhenDeleted policies.", len(pvc.OwnerReferences))
+		t.Fatalf(
+			"expected 0 owner references, got %d. OwnerReference overrides WhenDeleted policies.",
+			len(pvc.OwnerReferences),
+		)
 	}
 
 	expectedLabels := map[string]string{

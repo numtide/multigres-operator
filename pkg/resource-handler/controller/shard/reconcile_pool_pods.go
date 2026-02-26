@@ -647,7 +647,15 @@ func (r *ShardReconciler) cleanupDrainedPod(
 				}
 			}
 		} else {
-			logger.Info("Retaining PVC for pod during rolling update", "pod", pod.Name, "index", idx, "replicas", replicas)
+			logger.Info(
+				"Retaining PVC for pod during rolling update",
+				"pod",
+				pod.Name,
+				"index",
+				idx,
+				"replicas",
+				replicas,
+			)
 		}
 	}
 
