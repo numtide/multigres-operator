@@ -22,9 +22,6 @@ const (
 	// DefaultMultiGatewayReplicas is the default number of MultiGateway replicas
 	DefaultMultiGatewayReplicas int32 = 2
 
-	// DefaultMultiGatewayImage is the default MultiGateway container image
-	DefaultMultiGatewayImage = "ghcr.io/multigres/multigres:main"
-
 	// MultiGatewayHTTPPort is the default port for HTTP connections
 	MultiGatewayHTTPPort int32 = 15100
 
@@ -69,7 +66,7 @@ func BuildMultiGatewayDeployment(
 		replicas = *cell.Spec.MultiGateway.Replicas
 	}
 
-	image := DefaultMultiGatewayImage
+	image := multigresv1alpha1.DefaultMultiGatewayImage
 	if cell.Spec.Images.MultiGateway != "" {
 		image = string(cell.Spec.Images.MultiGateway)
 	}

@@ -102,7 +102,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "etcd",
-										Image: "gcr.io/etcd-development/etcd:v3.5.9",
+										Image: multigresv1alpha1.DefaultEtcdImage,
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "client", 2379),
 											tcpPort(t, "peer", 2380),
@@ -238,7 +238,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 								Containers: []corev1.Container{
 									{
 										Name:  "etcd",
-										Image: "gcr.io/etcd-development/etcd:v3.5.9",
+										Image: multigresv1alpha1.DefaultEtcdImage,
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "client", 2379),
 											tcpPort(t, "peer", 2380),

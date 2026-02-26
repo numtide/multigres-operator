@@ -91,7 +91,7 @@ func TestBuildStatefulSet(t *testing.T) {
 							Containers: []corev1.Container{
 								{
 									Name:      "etcd",
-									Image:     DefaultImage,
+									Image:     multigresv1alpha1.DefaultEtcdImage,
 									Resources: corev1.ResourceRequirements{},
 									Env: buildContainerEnv(
 										"test-toposerver",
@@ -319,7 +319,7 @@ func TestBuildStatefulSet(t *testing.T) {
 							Containers: []corev1.Container{
 								{
 									Name:      "etcd",
-									Image:     DefaultImage,
+									Image:     multigresv1alpha1.DefaultEtcdImage,
 									Resources: corev1.ResourceRequirements{},
 									Env: buildContainerEnv(
 										"test-toposerver",
