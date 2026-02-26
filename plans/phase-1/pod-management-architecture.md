@@ -155,13 +155,13 @@ The drain state machine coordinates pod removal between two controllers:
                     ┌──────────────▼───────────────────┐
                     │     Pod selected for drain       │
                     │  (non-ready > non-primary >      │
-                    │   highest index)                  │
+                    │   highest index)                 │
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
                     │  Annotation: state=requested     │
-                    │  + drain-requested-at timestamp   │
-                    │  (set by resource-handler)        │
+                    │  + drain-requested-at timestamp  │
+                    │  (set by resource-handler)       │
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
@@ -265,11 +265,13 @@ The `updatePoolsStatus` function directly lists pods by label selector and aggre
 | `shard.Status.Phase` | `Healthy` when both pools and orch are ready; `Progressing` otherwise |
 | `shard.Status.Cells` | Observed cells from pod labels |
 | `shard.Status.PodRoles` | Pod → role mapping (populated by data-handler from etcd) |
-| `shard.Status.Conditions` | `Available` condition with `AllPodsReady` or `NotAllPodsReady` |
+| `shard.Status.LastBackupTime` | Timestamp of last completed backup (from `GetBackups` RPC via data-handler) |
+| `shard.Status.LastBackupType` | Type of last backup (full/diff/incr) |
+| `shard.Status.Conditions` | `Available`, `BackupHealthy`, `RollingUpdate` |
 
 Terminating pods (with a non-zero `DeletionTimestamp`) are excluded from counts.
 
-Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmpty` warning event is emitted when a cell has zero ready replicas but the desired count is > 0.
+Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmpty` warning event is emitted when a cell has zero ready replicas but the desired count is > 0. Backup age is emitted via `monitoring.SetLastBackupAge()`.
 
 ---
 
@@ -296,6 +298,9 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **pgBackRest TLS certificates** | Auto-generated or user-provided (cert-manager compatible) |
 | **S3 and filesystem backup support** | Full backup configuration propagation |
 | **PVC deletion policy** | Hierarchical merge, Retain/Delete per whenDeleted/whenScaled |
+| **Etcd topology cleanup** | `UnregisterMultiPooler` called during drain flow; stale entries removed on pod termination |
+| **Backup health reporting** | Data-handler calls `GetBackups` RPC, sets `BackupHealthy` condition and `LastBackupTime` status |
+| **DRAINED pod replacement** | Pods with `DRAINED` role in etcd are detected and replaced via the drain state machine |
 | **Observability** | Events, conditions, metrics, tracing spans |
 
 ### Not Yet Implemented (Blocked on Upstream Multigres)
@@ -306,7 +311,6 @@ These features are designed and documented in `pod-management-design.md` but req
 |---|---|---|
 | **WAL archiving failure detection** | Gap 1 | Needs multipooler to expose `pg_stat_archiver` via etcd |
 | **Standby waiting-for-backup surfacing** | Gap 4 | Needs multipooler to expose `monitor_reason` via etcd |
-| **Graceful decommission RPC** | Gap 8 | Nice-to-have; drain state machine covers safety |
 | **Point-in-Time Recovery** | Gap 9 | Separate product feature, not urgent |
 
 ### Not Implemented (Design Decision)
@@ -314,9 +318,6 @@ These features are designed and documented in `pod-management-design.md` but req
 | Feature | Reason |
 |---|---|
 | **Scheduled base backups** | Per design review meeting, kept peripheral to operator |
-| **Etcd topology cleanup** | API exists (`UnregisterMultiPooler`), wired through data-handler drain flow |
-| **Backup health reporting** | `GetBackups` RPC exists; data-handler integration is scoped for future work |
-| **DRAINED pod replacement** | Detection and replacement flow designed; requires data-handler etcd reads at runtime |
 
 ---
 
@@ -443,11 +444,13 @@ Through the data-handler:
 |---|---|
 | Pod creation and recreation | Direct pod management via reconcile loop |
 | Scale-up (new replicas) | Create PVC + Pod, multigres handles the rest |
-| Scale-down | Drain state machine with standby removal |
+| Scale-down | Drain state machine with standby removal + etcd unregistration |
 | Rolling update | Spec-hash detection, ordered recreation |
+| DRAINED pod replacement | Detects DRAINED role from etcd, initiates drain + replacement |
+| Backup health reporting | Calls `GetBackups` RPC, sets `BackupHealthy` condition |
 | PVC lifecycle | Direct creation/deletion per policy |
 | Certificate provisioning | `pkg/cert` for pgBackRest TLS |
-| Status reporting | Aggregate from pod conditions and etcd roles |
+| Status reporting | Aggregate from pod conditions, etcd roles, and backup metadata |
 
 ---
 
@@ -459,14 +462,10 @@ Through the data-handler:
 |---|---|---|
 | WAL archiving failure detection | [#654](https://github.com/multigres/multigres/issues/654) | Multipooler should report `pg_stat_archiver` status via etcd |
 | Standby stuck waiting for backup | [#652](https://github.com/multigres/multigres/issues/652) | Multipooler should expose `monitor_reason` in etcd |
-| Graceful decommission RPC | [#653](https://github.com/multigres/multigres/issues/653) | Nice-to-have; drain state machine covers safety |
 
 ### Operator-Side Future Work
 
-- **Backup health reporting**: The `GetBackups` gRPC RPC exists and can be called to populate `ShardStatus` with backup metadata. Designed but not yet integrated.
 - **Scheduled base backups**: Designed as a controller-timer approach (like CloudNativePG) but deferred per team decision.
-- **DRAINED pod replacement**: The design calls for detecting DRAINED pods via etcd and creating replacements while cleaning up the drained pod. The scale-up logic already handles the "create replacement" part; the detection and cleanup need the data-handler to surface DRAINED status at runtime.
-- **Primary switchover for rolling updates**: Currently, rolling update of the primary defers to the same drain mechanism. A dedicated switchover flow (request switchover → wait for data-handler confirmation → then drain) would be more graceful and is mostly plumbed.
 
 ### Design Constraints (v1alpha1)
 

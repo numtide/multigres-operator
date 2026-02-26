@@ -140,6 +140,84 @@ func TestRecordWebhookRequest(t *testing.T) {
 	}
 }
 
+func TestSetPoolPodsDrifted(t *testing.T) {
+	t.Cleanup(func() { poolPodsDrifted.Reset() })
+
+	SetPoolPodsDrifted("cluster-1", "shard-1", "primary", "zone-a", "default", 3)
+
+	val := gaugeValue(t, poolPodsDrifted, "cluster-1", "shard-1", "primary", "zone-a", "default")
+	if val != 3 {
+		t.Errorf("expected poolPodsDrifted gauge to be 3, got %f", val)
+	}
+
+	SetPoolPodsDrifted("cluster-1", "shard-1", "primary", "zone-a", "default", 0)
+	val = gaugeValue(t, poolPodsDrifted, "cluster-1", "shard-1", "primary", "zone-a", "default")
+	if val != 0 {
+		t.Errorf("expected poolPodsDrifted gauge to be 0, got %f", val)
+	}
+}
+
+func TestSetLastBackupAge(t *testing.T) {
+	t.Cleanup(func() { lastBackupAgeSeconds.Reset() })
+
+	age := 30 * time.Minute
+	SetLastBackupAge("cluster-1", "shard-1", "default", age)
+
+	val := gaugeValue(t, lastBackupAgeSeconds, "cluster-1", "shard-1", "default")
+	if val != age.Seconds() {
+		t.Errorf("expected lastBackupAgeSeconds gauge to be %f, got %f", age.Seconds(), val)
+	}
+}
+
+func TestIncrementDrainOperations(t *testing.T) {
+	t.Cleanup(func() { drainOperationsTotal.Reset() })
+
+	IncrementDrainOperations("cluster-1", "shard-1", "success")
+	IncrementDrainOperations("cluster-1", "shard-1", "success")
+	IncrementDrainOperations("cluster-1", "shard-1", "error")
+
+	successVal := counterValue(t, drainOperationsTotal, "cluster-1", "shard-1", "success")
+	if successVal != 2 {
+		t.Errorf("expected drain success counter=2, got %f", successVal)
+	}
+	errorVal := counterValue(t, drainOperationsTotal, "cluster-1", "shard-1", "error")
+	if errorVal != 1 {
+		t.Errorf("expected drain error counter=1, got %f", errorVal)
+	}
+}
+
+func TestSetRollingUpdateInProgress(t *testing.T) {
+	t.Cleanup(func() { rollingUpdateInProgress.Reset() })
+
+	SetRollingUpdateInProgress("cluster-1", "shard-1", "primary", "zone-a", "default", true)
+	val := gaugeValue(
+		t,
+		rollingUpdateInProgress,
+		"cluster-1",
+		"shard-1",
+		"primary",
+		"zone-a",
+		"default",
+	)
+	if val != 1 {
+		t.Errorf("expected rollingUpdateInProgress=1 when true, got %f", val)
+	}
+
+	SetRollingUpdateInProgress("cluster-1", "shard-1", "primary", "zone-a", "default", false)
+	val = gaugeValue(
+		t,
+		rollingUpdateInProgress,
+		"cluster-1",
+		"shard-1",
+		"primary",
+		"zone-a",
+		"default",
+	)
+	if val != 0 {
+		t.Errorf("expected rollingUpdateInProgress=0 when false, got %f", val)
+	}
+}
+
 // --- helpers ---
 
 func gaugeValue(t *testing.T, vec *prometheus.GaugeVec, labels ...string) float64 {
