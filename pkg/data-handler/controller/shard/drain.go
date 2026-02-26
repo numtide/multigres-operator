@@ -48,7 +48,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	// Node Failure Safety: If the pod is stuck terminating for > 5 minutes, force unregister.
 	if !pod.DeletionTimestamp.IsZero() && time.Since(pod.DeletionTimestamp.Time) > drainTimeout {
 		logger.Info("Pod is stuck terminating, forcing unregistration", "pod", pod.Name)
-		if err := r.forceUnregister(ctx, store, pod); err != nil {
+		if err := r.forceUnregister(ctx, store, shard, pod); err != nil {
 			return false, fmt.Errorf("forcing unregistration: %w", err)
 		}
 		return r.updateDrainState(ctx, pod, metadata.DrainStateReadyForDeletion)
@@ -57,9 +57,17 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	cells := collectCells(shard)
 	cellName := pod.Labels[metadata.LabelMultigresCell]
 
+	opt := &topoclient.GetMultiPoolersByCellOptions{
+		DatabaseShard: &topoclient.DatabaseShard{
+			Database:   string(shard.Spec.DatabaseName),
+			TableGroup: string(shard.Spec.TableGroupName),
+			Shard:      string(shard.Spec.ShardName),
+		},
+	}
+
 	// Find the pooler entry for this pod
 	var myPooler *topoclient.MultiPoolerInfo
-	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, nil)
+	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, opt)
 	if err != nil && !isTopoUnavailable(err) {
 		return false, fmt.Errorf("listing poolers in cell %q: %w", cellName, err)
 	}
@@ -83,7 +91,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			// Best effort: find another pooler to become primary
 			var otherPooler *topoclient.MultiPoolerInfo
 			for _, cell := range cells {
-				pp, _ := store.GetMultiPoolersByCell(ctx, cell, nil)
+				pp, _ := store.GetMultiPoolersByCell(ctx, cell, opt)
 				for _, p := range pp {
 					if p.Type != clustermetadatapb.PoolerType_PRIMARY &&
 						(fmt.Sprintf("%v", p.Id) != pod.Name && p.GetHostname() != pod.Name) {
@@ -160,7 +168,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 		logger.Info("Proceeding to drain pod", "pod", pod.Name)
 
 		// Get the current primary to remove this replica from synchronous standby
-		primary, err := findPrimaryPooler(ctx, store, cells)
+		primary, err := findPrimaryPooler(ctx, store, shard, cells)
 		if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
 			req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
 				Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
@@ -183,7 +191,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	case metadata.DrainStateDraining:
 		// Verify that the standby removal actually took effect by re-attempting the
 		// idempotent REMOVE call on the primary. If the primary is unreachable, requeue.
-		primary, err := findPrimaryPooler(ctx, store, cells)
+		primary, err := findPrimaryPooler(ctx, store, shard, cells)
 		if err != nil {
 			logger.Error(
 				err,
@@ -218,7 +226,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	case metadata.DrainStateAcknowledged:
 		// Finally, call UnregisterMultiPooler
 		if myPooler != nil {
-			if err := r.forceUnregister(ctx, store, pod); err != nil {
+			if err := r.forceUnregister(ctx, store, shard, pod); err != nil {
 				return false, fmt.Errorf("unregistering pooler: %w", err)
 			}
 		}
@@ -250,6 +258,7 @@ func (r *ShardReconciler) updateDrainState(
 func (r *ShardReconciler) forceUnregister(
 	ctx context.Context,
 	store topoclient.Store,
+	shard *multigresv1alpha1.Shard,
 	pod *corev1.Pod,
 ) error {
 	cellName := pod.Labels[metadata.LabelMultigresCell]
@@ -257,7 +266,14 @@ func (r *ShardReconciler) forceUnregister(
 		return nil
 	}
 
-	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, nil)
+	opt := &topoclient.GetMultiPoolersByCellOptions{
+		DatabaseShard: &topoclient.DatabaseShard{
+			Database:   string(shard.Spec.DatabaseName),
+			TableGroup: string(shard.Spec.TableGroupName),
+			Shard:      string(shard.Spec.ShardName),
+		},
+	}
+	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, opt)
 	if err != nil {
 		return err
 	}
