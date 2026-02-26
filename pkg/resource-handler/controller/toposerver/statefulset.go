@@ -22,9 +22,6 @@ const (
 	// DefaultReplicas is the default number of etcd replicas
 	DefaultReplicas int32 = 3
 
-	// DefaultImage is the default etcd container image
-	DefaultImage = "gcr.io/etcd-development/etcd:v3.5.9"
-
 	// DefaultStorageSize is the default storage size for etcd data
 	DefaultStorageSize = "10Gi"
 
@@ -47,7 +44,7 @@ func BuildStatefulSet(
 		replicas = *toposerver.Spec.Etcd.Replicas
 	}
 
-	image := DefaultImage
+	image := multigresv1alpha1.DefaultEtcdImage
 	if toposerver.Spec.Etcd != nil && toposerver.Spec.Etcd.Image != "" {
 		image = string(toposerver.Spec.Etcd.Image)
 	}

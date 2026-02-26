@@ -18,22 +18,22 @@ func (r *Resolver) PopulateClusterDefaults(
 	var decisions []string
 	// 1. Default Images
 	if cluster.Spec.Images.Postgres == "" {
-		cluster.Spec.Images.Postgres = DefaultPostgresImage
+		cluster.Spec.Images.Postgres = multigresv1alpha1.DefaultPostgresImage
 	}
 	if cluster.Spec.Images.MultiAdmin == "" {
-		cluster.Spec.Images.MultiAdmin = DefaultMultiAdminImage
+		cluster.Spec.Images.MultiAdmin = multigresv1alpha1.DefaultMultiAdminImage
 	}
 	if cluster.Spec.Images.MultiAdminWeb == "" {
-		cluster.Spec.Images.MultiAdminWeb = DefaultMultiAdminWebImage
+		cluster.Spec.Images.MultiAdminWeb = multigresv1alpha1.DefaultMultiAdminWebImage
 	}
 	if cluster.Spec.Images.MultiOrch == "" {
-		cluster.Spec.Images.MultiOrch = DefaultMultiOrchImage
+		cluster.Spec.Images.MultiOrch = multigresv1alpha1.DefaultMultiOrchImage
 	}
 	if cluster.Spec.Images.MultiPooler == "" {
-		cluster.Spec.Images.MultiPooler = DefaultMultiPoolerImage
+		cluster.Spec.Images.MultiPooler = multigresv1alpha1.DefaultMultiPoolerImage
 	}
 	if cluster.Spec.Images.MultiGateway == "" {
-		cluster.Spec.Images.MultiGateway = DefaultMultiGatewayImage
+		cluster.Spec.Images.MultiGateway = multigresv1alpha1.DefaultMultiGatewayImage
 	}
 	if cluster.Spec.Images.ImagePullPolicy == "" {
 		cluster.Spec.Images.ImagePullPolicy = DefaultImagePullPolicy

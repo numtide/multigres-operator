@@ -12,18 +12,6 @@ import (
 )
 
 const (
-	// DefaultMultigresImage is the base image for all Multigres components (multipooler, multiorch)
-	// Different components use different subcommands.
-	DefaultMultigresImage = "ghcr.io/multigres/multigres:main"
-
-	// DefaultPgctldImage is the image containing the pgctld binary
-	// Used by buildPgctldInitContainer() for the binary-copy approach
-	DefaultPgctldImage = "ghcr.io/multigres/pgctld:main"
-
-	// DefaultPostgresImage is the default PostgreSQL database container image
-	// Used by buildPostgresContainer() for the original stock postgres:17 approach
-	// NOTE: Currently unused - buildPgctldContainer() uses ghcr.io/multigres/pgctld:main instead
-	DefaultPostgresImage = "postgres:17"
 
 	// PgctldVolumeName is the name of the shared volume for pgctld binary
 	// Used only by alternative approach (binary-copy via init container)
@@ -138,7 +126,7 @@ func buildPostgresContainer(
 	shard *multigresv1alpha1.Shard,
 	pool multigresv1alpha1.PoolSpec,
 ) corev1.Container {
-	image := DefaultPostgresImage
+	image := multigresv1alpha1.DefaultPostgresImage
 	if shard.Spec.Images.Postgres != "" {
 		image = string(shard.Spec.Images.Postgres)
 	}
@@ -216,7 +204,7 @@ func buildPgctldContainer(
 	shard *multigresv1alpha1.Shard,
 	pool multigresv1alpha1.PoolSpec,
 ) corev1.Container {
-	image := DefaultPgctldImage
+	image := multigresv1alpha1.DefaultPostgresImage
 	if shard.Spec.Images.Postgres != "" {
 		image = string(shard.Spec.Images.Postgres)
 	}
@@ -309,7 +297,7 @@ func buildMultiPoolerSidecar(
 	poolName string,
 	cellName string,
 ) corev1.Container {
-	image := DefaultMultigresImage
+	image := multigresv1alpha1.DefaultMultiPoolerImage
 	if shard.Spec.Images.MultiPooler != "" {
 		image = string(shard.Spec.Images.MultiPooler)
 	}
@@ -434,7 +422,7 @@ func buildMultiPoolerSidecar(
 func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 	return corev1.Container{
 		Name:    "pgctld-init",
-		Image:   DefaultPgctldImage,
+		Image:   multigresv1alpha1.DefaultPostgresImage,
 		Command: []string{"/bin/sh", "-c"},
 		Args: []string{
 			"cp /usr/local/bin/pgctld /usr/bin/pgbackrest /shared/",
@@ -450,7 +438,7 @@ func buildPgctldInitContainer(shard *multigresv1alpha1.Shard) corev1.Container {
 
 // buildMultiOrchContainer creates the MultiOrch container spec for a specific cell.
 func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) corev1.Container {
-	image := DefaultMultigresImage
+	image := multigresv1alpha1.DefaultMultiOrchImage
 	if shard.Spec.Images.MultiOrch != "" {
 		image = string(shard.Spec.Images.MultiOrch)
 	}

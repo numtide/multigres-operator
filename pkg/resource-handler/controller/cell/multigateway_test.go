@@ -88,7 +88,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								{
 									Name:  "multigateway",
-									Image: DefaultMultiGatewayImage,
+									Image: multigresv1alpha1.DefaultMultiGatewayImage,
 									Args: []string{
 										"multigateway",
 										"--http-port", "15100",
@@ -216,7 +216,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								{
 									Name:  "multigateway",
-									Image: DefaultMultiGatewayImage,
+									Image: multigresv1alpha1.DefaultMultiGatewayImage,
 									Args: []string{
 										"multigateway",
 										"--http-port", "15100",
@@ -488,7 +488,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								{
 									Name:  "multigateway",
-									Image: DefaultMultiGatewayImage,
+									Image: multigresv1alpha1.DefaultMultiGatewayImage,
 									Args: []string{
 										"multigateway",
 										"--http-port", "15100",
@@ -642,7 +642,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								{
 									Name:  "multigateway",
-									Image: DefaultMultiGatewayImage,
+									Image: multigresv1alpha1.DefaultMultiGatewayImage,
 									Args: []string{
 										"multigateway",
 										"--http-port", "15100",
@@ -779,7 +779,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								{
 									Name:  "multigateway",
-									Image: DefaultMultiGatewayImage,
+									Image: multigresv1alpha1.DefaultMultiGatewayImage,
 									Args: []string{
 										"multigateway",
 										"--http-port", "15100",

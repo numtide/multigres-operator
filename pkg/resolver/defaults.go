@@ -3,6 +3,8 @@ package resolver
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
 const (
@@ -30,29 +32,8 @@ const (
 	// DefaultSystemTableGroupName is the name of the mandatory default table group.
 	DefaultSystemTableGroupName = "default"
 
-	// DefaultPostgresImage is the default container image used for PostgreSQL instances.
-	DefaultPostgresImage = "ghcr.io/multigres/pgctld:main"
-
-	// DefaultEtcdImage is the default container image used for the managed Etcd cluster.
-	DefaultEtcdImage = "gcr.io/etcd-development/etcd:v3.6.7"
-
-	// DefaultMultiAdminImage is the default container image used for the MultiAdmin component.
-	DefaultMultiAdminImage = "ghcr.io/multigres/multigres:main"
-
-	// DefaultMultiAdminWebImage is the default container image used for the MultiAdminWeb component.
-	DefaultMultiAdminWebImage = "ghcr.io/multigres/multiadmin-web:main"
-
 	// DefaultMultiAdminWebReplicas is the default number of replicas for the MultiAdminWeb deployment if not specified.
 	DefaultMultiAdminWebReplicas int32 = 1
-
-	// DefaultMultiOrchImage is the default container image used for the MultiOrch component.
-	DefaultMultiOrchImage = "ghcr.io/multigres/multigres:main"
-
-	// DefaultMultiPoolerImage is the default container image used for the MultiPooler component.
-	DefaultMultiPoolerImage = "ghcr.io/multigres/multigres:main"
-
-	// DefaultMultiGatewayImage is the default container image used for the MultiGateway component.
-	DefaultMultiGatewayImage = "ghcr.io/multigres/multigres:main"
 
 	// DefaultImagePullPolicy is the default image pull policy used for all components if not specified.
 	DefaultImagePullPolicy = corev1.PullIfNotPresent
@@ -65,6 +46,15 @@ const (
 
 	// DefaultBackupStorageSize is the default PVC size for backup storage.
 	DefaultBackupStorageSize = "10Gi"
+
+	// Image defaults re-exported from the canonical source in api/v1alpha1.
+	DefaultPostgresImage      = multigresv1alpha1.DefaultPostgresImage
+	DefaultEtcdImage          = multigresv1alpha1.DefaultEtcdImage
+	DefaultMultiAdminImage    = multigresv1alpha1.DefaultMultiAdminImage
+	DefaultMultiAdminWebImage = multigresv1alpha1.DefaultMultiAdminWebImage
+	DefaultMultiOrchImage     = multigresv1alpha1.DefaultMultiOrchImage
+	DefaultMultiPoolerImage   = multigresv1alpha1.DefaultMultiPoolerImage
+	DefaultMultiGatewayImage  = multigresv1alpha1.DefaultMultiGatewayImage
 )
 
 // DefaultResourcesAdmin returns the default resource requests and limits for the MultiAdmin deployment.

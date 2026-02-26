@@ -27,7 +27,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			poolSpec: multigresv1alpha1.PoolSpec{},
 			want: corev1.Container{
 				Name:    "postgres",
-				Image:   DefaultPostgresImage,
+				Image:   multigresv1alpha1.DefaultPostgresImage,
 				Command: []string{"/usr/local/bin/multigres/pgctld"},
 				Args: []string{
 					"server",
@@ -166,7 +166,7 @@ func TestBuildPostgresContainer(t *testing.T) {
 			},
 			want: corev1.Container{
 				Name:    "postgres",
-				Image:   DefaultPostgresImage,
+				Image:   multigresv1alpha1.DefaultPostgresImage,
 				Command: []string{"/usr/local/bin/multigres/pgctld"},
 				Args: []string{
 					"server",
@@ -268,7 +268,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			cellName: "zone1",
 			want: corev1.Container{
 				Name:  "multipooler",
-				Image: DefaultMultigresImage,
+				Image: multigresv1alpha1.DefaultMultiPoolerImage,
 				Args: []string{
 					"multipooler",
 					"--http-port=15200",
@@ -487,7 +487,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			cellName: "zone1",
 			want: corev1.Container{
 				Name:  "multipooler",
-				Image: DefaultMultigresImage,
+				Image: multigresv1alpha1.DefaultMultiPoolerImage,
 				Args: []string{
 					"multipooler",
 					"--http-port=15200",
@@ -602,7 +602,7 @@ func TestBuildPgctldInitContainer(t *testing.T) {
 			},
 			want: corev1.Container{
 				Name:    "pgctld-init",
-				Image:   DefaultPgctldImage,
+				Image:   multigresv1alpha1.DefaultPostgresImage,
 				Command: []string{"/bin/sh", "-c"},
 				Args: []string{
 					"cp /usr/local/bin/pgctld /usr/bin/pgbackrest /shared/",
@@ -647,7 +647,7 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 			cellName: "zone1",
 			want: corev1.Container{
 				Name:  "multiorch",
-				Image: DefaultMultigresImage,
+				Image: multigresv1alpha1.DefaultMultiOrchImage,
 				Args: []string{
 					"multiorch",
 					"--http-port=15300",
@@ -750,8 +750,8 @@ func TestBuildPgctldContainer(t *testing.T) {
 	t.Run("default image", func(t *testing.T) {
 		shard := &multigresv1alpha1.Shard{Spec: multigresv1alpha1.ShardSpec{}}
 		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
-		if c.Image != DefaultPgctldImage {
-			t.Errorf("Image = %q, want %q", c.Image, DefaultPgctldImage)
+		if c.Image != multigresv1alpha1.DefaultPostgresImage {
+			t.Errorf("Image = %q, want %q", c.Image, multigresv1alpha1.DefaultPostgresImage)
 		}
 		if c.Command[0] != "/usr/local/bin/pgctld" {
 			t.Errorf("Command = %v, want /usr/local/bin/pgctld", c.Command)
