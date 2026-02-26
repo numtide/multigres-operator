@@ -1243,11 +1243,11 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		foundTrue := false
 		for _, cond := range updatedShard.Status.Conditions {
 			if cond.Type == "Available" {
-				if cond.Status != metav1.ConditionTrue {
-					t.Errorf("Condition status = %s, want %s", cond.Status, metav1.ConditionTrue)
+				if cond.Status != metav1.ConditionFalse {
+					t.Errorf("Condition status = %s, want %s", cond.Status, metav1.ConditionFalse)
 				}
-				if cond.Reason != "AllPodsReady" {
-					t.Errorf("Condition reason = %s, want %s", cond.Reason, "AllPodsReady")
+				if cond.Reason != "NotAllPodsReady" {
+					t.Errorf("Condition reason = %s, want %s", cond.Reason, "NotAllPodsReady")
 				}
 				foundTrue = true
 			}
@@ -1255,13 +1255,13 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		if !foundTrue {
 			t.Errorf("Condition %s not found", "Available")
 		}
-		if !updatedShard.Status.PoolsReady {
-			t.Error("PoolsReady should be true when all pools are ready")
+		if updatedShard.Status.PoolsReady {
+			t.Error("PoolsReady should be false when 1/3 pools are ready")
 		}
-		if updatedShard.Status.Phase != multigresv1alpha1.PhaseHealthy {
+		if updatedShard.Status.Phase != multigresv1alpha1.PhaseProgressing {
 			t.Errorf(
 				"Expected Phase to be %s, got %s",
-				multigresv1alpha1.PhaseHealthy,
+				multigresv1alpha1.PhaseProgressing,
 				updatedShard.Status.Phase,
 			)
 		}
@@ -1458,9 +1458,9 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 			t.Fatalf("updatePoolsStatus failed: %v", err)
 		}
 
-		// Verify aggregate: 3 (zone1) + 2 (zone2) = 5
-		if totalPods != 5 {
-			t.Errorf("totalPods = %d, want 5", totalPods)
+		// Verify aggregate: desired for primary is 3 pods per cell * 2 cells = 6 pods
+		if totalPods != 6 {
+			t.Errorf("totalPods = %d, want 6", totalPods)
 		}
 		if readyPods != 5 {
 			t.Errorf("readyPods = %d, want 5", readyPods)
