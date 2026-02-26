@@ -3,6 +3,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/multigres/multigres/go/common/topoclient"
@@ -27,6 +28,7 @@ const (
 // Returns true if reconciliation should be requeued.
 func (r *ShardReconciler) executeDrainStateMachine(
 	ctx context.Context,
+	store topoclient.Store,
 	shard *multigresv1alpha1.Shard,
 	pod *corev1.Pod,
 ) (bool, error) {
@@ -36,12 +38,6 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	if state == "" || state == metadata.DrainStateReadyForDeletion {
 		return false, nil
 	}
-
-	store, err := r.getTopoStore(shard)
-	if err != nil {
-		return false, fmt.Errorf("creating topology store: %w", err)
-	}
-	defer func() { _ = store.Close() }()
 
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 
@@ -73,9 +69,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	}
 
 	for _, p := range poolers {
-		// In multigres, the pooler ID depends on the hostname which is the pod name
-		if fmt.Sprintf("%v", p.Id) == pod.Name ||
-			p.GetHostname() == pod.Name { // Fallback heuristics for matching
+		if podMatchesPooler(pod.Name, p) {
 			myPooler = p
 			break
 		}
@@ -94,7 +88,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 				pp, _ := store.GetMultiPoolersByCell(ctx, cell, opt)
 				for _, p := range pp {
 					if p.Type != clustermetadatapb.PoolerType_PRIMARY &&
-						(fmt.Sprintf("%v", p.Id) != pod.Name && p.GetHostname() != pod.Name) {
+						!podMatchesPooler(pod.Name, p) {
 						otherPooler = p
 						break
 					}
@@ -279,7 +273,7 @@ func (r *ShardReconciler) forceUnregister(
 	}
 
 	for _, p := range poolers {
-		if fmt.Sprintf("%v", p.Id) == pod.Name || p.GetHostname() == pod.Name {
+		if podMatchesPooler(pod.Name, p) {
 			return store.UnregisterMultiPooler(ctx, p.Id)
 		}
 	}
@@ -287,4 +281,13 @@ func (r *ShardReconciler) forceUnregister(
 		Info("No matching pooler found in topology for pod, skipping unregistration",
 			"pod", pod.Name, "cell", cellName)
 	return nil
+}
+
+// podMatchesPooler checks if the topology pooler record corresponds to the given Kubernetes pod name.
+func podMatchesPooler(podName string, p *topoclient.MultiPoolerInfo) bool {
+	if p.Id != nil && p.Id.Name == podName {
+		return true
+	}
+	h := p.GetHostname()
+	return h == podName || strings.HasPrefix(h, podName+".")
 }

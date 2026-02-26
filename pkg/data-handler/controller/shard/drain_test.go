@@ -369,7 +369,7 @@ func TestReplicaDrainFlow(t *testing.T) {
 	}, false)
 
 	// Step 1: Requested -> Draining
-	requeue, err := reconciler.executeDrainStateMachine(ctx, shardObj, pod)
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestReplicaDrainFlow(t *testing.T) {
 	}
 
 	// Step 2: Draining -> Acknowledged
-	_, _ = reconciler.executeDrainStateMachine(ctx, shardObj, pod)
+	_, _ = reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
 	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
 	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateAcknowledged {
 		t.Fatalf(
@@ -396,7 +396,7 @@ func TestReplicaDrainFlow(t *testing.T) {
 	}
 
 	// Step 3: Acknowledged -> ReadyForDeletion
-	_, _ = reconciler.executeDrainStateMachine(ctx, shardObj, pod)
+	_, _ = reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
 	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
 	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateReadyForDeletion {
 		t.Fatalf(
@@ -489,7 +489,7 @@ func TestPrimaryDrainFlow(t *testing.T) {
 		Shard:      "0",
 	}, false)
 
-	requeue, err := reconciler.executeDrainStateMachine(ctx, shardObj, pod)
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -564,7 +564,7 @@ func TestStuckTerminatingPod(t *testing.T) {
 	delTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
 	pod.DeletionTimestamp = &delTime
 
-	_, _ = reconciler.executeDrainStateMachine(ctx, shardObj, pod)
+	_, _ = reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
 	// Recreate a new inspector store to verify unregistration without reuse
 	inspectorStore := topoclient.NewWithFactory(
 		factory,
