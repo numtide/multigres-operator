@@ -197,7 +197,11 @@ func (r *ShardReconciler) executeDrainStateMachine(
 		}
 		if primary != nil && myPooler != nil {
 			if r.rpcClient == nil {
-				logger.Info("RPC client not configured, skipping standby removal verification", "pod", pod.Name)
+				logger.Info(
+					"RPC client not configured, skipping standby removal verification",
+					"pod",
+					pod.Name,
+				)
 			} else {
 				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
 					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,

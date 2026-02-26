@@ -4,16 +4,16 @@ go 1.25.2
 
 require (
 	github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c
-	github.com/numtide/multigres-operator/api v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/cert v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260225213642-5bfde5e48101
-	github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260225213642-5bfde5e48101
+	github.com/numtide/multigres-operator/api v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/cert v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260226143348-0081d89df2c5
+	github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260226143348-0081d89df2c5
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
