@@ -255,7 +255,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			for i := range podList.Items {
 				pod := &podList.Items[i]
 				if pod.Annotations[metadata.AnnotationDrainState] != "" {
-					shouldRequeue, derr := r.executeDrainStateMachine(ctx, shard, pod)
+					shouldRequeue, derr := r.executeDrainStateMachine(ctx, store, shard, pod)
 					if derr != nil {
 						logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
 					}
