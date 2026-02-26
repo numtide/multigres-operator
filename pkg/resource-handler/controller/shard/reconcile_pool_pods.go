@@ -613,16 +613,8 @@ func (r *ShardReconciler) cleanupDrainedPod(
 ) error {
 	logger := log.FromContext(ctx)
 
-	// Remove finalizer to allow Kubernetes to delete the pod
-	if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
-		if err := r.Update(ctx, pod); err != nil {
-			return fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
-		}
-		logger.Info("Removed finalizer from drained pod", "pod", pod.Name)
-		r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Completed drain for pod %s", pod.Name)
-	}
-
-	// Handle PVC deletion based on policy
+	// Handle PVC deletion based on policy FIRST
+	// If this fails, we leave the finalizer so the pod isn't GC'd and we retry later.
 	mergedPolicy := multigresv1alpha1.MergePVCDeletionPolicy(
 		poolSpec.PVCDeletionPolicy,
 		shard.Spec.PVCDeletionPolicy,
@@ -644,10 +636,12 @@ func (r *ShardReconciler) cleanupDrainedPod(
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
+					return fmt.Errorf("failed to fetch PVC %s for deletion: %w", pvcName, err)
 				}
 			} else {
 				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
 					logger.Error(err, "Failed to delete PVC for scaled down pod", "pvc", pvcName)
+					return fmt.Errorf("failed to delete PVC %s: %w", pvcName, err)
 				} else {
 					logger.Info("Deleted PVC for scaled down pod", "pvc", pvcName)
 				}
@@ -655,6 +649,16 @@ func (r *ShardReconciler) cleanupDrainedPod(
 		} else {
 			logger.Info("Retaining PVC for pod during rolling update", "pod", pod.Name, "index", idx, "replicas", replicas)
 		}
+	}
+
+	// Remove finalizer to allow Kubernetes to delete the pod
+	// We only do this after PVC deletion (if applicable) succeeds to prevent PVC leaks.
+	if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
+		if err := r.Update(ctx, pod); err != nil {
+			return fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
+		}
+		logger.Info("Removed finalizer from drained pod", "pod", pod.Name)
+		r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Completed drain for pod %s", pod.Name)
 	}
 
 	return nil
