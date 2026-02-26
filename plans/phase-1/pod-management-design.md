@@ -598,6 +598,8 @@ The operator's `BackupConfig` API (v1alpha1) supports two storage backends:
 -   **Pros**: No shared volume required; works across zones/regions; highly durable; standard production choice.
 -   **Cons**: Requires external service setup (S3 bucket + credentials).
 
+> **Note on the EmptyDir in S3 mode:** When using S3, pgbackrest writes directly to S3 and does not use the `/backups` mount path for its repository. The `EmptyDir` volume mounted at `/backups` is an **unused placeholder**. It exists because `buildSharedBackupVolume()` always returns a volume (PVC for filesystem, EmptyDir for S3) and the container spec always includes the corresponding mount — this keeps the pod spec and spec-hash logic unconditional, avoiding conditional volume mounts and the complexity they would introduce. In the future, we may want to remove the EmptyDir mount entirely for S3 mode to avoid confusion, but the current approach is simpler and has no runtime cost.
+
 ### 10.3 Configuration API
 
 The `MultigresCluster` CRD now includes a `spec.backup` section used to configure the backend:

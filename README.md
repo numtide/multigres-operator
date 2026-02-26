@@ -362,13 +362,17 @@ The `filesystem` backend stores backups on a Persistent Volume Claim (PVC).
 >
 > **Do not use `filesystem` backups for multi-cell clusters** unless you understand that cross-cell failover will result in a split-brain backup state.
 
-**ReadWriteMany (RWX) Requirement:**
-If you have multiple replicas in the same Cell (e.g., `replicasPerCell: 3`), they must all mount the same PVC simultaneously.
-- **Option A (Recommended):** Use a StorageClass that supports `ReadWriteMany` (e.g., NFS, EFS, CephFS).
-- **Option B (Dev/Test):** If using standard block storage (RWO), all replicas must be on the **same node**.
+**ReadWriteMany (RWX) or S3 Required for Multi-Replica Cells:**
+If you have multiple replicas in the same Cell (e.g., `replicasPerCell: 2`), they must all access the same backup repository. Standard block storage (EBS gp2/gp3) uses `ReadWriteOnce` (RWO) and **cannot be attached to multiple nodes simultaneously**.
 
 > [!CAUTION]
-> **Silent HA Loss with RWO:** If your StorageClass uses `WaitForFirstConsumer` binding (standard for EBS/gp2/gp3), Kubernetes will **automatically co-locate all replicas on the same node** to satisfy the RWO constraint. The cluster will appear healthy, but all replicas are on a single node — if that node fails, you lose all replicas simultaneously. Use S3 or RWX storage for production to ensure replicas spread across nodes.
+> **Multi-Attach Failure with RWO Storage:** The operator creates pool pods **sequentially** (one at a time, waiting for readiness). By the time the second pod is created, the shared backup EBS volume is already attached to the first pod's node. The Kubernetes scheduler has no mechanism to detect this active RWO attachment when scheduling the second pod, so it may place it on a different node. The `attachdetach-controller` then fails with a `Multi-Attach error` because EBS volumes physically cannot attach to two nodes. This is a known Kubernetes limitation — the scheduler does not prevent cross-node scheduling of pods referencing an already-bound RWO PVC via `spec.volumes[]`.
+>
+> **Note:** The previous StatefulSet-based architecture (v0.2.6) avoided this because `ParallelPodManagement` submitted all pods to the scheduler simultaneously. With `WaitForFirstConsumer`, the first pod to be processed annotated the unbound PVC with `volume.kubernetes.io/selected-node`, constraining all other pods to the same AZ. If only one node existed per AZ, all pods landed on the same node deterministically — but this was a **silent HA loss**, not a solution.
+
+**For multi-replica cells, use one of these backends:**
+- **S3 (Recommended):** No shared PVC needed — each pod writes to S3 independently via an `EmptyDir` scratch volume.
+- **RWX Storage:** Use a StorageClass that supports `ReadWriteMany` (e.g., NFS, EFS, CephFS) so multiple pods can mount the backup PVC from different nodes.
 
 ```yaml
 spec:
