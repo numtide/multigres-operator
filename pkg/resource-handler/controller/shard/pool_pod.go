@@ -186,6 +186,16 @@ func hashContainers(h hash.Hash32, containers []corev1.Container) {
 		}
 		for _, e := range c.Env {
 			_, _ = fmt.Fprintf(h, "env=%s=%s", e.Name, e.Value)
+			if e.ValueFrom != nil {
+				if b, err := json.Marshal(e.ValueFrom); err == nil {
+					_, _ = fmt.Fprintf(h, "envValFrom=%s=%s", e.Name, b)
+				}
+			}
+		}
+		for _, ef := range c.EnvFrom {
+			if b, err := json.Marshal(ef); err == nil {
+				_, _ = fmt.Fprintf(h, "envFromSrc=%s", b)
+			}
 		}
 		if b, err := json.Marshal(c.Resources); err == nil {
 			_, _ = fmt.Fprintf(h, "res=%s", b)

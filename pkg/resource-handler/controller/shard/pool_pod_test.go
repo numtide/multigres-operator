@@ -301,6 +301,60 @@ func TestComputeSpecHash_ChangesOnDrift(t *testing.T) {
 	}
 }
 
+func TestComputeSpecHash_ChangesOnValueFromDrift(t *testing.T) {
+	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	pod1.Spec.Containers[0].Env = append(pod1.Spec.Containers[0].Env, corev1.EnvVar{
+		Name: "TEST_ENV",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "secret1"},
+				Key:                  "key1",
+			},
+		},
+	})
+
+	pod2, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	pod2.Spec.Containers[0].Env = append(pod2.Spec.Containers[0].Env, corev1.EnvVar{
+		Name: "TEST_ENV",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "secret2"},
+				Key:                  "key1",
+			},
+		},
+	})
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when ValueFrom secret name changes")
+	}
+}
+
+func TestComputeSpecHash_ChangesOnEnvFromDrift(t *testing.T) {
+	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	pod1.Spec.Containers[0].EnvFrom = append(pod1.Spec.Containers[0].EnvFrom, corev1.EnvFromSource{
+		ConfigMapRef: &corev1.ConfigMapEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "config1"},
+		},
+	})
+
+	pod2, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	pod2.Spec.Containers[0].EnvFrom = append(pod2.Spec.Containers[0].EnvFrom, corev1.EnvFromSource{
+		ConfigMapRef: &corev1.ConfigMapEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "config2"},
+		},
+	})
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when EnvFrom config map name changes")
+	}
+}
+
 func TestBuildPoolPodName_Truncation(t *testing.T) {
 	shard := newTestShard()
 	shard.Labels["multigres.com/cluster"] = "very-long-cluster-name-for-testing"
