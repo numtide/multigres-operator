@@ -1,0 +1,78 @@
+name: End-to-end tests
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to check out (defaults to the triggering ref)
+        default: ''
+        required: false
+        type: string
+      timeout-minutes:
+        description: Timeout for the e2e test job
+        default: 30
+        required: false
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: ./go.mod
+          cache: false
+
+      - name: Restore Go build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-e2e-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            go-e2e-${{ runner.os }}-
+
+      - name: Install Kind
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          install_only: true
+
+      - name: Build operator image
+        run: make container
+
+      - name: Run e2e tests
+        run: |
+          OPERATOR_IMG=$(make -s print-img) \
+          REPO_ROOT=$(pwd) \
+          go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
+        env:
+          E2E_KEEP_CLUSTERS: never
+
+      - name: Collect Kind logs on failure
+        if: failure()
+        run: |
+          for cluster in $(kind get clusters 2>/dev/null); do
+            echo "=== Logs for cluster: $cluster ==="
+            kind export logs "/tmp/kind-logs-$cluster" --name "$cluster" 2>/dev/null || true
+          done
+
+      - name: Upload Kind logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6db9b8a1f7c064a9ee161c2842d89 # v4.6.2
+        with:
+          name: kind-logs
+          path: /tmp/kind-logs-*
+          retention-days: 7
+          if-no-files-found: ignore
