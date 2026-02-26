@@ -173,6 +173,8 @@ github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260225213642-5bfde5e
 github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260225213642-5bfde5e48101/go.mod h1:BTV/4f0lUy57zgnDC4eXP18MzPhpy26LStRUjTbA3RI=
 github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260225213642-5bfde5e48101 h1:hQSULSvk0u5FVMlMAp7QHOA6KbuLQm/lUxtMBNlWz9w=
 github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260225213642-5bfde5e48101/go.mod h1:QWY1yhwafEX0M/6s/HqWqtEpGtD7Q4IG7BhKk9jptoY=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260225213642-5bfde5e48101 h1:zh3fYPOB01wneZiHUmXrrzHIvUz6MtN5gisnrMvWY0A=
+github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260225213642-5bfde5e48101/go.mod h1:4lVW+OWvZpUGX63dBfJcuN8swM9g9StPLAZM4Oz3d3A=
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260225213642-5bfde5e48101 h1:74pw9jCmayJW0yxiJm9l5/CVg/A1YnjH8vEh9tvqWeg=
 github.com/numtide/multigres-operator/pkg/util v0.0.0-20260225213642-5bfde5e48101/go.mod h1:PE2JMNyXj81OO/9G3tryC0eoXM661v+acvXMelQ9zSw=
 github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260225213642-5bfde5e48101 h1:lWW+b3mxWB2PYKZf2CXgEHPKq5pWJE64h20ropoarcg=
