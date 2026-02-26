@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload Kind logs on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6db9b8a1f7c064a9ee161c2842d89 # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: kind-logs
           path: /tmp/kind-logs-*
