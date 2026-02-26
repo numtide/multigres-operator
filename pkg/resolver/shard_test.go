@@ -850,6 +850,18 @@ func TestDefaultBackupConfig(t *testing.T) {
 			t.Errorf("Filesystem should be nil for S3 type, got %+v", cfg.Filesystem)
 		}
 	})
+
+	t.Run("sets default type when empty", func(t *testing.T) {
+		t.Parallel()
+		cfg := &multigresv1alpha1.BackupConfig{}
+		defaultBackupConfig(cfg)
+		if cfg.Type != multigresv1alpha1.BackupTypeFilesystem {
+			t.Errorf("Type = %q, want %q", cfg.Type, multigresv1alpha1.BackupTypeFilesystem)
+		}
+		if cfg.Filesystem == nil {
+			t.Fatal("Filesystem = nil, want non-nil")
+		}
+	})
 }
 
 func TestResolveShard_InheritedBackup(t *testing.T) {

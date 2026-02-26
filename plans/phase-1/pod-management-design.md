@@ -1,8 +1,10 @@
 # Pod Management Design: StatefulSet → Direct Pod Management
 
-> **Status**: Approved — Ready for Implementation
+> **Status**: Approved and Implemented
 >
 > **Goal**: Document the design for replacing StatefulSets with direct pod management in the operator, covering pod identity, decommissioning, failure scenarios, and scope limitations.
+>
+> **Implementation reference**: See [pod-management-architecture.md](./pod-management-architecture.md) for the current implementation details.
 
 ---
 
@@ -171,7 +173,7 @@ These constraints are already enforced or need to be enforced via CEL validation
 
 | Constraint | Status | Risk |
 |---|---|---|
-| **Cell rename prevention** | ❌ **No CEL rule exists** | Renaming a cell would create pods with new names while orphaning old ones. The old pods' etcd registrations would become stale. **Action needed: add CEL rule.** |
+| **Cell rename prevention** | ✅ **Implemented** | CEL append-only rule added to `MultigresCluster` and `Shard` CRDs. Cells cannot be removed or renamed after creation. |
 | **Pool replica count floor** | ❌ **Not validated** | User could set `replicasPerCell: 0`, which would delete all pods but leave etcd registrations behind. Consider minimum of 1. |
 
 ### Explicitly NOT Supported (v1alpha1)
@@ -295,6 +297,8 @@ This means:
 
 > [!NOTE]
 > The stale etcd entry problem **already exists today with StatefulSets**. When a user reduces `replicasPerCell` on a pool, the StatefulSet controller deletes the tail pod, but the operator does nothing to clean up that pod's etcd registration. The same 4-hour stale window applies. Moving to direct pod management does not make this worse — it just gives us the opportunity to do better.
+>
+> **Update (post-implementation)**: The drain state machine now calls `UnregisterMultiPooler` during the `ACKNOWLEDGED` state, fully cleaning up etcd entries on scale-down. Stale entries are no longer an issue.
 
 ### Implications for the Operator
 
@@ -471,10 +475,9 @@ Scale-down uses the drain state machine described in [§6](#graceful-scale-down-
 
 1. Operator selects which pod to remove using the pod selection algorithm below
 2. Operator annotates the pod to begin the drain sequence
-3. Drain progresses over multiple reconcile loops: remove from sync standby list → verify → delete
+3. Drain progresses over multiple reconcile loops: remove from sync standby list → verify → unregister from etcd → delete
 4. Operator deletes the PVC (if `PVCDeletionPolicy` says so)
-5. After 4 hours, multiorch's `forgetLongUnseenInstances` cleans its internal store
-6. Etcd topology entry persists (see [§6](#6-pod-lifecycle--decommissioning))
+5. Etcd topology entry is cleaned up during the drain flow (via `UnregisterMultiPooler`)
 
 ### Pod Selection Algorithm
 
@@ -829,8 +832,8 @@ Neither use case is currently automatable through multigres. Future versions cou
 
 | Entity | Risk | Recommendation |
 |---|---|---|
-| **Cell names** | Renaming a cell would orphan pods and their etcd registrations. Old pods would continue running with old names while new pods start with new names. | **Add CEL rule**: cells should be treated as append-only, same as pools. |
-| **Removing cells from a pool** | Same orphaning problem. Old pods in the removed cell continue running. | **Add CEL rule**: cells array should be append-only within each pool. |
+| **Cell names** | ✅ **Implemented** — CEL append-only rule added to `MultigresCluster` and `Shard` CRDs. |
+| **Removing cells from a pool** | ✅ **Implemented** — Covered by the same CEL append-only rule. |
 
 ---
 
@@ -1062,9 +1065,9 @@ Both modes use a unified volume mounting strategy:
 
 ---
 
-### Gap 8: Graceful Decommission RPC
+### Gap 8: Graceful Decommission RPC — Closed
 
-**Status**: GH Issue filed ([multigres/multigres#653](https://github.com/multigres/multigres/issues/653)). Sugu noted in the 2026-02-23 meeting that there is ongoing internal debate in the multigres team about handling this. Additionally, the team discussed that it is acceptable for the operator to read from the topology to determine pod status (like `DRAINED`), provided we track these topology accesses carefully.
+**Status**: GH Issue closed ([multigres/multigres#653](https://github.com/multigres/multigres/issues/653)). The operator's drain state machine now handles all safety-critical decommission steps (sync standby removal, etcd cleanup, PVC deletion). The remaining benefit (graceful connection draining) is marginal — by the time the pod is deleted, it is already unregistered from etcd and `terminationGracePeriodSeconds` (600s) gives in-flight queries time to complete.
 
 **Problem**: Before the operator deletes a pod during scale-down, it would be ideal to tell the multipooler to decommission itself gracefully: drain active connections, remove itself from `synchronous_standby_names`, set type to `DRAINED` in etcd, and then exit cleanly. Currently the operator must do this piecemeal by calling `UpdateSynchronousStandbyList(REMOVE)` on the primary, then deleting the pod.
 
@@ -1109,10 +1112,10 @@ Once multigres exposes PITR via gRPC, the operator could surface it as a `Multig
 | 2 | Scheduled base backups | Operator (using multigres `Backup` RPC) | **High** | Will NOT implement with the operator |
 | 3 | ~~S3 backup support in operator~~ | Operator | ✅ **Done** | Resolved — API, data handler, and resource handler fully wired |
 | 4 | Standby stuck without backup (not surfaced) | Multigres | **Medium** | [Issue #652](https://github.com/multigres/multigres/issues/652) (Upstream observability improvement needed) |
-| 5 | ~~Etcd cleanup on scale-down~~ | Operator (using multigres `UnregisterMultiPooler` API) | ✅ **API Exists** | Resolved — `UnregisterMultiPooler` exists in `CellStore` interface |
-| 6 | Backup health reporting | Operator (calling `multiadmin` `GetBackups` RPC) | **Medium** | ✅ **API Exists** — Resolved without upstream multigres changes |
+| 5 | ~~Etcd cleanup on scale-down~~ | Operator (using multigres `UnregisterMultiPooler` API) | ✅ **Done** | Implemented — drain state machine calls `UnregisterMultiPooler` in `ACKNOWLEDGED` state |
+| 6 | ~~Backup health reporting~~ | Operator (calling `GetBackups` RPC on multipooler) | ✅ **Done** | Implemented — `backup_health.go` calls `GetBackups`, sets `BackupHealthy` condition and metrics |
 | 7 | ~~pgBackRest TLS certificate handling~~ | Operator | ✅ **Done** | Resolved — `pkg/cert` infra, volume builder, and APIReader fully wired |
-| 8 | Graceful decommission RPC | Multigres | Low | [Issue #653](https://github.com/multigres/multigres/issues/653) |
+| 8 | ~~Graceful decommission RPC~~ | Multigres | ✅ **Closed** | [Issue #653](https://github.com/multigres/multigres/issues/653) — operator drain state machine covers all safety-critical steps |
 | 9 | Point-in-Time Recovery | Multigres | Low | Skipped |
 
 > [!NOTE]

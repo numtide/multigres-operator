@@ -1,6 +1,9 @@
 # MultigresCluster API v1alpha1
 
-This is the final design we will be using to implement the operator based on discussions with the Multigres team.
+This is the API design for the Multigres Operator, based on discussions with the Multigres team. The design is approved and implemented — see [pod-management-architecture.md](../pod-management-architecture.md) for operational details.
+
+> [!NOTE]
+> This document is kept as a living reference. Sections are updated as the implementation evolves as a best effort. The Go types in `api/v1alpha1/` are the authoritative source of truth for field names, types, and validation rules. This document provides architectural context and rationale.
 
 ## Summary
 
@@ -52,21 +55,31 @@ The formalized parent/child model addresses these by ensuring:
       │
       ├── 🤖 MultiAdmin Resources ← 📄 Uses [CoreTemplate] OR inline [spec]
       │
-      ├── 💠 [Cell] (Child CR) ← 📄 Uses [CellTemplate] OR inline [spec]
+      ├── 🌐 MultiAdminWeb Resources ← � Uses [CoreTemplate] OR inline [spec]
+      │
+      ├── �💠 [Cell] (Child CR) ← 📄 Uses [CellTemplate] OR inline [spec]
       │    │
-      │    ├── 🚪 MultiGateway Resources
+      │    ├── 🚪 MultiGateway Resources (Deployment + Service)
       │    └── 📡 [LocalTopoServer] (Child CR, optional)
       │
       └── 🗃️ [TableGroup] (Child CR)
            │
            └── 📦 [Shard] (Child CR) ← 📄 Uses [ShardTemplate] OR inline [spec]
                 │
-                ├── 🧠 MultiOrch Resources (Deployment/Pod)
-                └── 🏊 Pools (StatefulSets for Postgres+MultiPooler)
+                ├── 🧠 MultiOrch Resources (Deployment per cell)
+                └── 🏊 Pools (per cell):
+                     ├── Pod-0  ← operator-managed, owns data PVC-0
+                     ├── Pod-1  ← operator-managed, owns data PVC-1
+                     ├── PVC-0, PVC-1  ← operator-managed (data)
+                     ├── PodDisruptionBudget  ← per pool per cell
+                     ├── Headless Service  ← for pod DNS resolution
+                     ├── ConfigMap  ← spec-hash for drift detection
+                     └── Backup PVC (shared, filesystem only)
 
 📄 [CoreTemplate] (User-editable, scoped config)
    ├── globalTopoServer
-   └── multiadmin
+   ├── multiadmin
+   └── multiadminWeb
 
 📄 [CellTemplate] (User-editable, scoped config)
    ├── multigateway
@@ -76,6 +89,9 @@ The formalized parent/child model addresses these by ensuring:
    ├── multiorch
    └── pools (postgres + multipooler)
 ```
+
+> [!IMPORTANT]
+> **Pool pods are managed directly by the operator, not via StatefulSets.** The operator creates Pods and PVCs explicitly, handling sequential provisioning, rolling updates with primary awareness, and a drain state machine for graceful scale-down. See [pod-management-architecture.md](../pod-management-architecture.md) for details.
 
 ## Design Details: API Specification
 
@@ -99,7 +115,7 @@ The formalized parent/child model addresses these by ensuring:
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
-  name: example-cluster
+  name: example-cluster  # max 25 characters (CEL enforced)
   namespace: example
 spec:
   # ----------------------------------------------------------------
@@ -116,6 +132,7 @@ spec:
     multiorch: "multigres/multigres:latest"
     multipooler: "multigres/multigres:latest"
     multiadmin: "multigres/multigres:latest"
+    multiadminWeb: "multigres/multigres:latest"  # MultiAdmin Web UI
     postgres: "postgres:15.3"
 
   # ----------------------------------------------------------------
@@ -192,6 +209,19 @@ spec:
     # --- OPTION 2: Explicit Template Reference ---
     # templateRef: "my-explicit-core-template"
 
+  # MultiAdminWeb is a singleton. It follows the same pattern as MultiAdmin.
+  # It deploys the MultiAdmin Web UI component.
+  # multiadminWeb:
+  #   spec:
+  #     replicas: 1
+  #     resources:
+  #       requests:
+  #         cpu: "100m"
+  #         memory: "128Mi"
+  #       limits:
+  #         cpu: "200m"
+  #         memory: "256Mi"
+
   # ----------------------------------------------------------------
   # Cells Configuration
   # ----------------------------------------------------------------
@@ -250,11 +280,14 @@ spec:
     # bootstrap resources (System Catalog).
     - name: "postgres"
       default: true
+      # backup: override the global backup for this database (optional)
       tablegroups:
         - name: "default"
           default: true
+          # backup: override the database backup for this tablegroup (optional)
+          # pvcDeletionPolicy: override the cluster policy for this tablegroup (optional)
           shards:
-            - name: "0"
+            - name: "0-inf"  # v1alpha1: must be exactly "0-inf" (CEL enforced)
               # define resources for the system default shard
               shardTemplate: "standard-shard-ha"
 
@@ -373,8 +406,58 @@ spec:
                      cells:
                        - "us-east-1c"
 
+  # ----------------------------------------------------------------
+  # PVC Lifecycle Management
+  # ----------------------------------------------------------------
+  # Controls what happens to PVCs when the cluster is deleted or scaled down.
+  # Defaults to Retain/Retain for production safety.
+  pvcDeletionPolicy:
+    whenDeleted: "Retain"  # or "Delete"
+    whenScaled: "Retain"   # or "Delete"
+
+  # ----------------------------------------------------------------
+  # Backup Configuration
+  # ----------------------------------------------------------------
+  # Global backup settings, overridable at database, tablegroup, or shard level.
+  backup:
+    type: "filesystem"  # or "s3"
+    filesystem:
+      path: "/backups"
+      storage:
+        size: "10Gi"
+        class: "standard-rwx"
+    # s3:
+    #   bucket: "my-backups"
+    #   region: "us-east-1"
+    #   endpoint: "http://minio:9000"  # optional, for S3-compatible stores
+    #   keyPrefix: "my-cluster"        # optional
+    #   useEnvCredentials: true         # optional, for IRSA/pod-level creds
+    #   credentialsSecret: "aws-creds" # optional
+    pgbackrestTLS:
+      secretName: ""  # empty = auto-generated by operator; set to use cert-manager
+
+  # ----------------------------------------------------------------
+  # Observability (OpenTelemetry)
+  # ----------------------------------------------------------------
+  # Configures OTEL for data-plane components (multipooler, multiorch, etc.).
+  # When nil, components inherit the operator's own OTEL env vars.
+  # observability:
+  #   otlpEndpoint: "http://otel-collector:4318"  # or "disabled" to turn off
+  #   otlpProtocol: "http/protobuf"  # or "grpc"
+  #   tracesExporter: "otlp"  # otlp, none, console
+  #   metricsExporter: "otlp"
+  #   logsExporter: "otlp"
+  #   metricExportInterval: "30000"  # milliseconds
+  #   metricsTemporality: "cumulative"  # or "delta"
+  #   histogramAggregation: "base2_exponential_bucket_histogram"
+  #   tracesSampler: "parentbased_traceidratio"
+  #   samplingConfigRef:
+  #     name: "otel-sampling-config"  # ConfigMap name
+  #     key: "sampling-config.yaml"
+
 status:
   observedGeneration: 1
+  phase: "Healthy"  # Initializing, Progressing, Healthy, Degraded, Unknown
   conditions:
     - type: Available
       status: "True"
@@ -395,6 +478,11 @@ status:
     production_db:
       readyShards: 3
       totalShards: 3
+  # Tracks which templates were resolved (for template-change enqueuing)
+  resolvedTemplates:
+    coreTemplates: ["cluster-wide-core"]
+    cellTemplates: ["cluster-wide-cell", "standard-cell-ha"]
+    shardTemplates: ["cluster-wide-shard", "standard-shard-ha"]
 ```
 
 ### User Managed CR: CoreTemplate
@@ -513,8 +601,10 @@ spec:
 * When created, templates are not reconciled until referenced by a `MultigresCluster`.
 * Similar to `CellTemplate`, this is a pure configuration object. It defines the "shape" of a shard: its orchestration and its data pools.
 * **`pools` is a MAP, keyed by the pool name:** Using a map structure ensures that overrides are resilient to changes in the underlying template; unlike list arrays where inserting or reordering items shifts indices—potentially causing an override targeting "index 1" to accidentally apply to the wrong pool if the template order changes—keyed maps guarantee that an override for a specific pool (e.g., `main-app`) always targets that exact logical resource, regardless of how other pools are added or organized in the template.
+* **Pools and cells are append-only:** Once a pool or cell is added, it cannot be renamed or removed. This is enforced via CEL rules (`oldSelf.all(k, k in self)`).
 * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty or omitted, it defaults to all cells where pools are defined.
 * **Pool Placement:** `pools` uses a `cells` list. For `readWrite` pools, this list typically contains only a few cells rather than using all available cells. For `readOnly` pools, this list can contain multiple cells to apply the same configuration across multiple zones and regions.
+* **PVC management:** Pool pods are managed directly by the operator (no StatefulSets). PVC lifecycle is controlled by `PVCDeletionPolicy` at the pool, shard, tablegroup, or cluster level.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -576,6 +666,10 @@ spec:
                 operator: In
                 values:
                 - ssd
+      # PVC lifecycle can be controlled per-pool (overrides shard/tablegroup/cluster defaults)
+      # pvcDeletionPolicy:
+      #   whenDeleted: "Delete"
+      #   whenScaled: "Delete"
     dr-replica:
       type: "readOnly"
       # This pool will be deployed to all cells listed here.
@@ -752,7 +846,14 @@ spec:
     registerCell: true
     prunePoolers: true
 
+  # Observability configuration inherited from MultigresCluster
+  # observability:
+  #   otlpEndpoint: "http://otel-collector:4318"
+  #   tracesExporter: "otlp"
+
 status:
+  observedGeneration: 1
+  phase: "Healthy"
   conditions:
   - type: Available
     status: "True"
@@ -919,7 +1020,30 @@ spec:
                   cpu: "2"
                   memory: "1Gi"
 
+  # PVC lifecycle management, inherited from MultigresCluster
+  pvcDeletionPolicy:
+    whenDeleted: "Retain"
+    whenScaled: "Retain"
+
+  # Observability inherited from MultigresCluster
+  # observability:
+  #   otlpEndpoint: "http://otel-collector:4318"
+
+  # Backup config inherited from MultigresCluster -> Database -> TableGroup chain
+  # backup:
+  #   type: "filesystem"
+  #   ...
+
+  # Cell topology labels for nodeSelector injection
+  cellTopologyLabels:
+    us-east-1a:
+      topology.kubernetes.io/zone: "us-east-1a"
+    us-east-1b:
+      topology.kubernetes.io/zone: "us-east-1b"
+
 status:
+  observedGeneration: 1
+  phase: "Healthy"
   readyShards: 3
   totalShards: 3
 ```
@@ -1003,11 +1127,54 @@ spec:
               limits:
                 cpu: "2"
                 memory: "1Gi"
+
+  # PVC lifecycle management, inherited from cluster/tablegroup/shard settings
+  pvcDeletionPolicy:
+    whenDeleted: "Retain"
+    whenScaled: "Retain"
+
+  # Backup configuration, inherited from cluster -> database -> tablegroup chain
+  backup:
+    type: "filesystem"
+    filesystem:
+      path: "/backups"
+      storage:
+        size: "10Gi"
+        class: "standard-rwx"
+    pgbackrestTLS:
+      secretName: ""
+
+  # Observability configuration, inherited from cluster
+  observability:
+    otlpEndpoint: "http://otel-collector:4318"
+    tracesExporter: "otlp"
+    metricsExporter: "otlp"
+
+  # Cell topology labels for nodeSelector injection
+  cellTopologyLabels:
+    us-east-1a:
+      topology.kubernetes.io/zone: "us-east-1a"
+
+  # Total replicas across all pools (for HPA/PDB scale subresource)
+  replicas: 2
+
 status:
+  observedGeneration: 1
+  phase: "Healthy"
+  conditions:
+    - type: Available
+      status: "True"
+      lastTransitionTime: "2025-11-07T12:01:00Z"
   cells:
     - "us-east-1a"
   orchReady: True
   poolsReady: True
+  readyReplicas: 2
+  lastBackupTime: "2025-11-07T06:00:00Z"
+  lastBackupType: "full"
+  podRoles:
+    example-cluster-production-db-orders-tg-0-main-app-us-east-1a-0: "PRIMARY"
+    example-cluster-production-db-orders-tg-0-main-app-us-east-1a-1: "REPLICA"
 ```
 
 ## Defaults & Webhooks
@@ -1055,20 +1222,27 @@ Webhooks are used *only* for fast, synchronous, and semantic validation to preve
 
   * **On `CREATE` and `UPDATE`:**
       * **Template Existence:** Validates that all templates referenced in `spec.templateDefaults` or explicitly in components (Core, Cell, or Shard templates) exist *at the time of application*.
-      * **Component Spec Mutex:** Enforces that `etcd`, `external`, and `templateRef` are mutually exclusive for components like `GlobalTopoServer`.
-      * **Uniqueness:** Validates that all names are unique within their respective scopes:
+      * **Component Spec Mutex:** Enforces that `etcd`, `external`, and `templateRef` are mutually exclusive for components like `GlobalTopoServer` (CEL: exactly one of the three must be set).
+      * **Uniqueness:** Validated via `+listType=map` and `+listMapKey=name` markers, which ensure unique names within their respective scopes:
           * Cell names in `spec.cells`.
           * Database names in `spec.databases`.
           * TableGroup names within a Database.
           * Shard names within a TableGroup.
       * **Topology Integrity:** Verifies that if a Shard is pinned to a specific cell (via overrides), that cell exists in the `spec.cells` list.
-      * **Name Length Safety:** Validates that the combined length of `ClusterName` + `DatabaseName` + `TableGroupName` does not exceed **50 characters**.
-          * *Reasoning:* These names are concatenated to form the TableGroup and Shard names. Kubernetes labels and StatefulSet service names have a strict 63-character limit. Enforcing this limit early prevents downstream deployment failures (e.g., `example-cluster-production-db-orders-tg-0-main-app` must be < 63 chars).
+      * **Name Length Safety:**
+          * `MultigresCluster` name must be ≤ 25 characters (CEL enforced at resource level).
+          * Individual name types have their own limits: `DatabaseName` ≤ 30, `TableGroupName` ≤ 25, `ShardName` ≤ 25, `PoolName` ≤ 25, `CellName` ≤ 30.
+      * **Append-Only Enforcement (CEL Rules):** Several fields use CEL transition rules to prevent potentially destructive removals:
+          * **Cells:** `oldSelf.all(c, c.name in self.map(x, x.name))` — cells cannot be removed or renamed.
+          * **Pool cells:** `oldSelf.all(c, c in self)` — cells cannot be removed from a pool.
+          * **Pool names:** `oldSelf.all(k, k in self)` — pools cannot be removed or renamed.
       * **v1alpha1 Constraints (CEL Rules):** Due to current Multigres Gateway limitations, the following strict validations are applied via CEL:
           * `MaxItems: 1` for `spec.databases`.
           * The single database MUST be named `"postgres"` and marked `default: true`.
           * Any TableGroup marked `default: true` MUST be named `"default"`.
-          * **Mandatory Default TableGroup:** Every defined database must contain exactly one TableGroup marked `default: true`. This prevents users from defining custom tablegroups while forgetting the mandatory "default" catch-all group required by the Gateway.
+          * **Mandatory Default TableGroup:** Every defined database must contain exactly one TableGroup marked `default: true`.
+          * **Shard name:** Must be exactly `"0-inf"` in this version.
+          * **Local TopoServer:** CellInlineSpec blocks `localTopoServer` via CEL (`not yet supported`).
 
 -----
 
@@ -1170,7 +1344,7 @@ spec:
       - name: "default" # Was "tg1"
         default: true   # Added for v1alpha1 validity
         shards:
-          - name: "0"
+          - name: "0-inf"
             # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
             # We still need to override the 'cell' for the main-app pool.
             overrides:
@@ -1178,13 +1352,6 @@ spec:
                 main-app:
                   cells:
                     - "us-east-1a"
-          - name: "1"
-            # 'spec' and 'shardTemplate' are omitted, so "dev-defaults-shard" is used.
-            overrides:
-              pools:
-                main-app:
-                  cells:
-                    - "us-west-2a"
 ```
 
 ### 3\. The Power User (Explicit Overrides)
@@ -1270,7 +1437,7 @@ spec:
         - name: "default" # Was "auth"
           default: true   # Added for v1alpha1 validity
           shards:
-            - name: "0"
+            - name: "0-inf"
               shardTemplate: "geo-distributed-shard"
               overrides:
                 # MAP-BASED OVERRIDE: Safely targeting 'main-app' pool
@@ -1287,13 +1454,6 @@ spec:
                        limits:
                          cpu: "8"
                          memory: "16Gi"
-            - name: "1"
-              shardTemplate: "geo-distributed-shard"
-              overrides:
-                pools:
-                  main-app:
-                    cells:
-                      - "us-west-2a"
 ```
 
 ## Implementation History
@@ -1310,6 +1470,12 @@ spec:
   * **2025-11-18:** Reverted to the 2025-11-11 monolithic `MultigresCluster` design to align with client requirements for Postgres-native "System Catalog" management. The `MultigresDatabase` CRD was rejected. We will instead support the DDL workflow via a synchronization controller that patches the monolithic `MultigresCluster` CR based on the `SystemCatalog` state.
   * **2025-11-25:** Moved `multiorch` and `pool` placement from single `cell` fields to explicit `cells` lists. This supports multi-cell pool definitions (e.g., for uniform read replicas) and decouples MultiOrch placement from pool presence, while maintaining safety via a "defaults to all" logic.
   * **2026-01-02:** Introduced "System Catalog Smart Defaulting" and strict CEL validation for v1alpha1 to align the API with the current single-database routing limitations of the Multigres Gateway.
+  * **2026-01-15:** Added `PVCDeletionPolicy` at cluster, tablegroup, shard, and pool levels with hierarchical merge logic. Added `BackupConfig` type supporting `filesystem` and `s3` backends, with per-database and per-tablegroup overrides. Added `PgBackRestTLSConfig` for pgBackRest inter-node TLS.
+  * **2026-01-20:** Added `ObservabilityConfig` to propagate OpenTelemetry settings from `MultigresCluster` to data-plane Pods. Settings are resolved from operator environment variables by default.
+  * **2026-01-25:** Added `MultiAdminWebConfig` for the MultiAdmin Web UI component. Added `multiadminWeb` image to `ClusterImages`. Added `podAnnotations` and `podLabels` to `StatelessSpec`.
+  * **2026-02-01:** Added CEL rules for append-only cells, pools, and pool-cell lists to prevent accidental destructive operations. Enforced `MultigresCluster` name ≤ 25 chars. Set shard name to `"0-inf"` for v1alpha1.
+  * **2026-02-10:** Added `CellTopologyLabels` to `ShardSpec` to propagate zone/region labels without the shard controller needing to look up Cell CRs directly. Added `ResolvedTemplates` to `MultigresClusterStatus` for efficient template-change triggered reconciliation.
+  * **2026-02-20:** Pool management migrated from StatefulSets to direct operator-managed Pods and PVCs. Added scale subresource to Shard CRD (`.spec.replicas` / `.status.readyReplicas`). Added `PodRoles`, `LastBackupTime`, `LastBackupType` to `ShardStatus`.
 
 ## Drawbacks
 

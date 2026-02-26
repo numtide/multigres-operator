@@ -6,6 +6,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -181,6 +182,31 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 		Build()
 
 	noSCClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardTpl).Build()
+
+	nodeZoneA := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-zone-a",
+			Labels: map[string]string{"topology.kubernetes.io/zone": "us-east-1a"},
+		},
+	}
+	nodeRegionEast := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-region-east",
+			Labels: map[string]string{"topology.kubernetes.io/region": "us-east-1"},
+		},
+	}
+	withZoneAClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardTpl, defaultSC, nodeZoneA).
+		Build()
+	withRegionClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardTpl, defaultSC, nodeRegionEast).
+		Build()
+	noMatchingNodeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardTpl, defaultSC).
+		Build()
 
 	tests := map[string]struct {
 		cluster        *multigresv1alpha1.MultigresCluster
@@ -452,6 +478,119 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 				},
 			},
 			// Uses fakeClient which HAS a default StorageClass
+		},
+		// COVERAGE: validateCellTopology zone/region branches
+		"Cell Zone matches node - no topology warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-a", Zone: "us-east-1a"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			customClient: withZoneAClient,
+		},
+		"Cell Zone no matching node - topology warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-b", Zone: "us-west-2a"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			customClient: noMatchingNodeClient,
+			wantWarnings: []string{
+				"no nodes currently match topology.kubernetes.io/zone=us-west-2a",
+			},
+		},
+		"Cell Region matches node - no topology warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "region-east", Region: "us-east-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			customClient: withRegionClient,
+		},
+		"Cell Region no matching node - topology warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "region-eu", Region: "eu-west-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			customClient: noMatchingNodeClient,
+			wantWarnings: []string{
+				"no nodes currently match topology.kubernetes.io/region=eu-west-1",
+			},
+		},
+		// COVERAGE: filesystem backup AccessModes branch (isRWO=false path)
+		"Filesystem RWX backup suppresses replica warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+							Storage: multigresv1alpha1.StorageSpec{
+								AccessModes: []corev1.PersistentVolumeAccessMode{
+									corev1.ReadWriteMany,
+								},
+							},
+						},
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			// wantWarnings is nil: ReadWriteMany sets isRWO=false, suppressing the replica warning
 		},
 		"SC list error propagated": {
 			cluster: &multigresv1alpha1.MultigresCluster{
