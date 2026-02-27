@@ -631,6 +631,24 @@ func TestS3EnvVars(t *testing.T) {
 		}
 	})
 
+	t.Run("s3 with serviceAccountName only does not inject AWS credential env vars", func(t *testing.T) {
+		got := s3EnvVars(&multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3: &multigresv1alpha1.S3BackupConfig{
+				Bucket:             "b",
+				Region:             "us-east-1",
+				ServiceAccountName: "multigres-backup",
+			},
+		})
+		// Should only have AWS_REGION, no credential env vars
+		if len(got) != 1 {
+			t.Fatalf("s3EnvVars(serviceAccountName-only) returned %d vars, want 1 (AWS_REGION only)", len(got))
+		}
+		assertContainsEnvVar(t, got, "AWS_REGION")
+		assertNotContainsEnvVar(t, got, "AWS_ACCESS_KEY_ID")
+		assertNotContainsEnvVar(t, got, "AWS_SECRET_ACCESS_KEY")
+	})
+
 	t.Run("s3 with no region", func(t *testing.T) {
 		got := s3EnvVars(&multigresv1alpha1.BackupConfig{
 			Type: multigresv1alpha1.BackupTypeS3,

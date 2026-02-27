@@ -258,6 +258,92 @@ func TestBuildPoolPod_Hostname(t *testing.T) {
 	}
 }
 
+func TestBuildPoolPod_ServiceAccountName(t *testing.T) {
+	t.Run("set when S3 serviceAccountName configured", func(t *testing.T) {
+		shard := newTestShard()
+		shard.Spec.Backup = &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3: &multigresv1alpha1.S3BackupConfig{
+				Bucket:             "my-bucket",
+				Region:             "us-east-1",
+				ServiceAccountName: "multigres-backup",
+			},
+		}
+		pod, err := BuildPoolPod(shard, "main", "z1", newTestPoolSpec(), 0, testScheme())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pod.Spec.ServiceAccountName != "multigres-backup" {
+			t.Errorf("ServiceAccountName = %q, want %q", pod.Spec.ServiceAccountName, "multigres-backup")
+		}
+	})
+
+	t.Run("empty when no backup config", func(t *testing.T) {
+		pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pod.Spec.ServiceAccountName != "" {
+			t.Errorf("ServiceAccountName = %q, want empty", pod.Spec.ServiceAccountName)
+		}
+	})
+
+	t.Run("empty when S3 has no serviceAccountName", func(t *testing.T) {
+		shard := newTestShard()
+		shard.Spec.Backup = &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeS3,
+			S3: &multigresv1alpha1.S3BackupConfig{
+				Bucket: "my-bucket",
+				Region: "us-east-1",
+			},
+		}
+		pod, err := BuildPoolPod(shard, "main", "z1", newTestPoolSpec(), 0, testScheme())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pod.Spec.ServiceAccountName != "" {
+			t.Errorf("ServiceAccountName = %q, want empty", pod.Spec.ServiceAccountName)
+		}
+	})
+
+	t.Run("empty when backup is filesystem type", func(t *testing.T) {
+		shard := newTestShard()
+		shard.Spec.Backup = &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+		}
+		pod, err := BuildPoolPod(shard, "main", "z1", newTestPoolSpec(), 0, testScheme())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pod.Spec.ServiceAccountName != "" {
+			t.Errorf("ServiceAccountName = %q, want empty", pod.Spec.ServiceAccountName)
+		}
+	})
+}
+
+func TestComputeSpecHash_ChangesOnServiceAccountName(t *testing.T) {
+	shard := newTestShard()
+	pod1, _ := BuildPoolPod(shard, "main", "z1", newTestPoolSpec(), 0, testScheme())
+
+	shardWithSA := newTestShard()
+	shardWithSA.Spec.Backup = &multigresv1alpha1.BackupConfig{
+		Type: multigresv1alpha1.BackupTypeS3,
+		S3: &multigresv1alpha1.S3BackupConfig{
+			Bucket:             "my-bucket",
+			Region:             "us-east-1",
+			ServiceAccountName: "multigres-backup",
+		},
+	}
+	pod2, _ := BuildPoolPod(shardWithSA, "main", "z1", newTestPoolSpec(), 0, testScheme())
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when ServiceAccountName is added")
+	}
+}
+
 func TestComputeSpecHash_Deterministic(t *testing.T) {
 	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
 	pod2, _ := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())

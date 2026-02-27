@@ -160,6 +160,12 @@ if backup.S3.CredentialsSecret != "" {
 
 **When to use Option C:** When the Secret is only consumed by pods at runtime (credentials, API keys, tokens) and the operator does not need to make decisions based on its contents.
 
+#### IRSA (IAM Roles for Service Accounts): No Secret At All
+
+For EKS environments, the recommended S3 credential mechanism is **IRSA**. The user creates a ServiceAccount annotated with `eks.amazonaws.com/role-arn` and sets `s3.serviceAccountName` in the backup config. The operator sets `pod.spec.serviceAccountName` on pool pods — the EKS pod identity webhook then injects `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, and a projected OIDC token volume automatically. The upstream multipooler detects these env vars and configures pgBackRest with `repo1-s3-key-type=web-id`. The operator does not create the ServiceAccount, manage IAM roles, or inject any env vars for IRSA.
+
+This is the lightest-touch credential option: zero Secrets, zero operator cache interaction, zero env var injection. The `serviceAccountName` field is mutually exclusive with both `credentialsSecret` and `useEnvCredentials` (enforced via CEL validation).
+
 ## Operator Performance Tuning
 
 ### High Concurrency & Throughput

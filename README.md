@@ -338,6 +338,14 @@ S3 (or any S3-compatible object storage) is the **only supported method for mult
 - **Why:** All replicas across all failure domains (zones/regions) can access the same S3 bucket.
 - **Behavior:** The operator configures all pods to read/write to the specified bucket and path.
 
+**S3 Credential Options** (mutually exclusive):
+
+| Option | Field | Description |
+|--------|-------|-------------|
+| **IRSA** (recommended for EKS) | `serviceAccountName` | User creates a ServiceAccount annotated with `eks.amazonaws.com/role-arn`. The EKS pod identity webhook injects OIDC tokens automatically. |
+| **Static credentials** | `credentialsSecret` + `useEnvCredentials: true` | Operator injects `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from a K8s Secret. |
+| **EC2 instance metadata** | *(none)* | Default fallback — uses the node's IAM instance profile. |
+
 ```yaml
 spec:
   backup:
@@ -346,7 +354,17 @@ spec:
       bucket: my-database-backups
       region: us-east-1
       keyPrefix: prod/cluster-1
-      useEnvCredentials: true # Uses AWS_ACCESS_KEY_ID from env
+
+      # Option 1: IRSA (recommended for EKS)
+      # User creates the SA externally with eks.amazonaws.com/role-arn annotation
+      serviceAccountName: "multigres-backup"
+
+      # Option 2: Static credentials from a Secret
+      # (mutually exclusive with serviceAccountName)
+      # credentialsSecret: "my-aws-secret"
+      # useEnvCredentials: true
+
+      # Option 3: EC2 instance metadata (default, no fields needed)
 ```
 
 #### 2. Filesystem (Development / Single-Node Only)

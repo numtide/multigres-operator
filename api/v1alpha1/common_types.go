@@ -164,6 +164,8 @@ type FilesystemBackupConfig struct {
 }
 
 // S3BackupConfig defines S3-compatible backup storage settings.
+// +kubebuilder:validation:XValidation:rule="!(has(self.serviceAccountName) && self.serviceAccountName != '' && has(self.credentialsSecret) && self.credentialsSecret != '')",message="serviceAccountName and credentialsSecret are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.serviceAccountName) && self.serviceAccountName != '' && self.useEnvCredentials)",message="serviceAccountName and useEnvCredentials are mutually exclusive — IRSA credentials are handled automatically"
 type S3BackupConfig struct {
 	Bucket            string `json:"bucket"`
 	Region            string `json:"region"`
@@ -174,6 +176,13 @@ type S3BackupConfig struct {
 	// CredentialsSecret is the name of the Secret containing AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
 	// +optional
 	CredentialsSecret string `json:"credentialsSecret,omitempty"`
+
+	// ServiceAccountName is the name of the ServiceAccount to use for IRSA-based S3 authentication.
+	// The ServiceAccount must exist in the same namespace and be annotated with
+	// eks.amazonaws.com/role-arn pointing to an IAM role with S3 permissions.
+	// The operator does NOT create this ServiceAccount — the user must create it externally.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // PgBackRestTLSConfig configures TLS for pgBackRest inter-node communication.
@@ -340,6 +349,9 @@ func MergeBackupConfig(child, parent *BackupConfig) *BackupConfig {
 			merged.S3.UseEnvCredentials = child.S3.UseEnvCredentials
 			if child.S3.CredentialsSecret != "" {
 				merged.S3.CredentialsSecret = child.S3.CredentialsSecret
+			}
+			if child.S3.ServiceAccountName != "" {
+				merged.S3.ServiceAccountName = child.S3.ServiceAccountName
 			}
 		}
 	}
