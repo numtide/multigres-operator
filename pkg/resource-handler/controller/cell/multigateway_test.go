@@ -714,6 +714,282 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 				},
 			},
 		},
+		"with pod labels and annotations": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-pod-labels",
+					Namespace: "default",
+					UID:       "pod-labels-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-labels",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd",
+					},
+					MultiGateway: multigresv1alpha1.StatelessSpec{
+						PodLabels: map[string]string{
+							"custom-label":   "custom-value",
+							"team":           "platform",
+							"sidecar-inject": "true",
+						},
+						PodAnnotations: map[string]string{
+							"prometheus.io/scrape": "true",
+							"prometheus.io/port":   "15100",
+						},
+					},
+				},
+			},
+			scheme: scheme,
+			want: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-pod-labels-multigateway",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-cluster",
+						"app.kubernetes.io/component":  "multigateway",
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Cell",
+							Name:               "cell-pod-labels",
+							UID:                "pod-labels-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To(DefaultMultiGatewayReplicas),
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app.kubernetes.io/name":       "multigres",
+								"app.kubernetes.io/instance":   "test-cluster",
+								"app.kubernetes.io/component":  "multigateway",
+								"app.kubernetes.io/part-of":    "multigres",
+								"app.kubernetes.io/managed-by": "multigres-operator",
+								"custom-label":                 "custom-value",
+								"team":                         "platform",
+								"sidecar-inject":               "true",
+							},
+							Annotations: map[string]string{
+								"prometheus.io/scrape": "true",
+								"prometheus.io/port":   "15100",
+							},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "multigateway",
+									Image: multigresv1alpha1.DefaultMultiGatewayImage,
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--cell", "zone-labels",
+									},
+									Resources: corev1.ResourceRequirements{},
+									Ports: []corev1.ContainerPort{
+										{
+											Name:          "http",
+											ContainerPort: MultiGatewayHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiGatewayGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres",
+											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
+									LivenessProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/live",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds: 10,
+									},
+									ReadinessProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds: 5,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"pod labels cannot overwrite operator selector labels": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-override-labels",
+					Namespace: "default",
+					UID:       "override-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-override",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd",
+					},
+					MultiGateway: multigresv1alpha1.StatelessSpec{
+						PodLabels: map[string]string{
+							"app.kubernetes.io/component": "hacked",
+							"multigres.com/cell":          "wrong-cell",
+							"safe-label":                  "safe-value",
+						},
+					},
+				},
+			},
+			scheme: scheme,
+			want: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cell-override-labels-multigateway",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "test-cluster",
+						"app.kubernetes.io/component":  "multigateway",
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Cell",
+							Name:               "cell-override-labels",
+							UID:                "override-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To(DefaultMultiGatewayReplicas),
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/instance":  "test-cluster",
+							"app.kubernetes.io/component": "multigateway",
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app.kubernetes.io/name":       "multigres",
+								"app.kubernetes.io/instance":   "test-cluster",
+								"app.kubernetes.io/component":  "multigateway",
+								"app.kubernetes.io/part-of":    "multigres",
+								"app.kubernetes.io/managed-by": "multigres-operator",
+								"safe-label":                   "safe-value",
+							},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{
+									Name:  "multigateway",
+									Image: multigresv1alpha1.DefaultMultiGatewayImage,
+									Args: []string{
+										"multigateway",
+										"--http-port", "15100",
+										"--grpc-port", "15170",
+										"--pg-port", "15432",
+										"--topo-global-server-addresses", "global-topo:2379",
+										"--topo-global-root", "/multigres/global",
+										"--cell", "zone-override",
+									},
+									Resources: corev1.ResourceRequirements{},
+									Ports: []corev1.ContainerPort{
+										{
+											Name:          "http",
+											ContainerPort: MultiGatewayHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "grpc",
+											ContainerPort: MultiGatewayGRPCPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres",
+											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+									},
+									StartupProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds:    5,
+										FailureThreshold: 30,
+									},
+									LivenessProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/live",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds: 10,
+									},
+									ReadinessProbe: &corev1.Probe{
+										ProbeHandler: corev1.ProbeHandler{
+											HTTPGet: &corev1.HTTPGetAction{
+												Path: "/ready",
+												Port: intstr.FromInt32(MultiGatewayHTTPPort),
+											},
+										},
+										PeriodSeconds: 5,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		"with topology labels": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{

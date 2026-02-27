@@ -50,13 +50,15 @@ func BuildMultiOrchDeployment(
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      metadata.MergeLabels(labels, shard.Spec.MultiOrch.PodLabels),
+					Annotations: shard.Spec.MultiOrch.PodAnnotations,
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						buildMultiOrchContainer(shard, cellName),
 					},
 					NodeSelector: shard.Spec.CellTopologyLabels[multigresv1alpha1.CellName(cellName)],
+					Affinity:     shard.Spec.MultiOrch.Affinity,
 				},
 			},
 		},

@@ -324,7 +324,17 @@ func TestReplicaDrainFlow(t *testing.T) {
 		},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary-pod",
+			Namespace: "default",
+			Labels: map[string]string{
+				metadata.LabelMultigresCell: "cell1",
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod, primaryPod).Build()
 	rpcMock := &mockRPCClient{}
 
 	reconciler := &ShardReconciler{
@@ -676,5 +686,162 @@ func TestStuckTerminatingPod(t *testing.T) {
 	poolers, _ := inspectorStore.GetMultiPoolersByCell(ctx, "cell1", nil)
 	if len(poolers) != 0 {
 		t.Fatalf("expected stuck pod to be immediately unregistered")
+	}
+}
+
+func TestIsPrimaryTerminatingOrMissing(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+		},
+	}
+
+	t.Run("returns true for nil primary", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := &ShardReconciler{Client: c}
+		if !r.isPrimaryTerminatingOrMissing(context.Background(), shard, nil) {
+			t.Error("Expected true for nil primary")
+		}
+	})
+
+	t.Run("returns false for primary without drain annotation", func(t *testing.T) {
+		primaryPod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-pod",
+				Namespace: "default",
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(primaryPod).Build()
+		r := &ShardReconciler{Client: c}
+
+		primary := &clustermetadata.MultiPooler{
+			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		}
+		if r.isPrimaryTerminatingOrMissing(context.Background(), shard, primary) {
+			t.Error("Expected false for primary without drain annotation")
+		}
+	})
+
+	t.Run("returns false when primary pod not found", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := &ShardReconciler{Client: c}
+
+		primary := &clustermetadata.MultiPooler{
+			Id: &clustermetadata.ID{Cell: "cell1", Name: "nonexistent-pod"},
+		}
+		if !r.isPrimaryTerminatingOrMissing(context.Background(), shard, primary) {
+			t.Error("Expected true when primary pod not found")
+		}
+	})
+}
+
+func TestReplicaDrain_SkipsRPCWhenPrimaryDraining(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels: map[string]string{
+				metadata.LabelMultigresCluster: "test-cluster",
+			},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:     "test-db",
+			TableGroupName:   "test-tg",
+			ShardName:        "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	// The primary pod has a drain annotation — it's being drained too
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary-pod",
+			Namespace: "default",
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateDraining,
+			},
+		},
+	}
+
+	replicaPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica-pod-0",
+			Namespace: "default",
+			Labels: map[string]string{
+				metadata.LabelMultigresCell: "cell1",
+			},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateRequested,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, primaryPod, replicaPod).Build()
+	rpcMock := &mockRPCClient{}
+
+	reconciler := &ShardReconciler{
+		Client:    c,
+		Scheme:    scheme,
+		Recorder:  record.NewFakeRecorder(10),
+		rpcClient: rpcMock,
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+
+	// Register primary and replica in topo
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:         &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		Hostname:   "primary-pod",
+		Type:       clustermetadata.PoolerType_PRIMARY,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
+	}, false)
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:         &clustermetadata.ID{Cell: "cell1", Name: "replica-pod-0"},
+		Hostname:   "replica-pod-0",
+		Type:       clustermetadata.PoolerType_REPLICA,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
+	}, false)
+
+	// Execute drain for replica while primary is draining
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Error("Expected requeue when primary is draining")
+	}
+
+	// The RPC should NOT have been called because primary is draining
+	if rpcMock.updateStandbyCalled {
+		t.Error("UpdateSynchronousStandbyList should NOT be called when primary is draining")
+	}
+
+	// The drain state should NOT have advanced (still "requested")
+	updatedPod := &corev1.Pod{}
+	_ = c.Get(ctx, client.ObjectKeyFromObject(replicaPod), updatedPod)
+	if updatedPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+		t.Errorf("Expected drain state to remain %q, got %q",
+			metadata.DrainStateRequested,
+			updatedPod.Annotations[metadata.AnnotationDrainState])
 	}
 }

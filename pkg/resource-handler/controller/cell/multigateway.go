@@ -95,7 +95,8 @@ func BuildMultiGatewayDeployment(
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      metadata.MergeLabels(labels, cell.Spec.MultiGateway.PodLabels),
+					Annotations: cell.Spec.MultiGateway.PodAnnotations,
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{

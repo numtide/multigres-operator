@@ -75,6 +75,12 @@ func (r *ShardReconciler) updateStatus(
 		Status: shard.Status,
 	}
 
+	// Exclude fields owned by the data-handler to prevent SSA from overwriting
+	// them with stale cached values from the resource-handler's informer.
+	patchObj.Status.PodRoles = nil
+	patchObj.Status.LastBackupTime = nil
+	patchObj.Status.LastBackupType = ""
+
 	// 2. Apply the Patch
 	if oldPhase != shard.Status.Phase {
 		r.Recorder.Eventf(
@@ -94,7 +100,7 @@ func (r *ShardReconciler) updateStatus(
 		ctx,
 		patchObj,
 		client.Apply,
-		client.FieldOwner("multigres-operator"),
+		client.FieldOwner("multigres-resource-handler"),
 		client.ForceOwnership,
 	); err != nil {
 		return fmt.Errorf("failed to patch status: %w", err)
