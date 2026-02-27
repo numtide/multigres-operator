@@ -244,12 +244,6 @@ func (r *ShardReconciler) Reconcile(
 	return ctrl.Result{}, nil
 }
 
-// deletionDrainTimeout is the maximum time to wait for a pod's drain state machine
-// to complete during shard deletion before force-removing the finalizer.
-// Kept deliberately short (30s): if the data-handler hasn't progressed the drain by
-// then, the topo server is likely unavailable (e.g., being deleted alongside the cluster).
-const deletionDrainTimeout = 90 * time.Second
-
 // handleDeletion ensures all child resources (Pods) go through the drain state machine
 // to unregister from etcd before their finalizers are removed. Pods that were never
 // scheduled or whose drain times out get their finalizers removed directly.
@@ -377,7 +371,11 @@ func (r *ShardReconciler) handleDeletion(
 		pod := &podList.Items[i]
 		if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
 			if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to remove finalizer from pod %s: %w",
+					pod.Name,
+					err,
+				)
 			}
 			logger.Info("Removed finalizer from pod during shard deletion", "pod", pod.Name)
 		}
@@ -398,41 +396,6 @@ func (r *ShardReconciler) handleDeletion(
 
 	logger.Info("Shard cleanup complete, finalizer removed")
 	return ctrl.Result{}, nil
-}
-
-// isPodScheduled returns true if the pod has been scheduled to a node.
-func isPodScheduled(pod *corev1.Pod) bool {
-	for _, cond := range pod.Status.Conditions {
-		if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-	return false
-}
-
-// isPodInitialized returns true if all init containers have completed successfully.
-// A pod that hasn't been initialized never ran its main containers and therefore
-// could not have registered with etcd — making drain unnecessary.
-func isPodInitialized(pod *corev1.Pod) bool {
-	for _, cond := range pod.Status.Conditions {
-		if cond.Type == corev1.PodInitialized && cond.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-	return false
-}
-
-// drainTimedOut returns true if the drain was requested more than deletionDrainTimeout ago.
-func drainTimedOut(pod *corev1.Pod) bool {
-	requestedAt := pod.Annotations[metadata.AnnotationDrainRequestedAt]
-	if requestedAt == "" {
-		return false
-	}
-	t, err := time.Parse(time.RFC3339, requestedAt)
-	if err != nil {
-		return false
-	}
-	return time.Since(t) > deletionDrainTimeout
 }
 
 // reconcilePool creates or updates the Pods, PVCs and headless Service for a pool.

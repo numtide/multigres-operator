@@ -136,12 +136,12 @@ spec:
                     - message: serviceAccountName and credentialsSecret are mutually
                         exclusive
                       rule: '!(has(self.serviceAccountName) && self.serviceAccountName
-                        != '''' && has(self.credentialsSecret) && self.credentialsSecret
-                        != '''')'
+                        != ” && has(self.credentialsSecret) && self.credentialsSecret
+                        != ”)'
                     - message: serviceAccountName and useEnvCredentials are mutually
                         exclusive — IRSA credentials are handled automatically
                       rule: '!(has(self.serviceAccountName) && self.serviceAccountName
-                        != '''' && self.useEnvCredentials)'
+                        != ” && self.useEnvCredentials)'
                   type:
                     description: Type is the backup storage backend (filesystem or
                       s3).

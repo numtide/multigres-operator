@@ -470,7 +470,9 @@ func (r *Resolver) ValidateClusterLogic(
 							"pool '%s' in shard '%s' has replicasPerCell=%d; readWrite pools need at least 3 "+
 								"for zero-downtime rolling upgrades (ANY_2 durability requires 1 primary + 2 standbys "+
 								"to maintain quorum while draining a replica)",
-							poolName, shard.Name, replicas,
+							poolName,
+							shard.Name,
+							replicas,
 						))
 					}
 				}
