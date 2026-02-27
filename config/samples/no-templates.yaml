@@ -81,7 +81,7 @@ spec:
                     type: "readWrite"
                     cells:
                       - "z1"
-                    replicasPerCell: 2
+                    replicasPerCell: 3
                     storage:
                       # class: "standard"
                       size: "100Gi"

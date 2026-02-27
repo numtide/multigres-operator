@@ -568,6 +568,12 @@ func (r *ShardReconciler) getTopoStore(shard *multigresv1alpha1.Shard) (topoclie
 	return defaultCreateTopoStore(shard)
 }
 
+// SetRPCClient sets the gRPC client used for pooler management operations
+// such as failover promotion and standby list updates during drain.
+func (r *ShardReconciler) SetRPCClient(c rpcclient.MultiPoolerClient) {
+	r.rpcClient = c
+}
+
 // SetCreateTopoStore sets a custom topology store creation function for testing.
 func (r *ShardReconciler) SetCreateTopoStore(
 	f func(*multigresv1alpha1.Shard) (topoclient.Store, error),

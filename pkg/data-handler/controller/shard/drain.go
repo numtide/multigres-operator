@@ -75,146 +75,60 @@ func (r *ShardReconciler) executeDrainStateMachine(
 		}
 	}
 
+	isPrimary := myPooler != nil && myPooler.Type == clustermetadatapb.PoolerType_PRIMARY
+
 	// We only want to handle valid states
 	switch state {
 	case metadata.DrainStateRequested:
-		if myPooler != nil && myPooler.Type == clustermetadatapb.PoolerType_PRIMARY {
-			// It is a primary. We need to initiate a failover first.
-			logger.Info("Pod is PRIMARY, triggering failover", "pod", pod.Name)
-
-			// Best effort: find another pooler to become primary
-			var otherPooler *topoclient.MultiPoolerInfo
-			for _, cell := range cells {
-				pp, _ := store.GetMultiPoolersByCell(ctx, cell, opt)
-				for _, p := range pp {
-					if p.Type != clustermetadatapb.PoolerType_PRIMARY &&
-						!podMatchesPooler(pod.Name, p) {
-						otherPooler = p
-						break
-					}
-				}
-				if otherPooler != nil {
-					break
-				}
-			}
-
-			if otherPooler != nil {
-				if r.rpcClient == nil {
-					logger.Info(
-						"RPC client not configured, cannot trigger failover",
-						"pod",
-						pod.Name,
-					)
-					return true, nil
-				}
-				_, err = r.rpcClient.Promote(
-					ctx,
-					otherPooler.MultiPooler,
-					&multipoolermanagerdatapb.PromoteRequest{},
-				)
-				if err != nil {
-					logger.Error(
-						err,
-						"Failed to appoint new leader",
-						"newPrimary",
-						otherPooler.GetHostname(),
-					)
-					return true, nil // Requeue and try again
-				}
-				r.Recorder.Eventf(
-					shard,
-					"Warning",
-					"FailoverInitiated",
-					"Initiated failover from %s to %s",
-					pod.Name,
-					otherPooler.GetHostname(),
-				)
-			} else {
-				// No replicas available — check if we've exceeded the drain timeout.
-				if reqAt, ok := pod.Annotations[metadata.AnnotationDrainRequestedAt]; ok {
-					if t, parseErr := time.Parse(
-						time.RFC3339,
-						reqAt,
-					); parseErr == nil &&
-						time.Since(t) > drainTimeout {
-						r.Recorder.Eventf(
-							shard,
-							"Warning",
-							"FailoverTimeout",
-							"Cannot failover PRIMARY pod %s: no eligible replicas found after %s",
-							pod.Name,
-							drainTimeout,
-						)
-						monitoring.IncrementDrainOperations(clusterName, shard.Name, "failure")
-						return false, fmt.Errorf(
-							"failover timeout: no replicas available for PRIMARY pod %s after %s",
-							pod.Name,
-							drainTimeout,
-						)
-					}
-				}
-				logger.Info("No replicas available for failover, will retry", "pod", pod.Name)
-			}
-			return true, nil // Requeue until it becomes a replica
-		}
-
-		// Proceed to draining (call UpdateSynchronousStandbyList REMOVE on primary)
-		logger.Info("Proceeding to drain pod", "pod", pod.Name)
-
-		// Get the current primary to remove this replica from synchronous standby
-		primary, err := findPrimaryPooler(ctx, store, shard, cells)
-		if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
-			req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
-				Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
-				StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
-			}
-			_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
-			if rpcErr != nil {
-				logger.Error(
-					rpcErr,
-					"Failed to remove pod from synchronous standby list",
-					"pod",
-					pod.Name,
-				)
-				return true, nil
-			}
-		}
-
-		return r.updateDrainState(ctx, pod, metadata.DrainStateDraining)
-
-	case metadata.DrainStateDraining:
-		// Verify that the standby removal actually took effect by re-attempting the
-		// idempotent REMOVE call on the primary. If the primary is unreachable, requeue.
-		primary, err := findPrimaryPooler(ctx, store, shard, cells)
-		if err != nil {
-			logger.Error(
-				err,
-				"Failed to find primary for drain verification, will retry",
-				"pod",
+		if isPrimary {
+			// Failover is multiorch's responsibility via its consensus protocol
+			// (BeginTerm + Promote). The operator proceeds with the drain and
+			// multiorch will elect a new leader once this pod is removed.
+			logger.Info("Draining PRIMARY pod, multiorch will handle failover", "pod", pod.Name)
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"PrimaryDrain",
+				"Draining PRIMARY pod %s; multiorch will elect a new leader",
 				pod.Name,
 			)
-			return true, nil
-		}
-		if primary != nil && myPooler != nil {
-			if r.rpcClient == nil {
-				logger.Info(
-					"RPC client not configured, skipping standby removal verification",
-					"pod",
-					pod.Name,
-				)
-			} else {
+		} else {
+			// Remove this replica from the synchronous standby list on the primary
+			// so that quorum calculations no longer include it.
+			logger.Info("Proceeding to drain replica pod", "pod", pod.Name)
+			primary, err := findPrimaryPooler(ctx, store, shard, cells)
+			if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
 				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
 					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
 					StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
 				}
 				_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 				if rpcErr != nil {
-					logger.Error(
-						rpcErr,
-						"Standby removal verification failed, will retry",
-						"pod",
-						pod.Name,
-					)
+					logger.Error(rpcErr, "Failed to remove pod from synchronous standby list", "pod", pod.Name)
+					return true, nil
+				}
+			}
+		}
+
+		return r.updateDrainState(ctx, pod, metadata.DrainStateDraining)
+
+	case metadata.DrainStateDraining:
+		if !isPrimary {
+			// Verify that the standby removal actually took effect by re-attempting
+			// the idempotent REMOVE call on the primary.
+			primary, err := findPrimaryPooler(ctx, store, shard, cells)
+			if err != nil {
+				logger.Error(err, "Failed to find primary for drain verification, will retry", "pod", pod.Name)
+				return true, nil
+			}
+			if primary != nil && myPooler != nil && r.rpcClient != nil {
+				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
+					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
+					StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
+				}
+				_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
+				if rpcErr != nil {
+					logger.Error(rpcErr, "Standby removal verification failed, will retry", "pod", pod.Name)
 					return true, nil
 				}
 			}
