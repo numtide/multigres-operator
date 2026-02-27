@@ -186,6 +186,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 		store, err := r.getTopoStore(shard)
 		if err == nil {
+			statusBase := shard.DeepCopy()
 			if shard.Status.PodRoles == nil {
 				shard.Status.PodRoles = make(map[string]string)
 			}
@@ -240,14 +241,8 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			}
 
 			if rolesChanged {
-				if err := r.Status().Update(ctx, shard); err != nil {
-					if apierrors.IsConflict(err) {
-						logger.V(1).Info("Conflict updating shard pod roles, retrying")
-						childSpan.End()
-						return ctrl.Result{Requeue: true}, nil
-					}
+				if err := r.Status().Patch(ctx, shard, client.MergeFrom(statusBase)); err != nil {
 					logger.Error(err, "Failed to update shard pod roles")
-					// continue, non-fatal for drain
 				}
 			}
 
@@ -296,6 +291,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				err,
 			)
 		} else if result != nil {
+			backupBase := shard.DeepCopy()
 			prevHealthy := isConditionTrue(shard.Status.Conditions, conditionBackupHealthy)
 			applyBackupHealth(shard, result)
 
@@ -306,7 +302,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				r.Recorder.Eventf(shard, "Warning", "BackupStale", result.Message)
 			}
 
-			if err := r.Status().Update(ctx, shard); err != nil {
+			if err := r.Status().Patch(ctx, shard, client.MergeFrom(backupBase)); err != nil {
 				monitoring.RecordSpanError(childSpan, err)
 				childSpan.End()
 				logger.Error(err, "Failed to update shard backup status")
