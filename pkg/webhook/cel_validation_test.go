@@ -653,6 +653,112 @@ func TestCEL_ExtendedValidation(t *testing.T) {
 	}
 }
 
+func TestCEL_S3ServiceAccountName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		shard       client.Object
+		expectError string
+		shouldPass  bool
+	}{
+		{
+			name: "Rejected: serviceAccountName with credentialsSecret",
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "cel-s3-sa-creds-conflict", Namespace: testNamespace},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName: "postgres", TableGroupName: "default", ShardName: "0",
+					Images:           multigresv1alpha1.ShardImages{Postgres: "p", MultiOrch: "o", MultiPooler: "po"},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{Address: "etcd", RootPath: "/", Implementation: "etcd"},
+					MultiOrch:        multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"rw": {Type: "readWrite", Cells: []multigresv1alpha1.CellName{"cell-1"}, ReplicasPerCell: ptr.To(int32(1))},
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeS3,
+						S3: &multigresv1alpha1.S3BackupConfig{
+							Bucket:             "my-bucket",
+							Region:             "us-east-1",
+							ServiceAccountName: "multigres-backup",
+							CredentialsSecret:  "aws-creds",
+						},
+					},
+				},
+			},
+			expectError: "serviceAccountName and credentialsSecret are mutually exclusive",
+		},
+		{
+			name: "Rejected: serviceAccountName with useEnvCredentials",
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "cel-s3-sa-envcreds-conflict", Namespace: testNamespace},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName: "postgres", TableGroupName: "default", ShardName: "0",
+					Images:           multigresv1alpha1.ShardImages{Postgres: "p", MultiOrch: "o", MultiPooler: "po"},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{Address: "etcd", RootPath: "/", Implementation: "etcd"},
+					MultiOrch:        multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"rw": {Type: "readWrite", Cells: []multigresv1alpha1.CellName{"cell-1"}, ReplicasPerCell: ptr.To(int32(1))},
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeS3,
+						S3: &multigresv1alpha1.S3BackupConfig{
+							Bucket:             "my-bucket",
+							Region:             "us-east-1",
+							ServiceAccountName: "multigres-backup",
+							UseEnvCredentials:  true,
+						},
+					},
+				},
+			},
+			expectError: "serviceAccountName and useEnvCredentials are mutually exclusive",
+		},
+		{
+			name: "Accepted: serviceAccountName alone",
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "cel-s3-sa-only", Namespace: testNamespace},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName: "postgres", TableGroupName: "default", ShardName: "0",
+					Images:           multigresv1alpha1.ShardImages{Postgres: "p", MultiOrch: "o", MultiPooler: "po"},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{Address: "etcd", RootPath: "/", Implementation: "etcd"},
+					MultiOrch:        multigresv1alpha1.MultiOrchSpec{StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))}},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"rw": {Type: "readWrite", Cells: []multigresv1alpha1.CellName{"cell-1"}, ReplicasPerCell: ptr.To(int32(1))},
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeS3,
+						S3: &multigresv1alpha1.S3BackupConfig{
+							Bucket:             "my-bucket",
+							Region:             "us-east-1",
+							ServiceAccountName: "multigres-backup",
+						},
+					},
+				},
+			},
+			shouldPass: true,
+		},
+	}
+
+	privClient := getPrivilegedClient(t)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := privClient.Create(ctx, tc.shard)
+			if tc.shouldPass {
+				if err != nil {
+					t.Fatalf("Expected success, got error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Expected error, got nil")
+			}
+			if tc.expectError != "" && !strings.Contains(err.Error(), tc.expectError) {
+				t.Logf("ACTUAL ERROR: %v", err)
+				t.Errorf("Expected error message to contain %q, got %q", tc.expectError, err.Error())
+			}
+		})
+	}
+}
+
 func TestCEL_StatelessReplicasLimit(t *testing.T) {
 	t.Parallel()
 

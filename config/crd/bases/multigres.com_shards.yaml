@@ -119,12 +119,29 @@ spec:
                         type: string
                       region:
                         type: string
+                      serviceAccountName:
+                        description: |-
+                          ServiceAccountName is the name of the ServiceAccount to use for IRSA-based S3 authentication.
+                          The ServiceAccount must exist in the same namespace and be annotated with
+                          eks.amazonaws.com/role-arn pointing to an IAM role with S3 permissions.
+                          The operator does NOT create this ServiceAccount — the user must create it externally.
+                        type: string
                       useEnvCredentials:
                         type: boolean
                     required:
                     - bucket
                     - region
                     type: object
+                    x-kubernetes-validations:
+                    - message: serviceAccountName and credentialsSecret are mutually
+                        exclusive
+                      rule: '!(has(self.serviceAccountName) && self.serviceAccountName
+                        != '''' && has(self.credentialsSecret) && self.credentialsSecret
+                        != '''')'
+                    - message: serviceAccountName and useEnvCredentials are mutually
+                        exclusive — IRSA credentials are handled automatically
+                      rule: '!(has(self.serviceAccountName) && self.serviceAccountName
+                        != '''' && self.useEnvCredentials)'
                   type:
                     description: Type is the backup storage backend (filesystem or
                       s3).

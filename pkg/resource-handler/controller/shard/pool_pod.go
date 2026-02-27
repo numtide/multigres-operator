@@ -110,6 +110,12 @@ func BuildPoolPod(
 		},
 	}
 
+	if shard.Spec.Backup != nil &&
+		shard.Spec.Backup.S3 != nil &&
+		shard.Spec.Backup.S3.ServiceAccountName != "" {
+		pod.Spec.ServiceAccountName = shard.Spec.Backup.S3.ServiceAccountName
+	}
+
 	pod.Annotations[metadata.AnnotationSpecHash] = ComputeSpecHash(pod)
 
 	if err := ctrl.SetControllerReference(shard, pod, scheme); err != nil {
@@ -169,6 +175,10 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 	if spec.TerminationGracePeriodSeconds != nil {
 		_, _ = fmt.Fprintf(h, "tgp=%d", *spec.TerminationGracePeriodSeconds)
+	}
+
+	if spec.ServiceAccountName != "" {
+		_, _ = fmt.Fprintf(h, "sa=%s", spec.ServiceAccountName)
 	}
 
 	return hex.EncodeToString(h.Sum(nil))

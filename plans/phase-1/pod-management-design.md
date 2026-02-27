@@ -594,7 +594,7 @@ The operator's `BackupConfig` API (v1alpha1) supports two storage backends:
 
 #### B. S3 (Object Storage)
 -   **Mechanism**: All pods connect directly to an S3 bucket. The backup volume uses `EmptyDir` instead of a PVC.
--   **Requirement**: AWS credentials via `credentialsSecret` (K8s Secret with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) or `useEnvCredentials` (for IRSA/pod-level creds). Requires internet/VPC connectivity to S3.
+-   **Requirement**: AWS credentials via one of three mutually exclusive methods: `serviceAccountName` (IRSA — recommended for EKS), `credentialsSecret` (K8s Secret with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`), or EC2 instance metadata (default). Requires internet/VPC connectivity to S3.
 -   **Pros**: No shared volume required; works across zones/regions; highly durable; standard production choice.
 -   **Cons**: Requires external service setup (S3 bucket + credentials).
 
@@ -618,8 +618,9 @@ spec:
       region: "us-east-1"
       endpoint: "http://minio:9000"  # optional, for S3-compatible stores
       keyPrefix: "my-cluster"        # optional
-      useEnvCredentials: true         # optional, for IRSA/pod-level creds
+      useEnvCredentials: true         # optional, for static creds from credentialsSecret
       credentialsSecret: "aws-creds" # optional, K8s Secret with AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+      serviceAccountName: "multigres-backup" # optional, for IRSA-based auth (mutually exclusive with credentialsSecret/useEnvCredentials)
 ```
 
 This configuration is propagated to:
