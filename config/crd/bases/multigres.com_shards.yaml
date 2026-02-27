@@ -135,13 +135,13 @@ spec:
                     x-kubernetes-validations:
                     - message: serviceAccountName and credentialsSecret are mutually
                         exclusive
-                      rule: '!(has(self.serviceAccountName) && self.serviceAccountName
-                        != ” && has(self.credentialsSecret) && self.credentialsSecret
-                        != ”)'
+                      rule: '!(has(self.serviceAccountName) && size(self.serviceAccountName)
+                        > 0 && has(self.credentialsSecret) && size(self.credentialsSecret)
+                        > 0)'
                     - message: serviceAccountName and useEnvCredentials are mutually
                         exclusive — IRSA credentials are handled automatically
-                      rule: '!(has(self.serviceAccountName) && self.serviceAccountName
-                        != ” && self.useEnvCredentials)'
+                      rule: '!(has(self.serviceAccountName) && size(self.serviceAccountName)
+                        > 0 && has(self.useEnvCredentials) && self.useEnvCredentials)'
                   type:
                     description: Type is the backup storage backend (filesystem or
                       s3).
