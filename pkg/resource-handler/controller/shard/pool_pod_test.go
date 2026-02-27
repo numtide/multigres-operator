@@ -274,7 +274,11 @@ func TestBuildPoolPod_ServiceAccountName(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if pod.Spec.ServiceAccountName != "multigres-backup" {
-			t.Errorf("ServiceAccountName = %q, want %q", pod.Spec.ServiceAccountName, "multigres-backup")
+			t.Errorf(
+				"ServiceAccountName = %q, want %q",
+				pod.Spec.ServiceAccountName,
+				"multigres-backup",
+			)
 		}
 	})
 

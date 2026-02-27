@@ -788,7 +788,10 @@ func TestReplicaDrain_SkipsRPCWhenPrimaryDraining(t *testing.T) {
 		},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, primaryPod, replicaPod).Build()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardObj, primaryPod, replicaPod).
+		Build()
 	rpcMock := &mockRPCClient{}
 
 	reconciler := &ShardReconciler{

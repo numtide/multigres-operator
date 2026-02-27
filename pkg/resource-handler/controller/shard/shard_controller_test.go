@@ -1986,12 +1986,18 @@ func TestHandleDeletion(t *testing.T) {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
 		if result.RequeueAfter != 0 {
-			t.Error("Expected no requeue — finalizer should be removed directly during shard deletion")
+			t.Error(
+				"Expected no requeue — finalizer should be removed directly during shard deletion",
+			)
 		}
 
 		// Pod should be fully deleted (finalizer removed + Delete called)
 		updatedPod := &corev1.Pod{}
-		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-0", Namespace: "default"}, updatedPod)
+		err = c.Get(
+			context.Background(),
+			types.NamespacedName{Name: "pod-0", Namespace: "default"},
+			updatedPod,
+		)
 		if err == nil {
 			for _, f := range updatedPod.Finalizers {
 				if f == PoolPodFinalizer {
@@ -2030,7 +2036,11 @@ func TestHandleDeletion(t *testing.T) {
 
 		// Pod should be fully deleted (finalizer removed + Delete called → fake client removes it)
 		updatedPod := &corev1.Pod{}
-		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-unsched", Namespace: "default"}, updatedPod)
+		err = c.Get(
+			context.Background(),
+			types.NamespacedName{Name: "pod-unsched", Namespace: "default"},
+			updatedPod,
+		)
 		if err == nil {
 			for _, f := range updatedPod.Finalizers {
 				if f == PoolPodFinalizer {
@@ -2069,7 +2079,11 @@ func TestHandleDeletion(t *testing.T) {
 
 		// Pod should be fully deleted
 		updatedPod := &corev1.Pod{}
-		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-rfd", Namespace: "default"}, updatedPod)
+		err = c.Get(
+			context.Background(),
+			types.NamespacedName{Name: "pod-rfd", Namespace: "default"},
+			updatedPod,
+		)
 		if err == nil {
 			for _, f := range updatedPod.Finalizers {
 				if f == PoolPodFinalizer {
@@ -2104,12 +2118,18 @@ func TestHandleDeletion(t *testing.T) {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
 		if result.RequeueAfter != 0 {
-			t.Error("Expected no requeue — finalizer should be removed directly during shard deletion")
+			t.Error(
+				"Expected no requeue — finalizer should be removed directly during shard deletion",
+			)
 		}
 
 		// Pod should be fully deleted (finalizer removed directly, no drain wait)
 		updatedPod := &corev1.Pod{}
-		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-draining", Namespace: "default"}, updatedPod)
+		err = c.Get(
+			context.Background(),
+			types.NamespacedName{Name: "pod-draining", Namespace: "default"},
+			updatedPod,
+		)
 		if err == nil {
 			for _, f := range updatedPod.Finalizers {
 				if f == PoolPodFinalizer {
@@ -2124,7 +2144,10 @@ func TestHandleDeletion(t *testing.T) {
 		t.Parallel()
 
 		pod := makePod("pod-timeout", true, metadata.DrainStateDraining, true)
-		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().
+			Add(-2 * time.Hour).
+			UTC().
+			Format(time.RFC3339)
 		shard := baseShard.DeepCopy()
 
 		c := fake.NewClientBuilder().
@@ -2149,7 +2172,11 @@ func TestHandleDeletion(t *testing.T) {
 
 		// Pod should be fully cleaned up (finalizer removed + Delete called)
 		updatedPod := &corev1.Pod{}
-		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-timeout", Namespace: "default"}, updatedPod)
+		err = c.Get(
+			context.Background(),
+			types.NamespacedName{Name: "pod-timeout", Namespace: "default"},
+			updatedPod,
+		)
 		if err == nil {
 			for _, f := range updatedPod.Finalizers {
 				if f == PoolPodFinalizer {
@@ -2186,7 +2213,11 @@ func TestHandleDeletion(t *testing.T) {
 
 		// Shard should be fully cleaned up (finalizer removed → fake client auto-deletes)
 		updatedShard := &multigresv1alpha1.Shard{}
-		err = c.Get(context.Background(), types.NamespacedName{Name: "test-shard", Namespace: "default"}, updatedShard)
+		err = c.Get(
+			context.Background(),
+			types.NamespacedName{Name: "test-shard", Namespace: "default"},
+			updatedShard,
+		)
 		if err == nil {
 			for _, f := range updatedShard.Finalizers {
 				if f == ShardFinalizer {

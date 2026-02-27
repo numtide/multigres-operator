@@ -201,12 +201,18 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{topoFinalizerName},
-						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+						Labels: map[string]string{
+							"multigres.com/cluster": "test-cluster",
+						},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 					Status: multigresv1alpha1.TopoServerStatus{
 						Conditions: []metav1.Condition{
-							{Type: "Ready", Status: metav1.ConditionTrue, Reason: "AllReplicasReady"},
+							{
+								Type:   "Ready",
+								Status: metav1.ConditionTrue,
+								Reason: "AllReplicasReady",
+							},
 						},
 					},
 				},
@@ -254,12 +260,18 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{topoFinalizerName},
-						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+						Labels: map[string]string{
+							"multigres.com/cluster": "test-cluster",
+						},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 					Status: multigresv1alpha1.TopoServerStatus{
 						Conditions: []metav1.Condition{
-							{Type: "Ready", Status: metav1.ConditionTrue, Reason: "AllReplicasReady"},
+							{
+								Type:   "Ready",
+								Status: metav1.ConditionTrue,
+								Reason: "AllReplicasReady",
+							},
 						},
 					},
 				},
@@ -297,7 +309,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
 						Finalizers:        []string{topoFinalizerName},
-						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+						Labels: map[string]string{
+							"multigres.com/cluster": "test-cluster",
+						},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 					// No Ready=True condition → topo was never initialised
@@ -320,7 +334,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				if err == nil {
 					for _, f := range ts.Finalizers {
 						if f == topoFinalizerName {
-							t.Errorf("Topo finalizer should have been removed (topo was never ready)")
+							t.Errorf(
+								"Topo finalizer should have been removed (topo was never ready)",
+							)
 						}
 					}
 				}
@@ -535,7 +551,11 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			}
 
 			if (result.RequeueAfter != 0) != tc.wantRequeue {
-				t.Errorf("Reconcile() requeue = %v, want requeue = %v", result.RequeueAfter, tc.wantRequeue)
+				t.Errorf(
+					"Reconcile() requeue = %v, want requeue = %v",
+					result.RequeueAfter,
+					tc.wantRequeue,
+				)
 			}
 
 			// Run custom assertions if provided

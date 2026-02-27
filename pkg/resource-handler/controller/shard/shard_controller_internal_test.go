@@ -1573,7 +1573,13 @@ func TestCleanupDrainedPod_PVCDeletion(t *testing.T) {
 			)
 			pvcExists := getErr == nil
 			if pvcExists != tc.wantPVC {
-				t.Errorf("PVC %s exists = %v, want %v (err=%v)", tc.pvcName, pvcExists, tc.wantPVC, getErr)
+				t.Errorf(
+					"PVC %s exists = %v, want %v (err=%v)",
+					tc.pvcName,
+					pvcExists,
+					tc.wantPVC,
+					getErr,
+				)
 			}
 
 			podAfter := &corev1.Pod{}

@@ -66,7 +66,11 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, opt)
 	if err != nil {
 		if isTopoUnavailable(err) && !pod.DeletionTimestamp.IsZero() {
-			logger.Info("Topology is unavailable while pod is being deleted. Bypassing drain", "pod", pod.Name)
+			logger.Info(
+				"Topology is unavailable while pod is being deleted. Bypassing drain",
+				"pod",
+				pod.Name,
+			)
 			return r.updateDrainState(ctx, pod, metadata.DrainStateReadyForDeletion)
 		}
 		if !isTopoUnavailable(err) {
@@ -105,9 +109,17 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			primary, err := findPrimaryPooler(ctx, store, shard, cells)
 			if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
 				if r.isPrimaryTerminatingOrMissing(ctx, shard, primary) {
-					logger.Info("Primary pod is dead or terminating, skipping standby removal", "pod", pod.Name)
+					logger.Info(
+						"Primary pod is dead or terminating, skipping standby removal",
+						"pod",
+						pod.Name,
+					)
 				} else if r.isPrimaryDraining(ctx, shard, primary) {
-					logger.Info("Primary pod is being drained, delaying standby removal", "pod", pod.Name)
+					logger.Info(
+						"Primary pod is being drained, delaying standby removal",
+						"pod",
+						pod.Name,
+					)
 					return true, nil
 				} else {
 					req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
@@ -116,7 +128,12 @@ func (r *ShardReconciler) executeDrainStateMachine(
 					}
 					_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 					if rpcErr != nil {
-						logger.Error(rpcErr, "Failed to remove pod from synchronous standby list", "pod", pod.Name)
+						logger.Error(
+							rpcErr,
+							"Failed to remove pod from synchronous standby list",
+							"pod",
+							pod.Name,
+						)
 						return true, nil
 					}
 				}
@@ -131,14 +148,27 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			// the idempotent REMOVE call on the primary.
 			primary, err := findPrimaryPooler(ctx, store, shard, cells)
 			if err != nil {
-				logger.Error(err, "Failed to find primary for drain verification, will retry", "pod", pod.Name)
+				logger.Error(
+					err,
+					"Failed to find primary for drain verification, will retry",
+					"pod",
+					pod.Name,
+				)
 				return true, nil
 			}
 			if primary != nil && myPooler != nil && r.rpcClient != nil {
 				if r.isPrimaryTerminatingOrMissing(ctx, shard, primary) {
-					logger.Info("Primary pod is dead or terminating, skipping standby removal verification", "pod", pod.Name)
+					logger.Info(
+						"Primary pod is dead or terminating, skipping standby removal verification",
+						"pod",
+						pod.Name,
+					)
 				} else if r.isPrimaryDraining(ctx, shard, primary) {
-					logger.Info("Primary pod is being drained, delaying standby removal verification", "pod", pod.Name)
+					logger.Info(
+						"Primary pod is being drained, delaying standby removal verification",
+						"pod",
+						pod.Name,
+					)
 					return true, nil
 				} else {
 					req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
@@ -147,7 +177,12 @@ func (r *ShardReconciler) executeDrainStateMachine(
 					}
 					_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 					if rpcErr != nil {
-						logger.Error(rpcErr, "Standby removal verification failed, will retry", "pod", pod.Name)
+						logger.Error(
+							rpcErr,
+							"Standby removal verification failed, will retry",
+							"pod",
+							pod.Name,
+						)
 						return true, nil
 					}
 				}
