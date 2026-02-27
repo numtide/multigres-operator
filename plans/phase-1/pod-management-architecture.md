@@ -196,6 +196,14 @@ When choosing which pod to remove during scale-down:
 - Scale-down and rolling-update operations do not run concurrently — if a drain is in progress, rolling updates are deferred.
 - If the data-handler is unavailable, the drain annotation sits untouched and the resource-handler retries on the next reconcile.
 
+### Shard/Cluster Deletion (No Drain)
+
+The drain state machine is **not used during shard or cluster deletion**. When a Shard is deleted, the data-handler's `handleDeletion` runs first: it unregisters the database from the global topology (`DeleteDatabase`) and removes its own finalizer. By the time the resource-handler processes the pods, the data-handler has already stopped reconciling — there is nobody to drive the drain state machine.
+
+Instead, the resource-handler removes pod finalizers directly and deletes pods. This is safe for full cluster deletion because the topo server is also being destroyed. For individual shard deletion within a live cluster, residual pooler entries may remain in topo — see [Known Gaps](#15-known-gaps-and-future-work).
+
+The drain state machine remains fully functional for **rolling updates** and **scale-down**, where the cluster is alive and the data-handler is actively reconciling.
+
 ---
 
 ## 6. Rolling Updates
@@ -311,7 +319,7 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **Pod selection for scale-down** | Primary avoidance, prefer non-ready, highest index |
 | **Rolling updates** | Spec-hash drift detection, replicas first, primary last |
 | **Finalizer-based cleanup** | Pod finalizer prevents premature GC |
-| **Shard deletion handling** | Strips all pod finalizers, deletes deployments, waits for termination |
+| **Shard deletion handling** | Removes pod finalizers directly (no drain), deletes deployments and PVCs per policy |
 | **Status aggregation from pods** | Direct pod count, no StatefulSet intermediary |
 | **Zone/region scheduling** | `nodeSelector` injection from `CellTopologyLabels` |
 | **Cell topology propagation** | Labels carry cluster/db/tg/shard/pool/cell hierarchy |
@@ -486,6 +494,7 @@ Through the data-handler:
 ### Operator-Side Future Work
 
 - **Scheduled base backups**: Designed as a controller-timer approach (like CloudNativePG) but deferred per team decision.
+- **Individual shard deletion drain cleanup**: When a single shard is deleted within a live cluster (not full cluster teardown), pooler entries may be left in topo because the data-handler removes its finalizer before the resource-handler can initiate drains. Fixing this requires either making the data-handler keep its finalizer until drains complete, or having the resource-handler drive drains directly (single-controller pattern). Not addressed now because the operator currently only supports single-shard, single-database clusters — shards are only ever deleted as part of full cluster teardown where the topo server is also destroyed.
 
 ### Design Constraints (v1alpha1)
 

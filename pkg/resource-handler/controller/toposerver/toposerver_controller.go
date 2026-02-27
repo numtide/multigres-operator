@@ -166,6 +166,10 @@ func (r *TopoServerReconciler) Reconcile(
 // handleDeletion blocks TopoServer deletion until all Shards and Cells
 // belonging to the same cluster have been fully removed. This guarantees
 // the topo (etcd) stays alive for the drain state machine to complete.
+//
+// If the topo was never ready (0 ready replicas), there is no etcd data
+// to protect, so we skip the wait to avoid deadlocking with shards that
+// are themselves waiting for the topo to come up.
 func (r *TopoServerReconciler) handleDeletion(
 	ctx context.Context,
 	toposerver *multigresv1alpha1.TopoServer,
@@ -175,6 +179,14 @@ func (r *TopoServerReconciler) handleDeletion(
 	clusterName := toposerver.Labels[metadata.LabelMultigresCluster]
 	if clusterName == "" {
 		logger.Info("TopoServer has no cluster label, removing finalizer")
+		return r.removeFinalizer(ctx, toposerver)
+	}
+
+	// If the topo StatefulSet never had ready replicas, there is no etcd
+	// data to drain from. Release the finalizer immediately to prevent a
+	// deadlock where shards wait for topo and topo waits for shards.
+	if !r.topoWasEverReady(ctx, toposerver) {
+		logger.Info("TopoServer was never ready, skipping drain wait")
 		return r.removeFinalizer(ctx, toposerver)
 	}
 
@@ -202,6 +214,29 @@ func (r *TopoServerReconciler) handleDeletion(
 
 	logger.Info("All shards and cells deleted, removing topo finalizer")
 	return r.removeFinalizer(ctx, toposerver)
+}
+
+// topoWasEverReady returns true if the TopoServer's StatefulSet has (or
+// had) at least one ready replica. When the topo was never initialised,
+// there is nothing in etcd to protect, so callers can skip the drain wait.
+func (r *TopoServerReconciler) topoWasEverReady(
+	ctx context.Context,
+	toposerver *multigresv1alpha1.TopoServer,
+) bool {
+	// Status phase is set to Healthy once all replicas are ready.
+	// If it was ever healthy, the status condition will reflect it.
+	for _, cond := range toposerver.Status.Conditions {
+		if cond.Type == "Ready" && cond.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	// Fall back to checking the live StatefulSet.
+	sts := &appsv1.StatefulSet{}
+	key := client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name}
+	if err := r.Get(ctx, key, sts); err != nil {
+		return false
+	}
+	return sts.Status.ReadyReplicas > 0
 }
 
 func (r *TopoServerReconciler) removeFinalizer(

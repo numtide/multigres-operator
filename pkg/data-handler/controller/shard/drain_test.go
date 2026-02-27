@@ -324,7 +324,17 @@ func TestReplicaDrainFlow(t *testing.T) {
 		},
 	}
 
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "primary-pod",
+			Namespace: "default",
+			Labels: map[string]string{
+				metadata.LabelMultigresCell: "cell1",
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod, primaryPod).Build()
 	rpcMock := &mockRPCClient{}
 
 	reconciler := &ShardReconciler{
@@ -679,7 +689,7 @@ func TestStuckTerminatingPod(t *testing.T) {
 	}
 }
 
-func TestIsPrimaryDraining(t *testing.T) {
+func TestIsPrimaryTerminatingOrMissing(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
@@ -691,11 +701,11 @@ func TestIsPrimaryDraining(t *testing.T) {
 		},
 	}
 
-	t.Run("returns false for nil primary", func(t *testing.T) {
+	t.Run("returns true for nil primary", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		r := &ShardReconciler{Client: c}
-		if r.isPrimaryDraining(context.Background(), shard, nil) {
-			t.Error("Expected false for nil primary")
+		if !r.isPrimaryTerminatingOrMissing(context.Background(), shard, nil) {
+			t.Error("Expected true for nil primary")
 		}
 	})
 
@@ -712,29 +722,8 @@ func TestIsPrimaryDraining(t *testing.T) {
 		primary := &clustermetadata.MultiPooler{
 			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
 		}
-		if r.isPrimaryDraining(context.Background(), shard, primary) {
+		if r.isPrimaryTerminatingOrMissing(context.Background(), shard, primary) {
 			t.Error("Expected false for primary without drain annotation")
-		}
-	})
-
-	t.Run("returns true when primary has drain annotation", func(t *testing.T) {
-		primaryPod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "primary-pod-draining",
-				Namespace: "default",
-				Annotations: map[string]string{
-					metadata.AnnotationDrainState: metadata.DrainStateRequested,
-				},
-			},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(primaryPod).Build()
-		r := &ShardReconciler{Client: c}
-
-		primary := &clustermetadata.MultiPooler{
-			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod-draining"},
-		}
-		if !r.isPrimaryDraining(context.Background(), shard, primary) {
-			t.Error("Expected true when primary has drain annotation")
 		}
 	})
 
@@ -745,8 +734,8 @@ func TestIsPrimaryDraining(t *testing.T) {
 		primary := &clustermetadata.MultiPooler{
 			Id: &clustermetadata.ID{Cell: "cell1", Name: "nonexistent-pod"},
 		}
-		if r.isPrimaryDraining(context.Background(), shard, primary) {
-			t.Error("Expected false when primary pod not found")
+		if !r.isPrimaryTerminatingOrMissing(context.Background(), shard, primary) {
+			t.Error("Expected true when primary pod not found")
 		}
 	})
 }

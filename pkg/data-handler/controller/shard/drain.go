@@ -64,8 +64,14 @@ func (r *ShardReconciler) executeDrainStateMachine(
 	// Find the pooler entry for this pod
 	var myPooler *topoclient.MultiPoolerInfo
 	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, opt)
-	if err != nil && !isTopoUnavailable(err) {
-		return false, fmt.Errorf("listing poolers in cell %q: %w", cellName, err)
+	if err != nil {
+		if isTopoUnavailable(err) && !pod.DeletionTimestamp.IsZero() {
+			logger.Info("Topology is unavailable while pod is being deleted. Bypassing drain", "pod", pod.Name)
+			return r.updateDrainState(ctx, pod, metadata.DrainStateReadyForDeletion)
+		}
+		if !isTopoUnavailable(err) {
+			return false, fmt.Errorf("listing poolers in cell %q: %w", cellName, err)
+		}
 	}
 
 	for _, p := range poolers {
@@ -98,18 +104,21 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			logger.Info("Proceeding to drain replica pod", "pod", pod.Name)
 			primary, err := findPrimaryPooler(ctx, store, shard, cells)
 			if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
-				if r.isPrimaryDraining(ctx, shard, primary) {
-					logger.Info("Primary pod is being drained, skipping standby removal", "pod", pod.Name)
+				if r.isPrimaryTerminatingOrMissing(ctx, shard, primary) {
+					logger.Info("Primary pod is dead or terminating, skipping standby removal", "pod", pod.Name)
+				} else if r.isPrimaryDraining(ctx, shard, primary) {
+					logger.Info("Primary pod is being drained, delaying standby removal", "pod", pod.Name)
 					return true, nil
-				}
-				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
-					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
-					StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
-				}
-				_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
-				if rpcErr != nil {
-					logger.Error(rpcErr, "Failed to remove pod from synchronous standby list", "pod", pod.Name)
-					return true, nil
+				} else {
+					req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
+						Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
+						StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
+					}
+					_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
+					if rpcErr != nil {
+						logger.Error(rpcErr, "Failed to remove pod from synchronous standby list", "pod", pod.Name)
+						return true, nil
+					}
 				}
 			}
 		}
@@ -126,18 +135,21 @@ func (r *ShardReconciler) executeDrainStateMachine(
 				return true, nil
 			}
 			if primary != nil && myPooler != nil && r.rpcClient != nil {
-				if r.isPrimaryDraining(ctx, shard, primary) {
-					logger.Info("Primary pod is being drained, skipping standby removal verification", "pod", pod.Name)
+				if r.isPrimaryTerminatingOrMissing(ctx, shard, primary) {
+					logger.Info("Primary pod is dead or terminating, skipping standby removal verification", "pod", pod.Name)
+				} else if r.isPrimaryDraining(ctx, shard, primary) {
+					logger.Info("Primary pod is being drained, delaying standby removal verification", "pod", pod.Name)
 					return true, nil
-				}
-				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
-					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
-					StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
-				}
-				_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
-				if rpcErr != nil {
-					logger.Error(rpcErr, "Standby removal verification failed, will retry", "pod", pod.Name)
-					return true, nil
+				} else {
+					req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
+						Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
+						StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
+					}
+					_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
+					if rpcErr != nil {
+						logger.Error(rpcErr, "Standby removal verification failed, will retry", "pod", pod.Name)
+						return true, nil
+					}
 				}
 			}
 		}
@@ -207,6 +219,26 @@ func (r *ShardReconciler) forceUnregister(
 		Info("No matching pooler found in topology for pod, skipping unregistration",
 			"pod", pod.Name, "cell", cellName)
 	return nil
+}
+
+// isPrimaryTerminatingOrMissing checks if the primary pooler's corresponding Kubernetes pod
+// is unavailable for receiving RPCs because it is either missing or terminating.
+func (r *ShardReconciler) isPrimaryTerminatingOrMissing(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	primary *clustermetadatapb.MultiPooler,
+) bool {
+	if primary == nil || primary.Id == nil {
+		return true
+	}
+	primaryPod := &corev1.Pod{}
+	key := client.ObjectKey{Namespace: shard.Namespace, Name: primary.Id.Name}
+	if err := r.Get(ctx, key, primaryPod); err != nil {
+		// If the pod doesn't exist or we can't get it, it's unavailable for RPC.
+		return true
+	}
+	// If the pod is terminating, it's shutting down and unavailable for RPC.
+	return !primaryPod.DeletionTimestamp.IsZero()
 }
 
 // isPrimaryDraining checks if the primary pooler's corresponding Kubernetes pod

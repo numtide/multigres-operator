@@ -184,7 +184,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				// NotFound is expected: fake client deletes when last finalizer removed
 			},
 		},
-		"deletion blocks while shards exist": {
+		"deletion blocks while shards exist and topo was ready": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-topo-blocked",
@@ -204,6 +204,11 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
+					Status: multigresv1alpha1.TopoServerStatus{
+						Conditions: []metav1.Condition{
+							{Type: "Ready", Status: metav1.ConditionTrue, Reason: "AllReplicasReady"},
+						},
+					},
 				},
 				&multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
@@ -252,6 +257,11 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
+					Status: multigresv1alpha1.TopoServerStatus{
+						Conditions: []metav1.Condition{
+							{Type: "Ready", Status: metav1.ConditionTrue, Reason: "AllReplicasReady"},
+						},
+					},
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
@@ -268,6 +278,53 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					}
 				}
 				// NotFound is expected: fake client deletes when last finalizer removed
+			},
+		},
+		"deletion skips wait when topo was never ready": {
+			toposerver: &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-topo-never-ready",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.TopoServerSpec{},
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.TopoServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-topo-never-ready",
+						Namespace:         "default",
+						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+						Finalizers:        []string{topoFinalizerName},
+						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+					},
+					Spec: multigresv1alpha1.TopoServerSpec{},
+					// No Ready=True condition → topo was never initialised
+				},
+				// Shards still exist, but topo was never ready so we skip the wait
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard-stuck",
+						Namespace: "default",
+						Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+					},
+				},
+			},
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				// Finalizer should have been removed despite shards existing
+				ts := &multigresv1alpha1.TopoServer{}
+				err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-topo-never-ready", Namespace: "default"},
+					ts)
+				if err == nil {
+					for _, f := range ts.Finalizers {
+						if f == topoFinalizerName {
+							t.Errorf("Topo finalizer should have been removed (topo was never ready)")
+						}
+					}
+				}
+				// NotFound is expected
 			},
 		},
 		"finalizer added on first reconcile": {

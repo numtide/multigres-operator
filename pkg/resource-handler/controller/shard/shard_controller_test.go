@@ -1777,14 +1777,15 @@ func TestHandleDeletion(t *testing.T) {
 			pod.Annotations[metadata.AnnotationDrainState] = drainState
 		}
 		if scheduled {
-			pod.Status.Conditions = []corev1.PodCondition{
-				{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
-			}
+			pod.Status.Conditions = append(pod.Status.Conditions,
+				corev1.PodCondition{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
+				corev1.PodCondition{Type: corev1.PodInitialized, Status: corev1.ConditionTrue},
+			)
 		}
 		return pod
 	}
 
-	t.Run("scheduled pod gets drain initiated", func(t *testing.T) {
+	t.Run("scheduled pod gets finalizer removed directly", func(t *testing.T) {
 		t.Parallel()
 
 		pod := makePod("pod-0", true, "", true)
@@ -1806,23 +1807,21 @@ func TestHandleDeletion(t *testing.T) {
 		if err != nil {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
-		if result.RequeueAfter == 0 {
-			t.Error("Expected requeue while drain is in progress")
+		if result.RequeueAfter != 0 {
+			t.Error("Expected no requeue — finalizer should be removed directly during shard deletion")
 		}
 
-		// Pod should now have drain annotations
+		// Pod should be fully deleted (finalizer removed + Delete called)
 		updatedPod := &corev1.Pod{}
-		if err := c.Get(context.Background(), types.NamespacedName{Name: "pod-0", Namespace: "default"}, updatedPod); err != nil {
-			t.Fatalf("Failed to get pod: %v", err)
+		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-0", Namespace: "default"}, updatedPod)
+		if err == nil {
+			for _, f := range updatedPod.Finalizers {
+				if f == PoolPodFinalizer {
+					t.Error("Expected PoolPodFinalizer to be removed")
+				}
+			}
 		}
-		if updatedPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
-			t.Errorf("Expected drain state %q, got %q",
-				metadata.DrainStateRequested,
-				updatedPod.Annotations[metadata.AnnotationDrainState])
-		}
-		if updatedPod.Annotations[metadata.AnnotationDrainRequestedAt] == "" {
-			t.Error("Expected drain requested-at timestamp to be set")
-		}
+		// NotFound is expected: fake client deletes when finalizer removed + Delete called
 	})
 
 	t.Run("unscheduled pod gets finalizer removed directly", func(t *testing.T) {
@@ -1903,7 +1902,7 @@ func TestHandleDeletion(t *testing.T) {
 		// NotFound is expected
 	})
 
-	t.Run("mid-drain pod requeues without timeout", func(t *testing.T) {
+	t.Run("mid-drain pod gets finalizer removed directly", func(t *testing.T) {
 		t.Parallel()
 
 		pod := makePod("pod-draining", true, metadata.DrainStateDraining, true)
@@ -1926,32 +1925,28 @@ func TestHandleDeletion(t *testing.T) {
 		if err != nil {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
-		if result.RequeueAfter == 0 {
-			t.Error("Expected requeue while drain is in progress")
+		if result.RequeueAfter != 0 {
+			t.Error("Expected no requeue — finalizer should be removed directly during shard deletion")
 		}
 
-		// Pod should still have its finalizer
+		// Pod should be fully deleted (finalizer removed directly, no drain wait)
 		updatedPod := &corev1.Pod{}
-		if err := c.Get(context.Background(), types.NamespacedName{Name: "pod-draining", Namespace: "default"}, updatedPod); err != nil {
-			t.Fatalf("Failed to get pod: %v", err)
-		}
-		found := false
-		for _, f := range updatedPod.Finalizers {
-			if f == PoolPodFinalizer {
-				found = true
+		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-draining", Namespace: "default"}, updatedPod)
+		if err == nil {
+			for _, f := range updatedPod.Finalizers {
+				if f == PoolPodFinalizer {
+					t.Error("Expected PoolPodFinalizer to be removed from mid-drain pod")
+				}
 			}
 		}
-		if !found {
-			t.Error("Expected PoolPodFinalizer to still be present on mid-drain pod")
-		}
+		// NotFound is expected
 	})
 
-	t.Run("timed out drain force-removes finalizer", func(t *testing.T) {
+	t.Run("expired drain pod gets finalizer removed directly", func(t *testing.T) {
 		t.Parallel()
 
 		pod := makePod("pod-timeout", true, metadata.DrainStateDraining, true)
-		// Set requested-at to well past the timeout
-		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().Add(-2 * deletionDrainTimeout).UTC().Format(time.RFC3339)
+		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
 		shard := baseShard.DeepCopy()
 
 		c := fake.NewClientBuilder().
