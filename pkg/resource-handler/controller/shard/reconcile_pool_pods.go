@@ -364,6 +364,20 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 	}
 
+	// Process external deletions for extra pods to avoid deadlocks
+	for _, pod := range extraPods {
+		if !pod.DeletionTimestamp.IsZero() &&
+			controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) &&
+			pod.Annotations[metadata.AnnotationDrainState] == "" {
+			if !actionTaken {
+				if err := r.handleExternalDeletion(ctx, shard, pod); err != nil {
+					return actionTaken, inProgress, err
+				}
+				actionTaken = true
+			}
+		}
+	}
+
 	// Cleanup pods ready for deletion: remove finalizer first, then delete
 	for _, pod := range readyForDeletion {
 		logger.Info("Cleaning up pod in ready-for-deletion state", "pod", pod.Name)

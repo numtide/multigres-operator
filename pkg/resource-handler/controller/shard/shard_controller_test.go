@@ -1537,6 +1537,116 @@ func TestScaleDownPodSelection(t *testing.T) {
 	}
 }
 
+func TestScaleDown_ExternallyDeletedExtraPod(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {
+					ReplicasPerCell: ptr.To(int32(2)), // Scale down to 2 replicas
+					Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
+				},
+			},
+		},
+	}
+
+	shardObj.Status.PodRoles = map[string]string{
+		BuildPoolPodName(shardObj, "primary", "zone1", 0): "PRIMARY",
+		BuildPoolPodName(shardObj, "primary", "zone1", 1): "REPLICA",
+		BuildPoolPodName(shardObj, "primary", "zone1", 2): "REPLICA",
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj).Build()
+	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+	poolSpec := shardObj.Spec.Pools["primary"]
+
+	// Create 3 pods, simulating a scale-down from 3 to 2.
+	for i := 0; i < 3; i++ {
+		podName := BuildPoolPodName(shardObj, "primary", "zone1", i)
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: "default",
+				Labels: map[string]string{
+					"app.kubernetes.io/component":     "shard-pool",
+					"app.kubernetes.io/instance":      "test-cluster",
+					metadata.LabelMultigresCluster:    "test-cluster",
+					metadata.LabelMultigresDatabase:   "db",
+					metadata.LabelMultigresTableGroup: "tg",
+					metadata.LabelMultigresShard:      "s1",
+					metadata.LabelMultigresPool:       "primary",
+					metadata.LabelMultigresCell:       "zone1",
+				},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		}
+
+		// Ensure proper spec hash to avoid drift deletion
+		desiredPod, _ := BuildPoolPod(shardObj, "primary", "zone1", poolSpec, i, scheme)
+		if pod.Annotations == nil {
+			pod.Annotations = make(map[string]string)
+		}
+		pod.Annotations[metadata.AnnotationSpecHash] = desiredPod.Annotations[metadata.AnnotationSpecHash]
+
+		// For the extra pod (index 2), simulate an external deletion:
+		// Give it a DeletionTimestamp and the PoolPodFinalizer.
+		if i == 2 {
+			pod.Finalizers = []string{PoolPodFinalizer}
+			now := metav1.Now()
+			pod.DeletionTimestamp = &now
+		}
+
+		if err := c.Create(context.Background(), pod); err != nil {
+			t.Fatalf("failed to create pod: %v", err)
+		}
+	}
+
+	// 1. Run reconcile loop
+	err := r.reconcilePoolPods(context.Background(), shardObj, "primary", "zone1", poolSpec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 2. Extra pod with DeletionTimestamp should have drain requested by handleExternalDeletion
+	var extraPod corev1.Pod
+	err = c.Get(
+		context.Background(),
+		types.NamespacedName{
+			Name:      BuildPoolPodName(shardObj, "primary", "zone1", 2),
+			Namespace: "default",
+		},
+		&extraPod,
+	)
+	if err != nil {
+		t.Fatalf("failed to get extra pod: %v", err)
+	}
+
+	if extraPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+		t.Errorf(
+			"Expected extra internally deleted pod to be marked for drain, got %v",
+			extraPod.Annotations[metadata.AnnotationDrainState],
+		)
+	}
+}
+
 func TestRollingUpdateOrder(t *testing.T) {
 	t.Parallel()
 	scheme := runtime.NewScheme()
