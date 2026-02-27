@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -560,6 +561,85 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			customClient: noMatchingNodeClient,
 			wantWarnings: []string{
 				"no nodes currently match topology.kubernetes.io/region=eu-west-1",
+			},
+		},
+		// COVERAGE: quorum warning for readWrite pools with low replica count
+		"Quorum Warning: readWrite pool with 2 replicas": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+								Overrides: &multigresv1alpha1.ShardOverrides{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"default": {
+											ReplicasPerCell: ptr.To(int32(2)),
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			wantWarnings: []string{
+				"replicasPerCell=2; readWrite pools need at least 3",
+			},
+		},
+		"No Quorum Warning: readWrite pool with 3 replicas": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+								Overrides: &multigresv1alpha1.ShardOverrides{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"default": {
+											ReplicasPerCell: ptr.To(int32(3)),
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+		},
+		"No Quorum Warning: readOnly pool with 2 replicas": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0",
+								Spec: &multigresv1alpha1.ShardInlineSpec{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"readonly": {
+											Type:            "readOnly",
+											ReplicasPerCell: ptr.To(int32(2)),
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
 			},
 		},
 		// COVERAGE: filesystem backup AccessModes branch (isRWO=false path)

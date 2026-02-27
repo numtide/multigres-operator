@@ -615,6 +615,25 @@ func TestCEL_ExtendedValidation(t *testing.T) {
 			},
 			expectError: "less than or equal to 32",
 		},
+		{
+			name: "Invalid ReplicasPerCell Zero",
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "cel-replicas-per-cell-zero", Namespace: testNamespace},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName: "postgres", TableGroupName: "default", ShardName: "0",
+					Images:           multigresv1alpha1.ShardImages{Postgres: "p", MultiOrch: "o", MultiPooler: "po"},
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{Address: "etcd", RootPath: "/", Implementation: "etcd"},
+					MultiOrch:        multigresv1alpha1.MultiOrchSpec{},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"rw": {
+							Cells:           []multigresv1alpha1.CellName{"cell-1"},
+							ReplicasPerCell: ptr.To(int32(0)), // < 1
+						},
+					},
+				},
+			},
+			expectError: "greater than or equal to 1",
+		},
 	}
 
 	for _, tc := range tests {

@@ -612,6 +612,22 @@ You can customize the operator's behavior by passing flags to the binary (or edi
 
 ---
 
+## Pool Replication & Quorum
+
+Multigres uses the `ANY_2` durability policy by default, which requires every write to be acknowledged by at least 2 nodes (the primary + 1 synchronous standby). This has implications for how many replicas you should run per cell in `readWrite` pools.
+
+| Replicas per Cell | Configuration | Rolling Upgrade Behavior |
+| :--- | :--- | :--- |
+| **1** | 1 pod (primary only, no standbys) | **Downtime during upgrades.** No standby to maintain quorum. |
+| **2** | 1 primary + 1 standby | **Downtime during upgrades.** Draining the standby leaves zero synchronous standbys, violating `ANY_2`. Upstream multigres rejects the `UpdateSynchronousStandbyList REMOVE` because it would empty the synchronous standby list. |
+| **3** (recommended) | 1 primary + 2 standbys | **Zero-downtime upgrades.** One standby can be drained while the other maintains quorum. |
+
+The operator enforces a **hard minimum of 1** replica per cell (the CRD rejects `replicasPerCell: 0`). For `readWrite` pools with fewer than 3 replicas, the webhook returns an **admission warning** (not a rejection) explaining the quorum limitation.
+
+`readOnly` pools are not subject to this warning since they don't participate in write quorum.
+
+---
+
 ## Constraints & Limits (v1alpha1)
 
 Please be aware of the following constraints in the current version:

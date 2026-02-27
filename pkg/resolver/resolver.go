@@ -458,7 +458,25 @@ func (r *Resolver) ValidateClusterLogic(
 				}
 
 				// ------------------------------------------------------------------
-				// 3. Backup Validation
+				// 3. Quorum Warning for readWrite pools
+				// ------------------------------------------------------------------
+				for poolName, pool := range pools {
+					replicas := int32(3) // default
+					if pool.ReplicasPerCell != nil {
+						replicas = *pool.ReplicasPerCell
+					}
+					if pool.Type == "readWrite" && replicas < 3 {
+						warnings = append(warnings, fmt.Sprintf(
+							"pool '%s' in shard '%s' has replicasPerCell=%d; readWrite pools need at least 3 "+
+								"for zero-downtime rolling upgrades (ANY_2 durability requires 1 primary + 2 standbys "+
+								"to maintain quorum while draining a replica)",
+							poolName, shard.Name, replicas,
+						))
+					}
+				}
+
+				// ------------------------------------------------------------------
+				// 4. Backup Validation
 				// ------------------------------------------------------------------
 				if backupCfg != nil && backupCfg.Type == multigresv1alpha1.BackupTypeFilesystem {
 					// Check if any pool has >1 replicas and we are using RWO
@@ -498,7 +516,7 @@ func (r *Resolver) ValidateClusterLogic(
 	}
 
 	// ------------------------------------------------------------------
-	// 4. StorageClass Validation
+	// 5. StorageClass Validation
 	// ------------------------------------------------------------------
 	// Collect all PVC-generating components that have no explicit storage class.
 	// If any exist, verify a default StorageClass is available in the cluster.
