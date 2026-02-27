@@ -91,6 +91,70 @@ func buildHashedMultiOrchName(shard *multigresv1alpha1.Shard, cellName string) s
 	)
 }
 
+func TestGetPoolCells(t *testing.T) {
+	tests := map[string]struct {
+		shard *multigresv1alpha1.Shard
+		want  []multigresv1alpha1.CellName
+	}{
+		"explicit multiorch and pools in different cells": {
+			shard: &multigresv1alpha1.Shard{
+				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone-a"},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"pool1": {Cells: []multigresv1alpha1.CellName{"zone-b"}},
+					},
+				},
+			},
+			want: []multigresv1alpha1.CellName{"zone-b"},
+		},
+		"only multiorch": {
+			shard: &multigresv1alpha1.Shard{
+				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone-a"},
+					},
+				},
+			},
+			want: []multigresv1alpha1.CellName{},
+		},
+		"only pools": {
+			shard: &multigresv1alpha1.Shard{
+				Spec: multigresv1alpha1.ShardSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"pool1": {Cells: []multigresv1alpha1.CellName{"zone-b"}},
+						"pool2": {Cells: []multigresv1alpha1.CellName{"zone-c"}},
+					},
+				},
+			},
+			want: []multigresv1alpha1.CellName{"zone-b", "zone-c"},
+		},
+		"overlapping cells": {
+			shard: &multigresv1alpha1.Shard{
+				Spec: multigresv1alpha1.ShardSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"pool1": {Cells: []multigresv1alpha1.CellName{"zone-b", "zone-c"}},
+					},
+				},
+			},
+			want: []multigresv1alpha1.CellName{"zone-b", "zone-c"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := getPoolCells(tc.shard)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("getPoolCells() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestSetConditions(t *testing.T) {
 	tests := map[string]struct {
 		generation int64

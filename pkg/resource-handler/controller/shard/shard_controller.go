@@ -123,25 +123,28 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Compute active cells once for MultiOrch and backup PVCs
-	activeCells, err := getMultiOrchCells(shard)
+	// Compute MultiOrch cells
+	multiOrchCells, err := getMultiOrchCells(shard)
 	if err != nil {
 		monitoring.RecordSpanError(span, err)
-		logger.Error(err, "Failed to determine active cells")
+		logger.Error(err, "Failed to determine MultiOrch cells")
 		r.Recorder.Eventf(
 			shard,
 			"Warning",
 			"ConfigError",
-			"Failed to determine active cells: %v",
+			"Failed to determine MultiOrch cells: %v",
 			err,
 		)
 		return ctrl.Result{}, err
 	}
 
+	// Compute pool cells for shared backup PVCs (only cells with pool pods need backup storage)
+	poolCells := getPoolCells(shard)
+
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileMultiOrch")
-		for _, cell := range activeCells {
+		for _, cell := range multiOrchCells {
 			cellName := string(cell)
 
 			// Reconcile MultiOrch Deployment for this cell
@@ -182,7 +185,7 @@ func (r *ShardReconciler) Reconcile(
 	// Reconcile Shared Backup PVCs (one per cell)
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileBackupPVCs")
-		for _, cell := range activeCells {
+		for _, cell := range poolCells {
 			cellName := string(cell)
 			if err := r.reconcileSharedBackupPVC(ctx, shard, cellName); err != nil {
 				monitoring.RecordSpanError(childSpan, err)
@@ -517,6 +520,26 @@ func getMultiOrchCells(shard *multigresv1alpha1.Shard) ([]multigresv1alpha1.Cell
 
 	slices.Sort(cells)
 	return cells, nil
+}
+
+// getPoolCells returns the deduplicated, sorted set of cells from all pools.
+// Used for infrastructure that only needs to exist where pool pods run
+// (e.g., shared backup PVCs).
+func getPoolCells(shard *multigresv1alpha1.Shard) []multigresv1alpha1.CellName {
+	cellSet := make(map[multigresv1alpha1.CellName]bool)
+	for _, pool := range shard.Spec.Pools {
+		for _, cell := range pool.Cells {
+			cellSet[cell] = true
+		}
+	}
+
+	cells := make([]multigresv1alpha1.CellName, 0, len(cellSet))
+	for cell := range cellSet {
+		cells = append(cells, cell)
+	}
+
+	slices.Sort(cells)
+	return cells
 }
 
 // SetupWithManager sets up the controller with the Manager.
