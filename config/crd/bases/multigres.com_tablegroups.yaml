@@ -2596,9 +2596,11 @@ spec:
                             description: |-
                               ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
                               Sidecars (like Multipooler) will scale alongside the Postgres pods.
+                              Minimum 1 is required; readWrite pools need at least 3 for zero-downtime rolling upgrades
+                              (ANY_2 durability requires 1 primary + 2 standbys to maintain quorum during drain).
                             format: int32
                             maximum: 32
-                            minimum: 0
+                            minimum: 1
                             type: integer
                           storage:
                             description: Storage defines the storage configuration

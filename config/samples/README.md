@@ -119,7 +119,15 @@ This allows you to set "sane defaults" at the Namespace level (Level 3), overrid
 
 ---
 
-## 5. Scenarios & Gotchas
+## 5. Pool Replica Requirements
+
+- **Minimum**: `replicasPerCell` must be at least **1** (CRD-enforced). Setting it to 0 is rejected.
+- **Recommended for `readWrite` pools**: at least **3** replicas per cell. The `ANY_2` durability policy requires 1 primary + 2 synchronous standbys so that one standby can be drained during rolling upgrades while the other maintains write quorum. The operator issues an admission warning if a `readWrite` pool has fewer than 3 replicas.
+- **`readOnly` pools**: no quorum requirement, so any value >= 1 is fine.
+
+---
+
+## 6. Scenarios & Gotchas
 
 ### Scenario A: Namespace Defaults (The "Happy Path")
 
