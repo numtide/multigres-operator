@@ -240,6 +240,74 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
+		"create backup PVCs for all active cells including pool-only cells": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pool-only-pvc-shard",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type:       multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{},
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						Cells: []multigresv1alpha1.CellName{"zone1"},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells:           []multigresv1alpha1.CellName{"zone1"},
+							Type:            "replica",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+						"readonly": {
+							Cells:           []multigresv1alpha1.CellName{"zone2"},
+							Type:            "readOnly",
+							ReplicasPerCell: ptr.To(int32(1)),
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: "10Gi",
+							},
+						},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, shard *multigresv1alpha1.Shard) {
+				// Verify MultiOrch Deployment was ONLY created for zone1
+				hashedMo1 := buildHashedMultiOrchName(shard, "zone1")
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: hashedMo1, Namespace: "default"},
+					&appsv1.Deployment{}); err != nil {
+					t.Errorf("MultiOrch Deployment for zone1 should exist: %v", err)
+				}
+				hashedMo2 := buildHashedMultiOrchName(shard, "zone2")
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: hashedMo2, Namespace: "default"},
+					&appsv1.Deployment{}); err == nil {
+					t.Errorf("MultiOrch Deployment for zone2 should NOT exist")
+				}
+
+				// Verify Backup PVCs were created for BOTH zone1 AND zone2
+				hashedPvc1 := buildHashedBackupPVCName(shard, "zone1")
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: hashedPvc1, Namespace: "default"},
+					&corev1.PersistentVolumeClaim{}); err != nil {
+					t.Errorf("Backup PVC for zone1 should exist: %v", err)
+				}
+				hashedPvc2 := buildHashedBackupPVCName(shard, "zone2")
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: hashedPvc2, Namespace: "default"},
+					&corev1.PersistentVolumeClaim{}); err != nil {
+					t.Errorf("Backup PVC for zone2 should exist: %v", err)
+				}
+			},
+		},
 		"error when MultiOrch and pools have no cells specified": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
