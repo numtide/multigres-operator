@@ -164,8 +164,8 @@ type FilesystemBackupConfig struct {
 }
 
 // S3BackupConfig defines S3-compatible backup storage settings.
-// +kubebuilder:validation:XValidation:rule="!(has(self.serviceAccountName) && self.serviceAccountName != ” && has(self.credentialsSecret) && self.credentialsSecret != ”)",message="serviceAccountName and credentialsSecret are mutually exclusive"
-// +kubebuilder:validation:XValidation:rule="!(has(self.serviceAccountName) && self.serviceAccountName != ” && self.useEnvCredentials)",message="serviceAccountName and useEnvCredentials are mutually exclusive — IRSA credentials are handled automatically"
+// +kubebuilder:validation:XValidation:rule="!(has(self.serviceAccountName) && size(self.serviceAccountName) > 0 && has(self.credentialsSecret) && size(self.credentialsSecret) > 0)",message="serviceAccountName and credentialsSecret are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.serviceAccountName) && size(self.serviceAccountName) > 0 && has(self.useEnvCredentials) && self.useEnvCredentials)",message="serviceAccountName and useEnvCredentials are mutually exclusive — IRSA credentials are handled automatically"
 type S3BackupConfig struct {
 	Bucket            string `json:"bucket"`
 	Region            string `json:"region"`
