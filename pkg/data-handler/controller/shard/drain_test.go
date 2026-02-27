@@ -489,15 +489,114 @@ func TestPrimaryDrainFlow(t *testing.T) {
 		Shard:      "0",
 	}, false)
 
+	// PRIMARY drain should advance to DrainStateDraining without calling Promote.
+	// Failover is multiorch's responsibility via its consensus protocol.
 	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !requeue {
-		t.Fatalf("expected requeue for primary to wait for role change")
+		t.Fatalf("expected requeue after state transition")
 	}
-	if !rpcMock.promoteCalled {
-		t.Fatalf("expected promote to be called on another replica")
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateDraining {
+		t.Fatalf("expected PRIMARY pod to advance to draining, got %v",
+			pod.Annotations[metadata.AnnotationDrainState])
+	}
+	if rpcMock.promoteCalled {
+		t.Fatalf("Promote should not be called; failover is multiorch's responsibility")
+	}
+	if rpcMock.updateStandbyCalled {
+		t.Fatalf("UpdateSynchronousStandbyList should not be called when draining the PRIMARY")
+	}
+}
+
+func TestPrimaryDrainFlowNilRPCClient(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:     "test-db",
+			TableGroupName:   "test-tg",
+			ShardName:        "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateRequested,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	reconciler := &ShardReconciler{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+		// rpcClient intentionally nil
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+
+	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
+		return topoclient.NewWithFactory(
+			factory,
+			"",
+			[]string{""},
+			topoclient.NewDefaultTopoConfig(),
+		), nil
+	}
+
+	ctx := context.Background()
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "test-pod-0"},
+		Hostname: "test-pod-0", Type: clustermetadata.PoolerType_PRIMARY,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
+	}, false)
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod"},
+		Hostname: "replica-pod", Type: clustermetadata.PoolerType_REPLICA,
+		Database:   "test-db",
+		TableGroup: "test-tg",
+		Shard:      "0",
+	}, false)
+
+	// With nil rpcClient, drain should proceed instead of looping forever
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Fatalf("expected requeue after state transition")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateDraining {
+		t.Fatalf(
+			"expected PRIMARY pod to advance to draining when rpcClient is nil, got %v",
+			pod.Annotations[metadata.AnnotationDrainState],
+		)
 	}
 }
 

@@ -30,6 +30,7 @@ import (
 	// Import topology implementations for Vitess
 	// TODO: This pulls in multigres/multigres upstream as the hard direct
 	// dependency from the main module, which we would like to avoid.
+	"github.com/multigres/multigres/go/common/rpcclient"
 	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -442,11 +443,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&datahandlershardcontroller.ShardReconciler{
+	rpcClient := rpcclient.NewMultiPoolerClient(100)
+	defer rpcClient.Close()
+
+	dataHandlerReconciler := &datahandlershardcontroller.ShardReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("shard-datahandler"),
-	}).SetupWithManager(mgr); err != nil {
+	}
+	dataHandlerReconciler.SetRPCClient(rpcClient)
+	if err = dataHandlerReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Shard-DataHandler")
 		os.Exit(1)
 	}
