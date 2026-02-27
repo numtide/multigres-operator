@@ -148,7 +148,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 			},
 		},
 
-		"deletion - early exit": {
+		"deletion without cluster label removes finalizer immediately": {
 			toposerver: &multigresv1alpha1.TopoServer{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-toposerver-deletion",
@@ -163,18 +163,138 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						Name:              "test-toposerver-deletion",
 						Namespace:         "default",
 						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-						Finalizers:        []string{"testing"},
+						Finalizers:        []string{topoFinalizerName},
 					},
 					Spec: multigresv1alpha1.TopoServerSpec{},
 				},
 			},
 			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
-				// Verify resources were NOT created
-				sts := &appsv1.StatefulSet{}
+				// Finalizer removed → fake client auto-deletes the object
+				ts := &multigresv1alpha1.TopoServer{}
+				err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-toposerver-deletion", Namespace: "default"},
+					ts)
+				if err == nil {
+					for _, f := range ts.Finalizers {
+						if f == topoFinalizerName {
+							t.Errorf("Topo finalizer should have been removed (no cluster label)")
+						}
+					}
+				}
+				// NotFound is expected: fake client deletes when last finalizer removed
+			},
+		},
+		"deletion blocks while shards exist": {
+			toposerver: &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-topo-blocked",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.TopoServerSpec{},
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.TopoServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-topo-blocked",
+						Namespace:         "default",
+						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+						Finalizers:        []string{topoFinalizerName},
+						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+					},
+					Spec: multigresv1alpha1.TopoServerSpec{},
+				},
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-shard-1",
+						Namespace: "default",
+						Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+					},
+				},
+			},
+			wantRequeue: true,
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				ts := &multigresv1alpha1.TopoServer{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: "test-toposerver", Namespace: "default"},
-					sts); err == nil {
-					t.Errorf("StatefulSet should NOT exist")
+					types.NamespacedName{Name: "test-topo-blocked", Namespace: "default"},
+					ts); err != nil {
+					t.Fatalf("Failed to get TopoServer: %v", err)
+				}
+				found := false
+				for _, f := range ts.Finalizers {
+					if f == topoFinalizerName {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("Topo finalizer should still be present while shards exist")
+				}
+			},
+		},
+		"deletion removes finalizer when no shards or cells remain": {
+			toposerver: &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-topo-clean",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.TopoServerSpec{},
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.TopoServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-topo-clean",
+						Namespace:         "default",
+						DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+						Finalizers:        []string{topoFinalizerName},
+						Labels:            map[string]string{"multigres.com/cluster": "test-cluster"},
+					},
+					Spec: multigresv1alpha1.TopoServerSpec{},
+				},
+			},
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				// Finalizer removed → fake client auto-deletes the object
+				ts := &multigresv1alpha1.TopoServer{}
+				err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-topo-clean", Namespace: "default"},
+					ts)
+				if err == nil {
+					for _, f := range ts.Finalizers {
+						if f == topoFinalizerName {
+							t.Errorf("Topo finalizer should have been removed (no shards/cells)")
+						}
+					}
+				}
+				// NotFound is expected: fake client deletes when last finalizer removed
+			},
+		},
+		"finalizer added on first reconcile": {
+			toposerver: &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-topo-finalizer-add",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.TopoServerSpec{},
+			},
+			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				ts := &multigresv1alpha1.TopoServer{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-topo-finalizer-add", Namespace: "default"},
+					ts); err != nil {
+					t.Fatalf("Failed to get TopoServer: %v", err)
+				}
+				found := false
+				for _, f := range ts.Finalizers {
+					if f == topoFinalizerName {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("Topo finalizer should have been added during reconcile")
 				}
 			},
 		},
@@ -357,12 +477,9 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				return
 			}
 
-			// NOTE: Check for requeue delay when we need to support such setup.
-			_ = result
-			// // Check requeue
-			// if (result.RequeueAfter != 0) != tc.wantRequeue {
-			// 	t.Errorf("Reconcile() result.Requeue = %v, want %v", result.RequeueAfter, tc.wantRequeue)
-			// }
+			if (result.RequeueAfter != 0) != tc.wantRequeue {
+				t.Errorf("Reconcile() requeue = %v, want requeue = %v", result.RequeueAfter, tc.wantRequeue)
+			}
 
 			// Run custom assertions if provided
 			if tc.assertFunc != nil {

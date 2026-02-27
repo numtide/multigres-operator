@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -26,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -813,6 +815,507 @@ func TestUpdateStatus_GetError(t *testing.T) {
 	}
 }
 
+// statusPatchCapture wraps a client.Client to snapshot the state of the
+// patch object and options before delegating to the real Status().Patch().
+// Snapshotting before the call is necessary because the fake client's SSA
+// implementation may mutate the object in place during the merge.
+type statusPatchCapture struct {
+	client.Client
+	podRolesWasNil       bool
+	lastBackupTimeWasNil bool
+	lastBackupTypeEmpty  bool
+	capturedOpts         []client.SubResourcePatchOption
+}
+
+func (c *statusPatchCapture) Status() client.StatusWriter {
+	return &capturingStatusWriter{
+		StatusWriter: c.Client.Status(),
+		capture:      c,
+	}
+}
+
+type capturingStatusWriter struct {
+	client.StatusWriter
+	capture *statusPatchCapture
+}
+
+func (w *capturingStatusWriter) Patch(
+	ctx context.Context,
+	obj client.Object,
+	patch client.Patch,
+	opts ...client.SubResourcePatchOption,
+) error {
+	w.capture.capturedOpts = opts
+	if s, ok := obj.(*multigresv1alpha1.Shard); ok {
+		w.capture.podRolesWasNil = s.Status.PodRoles == nil
+		w.capture.lastBackupTimeWasNil = s.Status.LastBackupTime == nil
+		w.capture.lastBackupTypeEmpty = s.Status.LastBackupType == ""
+	}
+	return w.StatusWriter.Patch(ctx, obj, patch, opts...)
+}
+
+// TestUpdateStatus_NilsDataHandlerFields verifies that updateStatus clears
+// data-handler-owned fields (PodRoles, LastBackupTime, LastBackupType) from
+// the SSA patch object so the resource-handler never overwrites them.
+func TestUpdateStatus_NilsDataHandlerFields(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
+
+	now := metav1.Now()
+
+	tests := map[string]struct {
+		preStatus multigresv1alpha1.ShardStatus
+	}{
+		"PodRoles populated": {
+			preStatus: multigresv1alpha1.ShardStatus{
+				PodRoles: map[string]string{
+					"pod-0": "PRIMARY",
+					"pod-1": "REPLICA",
+				},
+			},
+		},
+		"LastBackupTime and LastBackupType populated": {
+			preStatus: multigresv1alpha1.ShardStatus{
+				LastBackupTime: &now,
+				LastBackupType: "full",
+			},
+		},
+		"all data-handler fields populated": {
+			preStatus: multigresv1alpha1.ShardStatus{
+				PodRoles: map[string]string{
+					"pod-0": "PRIMARY",
+				},
+				LastBackupTime: &now,
+				LastBackupType: "incr",
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			shard := &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-shard",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"pool1": {
+							Cells: []multigresv1alpha1.CellName{"cell1"},
+						},
+					},
+				},
+				Status: tc.preStatus,
+			}
+
+			baseClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(shard).
+				WithStatusSubresource(&multigresv1alpha1.Shard{}).
+				Build()
+
+			capture := &statusPatchCapture{Client: baseClient}
+
+			reconciler := &ShardReconciler{
+				Client:    capture,
+				Scheme:    scheme,
+				Recorder:  record.NewFakeRecorder(100),
+				APIReader: baseClient,
+			}
+
+			err := reconciler.updateStatus(context.Background(), shard)
+			if err != nil {
+				t.Fatalf("updateStatus() unexpected error: %v", err)
+			}
+
+			if !capture.podRolesWasNil {
+				t.Error("PodRoles should be nil in SSA patch object")
+			}
+			if !capture.lastBackupTimeWasNil {
+				t.Error("LastBackupTime should be nil in SSA patch object")
+			}
+			if !capture.lastBackupTypeEmpty {
+				t.Error("LastBackupType should be empty in SSA patch object")
+			}
+		})
+	}
+}
+
+// TestUpdateStatus_FieldOwner verifies that the SSA status patch uses
+// "multigres-resource-handler" as the field owner, not "multigres-operator".
+func TestUpdateStatus_FieldOwner(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {
+					Cells: []multigresv1alpha1.CellName{"cell1"},
+				},
+			},
+		},
+	}
+
+	baseClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shard).
+		WithStatusSubresource(&multigresv1alpha1.Shard{}).
+		Build()
+
+	capture := &statusPatchCapture{Client: baseClient}
+
+	reconciler := &ShardReconciler{
+		Client:    capture,
+		Scheme:    scheme,
+		Recorder:  record.NewFakeRecorder(100),
+		APIReader: baseClient,
+	}
+
+	err := reconciler.updateStatus(context.Background(), shard)
+	if err != nil {
+		t.Fatalf("updateStatus() unexpected error: %v", err)
+	}
+
+	// Verify the field owner is "multigres-resource-handler"
+	foundFieldOwner := false
+	for _, opt := range capture.capturedOpts {
+		if fo, ok := opt.(client.FieldOwner); ok {
+			if string(fo) != "multigres-resource-handler" {
+				t.Errorf("field owner = %q, want %q", string(fo), "multigres-resource-handler")
+			}
+			foundFieldOwner = true
+		}
+	}
+	if !foundFieldOwner {
+		t.Error("no FieldOwner option found in Status().Patch() call")
+	}
+}
+
+// TestHandleScaleDown_ConcurrentDrainPrevention verifies that handleScaleDown
+// respects the inProgress flag: when any pod already has a drain annotation
+// (DrainStateRequested, DrainStateDraining, or DrainStateAcknowledged), no new
+// drains are initiated for either DRAINED replacement or extra-pod scale-down.
+func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	poolName := "main"
+	cellName := "z1"
+
+	baseShard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "postgres",
+			TableGroupName: "default",
+			ShardName:      "0-inf",
+		},
+	}
+
+	podName0 := BuildPoolPodName(baseShard, poolName, cellName, 0)
+	podName1 := BuildPoolPodName(baseShard, poolName, cellName, 1)
+	podName2 := BuildPoolPodName(baseShard, poolName, cellName, 2)
+
+	makePod := func(podName string, annotations map[string]string) *corev1.Pod {
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        podName,
+				Namespace:   "default",
+				Annotations: annotations,
+				Finalizers:  []string{PoolPodFinalizer},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: cellName,
+				},
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		replicas       int32
+		pods           []*corev1.Pod
+		podRoles       map[string]string
+		actionTaken    bool
+		wantAction     bool
+		wantInProgress bool
+		wantNoDrains   bool
+		wantDrainedPod string
+	}{
+		"drain in progress (DrainStateRequested) blocks DRAINED replacement": {
+			replicas: 2,
+			pods: []*corev1.Pod{
+				makePod(podName0, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				}),
+				makePod(podName1, nil),
+			},
+			podRoles: map[string]string{
+				podName1: "DRAINED",
+			},
+			wantAction:     false,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+		"drain in progress (DrainStateDraining) blocks DRAINED replacement": {
+			replicas: 2,
+			pods: []*corev1.Pod{
+				makePod(podName0, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateDraining,
+				}),
+				makePod(podName1, nil),
+			},
+			podRoles: map[string]string{
+				podName1: "DRAINED",
+			},
+			wantAction:     false,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+		"drain in progress (DrainStateAcknowledged) blocks DRAINED replacement": {
+			replicas: 2,
+			pods: []*corev1.Pod{
+				makePod(podName0, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateAcknowledged,
+				}),
+				makePod(podName1, nil),
+			},
+			podRoles: map[string]string{
+				podName1: "DRAINED",
+			},
+			wantAction:     false,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+		"drain in progress (DrainStateRequested) blocks extra pod drain": {
+			replicas: 1,
+			pods: []*corev1.Pod{
+				makePod(podName0, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				}),
+				makePod(podName1, nil),
+			},
+			wantAction:     false,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+		"drain in progress (DrainStateDraining) blocks extra pod drain": {
+			replicas: 1,
+			pods: []*corev1.Pod{
+				makePod(podName0, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateDraining,
+				}),
+				makePod(podName1, nil),
+			},
+			wantAction:     false,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+		"no drain in progress allows DRAINED pod replacement": {
+			replicas: 2,
+			pods: []*corev1.Pod{
+				makePod(podName0, nil),
+				makePod(podName1, nil),
+			},
+			podRoles: map[string]string{
+				podName1: "DRAINED",
+			},
+			wantAction:     true,
+			wantInProgress: false,
+			wantDrainedPod: podName1,
+		},
+		"no drain in progress allows extra pod drain": {
+			replicas: 1,
+			pods: []*corev1.Pod{
+				makePod(podName0, nil),
+				makePod(podName1, nil),
+			},
+			wantAction:     true,
+			wantInProgress: false,
+			wantDrainedPod: podName1,
+		},
+		"actionTaken from earlier phase blocks DRAINED replacement": {
+			replicas: 2,
+			pods: []*corev1.Pod{
+				makePod(podName0, nil),
+				makePod(podName1, nil),
+			},
+			podRoles: map[string]string{
+				podName1: "DRAINED",
+			},
+			actionTaken:    true,
+			wantAction:     true,
+			wantInProgress: false,
+			wantNoDrains:   true,
+		},
+		"actionTaken from earlier phase blocks extra pod drain": {
+			replicas: 1,
+			pods: []*corev1.Pod{
+				makePod(podName0, nil),
+				makePod(podName1, nil),
+			},
+			actionTaken:    true,
+			wantAction:     true,
+			wantInProgress: false,
+			wantNoDrains:   true,
+		},
+		"pod with DeletionTimestamp sets inProgress and blocks DRAINED replacement": {
+			replicas: 2,
+			pods: []*corev1.Pod{
+				func() *corev1.Pod {
+					p := makePod(podName0, nil)
+					now := metav1.Now()
+					p.DeletionTimestamp = &now
+					return p
+				}(),
+				makePod(podName1, nil),
+			},
+			podRoles: map[string]string{
+				podName1: "DRAINED",
+			},
+			wantAction:     false,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+		"multiple DRAINED pods with drain in progress drains none": {
+			replicas: 3,
+			pods: []*corev1.Pod{
+				makePod(podName0, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				}),
+				makePod(podName1, nil),
+				makePod(podName2, nil),
+			},
+			podRoles: map[string]string{
+				podName1: "DRAINED",
+				podName2: "DRAINED",
+			},
+			wantAction:     false,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+		"ready-for-deletion pod is cleaned up even when other drain in progress": {
+			replicas: 2,
+			pods: []*corev1.Pod{
+				makePod(podName0, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateDraining,
+				}),
+				makePod(podName1, map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
+				}),
+			},
+			wantAction:     true,
+			wantInProgress: true,
+			wantNoDrains:   true,
+		},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			shard := baseShard.DeepCopy()
+			shard.Status.PodRoles = tc.podRoles
+
+			objects := make([]client.Object, 0, len(tc.pods)+1)
+			objects = append(objects, shard)
+			for _, p := range tc.pods {
+				objects = append(objects, p.DeepCopy())
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				Build()
+
+			reconciler := &ShardReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(100),
+			}
+
+			existingPods := make(map[string]*corev1.Pod, len(tc.pods))
+			for _, p := range tc.pods {
+				existingPods[p.Name] = p
+			}
+
+			poolSpec := multigresv1alpha1.PoolSpec{}
+
+			gotAction, gotInProgress, err := reconciler.handleScaleDown(
+				context.Background(),
+				shard,
+				poolName,
+				poolSpec,
+				existingPods,
+				tc.replicas,
+				tc.actionTaken,
+			)
+			if err != nil {
+				t.Fatalf("handleScaleDown() unexpected error: %v", err)
+			}
+
+			if gotAction != tc.wantAction {
+				t.Errorf("actionTaken = %v, want %v", gotAction, tc.wantAction)
+			}
+			if gotInProgress != tc.wantInProgress {
+				t.Errorf("inProgress = %v, want %v", gotInProgress, tc.wantInProgress)
+			}
+
+			for _, p := range tc.pods {
+				updated := &corev1.Pod{}
+				err := fakeClient.Get(
+					context.Background(),
+					client.ObjectKeyFromObject(p),
+					updated,
+				)
+				if err != nil {
+					// Pod may have been deleted by cleanupDrainedPod (ready-for-deletion flow)
+					if errors.IsNotFound(err) {
+						continue
+					}
+					t.Fatalf("failed to get pod %s: %v", p.Name, err)
+				}
+
+				drainState := updated.Annotations[metadata.AnnotationDrainState]
+				originalState := p.Annotations[metadata.AnnotationDrainState]
+
+				if tc.wantNoDrains && drainState != originalState {
+					t.Errorf(
+						"pod %s: drain state changed from %q to %q, expected no new drains",
+						p.Name, originalState, drainState,
+					)
+				}
+
+				if tc.wantDrainedPod == p.Name && drainState != metadata.DrainStateRequested {
+					t.Errorf(
+						"pod %s: drain state = %q, want %q",
+						p.Name, drainState, metadata.DrainStateRequested,
+					)
+				}
+			}
+		})
+	}
+}
+
 // TestSetupWithManager tests the manager setup function.
 func TestSetupWithManager(t *testing.T) {
 	scheme := runtime.NewScheme()
@@ -862,4 +1365,166 @@ func TestSetupWithManager(t *testing.T) {
 			t.Errorf("SetupWithManager() with opts error = %v", err)
 		}
 	})
+}
+
+// TestCleanupDrainedPod_PVCDeletion verifies that cleanupDrainedPod handles
+// PVC deletion correctly for DRAINED replacement pods (idx < replicas),
+// scale-down pods (idx >= replicas), and rolling-update pods under different
+// PVC deletion policies.
+func TestCleanupDrainedPod_PVCDeletion(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	baseShard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels: map[string]string{
+				metadata.LabelMultigresCluster: "test-cluster",
+			},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			ShardName:      "shard0",
+		},
+	}
+
+	poolName := "primary"
+	cellName := "zone1"
+	replicas := int32(3)
+
+	podName0 := BuildPoolPodName(baseShard, poolName, cellName, 0)
+	pvcName0 := BuildPoolDataPVCName(baseShard, poolName, cellName, 0)
+	podName1 := BuildPoolPodName(baseShard, poolName, cellName, 1)
+	pvcName1 := BuildPoolDataPVCName(baseShard, poolName, cellName, 1)
+	podName5 := BuildPoolPodName(baseShard, poolName, cellName, 5)
+	pvcName5 := BuildPoolDataPVCName(baseShard, poolName, cellName, 5)
+
+	makePod := func(n string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       n,
+				Namespace:  "default",
+				Finalizers: []string{PoolPodFinalizer},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: cellName,
+				},
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
+				},
+			},
+		}
+	}
+	makePVC := func(n string) *corev1.PersistentVolumeClaim {
+		return &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      n,
+				Namespace: "default",
+			},
+		}
+	}
+
+	deletePolicy := &multigresv1alpha1.PVCDeletionPolicy{
+		WhenScaled: multigresv1alpha1.DeletePVCRetentionPolicy,
+	}
+	retainPolicy := &multigresv1alpha1.PVCDeletionPolicy{
+		WhenScaled: multigresv1alpha1.RetainPVCRetentionPolicy,
+	}
+
+	tests := map[string]struct {
+		podName  string
+		pvcName  string
+		podRoles map[string]string
+		policy   *multigresv1alpha1.PVCDeletionPolicy
+		wantPVC  bool
+	}{
+		"DRAINED replacement (idx<replicas) with Delete policy deletes PVC": {
+			podName:  podName0,
+			pvcName:  pvcName0,
+			podRoles: map[string]string{podName0: "DRAINED"},
+			policy:   deletePolicy,
+			wantPVC:  false,
+		},
+		"DRAINED replacement (idx<replicas) with Retain policy keeps PVC": {
+			podName:  podName1,
+			pvcName:  pvcName1,
+			podRoles: map[string]string{podName1: "DRAINED"},
+			policy:   retainPolicy,
+			wantPVC:  true,
+		},
+		"non-DRAINED pod (idx<replicas) with Delete policy keeps PVC": {
+			podName:  podName0,
+			pvcName:  pvcName0,
+			podRoles: map[string]string{podName0: "REPLICA"},
+			policy:   deletePolicy,
+			wantPVC:  true,
+		},
+		"scale-down (idx>=replicas) with Delete policy deletes PVC": {
+			podName:  podName5,
+			pvcName:  pvcName5,
+			podRoles: map[string]string{},
+			policy:   deletePolicy,
+			wantPVC:  false,
+		},
+	}
+
+	for tn, tc := range tests {
+		t.Run(tn, func(t *testing.T) {
+			shard := baseShard.DeepCopy()
+			shard.Status.PodRoles = tc.podRoles
+
+			pod := makePod(tc.podName)
+			pvc := makePVC(tc.pvcName)
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(shard, pod, pvc).
+				Build()
+
+			reconciler := &ShardReconciler{
+				Client:    fakeClient,
+				Scheme:    scheme,
+				Recorder:  record.NewFakeRecorder(100),
+				APIReader: fakeClient,
+			}
+
+			poolSpec := multigresv1alpha1.PoolSpec{
+				PVCDeletionPolicy: tc.policy,
+			}
+
+			err := reconciler.cleanupDrainedPod(
+				context.Background(), shard, pod, poolName, poolSpec, replicas,
+			)
+			if err != nil {
+				t.Fatalf("cleanupDrainedPod() returned unexpected error: %v", err)
+			}
+
+			pvcAfter := &corev1.PersistentVolumeClaim{}
+			getErr := fakeClient.Get(
+				context.Background(),
+				client.ObjectKey{Namespace: "default", Name: tc.pvcName},
+				pvcAfter,
+			)
+			pvcExists := getErr == nil
+			if pvcExists != tc.wantPVC {
+				t.Errorf("PVC %s exists = %v, want %v (err=%v)", tc.pvcName, pvcExists, tc.wantPVC, getErr)
+			}
+
+			podAfter := &corev1.Pod{}
+			if err := fakeClient.Get(
+				context.Background(),
+				client.ObjectKey{Namespace: "default", Name: tc.podName},
+				podAfter,
+			); err != nil {
+				t.Fatalf("failed to get pod after cleanup: %v", err)
+			}
+			for _, f := range podAfter.Finalizers {
+				if f == PoolPodFinalizer {
+					t.Errorf("finalizer %q should have been removed from pod", PoolPodFinalizer)
+				}
+			}
+		})
+	}
 }

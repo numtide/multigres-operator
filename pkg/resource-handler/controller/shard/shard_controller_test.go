@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -1727,4 +1728,298 @@ func TestDrainedPodReplacement(t *testing.T) {
 			pod.Annotations[metadata.AnnotationDrainState],
 		)
 	}
+}
+
+func TestHandleDeletion(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
+
+	shardLabels := map[string]string{
+		metadata.LabelMultigresCluster:    "test-cluster",
+		metadata.LabelMultigresDatabase:   "testdb",
+		metadata.LabelMultigresTableGroup: "default",
+		metadata.LabelMultigresShard:      "shard0",
+	}
+
+	baseShard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "test-shard",
+			Namespace:         "default",
+			DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+			Finalizers:        []string{ShardFinalizer},
+			Labels:            shardLabels,
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			ShardName:      "shard0",
+		},
+	}
+
+	makePod := func(name string, scheduled bool, drainState string, finalizer bool) *corev1.Pod {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        name,
+				Namespace:   "default",
+				Labels:      shardLabels,
+				Annotations: map[string]string{},
+			},
+		}
+		if finalizer {
+			pod.Finalizers = []string{PoolPodFinalizer}
+		}
+		if drainState != "" {
+			pod.Annotations[metadata.AnnotationDrainState] = drainState
+		}
+		if scheduled {
+			pod.Status.Conditions = []corev1.PodCondition{
+				{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
+			}
+		}
+		return pod
+	}
+
+	t.Run("scheduled pod gets drain initiated", func(t *testing.T) {
+		t.Parallel()
+
+		pod := makePod("pod-0", true, "", true)
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		result, err := r.handleDeletion(context.Background(), shard)
+		if err != nil {
+			t.Fatalf("handleDeletion returned error: %v", err)
+		}
+		if result.RequeueAfter == 0 {
+			t.Error("Expected requeue while drain is in progress")
+		}
+
+		// Pod should now have drain annotations
+		updatedPod := &corev1.Pod{}
+		if err := c.Get(context.Background(), types.NamespacedName{Name: "pod-0", Namespace: "default"}, updatedPod); err != nil {
+			t.Fatalf("Failed to get pod: %v", err)
+		}
+		if updatedPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+			t.Errorf("Expected drain state %q, got %q",
+				metadata.DrainStateRequested,
+				updatedPod.Annotations[metadata.AnnotationDrainState])
+		}
+		if updatedPod.Annotations[metadata.AnnotationDrainRequestedAt] == "" {
+			t.Error("Expected drain requested-at timestamp to be set")
+		}
+	})
+
+	t.Run("unscheduled pod gets finalizer removed directly", func(t *testing.T) {
+		t.Parallel()
+
+		pod := makePod("pod-unsched", false, "", true)
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		result, err := r.handleDeletion(context.Background(), shard)
+		if err != nil {
+			t.Fatalf("handleDeletion returned error: %v", err)
+		}
+		if result.RequeueAfter != 0 {
+			t.Error("Expected no requeue for unscheduled pod")
+		}
+
+		// Pod should be fully deleted (finalizer removed + Delete called → fake client removes it)
+		updatedPod := &corev1.Pod{}
+		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-unsched", Namespace: "default"}, updatedPod)
+		if err == nil {
+			for _, f := range updatedPod.Finalizers {
+				if f == PoolPodFinalizer {
+					t.Error("Expected PoolPodFinalizer to be removed from unscheduled pod")
+				}
+			}
+		}
+		// NotFound is expected: fake client deletes when finalizer removed + Delete called
+	})
+
+	t.Run("ready-for-deletion pod gets finalizer removed", func(t *testing.T) {
+		t.Parallel()
+
+		pod := makePod("pod-rfd", true, metadata.DrainStateReadyForDeletion, true)
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		result, err := r.handleDeletion(context.Background(), shard)
+		if err != nil {
+			t.Fatalf("handleDeletion returned error: %v", err)
+		}
+		if result.RequeueAfter != 0 {
+			t.Error("Expected no requeue when drain is complete")
+		}
+
+		// Pod should be fully deleted
+		updatedPod := &corev1.Pod{}
+		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-rfd", Namespace: "default"}, updatedPod)
+		if err == nil {
+			for _, f := range updatedPod.Finalizers {
+				if f == PoolPodFinalizer {
+					t.Error("Expected PoolPodFinalizer to be removed from ready-for-deletion pod")
+				}
+			}
+		}
+		// NotFound is expected
+	})
+
+	t.Run("mid-drain pod requeues without timeout", func(t *testing.T) {
+		t.Parallel()
+
+		pod := makePod("pod-draining", true, metadata.DrainStateDraining, true)
+		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().UTC().Format(time.RFC3339)
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		result, err := r.handleDeletion(context.Background(), shard)
+		if err != nil {
+			t.Fatalf("handleDeletion returned error: %v", err)
+		}
+		if result.RequeueAfter == 0 {
+			t.Error("Expected requeue while drain is in progress")
+		}
+
+		// Pod should still have its finalizer
+		updatedPod := &corev1.Pod{}
+		if err := c.Get(context.Background(), types.NamespacedName{Name: "pod-draining", Namespace: "default"}, updatedPod); err != nil {
+			t.Fatalf("Failed to get pod: %v", err)
+		}
+		found := false
+		for _, f := range updatedPod.Finalizers {
+			if f == PoolPodFinalizer {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("Expected PoolPodFinalizer to still be present on mid-drain pod")
+		}
+	})
+
+	t.Run("timed out drain force-removes finalizer", func(t *testing.T) {
+		t.Parallel()
+
+		pod := makePod("pod-timeout", true, metadata.DrainStateDraining, true)
+		// Set requested-at to well past the timeout
+		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().Add(-2 * deletionDrainTimeout).UTC().Format(time.RFC3339)
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		result, err := r.handleDeletion(context.Background(), shard)
+		if err != nil {
+			t.Fatalf("handleDeletion returned error: %v", err)
+		}
+		if result.RequeueAfter != 0 {
+			t.Error("Expected no requeue after timeout force-removes finalizer")
+		}
+
+		// Pod should be fully cleaned up (finalizer removed + Delete called)
+		updatedPod := &corev1.Pod{}
+		err = c.Get(context.Background(), types.NamespacedName{Name: "pod-timeout", Namespace: "default"}, updatedPod)
+		if err == nil {
+			for _, f := range updatedPod.Finalizers {
+				if f == PoolPodFinalizer {
+					t.Error("Expected PoolPodFinalizer to be force-removed after timeout")
+				}
+			}
+		}
+	})
+
+	t.Run("shard finalizer removed when all pods are done", func(t *testing.T) {
+		t.Parallel()
+
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:   c,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		result, err := r.handleDeletion(context.Background(), shard)
+		if err != nil {
+			t.Fatalf("handleDeletion returned error: %v", err)
+		}
+		if result.RequeueAfter != 0 {
+			t.Error("Expected no requeue when all pods are gone")
+		}
+
+		// Shard should be fully cleaned up (finalizer removed → fake client auto-deletes)
+		updatedShard := &multigresv1alpha1.Shard{}
+		err = c.Get(context.Background(), types.NamespacedName{Name: "test-shard", Namespace: "default"}, updatedShard)
+		if err == nil {
+			for _, f := range updatedShard.Finalizers {
+				if f == ShardFinalizer {
+					t.Error("Expected ShardFinalizer to be removed when all pods are gone")
+				}
+			}
+		}
+	})
 }

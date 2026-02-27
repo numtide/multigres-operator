@@ -236,8 +236,15 @@ func (r *ShardReconciler) Reconcile(
 	return ctrl.Result{}, nil
 }
 
-// handleDeletion ensures all child resources (Pods) have their finalizers removed
-// before the Shard itself is allowed to be deleted.
+// deletionDrainTimeout is the maximum time to wait for a pod's drain state machine
+// to complete during shard deletion before force-removing the finalizer.
+// Kept deliberately short (30s): if the data-handler hasn't progressed the drain by
+// then, the topo server is likely unavailable (e.g., being deleted alongside the cluster).
+const deletionDrainTimeout = 90 * time.Second
+
+// handleDeletion ensures all child resources (Pods) go through the drain state machine
+// to unregister from etcd before their finalizers are removed. Pods that were never
+// scheduled or whose drain times out get their finalizers removed directly.
 func (r *ShardReconciler) handleDeletion(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -342,24 +349,28 @@ func (r *ShardReconciler) handleDeletion(
 		}
 	}
 
-	// Remove finalizers from all pods to allow them to be deleted by GC
+	// Process each pod through the drain state machine rather than stripping finalizers directly.
+	// This ensures pooler entries are unregistered from etcd before pods are removed.
 	podsStillPresent := 0
 	for i := range podList.Items {
 		pod := &podList.Items[i]
 
-		// Initiate pod deletion if not already deleting.
-		// We can't rely solely on ownerReference propagation because:
-		// 1. If propagation is Background, children are deleted AFTER parent (blocked by finalizers).
-		// 2. If propagation is Foreground, children are deleted BEFORE parent, but we might reach
-		//    this code before GC has marked them for deletion.
-		if pod.DeletionTimestamp.IsZero() {
-			logger.Info("Initiating pod deletion during shard cleanup", "pod", pod.Name)
-			if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+		if !controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
+			// No finalizer — pod will be cleaned up by GC.
+			// Initiate deletion if not already deleting.
+			if pod.DeletionTimestamp.IsZero() {
+				if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+					return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+				}
 			}
+			continue
 		}
 
-		if controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
+		drainState := pod.Annotations[metadata.AnnotationDrainState]
+
+		switch {
+		case drainState == metadata.DrainStateReadyForDeletion:
+			// Drain complete — remove finalizer and delete.
 			if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
 				if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
 					return ctrl.Result{}, fmt.Errorf(
@@ -368,28 +379,78 @@ func (r *ShardReconciler) handleDeletion(
 						err,
 					)
 				}
-				logger.Info("Removed finalizer from pod during shard deletion", "pod", pod.Name)
+				logger.Info("Removed finalizer from drained pod during shard deletion", "pod", pod.Name)
 			}
-		}
+			if pod.DeletionTimestamp.IsZero() {
+				if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+					return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+				}
+			}
 
-		// Check if the pod still exists after cleanup
-		checkPod := &corev1.Pod{}
-		if err := r.Get(
-			ctx,
-			client.ObjectKey{Namespace: pod.Namespace, Name: pod.Name},
-			checkPod,
-		); err == nil {
-			podsStillPresent++
-		} else if !errors.IsNotFound(
-			err,
-		) {
-			return ctrl.Result{}, fmt.Errorf("failed to check pod status: %w", err)
+		case drainState == "":
+			// No drain in progress — check if this pod was ever scheduled.
+			// Unscheduled pods can't be registered in etcd, so skip the drain.
+			if !isPodScheduled(pod) {
+				logger.Info("Removing finalizer from unscheduled pod during shard deletion", "pod", pod.Name)
+				if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
+					if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
+						return ctrl.Result{}, fmt.Errorf(
+							"failed to remove finalizer from unscheduled pod %s: %w",
+							pod.Name,
+							err,
+						)
+					}
+				}
+				if pod.DeletionTimestamp.IsZero() {
+					if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+						return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+					}
+				}
+			} else {
+				// Scheduled pod — initiate drain so data-handler unregisters from etcd.
+				logger.Info("Initiating drain for pod during shard deletion", "pod", pod.Name)
+				if err := r.initiateDrain(ctx, pod); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to initiate drain for pod %s: %w", pod.Name, err)
+				}
+				if pod.DeletionTimestamp.IsZero() {
+					if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+						return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+					}
+				}
+				podsStillPresent++
+			}
+
+		default:
+			// Drain is in progress (requested, draining, or acknowledged).
+			// Check if the drain has timed out.
+			if drainTimedOut(pod) {
+				logger.Info("Drain timed out during shard deletion, force-removing finalizer",
+					"pod", pod.Name, "drainState", drainState)
+				r.Recorder.Eventf(shard, "Warning", "DrainTimeout",
+					"Drain timed out for pod %s during shard deletion, force-removing finalizer", pod.Name)
+				if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
+					if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
+						return ctrl.Result{}, fmt.Errorf(
+							"failed to remove finalizer from timed-out pod %s: %w",
+							pod.Name,
+							err,
+						)
+					}
+				}
+				if pod.DeletionTimestamp.IsZero() {
+					if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+						return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+					}
+				}
+			} else {
+				podsStillPresent++
+			}
 		}
 	}
 
 	if podsStillPresent > 0 {
-		logger.V(1).Info("Waiting for pods to be removed", "count", podsStillPresent)
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		logger.V(1).Info("Waiting for pod drains to complete during shard deletion", "count", podsStillPresent)
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	// Remove Shard finalizer
@@ -402,6 +463,29 @@ func (r *ShardReconciler) handleDeletion(
 
 	logger.Info("Shard cleanup complete, finalizer removed")
 	return ctrl.Result{}, nil
+}
+
+// isPodScheduled returns true if the pod has been scheduled to a node.
+func isPodScheduled(pod *corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// drainTimedOut returns true if the drain was requested more than deletionDrainTimeout ago.
+func drainTimedOut(pod *corev1.Pod) bool {
+	requestedAt := pod.Annotations[metadata.AnnotationDrainRequestedAt]
+	if requestedAt == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, requestedAt)
+	if err != nil {
+		return false
+	}
+	return time.Since(t) > deletionDrainTimeout
 }
 
 // reconcilePool creates or updates the Pods, PVCs and headless Service for a pool.

@@ -98,6 +98,10 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			logger.Info("Proceeding to drain replica pod", "pod", pod.Name)
 			primary, err := findPrimaryPooler(ctx, store, shard, cells)
 			if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
+				if r.isPrimaryDraining(ctx, shard, primary) {
+					logger.Info("Primary pod is being drained, skipping standby removal", "pod", pod.Name)
+					return true, nil
+				}
 				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
 					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
 					StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
@@ -122,6 +126,10 @@ func (r *ShardReconciler) executeDrainStateMachine(
 				return true, nil
 			}
 			if primary != nil && myPooler != nil && r.rpcClient != nil {
+				if r.isPrimaryDraining(ctx, shard, primary) {
+					logger.Info("Primary pod is being drained, skipping standby removal verification", "pod", pod.Name)
+					return true, nil
+				}
 				req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
 					Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
 					StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
@@ -199,6 +207,24 @@ func (r *ShardReconciler) forceUnregister(
 		Info("No matching pooler found in topology for pod, skipping unregistration",
 			"pod", pod.Name, "cell", cellName)
 	return nil
+}
+
+// isPrimaryDraining checks if the primary pooler's corresponding Kubernetes pod
+// has drain annotations, indicating it is mid-drain and should not receive RPCs.
+func (r *ShardReconciler) isPrimaryDraining(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	primary *clustermetadatapb.MultiPooler,
+) bool {
+	if primary == nil || primary.Id == nil {
+		return false
+	}
+	primaryPod := &corev1.Pod{}
+	key := client.ObjectKey{Namespace: shard.Namespace, Name: primary.Id.Name}
+	if err := r.Get(ctx, key, primaryPod); err != nil {
+		return false
+	}
+	return primaryPod.Annotations[metadata.AnnotationDrainState] != ""
 }
 
 // podMatchesPooler checks if the topology pooler record corresponds to the given Kubernetes pod name.

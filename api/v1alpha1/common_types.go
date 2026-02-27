@@ -338,7 +338,14 @@ func MergeBackupConfig(child, parent *BackupConfig) *BackupConfig {
 			// Bool fields are tricky in merge (is false explicitly set or default?)
 			// For simplicity in v1alpha1, we assume if struct is present, we take the value
 			merged.S3.UseEnvCredentials = child.S3.UseEnvCredentials
+			if child.S3.CredentialsSecret != "" {
+				merged.S3.CredentialsSecret = child.S3.CredentialsSecret
+			}
 		}
+	}
+
+	if child.PgBackRestTLS != nil {
+		merged.PgBackRestTLS = child.PgBackRestTLS.DeepCopy()
 	}
 
 	return merged

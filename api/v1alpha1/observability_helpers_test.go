@@ -295,6 +295,44 @@ func TestMergeBackupConfig(t *testing.T) {
 				},
 			},
 		},
+		"s3 child overrides credentialsSecret": {
+			child: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{CredentialsSecret: "child-secret"},
+			},
+			parent: &BackupConfig{
+				Type: BackupTypeS3,
+				S3: &S3BackupConfig{
+					Bucket:            "parent-bucket",
+					Region:            "us-west-2",
+					CredentialsSecret: "parent-secret",
+				},
+			},
+			want: &BackupConfig{
+				Type: BackupTypeS3,
+				S3: &S3BackupConfig{
+					Bucket:            "parent-bucket",
+					Region:            "us-west-2",
+					CredentialsSecret: "child-secret",
+				},
+			},
+		},
+		"child overrides pgBackRestTLS": {
+			child: &BackupConfig{
+				Type:          BackupTypeS3,
+				S3:            &S3BackupConfig{Bucket: "child-bucket"},
+				PgBackRestTLS: &PgBackRestTLSConfig{SecretName: "child-tls-secret"},
+			},
+			parent: &BackupConfig{
+				Type: BackupTypeS3,
+				S3:   &S3BackupConfig{Bucket: "parent-bucket", Region: "eu-west-1"},
+			},
+			want: &BackupConfig{
+				Type:          BackupTypeS3,
+				S3:            &S3BackupConfig{Bucket: "child-bucket", Region: "eu-west-1"},
+				PgBackRestTLS: &PgBackRestTLSConfig{SecretName: "child-tls-secret"},
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -344,6 +382,25 @@ func TestMergeBackupConfig(t *testing.T) {
 				}
 				if got.S3.Endpoint != tc.want.S3.Endpoint {
 					t.Errorf("S3.Endpoint = %q, want %q", got.S3.Endpoint, tc.want.S3.Endpoint)
+				}
+				if got.S3.CredentialsSecret != tc.want.S3.CredentialsSecret {
+					t.Errorf(
+						"S3.CredentialsSecret = %q, want %q",
+						got.S3.CredentialsSecret,
+						tc.want.S3.CredentialsSecret,
+					)
+				}
+			}
+			if tc.want.PgBackRestTLS != nil {
+				if got.PgBackRestTLS == nil {
+					t.Fatal("PgBackRestTLS = nil, want non-nil")
+				}
+				if got.PgBackRestTLS.SecretName != tc.want.PgBackRestTLS.SecretName {
+					t.Errorf(
+						"PgBackRestTLS.SecretName = %q, want %q",
+						got.PgBackRestTLS.SecretName,
+						tc.want.PgBackRestTLS.SecretName,
+					)
 				}
 			}
 		})

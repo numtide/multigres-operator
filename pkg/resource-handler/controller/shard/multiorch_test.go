@@ -308,6 +308,240 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				},
 			},
 		},
+		"with pod labels, annotations, and affinity": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "labels-shard",
+					Namespace: "default",
+					UID:       "labels-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "labels-cluster"},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd",
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						StatelessSpec: multigresv1alpha1.StatelessSpec{
+							PodLabels: map[string]string{
+								"custom-label":   "custom-value",
+								"team":           "platform",
+								"sidecar-inject": "true",
+							},
+							PodAnnotations: map[string]string{
+								"prometheus.io/scrape": "true",
+								"prometheus.io/port":   "8080",
+							},
+							Affinity: &corev1.Affinity{
+								PodAntiAffinity: &corev1.PodAntiAffinity{
+									PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+										{
+											Weight: 100,
+											PodAffinityTerm: corev1.PodAffinityTerm{
+												TopologyKey: "kubernetes.io/hostname",
+											},
+										},
+									},
+								},
+							},
+						},
+						Cells: []multigresv1alpha1.CellName{"zone-a"},
+					},
+				},
+			},
+			cellName: "zone-a",
+			scheme:   scheme,
+			want: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "labels-shard-multiorch-zone-a",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "labels-cluster",
+						"app.kubernetes.io/component":  MultiOrchComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "labels-cluster",
+						"multigres.com/cell":           "zone-a",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "labels-shard",
+							UID:                "labels-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To(int32(1)),
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/instance":  "labels-cluster",
+							"app.kubernetes.io/component": MultiOrchComponentName,
+							"multigres.com/cluster":       "labels-cluster",
+							"multigres.com/cell":          "zone-a",
+							"multigres.com/database":      "testdb",
+							"multigres.com/tablegroup":    "default",
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app.kubernetes.io/name":       "multigres",
+								"app.kubernetes.io/instance":   "labels-cluster",
+								"app.kubernetes.io/component":  MultiOrchComponentName,
+								"app.kubernetes.io/part-of":    "multigres",
+								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "labels-cluster",
+								"multigres.com/cell":           "zone-a",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
+								"custom-label":                 "custom-value",
+								"team":                         "platform",
+								"sidecar-inject":               "true",
+							},
+							Annotations: map[string]string{
+								"prometheus.io/scrape": "true",
+								"prometheus.io/port":   "8080",
+							},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								buildMultiOrchContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd",
+										},
+									},
+								}, "zone-a"),
+							},
+							Affinity: &corev1.Affinity{
+								PodAntiAffinity: &corev1.PodAntiAffinity{
+									PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+										{
+											Weight: 100,
+											PodAffinityTerm: corev1.PodAffinityTerm{
+												TopologyKey: "kubernetes.io/hostname",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"pod labels cannot overwrite operator selector labels": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "override-shard",
+					Namespace: "default",
+					UID:       "override-uid",
+					Labels:    map[string]string{"multigres.com/cluster": "override-cluster"},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd",
+					},
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						StatelessSpec: multigresv1alpha1.StatelessSpec{
+							PodLabels: map[string]string{
+								"app.kubernetes.io/component": "hacked",
+								"multigres.com/cell":          "wrong-cell",
+								"safe-label":                  "safe-value",
+							},
+						},
+						Cells: []multigresv1alpha1.CellName{"zone-a"},
+					},
+				},
+			},
+			cellName: "zone-a",
+			scheme:   scheme,
+			want: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "override-shard-multiorch-zone-a",
+					Namespace: "default",
+					Labels: map[string]string{
+						"app.kubernetes.io/name":       "multigres",
+						"app.kubernetes.io/instance":   "override-cluster",
+						"app.kubernetes.io/component":  MultiOrchComponentName,
+						"app.kubernetes.io/part-of":    "multigres",
+						"app.kubernetes.io/managed-by": "multigres-operator",
+						"multigres.com/cluster":        "override-cluster",
+						"multigres.com/cell":           "zone-a",
+						"multigres.com/database":       "testdb",
+						"multigres.com/tablegroup":     "default",
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "multigres.com/v1alpha1",
+							Kind:               "Shard",
+							Name:               "override-shard",
+							UID:                "override-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To(int32(1)),
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app.kubernetes.io/instance":  "override-cluster",
+							"app.kubernetes.io/component": MultiOrchComponentName,
+							"multigres.com/cluster":       "override-cluster",
+							"multigres.com/cell":          "zone-a",
+							"multigres.com/database":      "testdb",
+							"multigres.com/tablegroup":    "default",
+						},
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app.kubernetes.io/name":       "multigres",
+								"app.kubernetes.io/instance":   "override-cluster",
+								"app.kubernetes.io/component":  MultiOrchComponentName,
+								"app.kubernetes.io/part-of":    "multigres",
+								"app.kubernetes.io/managed-by": "multigres-operator",
+								"multigres.com/cluster":        "override-cluster",
+								"multigres.com/cell":           "zone-a",
+								"multigres.com/database":       "testdb",
+								"multigres.com/tablegroup":     "default",
+								"safe-label":                   "safe-value",
+							},
+						},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								buildMultiOrchContainer(&multigresv1alpha1.Shard{
+									Spec: multigresv1alpha1.ShardSpec{
+										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+											Address:        "global-topo:2379",
+											RootPath:       "/multigres/global",
+											Implementation: "etcd",
+										},
+									},
+								}, "zone-a"),
+							},
+						},
+					},
+				},
+			},
+		},
 		"invalid scheme - should error": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{

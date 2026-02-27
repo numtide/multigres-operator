@@ -384,10 +384,10 @@ func (r *ShardReconciler) handleScaleDown(
 		actionTaken = true
 	}
 
-	// Replace DRAINED pods
+	// Replace DRAINED pods (skip if another drain is already in progress)
 	for _, name := range podNames {
 		pod := existingPods[name]
-		if actionTaken {
+		if actionTaken || inProgress {
 			break
 		}
 		role := resolvePodRole(shard, pod.Name)
@@ -409,10 +409,10 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 	}
 
-	// Drain extra pods (scale-down)
+	// Drain extra pods (scale-down, skip if another drain is already in progress)
 	logger.V(1).
-		Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "desiredReplicas", replicas)
-	if !actionTaken && len(extraPods) > 0 {
+		Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "inProgress", inProgress, "desiredReplicas", replicas)
+	if !actionTaken && !inProgress && len(extraPods) > 0 {
 		podToDrain := r.selectPodToDrain(ctx, extraPods, shard)
 		if podToDrain != nil && podToDrain.Annotations[metadata.AnnotationDrainState] == "" {
 			if err := r.initiateDrain(ctx, podToDrain); err != nil {
@@ -628,7 +628,8 @@ func (r *ShardReconciler) cleanupDrainedPod(
 
 	if policy.WhenScaled == multigresv1alpha1.DeletePVCRetentionPolicy {
 		idx := resolvePodIndex(pod.Name)
-		if idx >= int(replicas) {
+		isDrainedReplacement := idx < int(replicas) && resolvePodRole(shard, pod.Name) == "DRAINED"
+		if idx >= int(replicas) || isDrainedReplacement {
 			cellName := pod.Labels[metadata.LabelMultigresCell]
 			pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
 			pvc := &corev1.PersistentVolumeClaim{}
@@ -639,12 +640,15 @@ func (r *ShardReconciler) cleanupDrainedPod(
 					return fmt.Errorf("failed to fetch PVC %s for deletion: %w", pvcName, err)
 				}
 			} else {
-				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
-					logger.Error(err, "Failed to delete PVC for scaled down pod", "pvc", pvcName)
-					return fmt.Errorf("failed to delete PVC %s: %w", pvcName, err)
-				} else {
-					logger.Info("Deleted PVC for scaled down pod", "pvc", pvcName)
+				reason := "scaled down"
+				if isDrainedReplacement {
+					reason = "DRAINED replacement"
 				}
+				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
+					logger.Error(err, "Failed to delete PVC for "+reason+" pod", "pvc", pvcName)
+					return fmt.Errorf("failed to delete PVC %s: %w", pvcName, err)
+				}
+				logger.Info("Deleted PVC for "+reason+" pod", "pvc", pvcName)
 			}
 		} else {
 			logger.Info(
