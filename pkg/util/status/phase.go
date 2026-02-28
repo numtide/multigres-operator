@@ -14,12 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package status provides utilities for managing and calculating the Phase
-// and Status conditions of Multigres Custom Resources.
-//
-// It defines shared helper functions like ComputePhase to ensure consistent
-// lifecycle management across different resources such as TopoServer, Cell,
-// Shard, TableGroup, and MultigresCluster.
 package status
 
 import (

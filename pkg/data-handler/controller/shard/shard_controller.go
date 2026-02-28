@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -30,10 +31,16 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
 const (
 	finalizerName = "multigres.com/shard-data-protection"
+
+	// conditionDatabaseRegistered tracks whether the database was ever
+	// successfully registered in the global topology. Used during deletion
+	// to distinguish "never initialized" from "temporarily unreachable".
+	conditionDatabaseRegistered = "DatabaseRegistered"
 
 	// topoUnavailableGracePeriod is the duration after resource creation during
 	// which topology UNAVAILABLE errors are silently requeued instead of being
@@ -44,6 +51,11 @@ const (
 	// topoUnavailableRequeueDelay is the delay before retrying when the topology
 	// server is unavailable during the grace period.
 	topoUnavailableRequeueDelay = 5 * time.Second
+
+	// topoCleanupTimeout is the maximum duration to retry topology cleanup
+	// during deletion when the database was previously registered but is now
+	// unreachable. After this period, the finalizer is removed with a warning.
+	topoCleanupTimeout = 2 * time.Minute
 )
 
 // ShardReconciler reconciles Shard data plane operations.
@@ -161,6 +173,22 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			return ctrl.Result{}, err
 		}
 		childSpan.End()
+	}
+
+	// Mark the database as registered in topology so deletion knows cleanup is needed.
+	if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
+		statusBase := shard.DeepCopy()
+		status.SetCondition(&shard.Status.Conditions, metav1.Condition{
+			Type:               conditionDatabaseRegistered,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Registered",
+			Message:            "Database registered in topology",
+			ObservedGeneration: shard.Generation,
+			LastTransitionTime: metav1.Now(),
+		})
+		if err := r.Status().Patch(ctx, shard, client.MergeFrom(statusBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("setting DatabaseRegistered condition: %w", err)
+		}
 	}
 
 	// Update PodRoles and execute Drain State Machine
@@ -292,7 +320,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			)
 		} else if result != nil {
 			backupBase := shard.DeepCopy()
-			prevHealthy := isConditionTrue(shard.Status.Conditions, conditionBackupHealthy)
+			prevHealthy := status.IsConditionTrue(shard.Status.Conditions, conditionBackupHealthy)
 			applyBackupHealth(shard, result)
 
 			// Emit transition events.
@@ -330,7 +358,22 @@ func (r *ShardReconciler) handleDeletion(
 		// Clean up database data from topology
 		if err := r.unregisterDatabaseFromTopology(ctx, shard); err != nil {
 			if isTopoUnavailable(err) {
-				logger.Info("Topology server unreachable during deletion, skipping cleanup")
+				if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
+					logger.Info("Topology never initialized, skipping cleanup")
+				} else {
+					deletionAge := time.Since(shard.DeletionTimestamp.Time)
+					if deletionAge > topoCleanupTimeout {
+						logger.Info("Topology unreachable beyond cleanup timeout, forcing finalizer removal",
+							"deletionAge", deletionAge.Round(time.Second).String())
+						r.Recorder.Eventf(shard, "Warning", "CleanupSkipped",
+							"Topology unreachable for %s during deletion, skipping cleanup",
+							deletionAge.Round(time.Second))
+					} else {
+						logger.Info("Topology temporarily unreachable, will retry cleanup",
+							"deletionAge", deletionAge.Round(time.Second).String())
+						return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
+					}
+				}
 			} else {
 				r.Recorder.Eventf(
 					shard,
