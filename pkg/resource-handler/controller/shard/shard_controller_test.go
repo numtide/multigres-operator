@@ -1715,6 +1715,245 @@ func TestScaleDown_ExternallyDeletedExtraPod(t *testing.T) {
 	}
 }
 
+func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
+	t.Parallel()
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+		},
+	}
+
+	poolName := "primary"
+	cellName := "zone1"
+
+	podName0 := BuildPoolPodName(shardObj, poolName, cellName, 0)
+	podName1 := BuildPoolPodName(shardObj, poolName, cellName, 1)
+	podName2 := BuildPoolPodName(shardObj, poolName, cellName, 2)
+
+	makePod := func(name string, ready bool) *corev1.Pod {
+		readyStatus := corev1.ConditionTrue
+		if !ready {
+			readyStatus = corev1.ConditionFalse
+		}
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        name,
+				Namespace:   "default",
+				Annotations: map[string]string{},
+				Finalizers:  []string{PoolPodFinalizer},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: cellName,
+				},
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: readyStatus},
+				},
+			},
+		}
+	}
+
+	t.Run("blocks drain when pool has non-ready pod", func(t *testing.T) {
+		t.Parallel()
+		shard := shardObj.DeepCopy()
+		shard.Status.PodRoles = map[string]string{
+			podName0: "PRIMARY",
+			podName1: "REPLICA",
+			podName2: "REPLICA",
+		}
+
+		pods := []*corev1.Pod{
+			makePod(podName0, true),
+			makePod(podName1, false), // not ready
+			makePod(podName2, true),
+		}
+
+		objects := []client.Object{shard}
+		for _, p := range pods {
+			objects = append(objects, p.DeepCopy())
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+		rec := record.NewFakeRecorder(10)
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: rec}
+
+		existingPods := make(map[string]*corev1.Pod, len(pods))
+		for _, p := range pods {
+			existingPods[p.Name] = p
+		}
+
+		actionTaken, _, err := r.handleScaleDown(
+			context.Background(), shard, poolName,
+			multigresv1alpha1.PoolSpec{}, existingPods,
+			2, // replicas: pod-2 is extra
+			false,
+		)
+		if err != nil {
+			t.Fatalf("handleScaleDown returned error: %v", err)
+		}
+
+		if actionTaken {
+			t.Error("Expected no action taken (health gate should block)")
+		}
+
+		// Pod-2 should NOT have drain annotation
+		updated := &corev1.Pod{}
+		if err := c.Get(
+			context.Background(),
+			types.NamespacedName{Name: podName2, Namespace: "default"},
+			updated,
+		); err != nil {
+			t.Fatalf("failed to get pod: %v", err)
+		}
+		if updated.Annotations[metadata.AnnotationDrainState] != "" {
+			t.Errorf(
+				"Expected no drain annotation (health gate should block), got %q",
+				updated.Annotations[metadata.AnnotationDrainState],
+			)
+		}
+
+		// Verify ScaleDownBlocked event was emitted
+		select {
+		case event := <-rec.Events:
+			if !strings.Contains(event, "ScaleDownBlocked") {
+				t.Errorf("Expected ScaleDownBlocked event, got %q", event)
+			}
+		default:
+			t.Error("Expected ScaleDownBlocked event to be emitted")
+		}
+	})
+
+	t.Run("allows drain when all pods are healthy", func(t *testing.T) {
+		t.Parallel()
+		shard := shardObj.DeepCopy()
+		shard.Status.PodRoles = map[string]string{
+			podName0: "PRIMARY",
+			podName1: "REPLICA",
+			podName2: "REPLICA",
+		}
+
+		pods := []*corev1.Pod{
+			makePod(podName0, true),
+			makePod(podName1, true),
+			makePod(podName2, true),
+		}
+
+		objects := []client.Object{shard}
+		for _, p := range pods {
+			objects = append(objects, p.DeepCopy())
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		existingPods := make(map[string]*corev1.Pod, len(pods))
+		for _, p := range pods {
+			existingPods[p.Name] = p
+		}
+
+		actionTaken, _, err := r.handleScaleDown(
+			context.Background(), shard, poolName,
+			multigresv1alpha1.PoolSpec{}, existingPods,
+			2, // replicas: pod-2 is extra
+			false,
+		)
+		if err != nil {
+			t.Fatalf("handleScaleDown returned error: %v", err)
+		}
+
+		if !actionTaken {
+			t.Error("Expected action taken (drain should proceed)")
+		}
+
+		// Pod-2 SHOULD have drain annotation
+		updated := &corev1.Pod{}
+		if err := c.Get(
+			context.Background(),
+			types.NamespacedName{Name: podName2, Namespace: "default"},
+			updated,
+		); err != nil {
+			t.Fatalf("failed to get pod: %v", err)
+		}
+		if updated.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+			t.Errorf(
+				"Expected drain annotation %q, got %q",
+				metadata.DrainStateRequested,
+				updated.Annotations[metadata.AnnotationDrainState],
+			)
+		}
+	})
+
+	t.Run("unhealthy extra pod does not block its own removal", func(t *testing.T) {
+		t.Parallel()
+		shard := shardObj.DeepCopy()
+		shard.Status.PodRoles = map[string]string{
+			podName0: "PRIMARY",
+			podName1: "REPLICA",
+			podName2: "REPLICA",
+		}
+
+		pods := []*corev1.Pod{
+			makePod(podName0, true),
+			makePod(podName1, true),
+			makePod(podName2, false), // extra pod is unhealthy (e.g. CrashLoopBackOff)
+		}
+
+		objects := []client.Object{shard}
+		for _, p := range pods {
+			objects = append(objects, p.DeepCopy())
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		existingPods := make(map[string]*corev1.Pod, len(pods))
+		for _, p := range pods {
+			existingPods[p.Name] = p
+		}
+
+		actionTaken, _, err := r.handleScaleDown(
+			context.Background(), shard, poolName,
+			multigresv1alpha1.PoolSpec{}, existingPods,
+			2, // replicas: pod-2 is extra
+			false,
+		)
+		if err != nil {
+			t.Fatalf("handleScaleDown returned error: %v", err)
+		}
+
+		if !actionTaken {
+			t.Error("Expected action taken (unhealthy extra pod should not block its own removal)")
+		}
+
+		// Pod-2 SHOULD have drain annotation despite being unhealthy
+		updated := &corev1.Pod{}
+		if err := c.Get(
+			context.Background(),
+			types.NamespacedName{Name: podName2, Namespace: "default"},
+			updated,
+		); err != nil {
+			t.Fatalf("failed to get pod: %v", err)
+		}
+		if updated.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+			t.Errorf(
+				"Expected drain annotation %q, got %q",
+				metadata.DrainStateRequested,
+				updated.Annotations[metadata.AnnotationDrainState],
+			)
+		}
+	})
+}
+
 func TestRollingUpdateOrder(t *testing.T) {
 	t.Parallel()
 	scheme := runtime.NewScheme()
