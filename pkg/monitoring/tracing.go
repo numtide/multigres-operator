@@ -39,6 +39,9 @@ const (
 // making instrumentation zero-cost in the default configuration.
 var Tracer = otel.Tracer(tracerName)
 
+// newResource wraps resource.New so tests can inject failures.
+var newResource = resource.New
+
 // InitTracing initialises the OTel TracerProvider using autoexport.
 // The transport protocol is determined by OTEL_EXPORTER_OTLP_PROTOCOL
 // (default: "http/protobuf"). Supported values: "grpc", "http/protobuf".
@@ -57,7 +60,7 @@ func InitTracing(
 		return nil, fmt.Errorf("creating OTLP exporter: %w", err)
 	}
 
-	res, err := resource.New(ctx,
+	res, err := newResource(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName),
 			semconv.ServiceVersion(version),

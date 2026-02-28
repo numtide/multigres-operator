@@ -966,6 +966,16 @@ func TestEnqueueRequestsFromTemplate(t *testing.T) {
 		}
 	})
 
+	t.Run("Unknown object type returns nil", func(t *testing.T) {
+		unknown := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "not-a-template", Namespace: "default"},
+		}
+		requests := r.enqueueRequestsFromTemplate(context.Background(), unknown)
+		if requests != nil {
+			t.Errorf("Expected nil for unknown object type, got %v", requests)
+		}
+	})
+
 	t.Run("List error returns empty", func(t *testing.T) {
 		failureConfig := &testutil.FailureConfig{
 			OnList: testutil.FailObjListAfterNCalls(0, errors.New("list error")),

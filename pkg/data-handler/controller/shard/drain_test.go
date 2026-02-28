@@ -2,6 +2,8 @@ package shard
 
 import (
 	"context"
+	"fmt"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -846,5 +848,1016 @@ func TestReplicaDrain_SkipsRPCWhenPrimaryDraining(t *testing.T) {
 		t.Errorf("Expected drain state to remain %q, got %q",
 			metadata.DrainStateRequested,
 			updatedPod.Annotations[metadata.AnnotationDrainState])
+	}
+}
+
+func TestReplicaDrain_DrainingState_FindPrimaryError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateDraining,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	rpcMock := &mockRPCClient{}
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
+	}
+
+	// Create a topo where the replica exists but finding primary will fail
+	// because cell1 has a pooler error condition (e.g., non-UNAVAILABLE error).
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod-0"},
+		Hostname: "replica-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+
+	// Since there's no primary in topo, findPrimaryPooler returns nil,nil.
+	// So the replica draining state should advance to Acknowledged.
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Fatal("expected requeue")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateAcknowledged {
+		t.Errorf("expected Acknowledged, got %s", pod.Annotations[metadata.AnnotationDrainState])
+	}
+}
+
+func TestReplicaDrain_DrainingState_PrimaryDraining(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-pod", Namespace: "default",
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateDraining,
+			},
+		},
+	}
+
+	replicaPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateDraining,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardObj, primaryPod, replicaPod).
+		Build()
+	rpcMock := &mockRPCClient{}
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		Hostname: "primary-pod", Type: clustermetadata.PoolerType_PRIMARY,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod-0"},
+		Hostname: "replica-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+
+	// In DrainStateDraining, if primary is draining, should requeue without advancing
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Error("expected requeue when primary is draining")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(replicaPod), replicaPod)
+	if replicaPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateDraining {
+		t.Errorf("expected state to remain Draining, got %s",
+			replicaPod.Annotations[metadata.AnnotationDrainState])
+	}
+	if rpcMock.updateStandbyCalled {
+		t.Error("should not call UpdateSynchronousStandbyList when primary is draining")
+	}
+}
+
+func TestDrain_TopoUnavailableDuringPodDeletion(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	now := metav1.Now()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateRequested,
+			},
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"test-finalizer"},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	store := &unavailableTopoStore{}
+
+	ctx := context.Background()
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Fatal("expected requeue")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateReadyForDeletion {
+		t.Errorf("expected ReadyForDeletion when topo unavailable and pod is deleted, got %s",
+			pod.Annotations[metadata.AnnotationDrainState])
+	}
+}
+
+// unavailableTopoStore is a mock store that returns UNAVAILABLE for GetMultiPoolersByCell.
+type unavailableTopoStore struct {
+	topoclient.Store
+}
+
+func (s *unavailableTopoStore) GetMultiPoolersByCell(
+	ctx context.Context,
+	cell string,
+	opts *topoclient.GetMultiPoolersByCellOptions,
+) ([]*topoclient.MultiPoolerInfo, error) {
+	return nil, fmt.Errorf("Code: UNAVAILABLE\nno connection available")
+}
+
+func (s *unavailableTopoStore) Close() error { return nil }
+
+func TestReplicaDrain_PrimaryTerminatingOrMissing(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	replicaPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateRequested,
+			},
+		},
+	}
+
+	// Primary pod is terminating (has DeletionTimestamp)
+	now := metav1.Now()
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-pod", Namespace: "default",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"test-finalizer"},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardObj, replicaPod, primaryPod).
+		Build()
+	rpcMock := &mockRPCClient{}
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		Hostname: "primary-pod", Type: clustermetadata.PoolerType_PRIMARY,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod-0"},
+		Hostname: "replica-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Fatal("expected requeue")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(replicaPod), replicaPod)
+	if replicaPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateDraining {
+		t.Errorf("expected Draining, got %s", replicaPod.Annotations[metadata.AnnotationDrainState])
+	}
+	if rpcMock.updateStandbyCalled {
+		t.Error("should skip standby removal when primary is terminating")
+	}
+}
+
+func TestReplicaDrain_DrainingState_PrimaryTerminating(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	replicaPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateDraining,
+			},
+		},
+	}
+
+	now := metav1.Now()
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-pod", Namespace: "default",
+			DeletionTimestamp: &now,
+			Finalizers:        []string{"test-finalizer"},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardObj, replicaPod, primaryPod).
+		Build()
+	rpcMock := &mockRPCClient{}
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		Hostname: "primary-pod", Type: clustermetadata.PoolerType_PRIMARY,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod-0"},
+		Hostname: "replica-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+
+	// In DrainStateDraining, primary is terminating, should skip standby verification
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Fatal("expected requeue")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(replicaPod), replicaPod)
+	if replicaPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateAcknowledged {
+		t.Errorf(
+			"expected Acknowledged, got %s",
+			replicaPod.Annotations[metadata.AnnotationDrainState],
+		)
+	}
+	if rpcMock.updateStandbyCalled {
+		t.Error("should skip standby removal verification when primary is terminating")
+	}
+}
+
+func TestDrain_AcknowledgedState_NoPoolerInTopo(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateAcknowledged,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	// Don't register any pooler — the pod won't be found in topo
+
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Fatal("expected requeue")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateReadyForDeletion {
+		t.Errorf("expected ReadyForDeletion, got %s",
+			pod.Annotations[metadata.AnnotationDrainState])
+	}
+}
+
+func TestDrain_StuckDrainTimeout_DeletionTimestampFallback(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	// Pod with DeletionTimestamp 10 minutes ago but no AnnotationDrainRequestedAt
+	oldTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateDraining,
+			},
+			DeletionTimestamp: &oldTime,
+			Finalizers:        []string{"test-finalizer"},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	store, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "test-pod-0"},
+		Hostname: "test-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Fatal("expected requeue after forced unregistration")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateReadyForDeletion {
+		t.Errorf("expected ReadyForDeletion after timeout, got %s",
+			pod.Annotations[metadata.AnnotationDrainState])
+	}
+
+	// Verify pooler was unregistered
+	inspectorStore := topoclient.NewWithFactory(
+		factory,
+		"",
+		[]string{""},
+		topoclient.NewDefaultTopoConfig(),
+	)
+	defer func() { _ = inspectorStore.Close() }()
+	poolers, _ := inspectorStore.GetMultiPoolersByCell(ctx, "cell1", nil)
+	if len(poolers) != 0 {
+		t.Errorf("expected pooler to be unregistered, got %d", len(poolers))
+	}
+}
+
+func TestDrain_NonTopoError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateRequested,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	store := &nonTopoErrorStore{}
+
+	_, err := reconciler.executeDrainStateMachine(context.Background(), store, shardObj, pod)
+	if err == nil {
+		t.Error("expected error for non-topo-unavailable error when pod is not being deleted")
+	}
+}
+
+// nonTopoErrorStore returns a non-UNAVAILABLE error for GetMultiPoolersByCell.
+type nonTopoErrorStore struct {
+	topoclient.Store
+}
+
+func (s *nonTopoErrorStore) GetMultiPoolersByCell(
+	ctx context.Context,
+	cell string,
+	opts *topoclient.GetMultiPoolersByCellOptions,
+) ([]*topoclient.MultiPoolerInfo, error) {
+	return nil, fmt.Errorf("permission denied")
+}
+
+func (s *nonTopoErrorStore) Close() error { return nil }
+
+func TestReplicaDrain_RPCError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	replicaPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateRequested,
+			},
+		},
+	}
+
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-pod", Namespace: "default",
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardObj, replicaPod, primaryPod).
+		Build()
+	rpcMock := &failingRPCClient{}
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		Hostname: "primary-pod", Type: clustermetadata.PoolerType_PRIMARY,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod-0"},
+		Hostname: "replica-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+
+	// RPC error on UpdateSynchronousStandbyList should requeue
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Error("expected requeue when RPC fails")
+	}
+
+	// State should NOT have advanced
+	_ = c.Get(ctx, client.ObjectKeyFromObject(replicaPod), replicaPod)
+	if replicaPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+		t.Errorf("expected state to remain Requested on RPC failure, got %s",
+			replicaPod.Annotations[metadata.AnnotationDrainState])
+	}
+}
+
+func TestReplicaDrain_DrainingState_RPCError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardObj := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName: "test-db", TableGroupName: "test-tg", ShardName: "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	replicaPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "replica-pod-0",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: metadata.DrainStateDraining,
+			},
+		},
+	}
+
+	primaryPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "primary-pod", Namespace: "default",
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardObj, replicaPod, primaryPod).
+		Build()
+	rpcMock := &failingRPCClient{}
+	reconciler := &ShardReconciler{
+		Client: c, Scheme: scheme,
+		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
+	}
+
+	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		Hostname: "primary-pod", Type: clustermetadata.PoolerType_PRIMARY,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+		Id:       &clustermetadata.ID{Cell: "cell1", Name: "replica-pod-0"},
+		Hostname: "replica-pod-0", Type: clustermetadata.PoolerType_REPLICA,
+		Database: "test-db", TableGroup: "test-tg", Shard: "0",
+	}, false)
+
+	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !requeue {
+		t.Error("expected requeue when RPC fails in Draining verification")
+	}
+
+	_ = c.Get(ctx, client.ObjectKeyFromObject(replicaPod), replicaPod)
+	if replicaPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateDraining {
+		t.Errorf("expected state to remain Draining on RPC failure, got %s",
+			replicaPod.Annotations[metadata.AnnotationDrainState])
+	}
+}
+
+// failingRPCClient returns errors for UpdateSynchronousStandbyList.
+type failingRPCClient struct {
+	mockRPCClient
+}
+
+func (m *failingRPCClient) UpdateSynchronousStandbyList(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest,
+) (*multipoolermanagerdatapb.UpdateSynchronousStandbyListResponse, error) {
+	return nil, fmt.Errorf("rpc error: connection refused")
+}
+
+// drainStateOrder maps drain states to their ordinal position for monotonicity checks.
+var drainStateOrder = map[string]int{
+	"":                                  0,
+	metadata.DrainStateRequested:        1,
+	metadata.DrainStateDraining:         2,
+	metadata.DrainStateAcknowledged:     3,
+	metadata.DrainStateReadyForDeletion: 4,
+}
+
+// TestDrainStateMachine_RandomizedInvariants runs the drain state machine on
+// many random pod configurations and verifies that key safety invariants hold
+// regardless of the starting state or processing order:
+//
+//   - States only move forward (Requested→Draining→Acknowledged→ReadyForDeletion)
+//   - ReadyForDeletion is terminal: no further transitions occur
+//   - Pods that reach ReadyForDeletion are unregistered from topology
+//   - Running the state machine twice at the same state is idempotent
+//   - The state machine never errors on valid drain states
+func TestDrainStateMachine_RandomizedInvariants(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	activeDrainStates := []string{
+		metadata.DrainStateRequested,
+		metadata.DrainStateDraining,
+		metadata.DrainStateAcknowledged,
+	}
+
+	poolerTypes := []clustermetadata.PoolerType{
+		clustermetadata.PoolerType_PRIMARY,
+		clustermetadata.PoolerType_REPLICA,
+	}
+
+	const iterations = 500
+
+	for i := range iterations {
+		// Deterministic seed per iteration for reproducibility on failure.
+		seed := uint64(i) //nolint:gosec // i is [0,500)
+		src := rand.NewPCG(seed, 0)
+		rng := rand.New(src) //nolint:gosec
+
+		numPods := 2 + rng.IntN(4) // 2-5 pods
+		podNames := make([]string, numPods)
+		initialStates := make([]string, numPods)
+		podTypes := make([]clustermetadata.PoolerType, numPods)
+
+		// First pod is always primary, rest are replicas.
+		for j := range numPods {
+			podNames[j] = fmt.Sprintf("pod-%d", j)
+			initialStates[j] = activeDrainStates[rng.IntN(len(activeDrainStates))]
+			if j == 0 {
+				podTypes[j] = clustermetadata.PoolerType_PRIMARY
+			} else {
+				podTypes[j] = poolerTypes[rng.IntN(len(poolerTypes))]
+			}
+		}
+
+		// Pick a random subset of pods to have drain annotations (1 to all).
+		numDraining := 1 + rng.IntN(numPods)
+		drainingIndices := rng.Perm(numPods)[:numDraining]
+		drainingSet := make(map[int]bool)
+		for _, idx := range drainingIndices {
+			drainingSet[idx] = true
+		}
+
+		// Build Kubernetes objects and topology.
+		shardObj := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "shard", Namespace: "default",
+				Labels: map[string]string{metadata.LabelMultigresCluster: "cluster"},
+			},
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{RootPath: "/test"},
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		var pods []*corev1.Pod
+		var objects []client.Object
+		objects = append(objects, shardObj)
+
+		for j := range numPods {
+			ann := map[string]string{}
+			if drainingSet[j] {
+				ann[metadata.AnnotationDrainState] = initialStates[j]
+			}
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: podNames[j], Namespace: "default",
+					Labels:      map[string]string{metadata.LabelMultigresCell: "cell1"},
+					Annotations: ann,
+				},
+			}
+			pods = append(pods, pod)
+			objects = append(objects, pod)
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+		rpcMock := &mockRPCClient{}
+		reconciler := &ShardReconciler{
+			Client: c, Scheme: scheme,
+			Recorder:  record.NewFakeRecorder(100),
+			rpcClient: rpcMock,
+		}
+
+		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+		store := topoclient.NewWithFactory(
+			factory,
+			"",
+			[]string{""},
+			topoclient.NewDefaultTopoConfig(),
+		)
+
+		for j := range numPods {
+			_ = store.RegisterMultiPooler(context.Background(), &clustermetadata.MultiPooler{
+				Id:         &clustermetadata.ID{Cell: "cell1", Name: podNames[j]},
+				Hostname:   podNames[j],
+				Type:       podTypes[j],
+				Database:   "db",
+				TableGroup: "tg",
+				Shard:      "0",
+			}, false)
+		}
+
+		ctx := context.Background()
+
+		// Run multiple reconciliation rounds, processing pods in random order.
+		rounds := 3 + rng.IntN(5)
+		for round := range rounds {
+			order := rng.Perm(numPods)
+			for _, j := range order {
+				pod := pods[j]
+
+				// Read fresh state from the fake API server.
+				fresh := &corev1.Pod{}
+				if err := c.Get(ctx, client.ObjectKeyFromObject(pod), fresh); err != nil {
+					t.Fatalf("iter=%d round=%d pod=%s: Get failed: %v", i, round, pod.Name, err)
+				}
+
+				stateBefore := fresh.Annotations[metadata.AnnotationDrainState]
+				orderBefore := drainStateOrder[stateBefore]
+
+				_, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, fresh)
+				// INVARIANT 1: No errors on valid drain states.
+				if err != nil {
+					t.Fatalf("iter=%d seed=%d round=%d pod=%s state=%q: unexpected error: %v",
+						i, seed, round, pod.Name, stateBefore, err)
+				}
+
+				// Re-read to see the new state.
+				updated := &corev1.Pod{}
+				if err := c.Get(ctx, client.ObjectKeyFromObject(pod), updated); err != nil {
+					t.Fatalf("iter=%d pod=%s: Get after drain failed: %v", i, pod.Name, err)
+				}
+				stateAfter := updated.Annotations[metadata.AnnotationDrainState]
+				orderAfter := drainStateOrder[stateAfter]
+
+				// INVARIANT 2: Monotonic forward progress — state never goes backward.
+				if orderAfter < orderBefore {
+					t.Fatalf(
+						"iter=%d seed=%d round=%d pod=%s: state regressed from %q (%d) to %q (%d)",
+						i,
+						seed,
+						round,
+						pod.Name,
+						stateBefore,
+						orderBefore,
+						stateAfter,
+						orderAfter,
+					)
+				}
+
+				// INVARIANT 3: ReadyForDeletion is terminal.
+				if stateBefore == metadata.DrainStateReadyForDeletion &&
+					stateAfter != metadata.DrainStateReadyForDeletion {
+					t.Fatalf(
+						"iter=%d seed=%d round=%d pod=%s: ReadyForDeletion is not terminal, changed to %q",
+						i,
+						seed,
+						round,
+						pod.Name,
+						stateAfter,
+					)
+				}
+
+				// Update our local reference for the next round.
+				pods[j] = updated
+			}
+		}
+
+		// INVARIANT 4: Pods that reached ReadyForDeletion are unregistered from topology.
+		inspectorStore := topoclient.NewWithFactory(
+			factory,
+			"",
+			[]string{""},
+			topoclient.NewDefaultTopoConfig(),
+		)
+		poolers, _ := inspectorStore.GetMultiPoolersByCell(ctx, "cell1", nil)
+		registeredNames := make(map[string]bool)
+		for _, p := range poolers {
+			registeredNames[p.Id.Name] = true
+		}
+
+		for j := range numPods {
+			fresh := &corev1.Pod{}
+			_ = c.Get(ctx, client.ObjectKeyFromObject(pods[j]), fresh)
+			if fresh.Annotations[metadata.AnnotationDrainState] == metadata.DrainStateReadyForDeletion {
+				if registeredNames[podNames[j]] {
+					t.Fatalf(
+						"iter=%d seed=%d pod=%s: reached ReadyForDeletion but still registered in topology",
+						i,
+						seed,
+						podNames[j],
+					)
+				}
+			}
+		}
+
+		// INVARIANT 5: Idempotency — running on a terminal state produces no change.
+		for j := range numPods {
+			fresh := &corev1.Pod{}
+			_ = c.Get(ctx, client.ObjectKeyFromObject(pods[j]), fresh)
+			stateBefore := fresh.Annotations[metadata.AnnotationDrainState]
+
+			_, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, fresh)
+			if err != nil {
+				t.Fatalf(
+					"iter=%d seed=%d pod=%s: idempotency check error: %v",
+					i,
+					seed,
+					podNames[j],
+					err,
+				)
+			}
+
+			afterIdem := &corev1.Pod{}
+			_ = c.Get(ctx, client.ObjectKeyFromObject(pods[j]), afterIdem)
+			stateAfter := afterIdem.Annotations[metadata.AnnotationDrainState]
+
+			if stateBefore == metadata.DrainStateReadyForDeletion && stateAfter != stateBefore {
+				t.Fatalf("iter=%d seed=%d pod=%s: idempotency violated at %q, changed to %q",
+					i, seed, podNames[j], stateBefore, stateAfter)
+			}
+		}
+
+		_ = store.Close()
+		_ = inspectorStore.Close()
 	}
 }

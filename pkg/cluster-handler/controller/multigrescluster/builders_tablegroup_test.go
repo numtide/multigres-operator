@@ -83,6 +83,45 @@ func TestBuildTableGroup(t *testing.T) {
 		}
 	})
 
+	t.Run("CellTopologyLabels Region", func(t *testing.T) {
+		regionCluster := &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-cluster",
+				Namespace: "default",
+				UID:       "cluster-uid",
+			},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "region-cell", Region: "us-east-1"},
+				},
+			},
+		}
+		tgCfg := &multigresv1alpha1.TableGroupConfig{Name: "tg-region"}
+		resolvedShards := []multigresv1alpha1.ShardResolvedSpec{{Name: "shard-0"}}
+
+		got, err := BuildTableGroup(
+			regionCluster,
+			dbCfg,
+			tgCfg,
+			resolvedShards,
+			globalTopoRef,
+			scheme,
+		)
+		if err != nil {
+			t.Fatalf("BuildTableGroup() error = %v", err)
+		}
+		labels, ok := got.Spec.CellTopologyLabels["region-cell"]
+		if !ok {
+			t.Fatal("Expected CellTopologyLabels to contain region-cell")
+		}
+		if labels["topology.kubernetes.io/region"] != "us-east-1" {
+			t.Errorf(
+				"Expected region label us-east-1, got %s",
+				labels["topology.kubernetes.io/region"],
+			)
+		}
+	})
+
 	t.Run("ControllerRefError", func(t *testing.T) {
 		tgCfg := &multigresv1alpha1.TableGroupConfig{Name: "tg1"}
 		resolvedShards := []multigresv1alpha1.ShardResolvedSpec{}
