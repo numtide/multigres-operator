@@ -638,6 +638,9 @@ func TestStuckTerminatingPod(t *testing.T) {
 			Labels:    map[string]string{metadata.LabelMultigresCell: "cell1"},
 			Annotations: map[string]string{
 				metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				metadata.AnnotationDrainRequestedAt: time.Now().
+					Add(-10 * time.Minute).
+					Format(time.RFC3339),
 			},
 		},
 	}
@@ -668,11 +671,8 @@ func TestStuckTerminatingPod(t *testing.T) {
 	// Delete the pod using the client to set DeletionTimestamp
 	_ = c.Delete(ctx, pod)
 
-	// Fast forward DeletionTimestamp by 10 minutes
-	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
-	delTime := metav1.NewTime(time.Now().Add(-10 * time.Minute))
-	pod.DeletionTimestamp = &delTime
-
+	// Since we set AnnotationDrainRequestedAt to 10 minutes ago,
+	// executeDrainStateMachine should force unregister it due to timeout.
 	_, _ = reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
 	// Recreate a new inspector store to verify unregistration without reuse
 	inspectorStore := topoclient.NewWithFactory(

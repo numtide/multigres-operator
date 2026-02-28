@@ -41,9 +41,20 @@ func (r *ShardReconciler) executeDrainStateMachine(
 
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 
-	// Node Failure Safety: If the pod is stuck terminating for > 5 minutes, force unregister.
-	if !pod.DeletionTimestamp.IsZero() && time.Since(pod.DeletionTimestamp.Time) > drainTimeout {
-		logger.Info("Pod is stuck terminating, forcing unregistration", "pod", pod.Name)
+	// Node Failure Safety: If the pod is stuck draining for > 5 minutes, force unregister.
+	// We use AnnotationDrainRequestedAt if available, otherwise fall back to DeletionTimestamp.
+	var drainStart time.Time
+	if reqAtStr := pod.Annotations[metadata.AnnotationDrainRequestedAt]; reqAtStr != "" {
+		if reqAt, err := time.Parse(time.RFC3339, reqAtStr); err == nil {
+			drainStart = reqAt
+		}
+	}
+	if drainStart.IsZero() && !pod.DeletionTimestamp.IsZero() {
+		drainStart = pod.DeletionTimestamp.Time
+	}
+
+	if !drainStart.IsZero() && time.Since(drainStart) > drainTimeout {
+		logger.Info("Pod is stuck draining, forcing unregistration", "pod", pod.Name)
 		if err := r.forceUnregister(ctx, store, shard, pod); err != nil {
 			return false, fmt.Errorf("forcing unregistration: %w", err)
 		}

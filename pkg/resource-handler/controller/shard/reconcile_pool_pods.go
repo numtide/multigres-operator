@@ -264,6 +264,24 @@ func isPodReady(pod *corev1.Pod) bool {
 	return false
 }
 
+// isPoolHealthy returns true if all non-draining, non-terminating pods that
+// will remain after scale-down are Ready. Extra pods (index >= replicas) are
+// excluded so an unhealthy extra pod does not block its own removal.
+func isPoolHealthy(existingPods map[string]*corev1.Pod, replicas int32) bool {
+	for _, pod := range existingPods {
+		if pod.Annotations[metadata.AnnotationDrainState] != "" || !pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if resolvePodIndex(pod.Name) >= int(replicas) {
+			continue
+		}
+		if !isPodReady(pod) {
+			return false
+		}
+	}
+	return true
+}
+
 // handleExternalDeletion handles a pod that has been deleted externally (e.g. kubectl delete).
 // Unscheduled pods get their finalizer removed directly; scheduled pods enter the drain state machine.
 func (r *ShardReconciler) handleExternalDeletion(
@@ -423,10 +441,28 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 	}
 
-	// Drain extra pods (scale-down, skip if another drain is already in progress)
+	// Drain extra pods (scale-down, skip if another drain is already in progress).
+	// Health gate: refuse to start a new drain if the pool is already degraded.
+	// This prevents cascading failures where removing pods from an unhealthy pool
+	// could cause an outage.
 	logger.V(1).
 		Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "inProgress", inProgress, "desiredReplicas", replicas)
 	if !actionTaken && !inProgress && len(extraPods) > 0 {
+		if !isPoolHealthy(existingPods, replicas) {
+			logger.Info(
+				"Deferring scale-down: pool has non-ready pods",
+				"extraPods",
+				len(extraPods),
+			)
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"ScaleDownBlocked",
+				"Deferring scale-down of %d extra pod(s): pool has non-ready pods",
+				len(extraPods),
+			)
+			return actionTaken, inProgress, nil
+		}
 		podToDrain := r.selectPodToDrain(ctx, extraPods, shard)
 		if podToDrain != nil && podToDrain.Annotations[metadata.AnnotationDrainState] == "" {
 			if err := r.initiateDrain(ctx, podToDrain); err != nil {

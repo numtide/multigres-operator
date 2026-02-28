@@ -120,7 +120,7 @@ The `createMissingResources` function handles pod creation:
 
 ### Deletion (Scale-Down)
 
-Scale-down uses the [drain state machine](#5-drain-state-machine). Extra pods beyond the desired count are identified, and the highest-index non-primary pod is selected for draining.
+Scale-down uses the [drain state machine](#5-drain-state-machine). Extra pods beyond the desired count are identified, and the highest-index non-primary pod is selected for draining. Before initiating a new drain, the operator verifies that all non-draining, non-terminating pods in the pool are Ready. If the pool is already degraded, the scale-down is deferred and a `ScaleDownBlocked` warning event is emitted to prevent cascading failures.
 
 ### External Deletion
 
@@ -195,6 +195,7 @@ When choosing which pod to remove during scale-down:
 - At most **one pod per pool** can be in the drain state at any time.
 - Scale-down and rolling-update operations do not run concurrently — if a drain is in progress, rolling updates are deferred.
 - If the data-handler is unavailable, the drain annotation sits untouched and the resource-handler retries on the next reconcile.
+- **Health gate**: Scale-down drains are deferred when any non-draining pod is not Ready, preventing removal of pods from an already degraded pool.
 
 ### Shard/Cluster Deletion (No Drain)
 
@@ -329,6 +330,7 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **Etcd topology cleanup** | `UnregisterMultiPooler` called during drain flow; stale entries removed on pod termination |
 | **Backup health reporting** | Data-handler calls `GetBackups` RPC, sets `BackupHealthy` condition and `LastBackupTime` status |
 | **DRAINED pod replacement** | Pods with `DRAINED` role in etcd are detected and replaced via the drain state machine |
+| **Scale-down health gate** | Drains deferred when pool has non-ready pods to prevent cascading failures |
 | **Observability** | Events, conditions, metrics, tracing spans |
 
 ### Not Yet Implemented (Blocked on Upstream Multigres)
