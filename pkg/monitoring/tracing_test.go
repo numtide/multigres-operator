@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -334,27 +335,29 @@ func TestInitTracing_ExporterError(t *testing.T) {
 	}
 }
 
-func TestInitTracing_ResourceError_InvalidDetector(t *testing.T) {
-	// Set endpoint so we reach resource creation
+func TestInitTracing_ResourceError(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
 	t.Setenv("OTEL_TRACES_EXPORTER", "none")
 
-	// Try to trigger resource creation error with invalid detector
-	t.Setenv("OTEL_EXPERIMENTAL_RESOURCE_DETECTORS", "invalid-detector")
+	injectedErr := errors.New("synthetic resource failure")
+	original := newResource
+	newResource = func(ctx context.Context, opts ...resource.Option) (*resource.Resource, error) {
+		return nil, injectedErr
+	}
+	t.Cleanup(func() { newResource = original })
 
 	shutdown, err := InitTracing(context.Background(), "test-svc", "v0.0.1")
 	if err == nil {
-		// If this doesn't fail, we might not be able to cover this line without mocking
-		t.Log(
-			"InitTracing() did not fail with invalid detector. Resource error path might be unreachable.",
-		)
-	} else {
-		if !strings.Contains(err.Error(), "creating OTel resource") {
-			t.Errorf("unexpected error message: %v", err)
-		}
+		t.Fatal("expected error from InitTracing when resource creation fails")
+	}
+	if !strings.Contains(err.Error(), "creating OTel resource") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+	if !errors.Is(err, injectedErr) {
+		t.Errorf("expected wrapped injectedErr, got: %v", err)
 	}
 	if shutdown != nil {
-		_ = shutdown(context.Background())
+		t.Fatal("shutdown function should be nil on error")
 	}
 }
 

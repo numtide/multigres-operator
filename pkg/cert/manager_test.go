@@ -19,8 +19,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -1300,6 +1302,151 @@ func TestManager_EntropyFailures(t *testing.T) {
 		err := mgr.reconcilePKI(t.Context())
 		if err == nil || !strings.Contains(err.Error(), "failed to generate new server cert") {
 			t.Errorf("Expected server cert rotation error, got %v", err)
+		}
+	})
+}
+
+// alreadyExistsOnCreateClient wraps a client and returns AlreadyExists on Create
+// for a specific secret name, while still persisting the object in the backing store
+// so that subsequent Get calls find it (simulating a cache-vs-API-server race).
+type alreadyExistsOnCreateClient struct {
+	client.Client
+	targetName string
+	persist    bool
+}
+
+func (c *alreadyExistsOnCreateClient) Create(
+	ctx context.Context,
+	obj client.Object,
+	opts ...client.CreateOption,
+) error {
+	if obj.GetName() == c.targetName {
+		if c.persist {
+			_ = c.Client.Create(ctx, obj, opts...)
+		}
+		return apierrors.NewAlreadyExists(
+			schema.GroupResource{Group: "", Resource: "secrets"},
+			c.targetName,
+		)
+	}
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func TestManager_CacheRaceConditions(t *testing.T) {
+	t.Parallel()
+
+	s := runtime.NewScheme()
+	_ = scheme.AddToScheme(s)
+
+	const namespace = "test-ns"
+
+	t.Run("ensureCA: MaxRecursionDepth", func(t *testing.T) {
+		t.Parallel()
+
+		cl := &alreadyExistsOnCreateClient{
+			Client:     fake.NewClientBuilder().WithScheme(s).Build(),
+			targetName: testCASecretName,
+			persist:    false, // Get keeps returning NotFound
+		}
+
+		mgr := NewManager(cl, nil, Options{
+			Namespace:        namespace,
+			CASecretName:     testCASecretName,
+			ServerSecretName: testServerSecretName,
+			ServiceName:      "test-svc",
+		})
+
+		err := mgr.Bootstrap(t.Context())
+		if err == nil {
+			t.Fatal("Expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to ensure CA secret") {
+			t.Errorf("Expected max recursion error, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "informer cache") {
+			t.Errorf("Expected cache label hint in error, got: %v", err)
+		}
+	})
+
+	t.Run("ensureCA: AlreadyExists Retry Succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		cl := &alreadyExistsOnCreateClient{
+			Client:     fake.NewClientBuilder().WithScheme(s).Build(),
+			targetName: testCASecretName,
+			persist:    true, // Object persists so retry Get finds it
+		}
+
+		mgr := NewManager(cl, record.NewFakeRecorder(10), Options{
+			Namespace:        namespace,
+			CASecretName:     testCASecretName,
+			ServerSecretName: testServerSecretName,
+			ServiceName:      "test-svc",
+		})
+
+		if err := mgr.Bootstrap(t.Context()); err != nil {
+			t.Fatalf("Expected success after retry, got: %v", err)
+		}
+	})
+
+	t.Run("ensureServerCert: MaxRecursionDepth", func(t *testing.T) {
+		t.Parallel()
+
+		validCABytes, validCAKeyBytes := generateCAPEM(t)
+		caSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: testCASecretName, Namespace: namespace},
+			Data:       map[string][]byte{"ca.crt": validCABytes, "ca.key": validCAKeyBytes},
+		}
+
+		cl := &alreadyExistsOnCreateClient{
+			Client:     fake.NewClientBuilder().WithScheme(s).WithObjects(caSecret).Build(),
+			targetName: testServerSecretName,
+			persist:    false,
+		}
+
+		mgr := NewManager(cl, nil, Options{
+			Namespace:        namespace,
+			CASecretName:     testCASecretName,
+			ServerSecretName: testServerSecretName,
+			ServiceName:      "test-svc",
+		})
+
+		err := mgr.Bootstrap(t.Context())
+		if err == nil {
+			t.Fatal("Expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to ensure server cert secret") {
+			t.Errorf("Expected max recursion error, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "informer cache") {
+			t.Errorf("Expected cache label hint in error, got: %v", err)
+		}
+	})
+
+	t.Run("ensureServerCert: AlreadyExists Retry Succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		validCABytes, validCAKeyBytes := generateCAPEM(t)
+		caSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: testCASecretName, Namespace: namespace},
+			Data:       map[string][]byte{"ca.crt": validCABytes, "ca.key": validCAKeyBytes},
+		}
+
+		cl := &alreadyExistsOnCreateClient{
+			Client:     fake.NewClientBuilder().WithScheme(s).WithObjects(caSecret).Build(),
+			targetName: testServerSecretName,
+			persist:    true,
+		}
+
+		mgr := NewManager(cl, record.NewFakeRecorder(10), Options{
+			Namespace:        namespace,
+			CASecretName:     testCASecretName,
+			ServerSecretName: testServerSecretName,
+			ServiceName:      "test-svc",
+		})
+
+		if err := mgr.Bootstrap(t.Context()); err != nil {
+			t.Fatalf("Expected success after retry, got: %v", err)
 		}
 	})
 }

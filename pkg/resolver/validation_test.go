@@ -699,6 +699,56 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			},
 			wantErr: "failed to check for default StorageClass",
 		},
+		"Two cells same zone - topology dedup": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "cell-a", Zone: "us-east-1a"},
+						{Name: "cell-b", Zone: "us-east-1a"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			customClient: noMatchingNodeClient,
+			wantWarnings: []string{
+				"cell 'cell-a': no nodes currently match topology.kubernetes.io/zone=us-east-1a",
+				"cell 'cell-b': no nodes currently match topology.kubernetes.io/zone=us-east-1a",
+			},
+		},
+		"Node list error skips topology validation silently": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-a", Zone: "us-east-1a"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			clientFailures: &testutil.FailureConfig{
+				OnList: func(list client.ObjectList) error {
+					if _, ok := list.(*corev1.NodeList); ok {
+						return testutil.ErrInjected
+					}
+					return nil
+				},
+			},
+		},
 	}
 
 	for name, tc := range tests {

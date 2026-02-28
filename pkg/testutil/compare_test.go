@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
@@ -167,5 +168,101 @@ func TestComparisonOptions(t *testing.T) {
 				t.Errorf("%s should make objects match, but found diff:\n%s", name, diff)
 			}
 		})
+	}
+}
+
+func TestIgnoreProbeDefaults(t *testing.T) {
+	t.Parallel()
+
+	pod1 := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:  "app",
+				Image: "nginx",
+				LivenessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/healthz",
+							Port:   intstr.FromInt32(8080),
+							Scheme: "HTTP",
+						},
+					},
+					TimeoutSeconds:   1,
+					SuccessThreshold: 1,
+					FailureThreshold: 3,
+				},
+			}},
+		},
+	}
+
+	pod2 := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name:  "app",
+				Image: "nginx",
+				LivenessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						HTTPGet: &corev1.HTTPGetAction{
+							Path:   "/healthz",
+							Port:   intstr.FromInt32(8080),
+							Scheme: "HTTPS",
+						},
+					},
+					TimeoutSeconds:   5,
+					SuccessThreshold: 2,
+					FailureThreshold: 10,
+				},
+			}},
+		},
+	}
+
+	diff := cmp.Diff(pod1, pod2,
+		testutil.IgnoreProbeDefaults(),
+		testutil.IgnoreMetaRuntimeFields(),
+		testutil.IgnorePodSpecDefaults(),
+	)
+	if diff != "" {
+		t.Errorf("IgnoreProbeDefaults should ignore probe defaults, but found diff:\n%s", diff)
+	}
+}
+
+func TestIgnorePVCRuntimeFields(t *testing.T) {
+	t.Parallel()
+
+	blockMode := corev1.PersistentVolumeBlock
+	fsMode := corev1.PersistentVolumeFilesystem
+
+	pvc1 := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "data-pvc",
+			Namespace:  "default",
+			Finalizers: []string{"kubernetes.io/pvc-protection"},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			VolumeMode:  &blockMode,
+		},
+	}
+
+	pvc2 := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "data-pvc",
+			Namespace: "default",
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			VolumeMode:  &fsMode,
+		},
+	}
+
+	diff := cmp.Diff(pvc1, pvc2,
+		testutil.IgnorePVCRuntimeFields(),
+		testutil.IgnoreMetaRuntimeFields(),
+	)
+	if diff != "" {
+		t.Errorf(
+			"IgnorePVCRuntimeFields should ignore finalizers and VolumeMode, but found diff:\n%s",
+			diff,
+		)
 	}
 }
