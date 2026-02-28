@@ -135,6 +135,25 @@ func TestReconcile(t *testing.T) {
 				if diff := cmp.Diff(wantDB, gotDB, opts); diff != "" {
 					t.Errorf("Database in topology mismatch (-want +got):\n%s", diff)
 				}
+
+				// Verify DatabaseRegistered condition is set
+				updatedShard := &multigresv1alpha1.Shard{}
+				if err := c.Get(context.Background(), types.NamespacedName{
+					Name:      shardObj.Name,
+					Namespace: shardObj.Namespace,
+				}, updatedShard); err != nil {
+					t.Fatalf("Failed to get Shard: %v", err)
+				}
+				var found bool
+				for _, cond := range updatedShard.Status.Conditions {
+					if cond.Type == "DatabaseRegistered" && cond.Status == metav1.ConditionTrue {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Error("DatabaseRegistered condition should be True after registration")
+				}
 			},
 		},
 		"idempotent - database already exists": {
@@ -478,7 +497,7 @@ func TestReconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"skips topo cleanup when topo unavailable during deletion": {
+		"skips topo cleanup when topo unavailable and never registered": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-shard",
@@ -497,6 +516,81 @@ func TestReconcile(t *testing.T) {
 					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"primary": {
 							Cells: []multigresv1alpha1.CellName{"zone-a"},
+						},
+					},
+				},
+			},
+			customTopoStoreFunc: func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+		},
+		"retries cleanup when topo unavailable but was registered": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-shard",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "postgres",
+					TableGroupName: "default",
+					ShardName:      "0",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:  "localhost:2379",
+						RootPath: "/test",
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells: []multigresv1alpha1.CellName{"zone-a"},
+						},
+					},
+				},
+				Status: multigresv1alpha1.ShardStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:               "DatabaseRegistered",
+							Status:             metav1.ConditionTrue,
+							Reason:             "Registered",
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+				},
+			},
+			customTopoStoreFunc: func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+			wantRequeue: true,
+		},
+		"forces cleanup skip after timeout when topo permanently gone": {
+			shard: &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-shard",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "postgres",
+					TableGroupName: "default",
+					ShardName:      "0",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:  "localhost:2379",
+						RootPath: "/test",
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Cells: []multigresv1alpha1.CellName{"zone-a"},
+						},
+					},
+				},
+				Status: multigresv1alpha1.ShardStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:               "DatabaseRegistered",
+							Status:             metav1.ConditionTrue,
+							Reason:             "Registered",
+							LastTransitionTime: metav1.Now(),
 						},
 					},
 				},

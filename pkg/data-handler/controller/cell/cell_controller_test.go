@@ -112,6 +112,25 @@ func TestReconcile(t *testing.T) {
 				if diff := cmp.Diff(wantCell, gotCell, opts); diff != "" {
 					t.Errorf("Cell in topology mismatch (-want +got):\n%s", diff)
 				}
+
+				// Verify TopologyRegistered condition is set
+				updatedCell := &multigresv1alpha1.Cell{}
+				if err := c.Get(context.Background(), types.NamespacedName{
+					Name:      cellObj.Name,
+					Namespace: cellObj.Namespace,
+				}, updatedCell); err != nil {
+					t.Fatalf("Failed to get Cell: %v", err)
+				}
+				var found bool
+				for _, cond := range updatedCell.Status.Conditions {
+					if cond.Type == "TopologyRegistered" && cond.Status == metav1.ConditionTrue {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Error("TopologyRegistered condition should be True after registration")
+				}
 			},
 		},
 		"skips registration when disabled": {
@@ -408,7 +427,7 @@ func TestReconcile(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"skips topo cleanup when topo unavailable during deletion": {
+		"skips topo cleanup when topo unavailable and never registered": {
 			cell: &multigresv1alpha1.Cell{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-cell",
@@ -422,6 +441,69 @@ func TestReconcile(t *testing.T) {
 						Address:        "localhost:2379",
 						RootPath:       "/test",
 						Implementation: "memory",
+					},
+				},
+			},
+			customTopoStoreFunc: func(c *multigresv1alpha1.Cell) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+		},
+		"retries cleanup when topo unavailable but was registered": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-cell",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-a",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "localhost:2379",
+						RootPath:       "/test",
+						Implementation: "memory",
+					},
+				},
+				Status: multigresv1alpha1.CellStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:               "TopologyRegistered",
+							Status:             metav1.ConditionTrue,
+							Reason:             "Registered",
+							LastTransitionTime: metav1.Now(),
+						},
+					},
+				},
+			},
+			customTopoStoreFunc: func(c *multigresv1alpha1.Cell) (topoclient.Store, error) {
+				return nil, errors.New("Code: UNAVAILABLE\nno connection available")
+			},
+			wantRequeue: true,
+		},
+		"forces cleanup skip after timeout when topo permanently gone": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-cell",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &metav1.Time{Time: time.Now().Add(-10 * time.Minute)},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-a",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "localhost:2379",
+						RootPath:       "/test",
+						Implementation: "memory",
+					},
+				},
+				Status: multigresv1alpha1.CellStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:               "TopologyRegistered",
+							Status:             metav1.ConditionTrue,
+							Reason:             "Registered",
+							LastTransitionTime: metav1.Now(),
+						},
 					},
 				},
 			},

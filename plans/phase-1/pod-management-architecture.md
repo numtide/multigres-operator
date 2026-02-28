@@ -205,6 +205,15 @@ Instead, the resource-handler removes pod finalizers directly and deletes pods. 
 
 The drain state machine remains fully functional for **rolling updates** and **scale-down**, where the cluster is alive and the data-handler is actively reconciling.
 
+#### Topology Cleanup Timeout
+
+During deletion, both Cell and Shard controllers use a `TopologyRegistered` / `DatabaseRegistered` status condition to determine whether topology cleanup is needed. This prevents two failure modes:
+
+- **Never initialized**: If the condition was never set (e.g., the topology server was unreachable since creation), cleanup is skipped immediately — there's nothing to clean up.
+- **Transient failure**: If the condition is `True` but the topology is temporarily unreachable, the controller retries for up to `topoCleanupTimeout` (currently 2 minutes). After the timeout, the controller force-skips cleanup with a `CleanupSkipped` warning event and removes the finalizer.
+
+> **Future consideration**: The 2-minute timeout is conservative for the current deployment model. As real-world usage patterns emerge, this value may need tuning. It could also be made configurable via the MultigresCluster spec if operators need per-cluster control.
+
 ---
 
 ## 6. Rolling Updates
@@ -296,7 +305,7 @@ The `updatePoolsStatus` function directly lists pods by label selector and aggre
 | `shard.Status.PodRoles` | Pod → role mapping (populated by data-handler from etcd) |
 | `shard.Status.LastBackupTime` | Timestamp of last completed backup (from `GetBackups` RPC via data-handler) |
 | `shard.Status.LastBackupType` | Type of last backup (full/diff/incr) |
-| `shard.Status.Conditions` | `Available`, `BackupHealthy`, `RollingUpdate` |
+| `shard.Status.Conditions` | `Available`, `BackupHealthy`, `DatabaseRegistered`, `RollingUpdate` |
 
 Terminating pods (with a non-zero `DeletionTimestamp`) are excluded from counts.
 

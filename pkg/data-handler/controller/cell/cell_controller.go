@@ -12,6 +12,7 @@ import (
 	"github.com/multigres/multigres/go/pb/clustermetadata"
 	"go.opentelemetry.io/otel/attribute"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,10 +23,16 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
 const (
 	finalizerName = "cell.data-handler.multigres.com/finalizer"
+
+	// conditionTopologyRegistered tracks whether the cell was ever
+	// successfully registered in the global topology. Used during deletion
+	// to distinguish "never initialized" from "temporarily unreachable".
+	conditionTopologyRegistered = "TopologyRegistered"
 
 	// topoUnavailableGracePeriod is the duration after resource creation during
 	// which topology UNAVAILABLE errors are silently requeued instead of being
@@ -36,6 +43,11 @@ const (
 	// topoUnavailableRequeueDelay is the delay before retrying when the topology
 	// server is unavailable during the grace period.
 	topoUnavailableRequeueDelay = 5 * time.Second
+
+	// topoCleanupTimeout is the maximum duration to retry topology cleanup
+	// during deletion when the topology was previously registered but is now
+	// unreachable. After this period, the finalizer is removed with a warning.
+	topoCleanupTimeout = 2 * time.Minute
 )
 
 // CellReconciler reconciles Cell data plane operations.
@@ -157,6 +169,22 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		childSpan.End()
 	}
 
+	// Mark the cell as registered in topology so deletion knows cleanup is needed.
+	if !status.IsConditionTrue(cell.Status.Conditions, conditionTopologyRegistered) {
+		statusBase := cell.DeepCopy()
+		status.SetCondition(&cell.Status.Conditions, metav1.Condition{
+			Type:               conditionTopologyRegistered,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Registered",
+			Message:            "Cell registered in topology",
+			ObservedGeneration: cell.Generation,
+			LastTransitionTime: metav1.Now(),
+		})
+		if err := r.Status().Patch(ctx, cell, client.MergeFrom(statusBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("setting TopologyRegistered condition: %w", err)
+		}
+	}
+
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	logger.Info("Cell registered in topology successfully")
 	r.Recorder.Event(cell, "Normal", "Synced", "Successfully reconciled Cell topology")
@@ -174,7 +202,22 @@ func (r *CellReconciler) handleDeletion(
 		// Clean up cell data from topology
 		if err := r.unregisterCellFromTopology(ctx, cell); err != nil {
 			if isTopoUnavailable(err) {
-				logger.Info("Topology server unreachable during deletion, skipping cleanup")
+				if !status.IsConditionTrue(cell.Status.Conditions, conditionTopologyRegistered) {
+					logger.Info("Topology never initialized, skipping cleanup")
+				} else {
+					deletionAge := time.Since(cell.DeletionTimestamp.Time)
+					if deletionAge > topoCleanupTimeout {
+						logger.Info("Topology unreachable beyond cleanup timeout, forcing finalizer removal",
+							"deletionAge", deletionAge.Round(time.Second).String())
+						r.Recorder.Eventf(cell, "Warning", "CleanupSkipped",
+							"Topology unreachable for %s during deletion, skipping cleanup",
+							deletionAge.Round(time.Second))
+					} else {
+						logger.Info("Topology temporarily unreachable, will retry cleanup",
+							"deletionAge", deletionAge.Round(time.Second).String())
+						return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
+					}
+				}
 			} else {
 				r.Recorder.Eventf(
 					cell,

@@ -13,6 +13,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
 const (
@@ -214,24 +215,7 @@ func applyBackupHealth(shard *multigresv1alpha1.Shard, result *backupHealthResul
 		condition.Reason = "BackupStale"
 	}
 
-	setCondition(&shard.Status.Conditions, condition)
-}
-
-// setCondition adds or updates a condition in the slice.
-func setCondition(conditions *[]metav1.Condition, condition metav1.Condition) {
-	for i, c := range *conditions {
-		if c.Type == condition.Type {
-			if c.Status != condition.Status {
-				(*conditions)[i] = condition
-			} else {
-				// Preserve transition time when status hasn't changed.
-				condition.LastTransitionTime = c.LastTransitionTime
-				(*conditions)[i] = condition
-			}
-			return
-		}
-	}
-	*conditions = append(*conditions, condition)
+	status.SetCondition(&shard.Status.Conditions, condition)
 }
 
 // collectCells returns the deduplicated set of cell names from the shard's pools.
@@ -247,14 +231,4 @@ func collectCells(shard *multigresv1alpha1.Shard) []string {
 		cells = append(cells, cell)
 	}
 	return cells
-}
-
-// isConditionTrue returns true if the named condition exists and has status True.
-func isConditionTrue(conditions []metav1.Condition, condType string) bool {
-	for _, c := range conditions {
-		if c.Type == condType {
-			return c.Status == metav1.ConditionTrue
-		}
-	}
-	return false
 }

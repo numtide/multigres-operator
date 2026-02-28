@@ -29,6 +29,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
 // TestDefaultCreateTopoStore tests error paths in defaultCreateTopoStore
@@ -695,8 +696,8 @@ func TestIsConditionTrue(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if got := isConditionTrue(conditions, tc.condType); got != tc.want {
-				t.Errorf("isConditionTrue(%q) = %v, want %v", tc.condType, got, tc.want)
+			if got := status.IsConditionTrue(conditions, tc.condType); got != tc.want {
+				t.Errorf("IsConditionTrue(%q) = %v, want %v", tc.condType, got, tc.want)
 			}
 		})
 	}
@@ -714,7 +715,7 @@ func TestSetCondition(t *testing.T) {
 			Reason:  "AllGood",
 			Message: "everything is fine",
 		}
-		setCondition(&conditions, cond)
+		status.SetCondition(&conditions, cond)
 		if len(conditions) != 1 {
 			t.Fatalf("expected 1 condition, got %d", len(conditions))
 		}
@@ -740,7 +741,7 @@ func TestSetCondition(t *testing.T) {
 			Reason:             "NotReady",
 			LastTransitionTime: metav1.Now(),
 		}
-		setCondition(&conditions, newCond)
+		status.SetCondition(&conditions, newCond)
 		if len(conditions) != 1 {
 			t.Fatalf("expected 1 condition, got %d", len(conditions))
 		}
@@ -771,7 +772,7 @@ func TestSetCondition(t *testing.T) {
 				Reason:  "StillGood",
 				Message: "updated message",
 			}
-			setCondition(&conditions, newCond)
+			status.SetCondition(&conditions, newCond)
 			if len(conditions) != 1 {
 				t.Fatalf("expected 1 condition, got %d", len(conditions))
 			}
@@ -2233,7 +2234,7 @@ func TestReconcile_BackupStaleTransition(t *testing.T) {
 
 	updatedShard := &multigresv1alpha1.Shard{}
 	_ = c.Get(ctx, types.NamespacedName{Name: "test-shard", Namespace: "default"}, updatedShard)
-	if isConditionTrue(updatedShard.Status.Conditions, conditionBackupHealthy) {
+	if status.IsConditionTrue(updatedShard.Status.Conditions, conditionBackupHealthy) {
 		t.Error("expected backup condition to be False for stale backup")
 	}
 }
