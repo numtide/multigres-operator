@@ -1,5 +1,3 @@
-// Package storage provides utilities for building PersistentVolumeClaim templates
-// for StatefulSet-based components.
 package storage
 
 import (
