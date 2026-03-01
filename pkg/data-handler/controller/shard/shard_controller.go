@@ -363,8 +363,11 @@ func (r *ShardReconciler) handleDeletion(
 				} else {
 					deletionAge := time.Since(shard.DeletionTimestamp.Time)
 					if deletionAge > topoCleanupTimeout {
-						logger.Info("Topology unreachable beyond cleanup timeout, forcing finalizer removal",
-							"deletionAge", deletionAge.Round(time.Second).String())
+						logger.Info(
+							"Topology unreachable beyond cleanup timeout, forcing finalizer removal",
+							"deletionAge",
+							deletionAge.Round(time.Second).String(),
+						)
 						r.Recorder.Eventf(shard, "Warning", "CleanupSkipped",
 							"Topology unreachable for %s during deletion, skipping cleanup",
 							deletionAge.Round(time.Second))
