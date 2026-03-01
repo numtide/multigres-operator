@@ -1906,7 +1906,7 @@ func TestReconcile_ConflictOnFinalizerAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error on conflict, got: %v", err)
 	}
-	if !result.Requeue {
+	if result.Requeue == false {
 		t.Error("expected Requeue=true on conflict")
 	}
 }
@@ -1977,7 +1977,7 @@ func TestReconcile_ConflictOnFinalizerRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error on conflict, got: %v", err)
 	}
-	if !result.Requeue {
+	if result.Requeue == false {
 		t.Error("expected Requeue=true on conflict")
 	}
 }
