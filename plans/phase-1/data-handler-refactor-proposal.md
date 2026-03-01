@@ -961,6 +961,14 @@ refactoring effort. Recommended order:
 - **Instant cluster teardown** — no polling loops, no 2-second requeue cycles.
   `kubectl delete` and GC does the rest.
 - **Reusable topo utilities** — any controller can call the topo packages
+- **Less code, less complexity** — the `pkg/data-handler/controller/`
+  directory (~1,800 lines of implementation, ~7,200 lines of tests) is
+  deleted entirely. The core business logic (drain, backup health, topo
+  registration) moves to utility packages and keeps its tests. What is
+  truly eliminated is the controller scaffolding: reconcile loops,
+  finalizer add/check/remove paths, dual-controller coordination, SSA
+  field exclusion lists, and all the tests that exist solely to verify
+  that two controllers don't step on each other.
 
 ### What we lose
 
