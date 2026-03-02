@@ -1110,59 +1110,6 @@ refactor.
 
 ---
 
-## 11. Questions for the Multigres Team
-
-Before implementing, the following questions should be clarified with the
-upstream multigres team:
-
-### 11.1 Shard Registration in Topology
-
-The upstream `topoclient` currently has no `CreateShard`/`DeleteShard` API.
-Shards exist implicitly under the database path
-(`databases/{db}/{tablegroup}/{shard}/`) and are only materialised when
-`LockShard()` creates the lock path.
-
-Our operator currently registers databases via `CreateDatabase()`, and the
-shard's existence is implicit — tracked through the Shard CR at the
-Kubernetes level and the pooler entries that reference a `ShardKey`.
-
-**Questions:**
-
-1. Is there a plan to add explicit shard CRUD to the `topoclient` for
-   multi-shard support (e.g. `CreateShard`, `GetShardNames`,
-   `DeleteShard`)? If so, what data would a shard record contain (key
-   range, serving state, primary tablet, etc.)?
-
-2. In the meantime, is it correct for the operator to continue registering
-   only the database via `CreateDatabase()` and let shards remain implicit?
-   Or should we be creating shard directory nodes explicitly?
-
-### 11.2 Operator-Side Pruning
-
-We plan to implement a prune-on-reconcile pattern where the operator:
-
-- **Shard controller:** lists pooler entries in topo via
-  `GetMultiPoolersByCell()`, compares to running pods, and calls
-  `UnregisterMultiPooler()` for any stale entries.
-- **MultigresCluster controller:** lists databases/cells in topo via
-  `GetDatabaseNames()`/`GetCellNames()`, compares to the spec, and calls
-  `DeleteDatabase()`/`DeleteCell()` for entries no longer in the spec.
-
-**Questions:**
-
-1. Are there any concerns with the operator calling `UnregisterMultiPooler()`
-   to remove stale pooler entries, beyond what the drain state machine
-   already does? Could this interfere with upstream pooler health-checking
-   or connection routing?
-
-2. Are there any upstream components that rely on the existence of a database
-   or cell entry in topo and could break if the operator prunes it? For
-   example, does `multiorch` assume the database entry exists before
-   attempting to bootstrap a shard?
-
-
----
-
 ## Appendix: Key File References
 
 ### Current Architecture
