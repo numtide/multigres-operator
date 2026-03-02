@@ -53,7 +53,6 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
 	tablegroupcontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
-	datahandlershardcontroller "github.com/numtide/multigres-operator/pkg/data-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
 	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
@@ -436,17 +435,6 @@ func main() {
 	rpcClient := rpcclient.NewMultiPoolerClient(100)
 	defer rpcClient.Close()
 
-	dataHandlerReconciler := &datahandlershardcontroller.ShardReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("shard-datahandler"),
-	}
-	dataHandlerReconciler.SetRPCClient(rpcClient)
-	if err = dataHandlerReconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Shard-DataHandler")
-		os.Exit(1)
-	}
-
 	if err = (&toposervercontroller.TopoServerReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -461,6 +449,7 @@ func main() {
 		Scheme:    mgr.GetScheme(),
 		Recorder:  mgr.GetEventRecorderFor("shard-controller"),
 		APIReader: mgr.GetAPIReader(),
+		RPCClient: rpcClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Shard")
 		os.Exit(1)

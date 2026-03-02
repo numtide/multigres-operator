@@ -104,6 +104,8 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
+github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c h1:KUene2FBKD/mrH8XT+KprROxgwde1MA9ZYAnht9PO80=
+github.com/multigres/multigres v0.0.0-20260206234310-62e1d947565c/go.mod h1:x+HiTIl2+sC378/i1MSh0SPknIIHf/VH7PGKNN5TI9s=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f h1:y5//uYreIhSUg3J1GEMiLbxo1LJaP8RfCpH6pymGZus=
@@ -112,6 +114,8 @@ github.com/numtide/multigres-operator/api v0.0.0-20260228120317-9484bd595cec h1:
 github.com/numtide/multigres-operator/api v0.0.0-20260228120317-9484bd595cec/go.mod h1:7nlnBwoyLSbEloUaHHC6X3ncWZeuOvkOBnnF9cSW+Wg=
 github.com/numtide/multigres-operator/pkg/cert v0.0.0-20260228120317-9484bd595cec h1:BikHr7wQ24pQ9CzGvf4nIpXuI4c0cIpl4vOQ/g4dlAI=
 github.com/numtide/multigres-operator/pkg/cert v0.0.0-20260228120317-9484bd595cec/go.mod h1:Px+nxrKiQkO7OCrn3GQ5FfIfLx7NE0B5sTuVrCZdKwU=
+github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260228120317-9484bd595cec h1:1L0Szz0rMYbvqLH8PTIjyR85GQxPMSTY8O8Ea1A1XO0=
+github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260228120317-9484bd595cec/go.mod h1:qG+nh8dECyz/GG5r1FqkKBAk4VVMbWZxWEQZCyGPuc4=
 github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260228120317-9484bd595cec h1:4SAuaFjbsGeibkwaJQp0Cw6wrA6ndF8noFmT6tpk6uc=
 github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260228120317-9484bd595cec/go.mod h1:3UfcOjUgXGSl3dNxTOjLHKrfMmQtY305ialGx/yg0xI=
 github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260228120317-9484bd595cec h1:FU2KseAwmkRxJ0KSdU0MYpicDDTYCFyH/EE0rZ5BPbc=

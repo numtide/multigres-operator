@@ -658,10 +658,11 @@ func TestReconcile_PostgresSecretError(t *testing.T) {
 	})
 
 	reconciler := &ShardReconciler{
-		Client:    fakeClient,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: fakeClient,
+		Client:          fakeClient,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(100),
+		APIReader:       fakeClient,
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	req := ctrl.Request{
@@ -881,15 +882,10 @@ func TestUpdateStatus_GetError(t *testing.T) {
 }
 
 // statusPatchCapture wraps a client.Client to snapshot the state of the
-// patch object and options before delegating to the real Status().Patch().
-// Snapshotting before the call is necessary because the fake client's SSA
-// implementation may mutate the object in place during the merge.
+// patch options before delegating to the real Status().Patch().
 type statusPatchCapture struct {
 	client.Client
-	podRolesWasNil       bool
-	lastBackupTimeWasNil bool
-	lastBackupTypeEmpty  bool
-	capturedOpts         []client.SubResourcePatchOption
+	capturedOpts []client.SubResourcePatchOption
 }
 
 func (c *statusPatchCapture) Status() client.StatusWriter {
@@ -911,102 +907,7 @@ func (w *capturingStatusWriter) Patch(
 	opts ...client.SubResourcePatchOption,
 ) error {
 	w.capture.capturedOpts = opts
-	if s, ok := obj.(*multigresv1alpha1.Shard); ok {
-		w.capture.podRolesWasNil = s.Status.PodRoles == nil
-		w.capture.lastBackupTimeWasNil = s.Status.LastBackupTime == nil
-		w.capture.lastBackupTypeEmpty = s.Status.LastBackupType == ""
-	}
 	return w.StatusWriter.Patch(ctx, obj, patch, opts...)
-}
-
-// TestUpdateStatus_NilsDataHandlerFields verifies that updateStatus clears
-// data-handler-owned fields (PodRoles, LastBackupTime, LastBackupType) from
-// the SSA patch object so the resource-handler never overwrites them.
-func TestUpdateStatus_NilsDataHandlerFields(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-	_ = policyv1.AddToScheme(scheme)
-
-	now := metav1.Now()
-
-	tests := map[string]struct {
-		preStatus multigresv1alpha1.ShardStatus
-	}{
-		"PodRoles populated": {
-			preStatus: multigresv1alpha1.ShardStatus{
-				PodRoles: map[string]string{
-					"pod-0": "PRIMARY",
-					"pod-1": "REPLICA",
-				},
-			},
-		},
-		"LastBackupTime and LastBackupType populated": {
-			preStatus: multigresv1alpha1.ShardStatus{
-				LastBackupTime: &now,
-				LastBackupType: "full",
-			},
-		},
-		"all data-handler fields populated": {
-			preStatus: multigresv1alpha1.ShardStatus{
-				PodRoles: map[string]string{
-					"pod-0": "PRIMARY",
-				},
-				LastBackupTime: &now,
-				LastBackupType: "incr",
-			},
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			shard := &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"pool1": {
-							Cells: []multigresv1alpha1.CellName{"cell1"},
-						},
-					},
-				},
-				Status: tc.preStatus,
-			}
-
-			baseClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(shard).
-				WithStatusSubresource(&multigresv1alpha1.Shard{}).
-				Build()
-
-			capture := &statusPatchCapture{Client: baseClient}
-
-			reconciler := &ShardReconciler{
-				Client:    capture,
-				Scheme:    scheme,
-				Recorder:  record.NewFakeRecorder(100),
-				APIReader: baseClient,
-			}
-
-			err := reconciler.updateStatus(context.Background(), shard)
-			if err != nil {
-				t.Fatalf("updateStatus() unexpected error: %v", err)
-			}
-
-			if !capture.podRolesWasNil {
-				t.Error("PodRoles should be nil in SSA patch object")
-			}
-			if !capture.lastBackupTimeWasNil {
-				t.Error("LastBackupTime should be nil in SSA patch object")
-			}
-			if !capture.lastBackupTypeEmpty {
-				t.Error("LastBackupType should be empty in SSA patch object")
-			}
-		})
-	}
 }
 
 // TestUpdateStatus_FieldOwner verifies that the SSA status patch uses
@@ -2005,7 +1906,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2024,7 +1925,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2043,7 +1944,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2069,7 +1970,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2107,7 +2008,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 			WithObjects(shard, pvc).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err != nil {
@@ -2150,7 +2051,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 			WithObjects(shard, pvc).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err != nil {
@@ -2190,7 +2091,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2218,7 +2119,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2245,7 +2146,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2268,7 +2169,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -2309,7 +2210,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 			WithObjects(shard, pvc).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err != nil {
@@ -2355,7 +2256,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 			WithObjects(shard, pvc).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err != nil {
@@ -2401,7 +2302,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 			WithObjects(shard, pvc).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err != nil {
@@ -2437,7 +2338,7 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 			WithObjects(shard, deploy).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err != nil {
@@ -4178,10 +4079,11 @@ func TestReconcile_BackupCertsError(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: c,
+		Client:          c,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(100),
+		APIReader:       c,
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(shard)}
@@ -4226,10 +4128,11 @@ func TestReconcile_AddFinalizerError(t *testing.T) {
 	})
 
 	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: c,
+		Client:          c,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(100),
+		APIReader:       c,
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(shard)}
@@ -4780,10 +4683,11 @@ func TestReconcile_DeletionWithFinalizer(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: c,
+		Client:          c,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(100),
+		APIReader:       c,
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(shard)}

@@ -6,10 +6,14 @@ import (
 	"slices"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
+	"github.com/multigres/multigres/go/common/topoclient"
+	"go.opentelemetry.io/otel/attribute"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 
@@ -20,8 +24,34 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/backuphealth"
+	"github.com/numtide/multigres-operator/pkg/data-handler/drain"
+	"github.com/numtide/multigres-operator/pkg/data-handler/topo"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	"github.com/numtide/multigres-operator/pkg/util/status"
+)
+
+const (
+	// topoUnavailableGracePeriod is the duration after resource creation during
+	// which topology UNAVAILABLE errors are silently requeued instead of being
+	// reported as reconcile errors. This prevents noisy error metrics during
+	// normal cluster startup while the toposerver is still initializing.
+	topoUnavailableGracePeriod = 2 * time.Minute
+
+	// topoUnavailableRequeueDelay is the delay before retrying when the topology
+	// server is unavailable during the grace period.
+	topoUnavailableRequeueDelay = 5 * time.Second
+
+	// conditionDatabaseRegistered tracks whether the database was ever
+	// successfully registered in the global topology. Used during deletion
+	// to distinguish "never initialized" from "temporarily unreachable".
+	conditionDatabaseRegistered = "DatabaseRegistered"
+
+	// topoCleanupTimeout is the maximum duration to retry topology cleanup
+	// during deletion when the database was previously registered but is now
+	// unreachable. After this period, the finalizer is removed with a warning.
+	topoCleanupTimeout = 2 * time.Minute
 )
 
 // ShardReconciler reconciles a Shard object.
@@ -34,7 +64,9 @@ type ShardReconciler struct {
 	// "app.kubernetes.io/managed-by: multigres-operator" due to the informer
 	// cache's label filter. External Secrets (e.g., cert-manager) lack this
 	// label, so we need APIReader to validate user-provided pgBackRest TLS Secrets.
-	APIReader client.Reader
+	APIReader       client.Reader
+	RPCClient       rpcclient.MultiPoolerClient
+	CreateTopoStore func(*multigresv1alpha1.Shard) (topoclient.Store, error)
 }
 
 // Reconcile handles Shard resource reconciliation.
@@ -226,6 +258,12 @@ func (r *ShardReconciler) Reconcile(
 		childSpan.End()
 	}
 
+	// Data-plane phases: open a single topo connection shared across all phases.
+	result, err := r.reconcileDataPlane(ctx, shard)
+	if err != nil || result.RequeueAfter > 0 || result.Requeue {
+		return result, err
+	}
+
 	// Update status
 	{
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.UpdateStatus")
@@ -244,14 +282,49 @@ func (r *ShardReconciler) Reconcile(
 	return ctrl.Result{}, nil
 }
 
-// handleDeletion ensures all child resources (Pods) go through the drain state machine
-// to unregister from etcd before their finalizers are removed. Pods that were never
-// scheduled or whose drain times out get their finalizers removed directly.
+// handleDeletion ensures all child resources (Pods) go through cleanup
+// before the shard finalizer is removed. It also performs best-effort
+// topology cleanup (database unregistration).
 func (r *ShardReconciler) handleDeletion(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+
+	// Best-effort topology cleanup: unregister the database from etcd.
+	if err := r.unregisterDatabaseFromTopology(ctx, shard); err != nil {
+		if topo.IsTopoUnavailable(err) {
+			if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
+				logger.Info("Topology never initialized, skipping cleanup")
+			} else {
+				deletionAge := time.Since(shard.DeletionTimestamp.Time)
+				if deletionAge > topoCleanupTimeout {
+					logger.Info(
+						"Topology unreachable beyond cleanup timeout, forcing finalizer removal",
+						"deletionAge",
+						deletionAge.Round(time.Second).String(),
+					)
+					r.Recorder.Eventf(shard, "Warning", "CleanupSkipped",
+						"Topology unreachable for %s during deletion, skipping cleanup",
+						deletionAge.Round(time.Second))
+				} else {
+					logger.Info("Topology temporarily unreachable, will retry cleanup",
+						"deletionAge", deletionAge.Round(time.Second).String())
+					return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
+				}
+			}
+		} else {
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"CleanupFailed",
+				"Failed to clean up database from topology: %v",
+				err,
+			)
+			logger.Error(err, "Failed to unregister database from topology")
+			return ctrl.Result{}, err
+		}
+	}
 
 	// Determine matching labels for all pods belonging to this shard
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
@@ -351,13 +424,9 @@ func (r *ShardReconciler) handleDeletion(
 		}
 	}
 
-	// During shard deletion, remove pod finalizers directly and skip the drain
-	// state machine. The data-handler has already unregistered the database from
-	// topology in its own handleDeletion, so pooler entries are cleaned up at the
-	// database level. The drain state machine (which removes individual poolers
-	// from the sync standby list) cannot run reliably here because the
-	// data-handler has already removed its finalizer and stopped reconciling
-	// before the resource-handler gets a chance to set drain annotations.
+	// During shard deletion, remove pod finalizers directly. The database has
+	// been unregistered from topology above, so pooler entries are cleaned up
+	// at the database level.
 	//
 	// For full cluster deletion this is safe: the topo server is also being
 	// deleted so any residual entries are destroyed with it.
@@ -396,6 +465,258 @@ func (r *ShardReconciler) handleDeletion(
 
 	logger.Info("Shard cleanup complete, finalizer removed")
 	return ctrl.Result{}, nil
+}
+
+// reconcileDataPlane opens a topo connection and runs all data-plane phases:
+// database registration, PodRoles update, drain state machine, and backup health.
+func (r *ShardReconciler) reconcileDataPlane(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Register database in topology
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.RegisterDatabaseInTopology")
+		if err := r.registerDatabaseInTopology(ctx, shard); err != nil {
+			resourceAge := time.Since(shard.CreationTimestamp.Time)
+			if topo.IsTopoUnavailable(err) && resourceAge < topoUnavailableGracePeriod {
+				childSpan.SetAttributes(attribute.Bool("topo.unavailable_grace", true))
+				childSpan.End()
+				logger.V(1).Info("Topology server not available yet, requeueing",
+					"resourceAge", resourceAge.Round(time.Second).String(),
+					"gracePeriod", topoUnavailableGracePeriod.String(),
+				)
+				r.Recorder.Eventf(
+					shard,
+					"Normal",
+					"TopologyWaiting",
+					"Topology server not available yet (age %s), will retry",
+					resourceAge.Round(time.Second),
+				)
+				return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
+			}
+
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"TopologyError",
+				"Failed to register database in topology: %v",
+				err,
+			)
+			logger.Error(err, "Failed to register database in topology")
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
+	}
+
+	// Mark the database as registered so deletion knows cleanup is needed.
+	if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
+		statusBase := shard.DeepCopy()
+		status.SetCondition(&shard.Status.Conditions, metav1.Condition{
+			Type:               conditionDatabaseRegistered,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Registered",
+			Message:            "Database registered in topology",
+			ObservedGeneration: shard.Generation,
+			LastTransitionTime: metav1.Now(),
+		})
+		if err := r.Status().Patch(ctx, shard, client.MergeFrom(statusBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("setting DatabaseRegistered condition: %w", err)
+		}
+	}
+
+	// Open a single topo connection for PodRoles, drain, and backup health.
+	store, err := r.getTopoStore(shard)
+	if err != nil {
+		logger.Error(err, "Failed to get topo store, cannot update roles or execute drain")
+		return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
+	}
+	defer func() { _ = store.Close() }()
+
+	// Phase: Update PodRoles from topology
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePodRoles")
+		r.reconcilePodRoles(ctx, store, shard)
+		childSpan.End()
+	}
+
+	// Phase: Execute drain state machine for pods with drain annotations
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileDrainState")
+		requeue, err := r.reconcileDrainState(ctx, store, shard)
+		if err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+		}
+		childSpan.End()
+		if requeue {
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+	}
+
+	// Phase: Evaluate backup health
+	if r.RPCClient != nil {
+		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileBackupHealth")
+		result, err := backuphealth.EvaluateBackupHealth(ctx, store, r.RPCClient, shard)
+		if err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to evaluate backup health")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"BackupCheckFailed",
+				"Failed to check backup health: %v",
+				err,
+			)
+		} else if result != nil {
+			backupBase := shard.DeepCopy()
+			prevHealthy := status.IsConditionTrue(
+				shard.Status.Conditions,
+				backuphealth.ConditionBackupHealthy,
+			)
+			backuphealth.ApplyBackupHealth(shard, result)
+
+			if result.Healthy && !prevHealthy {
+				r.Recorder.Event(shard, "Normal", "BackupHealthy", result.Message)
+			} else if !result.Healthy {
+				r.Recorder.Eventf(shard, "Warning", "BackupStale", result.Message)
+			}
+
+			if err := r.Status().Patch(ctx, shard, client.MergeFrom(backupBase)); err != nil {
+				monitoring.RecordSpanError(childSpan, err)
+				childSpan.End()
+				logger.Error(err, "Failed to update shard backup status")
+				return ctrl.Result{}, err
+			}
+			childSpan.End()
+		} else {
+			childSpan.End()
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// reconcilePodRoles queries the topology for pooler status and updates
+// shard.Status.PodRoles.
+func (r *ShardReconciler) reconcilePodRoles(
+	ctx context.Context,
+	store topoclient.Store,
+	shard *multigresv1alpha1.Shard,
+) {
+	logger := log.FromContext(ctx)
+	statusBase := shard.DeepCopy()
+	poolerStatus := topo.GetPoolerStatus(ctx, store, shard)
+
+	if shard.Status.PodRoles == nil {
+		shard.Status.PodRoles = make(map[string]string)
+	}
+	rolesChanged := false
+
+	for hostname, role := range poolerStatus.Roles {
+		if shard.Status.PodRoles[hostname] != role {
+			shard.Status.PodRoles[hostname] = role
+			rolesChanged = true
+		}
+	}
+
+	// Prune entries for poolers that no longer exist in the topology.
+	if poolerStatus.QuerySuccess {
+		for hostname := range shard.Status.PodRoles {
+			if _, exists := poolerStatus.Roles[hostname]; !exists {
+				delete(shard.Status.PodRoles, hostname)
+				rolesChanged = true
+			}
+		}
+	}
+
+	if rolesChanged {
+		if err := r.Status().Patch(ctx, shard, client.MergeFrom(statusBase)); err != nil {
+			logger.Error(err, "Failed to update shard pod roles")
+		}
+	}
+}
+
+// reconcileDrainState iterates pods with drain annotations and runs the
+// drain state machine for each one.
+func (r *ShardReconciler) reconcileDrainState(
+	ctx context.Context,
+	store topoclient.Store,
+	shard *multigresv1alpha1.Shard,
+) (bool, error) {
+	logger := log.FromContext(ctx)
+
+	lbls := map[string]string{
+		metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
+	}
+	podList := &corev1.PodList{}
+	if err := r.List(
+		ctx,
+		podList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(lbls),
+	); err != nil {
+		logger.Error(err, "Failed to list pods for drain state machine")
+		return false, err
+	}
+
+	requeue := false
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if pod.Annotations[metadata.AnnotationDrainState] != "" {
+			shouldRequeue, derr := drain.ExecuteDrainStateMachine(
+				ctx, r.Client, r.RPCClient, r.Recorder, store, shard, pod,
+			)
+			if derr != nil {
+				logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
+			}
+			if shouldRequeue {
+				requeue = true
+			}
+		}
+	}
+
+	return requeue, nil
+}
+
+// registerDatabaseInTopology delegates database registration to the topo package.
+func (r *ShardReconciler) registerDatabaseInTopology(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	store, err := r.getTopoStore(shard)
+	if err != nil {
+		return fmt.Errorf("failed to create topology store: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	return topo.RegisterDatabase(ctx, store, r.Recorder, shard)
+}
+
+// unregisterDatabaseFromTopology delegates database unregistration to the topo package.
+func (r *ShardReconciler) unregisterDatabaseFromTopology(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	store, err := r.getTopoStore(shard)
+	if err != nil {
+		return fmt.Errorf("failed to create topology store: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	return topo.UnregisterDatabase(ctx, store, r.Recorder, shard)
+}
+
+// getTopoStore returns a topology store, using the custom factory if set, otherwise the default.
+func (r *ShardReconciler) getTopoStore(shard *multigresv1alpha1.Shard) (topoclient.Store, error) {
+	if r.CreateTopoStore != nil {
+		return r.CreateTopoStore(shard)
+	}
+	return topo.NewStoreFromShard(shard)
 }
 
 // reconcilePool creates or updates the Pods, PVCs and headless Service for a pool.

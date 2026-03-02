@@ -1089,9 +1089,10 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			}
 
 			reconciler := &ShardReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(1000),
+				Client:          fakeClient,
+				Scheme:          scheme,
+				Recorder:        record.NewFakeRecorder(1000),
+				CreateTopoStore: newMemoryTopoFactory(),
 			}
 			if tc.reconcilerScheme != nil {
 				reconciler.Scheme = tc.reconcilerScheme
@@ -1197,9 +1198,10 @@ func TestShardReconciler_ReconcileNotFound(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client:   fakeClient,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(10),
+		Client:          fakeClient,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(10),
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	// Reconcile non-existent resource
@@ -2215,9 +2217,10 @@ func TestHandleDeletion(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: record.NewFakeRecorder(10),
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
 		}
 
 		result, err := r.handleDeletion(context.Background(), shard)
@@ -2260,9 +2263,10 @@ func TestHandleDeletion(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: record.NewFakeRecorder(10),
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
 		}
 
 		result, err := r.handleDeletion(context.Background(), shard)
@@ -2303,9 +2307,10 @@ func TestHandleDeletion(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: record.NewFakeRecorder(10),
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
 		}
 
 		result, err := r.handleDeletion(context.Background(), shard)
@@ -2347,9 +2352,10 @@ func TestHandleDeletion(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: record.NewFakeRecorder(10),
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
 		}
 
 		result, err := r.handleDeletion(context.Background(), shard)
@@ -2396,9 +2402,10 @@ func TestHandleDeletion(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: record.NewFakeRecorder(10),
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
 		}
 
 		result, err := r.handleDeletion(context.Background(), shard)
@@ -2437,9 +2444,10 @@ func TestHandleDeletion(t *testing.T) {
 			Build()
 
 		r := &ShardReconciler{
-			Client:   c,
-			Scheme:   scheme,
-			Recorder: record.NewFakeRecorder(10),
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
 		}
 
 		result, err := r.handleDeletion(context.Background(), shard)
