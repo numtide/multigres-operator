@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -223,8 +222,7 @@ func (r *ShardReconciler) createMissingResources(
 		}
 
 		// Handle pods being deleted externally
-		if !pod.DeletionTimestamp.IsZero() &&
-			controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) {
+		if !pod.DeletionTimestamp.IsZero() {
 			if !actionTaken {
 				if handleErr := r.handleExternalDeletion(ctx, shard, pod); handleErr != nil {
 					return 0, false, handleErr
@@ -283,7 +281,7 @@ func isPoolHealthy(existingPods map[string]*corev1.Pod, replicas int32) bool {
 }
 
 // handleExternalDeletion handles a pod that has been deleted externally (e.g. kubectl delete).
-// Unscheduled pods get their finalizer removed directly; scheduled pods enter the drain state machine.
+// Unscheduled pods are allowed to terminate; scheduled pods enter the drain state machine.
 func (r *ShardReconciler) handleExternalDeletion(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -300,28 +298,11 @@ func (r *ShardReconciler) handleExternalDeletion(
 	}
 
 	if !isScheduled {
-		// Never scheduled -> can't be registered in etcd, safe to remove finalizer.
-		logger.Info(
-			"Removing finalizer from unscheduled pod to clear deletion deadlock",
-			"pod",
-			pod.Name,
-		)
-		if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
-			if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
-				return fmt.Errorf(
-					"failed to remove finalizer from unscheduled pod %s: %w",
-					pod.Name,
-					err,
-				)
-			}
-		}
+		logger.Info("Ignoring externally-deleted unscheduled pod", "pod", pod.Name)
 		return nil
 	}
 
 	if pod.Annotations[metadata.AnnotationDrainState] == "" {
-		// Scheduled pod deleted externally without a drain annotation.
-		// Initiate the drain state machine so the data-handler can
-		// unregister it from etcd before the finalizer is removed.
 		logger.Info("Initiating drain for externally-deleted pod", "pod", pod.Name)
 		if err := r.initiateDrain(ctx, pod); err != nil {
 			return err
@@ -385,7 +366,6 @@ func (r *ShardReconciler) handleScaleDown(
 	// Process external deletions for extra pods to avoid deadlocks
 	for _, pod := range extraPods {
 		if !pod.DeletionTimestamp.IsZero() &&
-			controllerutil.ContainsFinalizer(pod, PoolPodFinalizer) &&
 			pod.Annotations[metadata.AnnotationDrainState] == "" {
 			if !actionTaken {
 				if err := r.handleExternalDeletion(ctx, shard, pod); err != nil {
@@ -396,7 +376,7 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 	}
 
-	// Cleanup pods ready for deletion: remove finalizer first, then delete
+	// Cleanup pods ready for deletion
 	for _, pod := range readyForDeletion {
 		logger.Info("Cleaning up pod in ready-for-deletion state", "pod", pod.Name)
 		if err := r.cleanupDrainedPod(ctx, shard, pod, poolName, poolSpec, replicas); err != nil {
@@ -664,7 +644,6 @@ func (r *ShardReconciler) cleanupDrainedPod(
 	logger := log.FromContext(ctx)
 
 	// Handle PVC deletion based on policy FIRST
-	// If this fails, we leave the finalizer so the pod isn't GC'd and we retry later.
 	mergedPolicy := multigresv1alpha1.MergePVCDeletionPolicy(
 		poolSpec.PVCDeletionPolicy,
 		shard.Spec.PVCDeletionPolicy,
@@ -713,15 +692,9 @@ func (r *ShardReconciler) cleanupDrainedPod(
 		}
 	}
 
-	// Remove finalizer to allow Kubernetes to delete the pod
-	// We only do this after PVC deletion (if applicable) succeeds to prevent PVC leaks.
-	if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
-		if err := r.Update(ctx, pod); err != nil {
-			return fmt.Errorf("failed to remove finalizer from pod %s: %w", pod.Name, err)
-		}
-		logger.Info("Removed finalizer from drained pod", "pod", pod.Name)
-		r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Completed drain for pod %s", pod.Name)
-	}
+	// Record event for completed drain.
+	logger.Info("Drained pod cleanup complete", "pod", pod.Name)
+	r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Completed drain for pod %s", pod.Name)
 
 	return nil
 }

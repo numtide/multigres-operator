@@ -29,8 +29,6 @@ import (
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
-const finalizerName = "multigres.com/cluster-cleanup"
-
 // MultigresClusterReconciler reconciles a MultigresCluster object.
 type MultigresClusterReconciler struct {
 	client.Client
@@ -129,24 +127,6 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 		for _, decision := range decisions {
 			r.Recorder.Event(cluster, "Normal", "ImplicitDefault", decision)
-		}
-	}
-
-	// Add finalizer on first reconcile to guarantee ordered deletion.
-	// We do not return early here because GenerationChangedPredicate would
-	// filter out the metadata-only update, preventing child resource creation.
-	if !slices.Contains(cluster.Finalizers, finalizerName) {
-		cluster.Finalizers = append(cluster.Finalizers, finalizerName)
-		if err := r.Update(ctx, cluster); err != nil {
-			l.Error(err, "Failed to add finalizer")
-			r.Recorder.Eventf(
-				cluster,
-				"Warning",
-				"FinalizerFailed",
-				"Failed to add finalizer: %v",
-				err,
-			)
-			return ctrl.Result{}, err
 		}
 	}
 
@@ -265,10 +245,8 @@ func (r *MultigresClusterReconciler) Reconcile(
 	return ctrl.Result{}, nil
 }
 
-// handleDeletion orchestrates phased deletion of the MultigresCluster.
-// It deletes Cells and TableGroups first. Once all Cells and Shards
-// are fully removed, it removes our finalizer, allowing Kubernetes GC
-// to cascade-delete the remaining resources (topo servers, deployments).
+// handleDeletion performs best-effort cleanup by deleting Cells and TableGroups.
+// Without finalizers, Kubernetes GC cascade via ownerReferences handles the rest.
 func (r *MultigresClusterReconciler) handleDeletion(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
@@ -313,31 +291,8 @@ func (r *MultigresClusterReconciler) handleDeletion(
 		}
 	}
 
-	// Check if any Cells or Shards still exist (waiting for child resource deletion).
-	shards := &multigresv1alpha1.ShardList{}
-	if err := r.List(ctx, shards, ns, clusterLabels); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list shards: %w", err)
-	}
-
-	remaining := len(cells.Items) + len(shards.Items)
-	if remaining > 0 {
-		l.Info("Waiting for child resources to be deleted",
-			"remainingCells", len(cells.Items),
-			"remainingShards", len(shards.Items),
-		)
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-	}
-
-	// All Cells and Shards are gone — safe to remove our finalizer.
-	cluster.Finalizers = slices.DeleteFunc(cluster.Finalizers, func(s string) bool {
-		return s == finalizerName
-	})
-	if err := r.Update(ctx, cluster); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
-	}
-
-	l.Info("Cluster cleanup complete, finalizer removed")
-	r.Recorder.Event(cluster, "Normal", "CleanupComplete", "All child resources cleaned up")
+	l.Info("Cluster best-effort cleanup complete")
+	r.Recorder.Event(cluster, "Normal", "CleanupComplete", "Initiated deletion of child resources")
 	return ctrl.Result{}, nil
 }
 

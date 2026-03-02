@@ -3,7 +3,6 @@ package toposerver
 import (
 	"context"
 	"fmt"
-	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,11 +21,8 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/status"
 )
-
-const topoFinalizerName = "multigres.com/topo-deletion-ordering"
 
 // TopoServerReconciler reconciles a TopoServer object.
 type TopoServerReconciler struct {
@@ -66,20 +62,9 @@ func (r *TopoServerReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Add finalizer to prevent premature GC during cluster deletion.
-	// Without this, Kubernetes GC can delete the TopoServer (via ownerReference)
-	// before shard drains complete, leaving the drain state machine without a topo.
-	if toposerver.DeletionTimestamp.IsZero() {
-		if !slices.Contains(toposerver.Finalizers, topoFinalizerName) {
-			toposerver.Finalizers = append(toposerver.Finalizers, topoFinalizerName)
-			if err := r.Update(ctx, toposerver); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-			}
-		}
-	}
-
 	if !toposerver.DeletionTimestamp.IsZero() {
-		return r.handleDeletion(ctx, toposerver)
+		logger.Info("TopoServer is being deleted, skipping reconciliation")
+		return ctrl.Result{}, nil
 	}
 
 	// Reconcile StatefulSet
@@ -160,95 +145,6 @@ func (r *TopoServerReconciler) Reconcile(
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(toposerver, "Normal", "Synced", "Successfully reconciled TopoServer")
-	return ctrl.Result{}, nil
-}
-
-// handleDeletion blocks TopoServer deletion until all Shards and Cells
-// belonging to the same cluster have been fully removed. This guarantees
-// the topo (etcd) stays alive for the drain state machine to complete.
-//
-// If the topo was never ready (0 ready replicas), there is no etcd data
-// to protect, so we skip the wait to avoid deadlocking with shards that
-// are themselves waiting for the topo to come up.
-func (r *TopoServerReconciler) handleDeletion(
-	ctx context.Context,
-	toposerver *multigresv1alpha1.TopoServer,
-) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	clusterName := toposerver.Labels[metadata.LabelMultigresCluster]
-	if clusterName == "" {
-		logger.Info("TopoServer has no cluster label, removing finalizer")
-		return r.removeFinalizer(ctx, toposerver)
-	}
-
-	// If the topo StatefulSet never had ready replicas, there is no etcd
-	// data to drain from. Release the finalizer immediately to prevent a
-	// deadlock where shards wait for topo and topo waits for shards.
-	if !r.topoWasEverReady(ctx, toposerver) {
-		logger.Info("TopoServer was never ready, skipping drain wait")
-		return r.removeFinalizer(ctx, toposerver)
-	}
-
-	clusterLabels := client.MatchingLabels{metadata.LabelMultigresCluster: clusterName}
-	ns := client.InNamespace(toposerver.Namespace)
-
-	shards := &multigresv1alpha1.ShardList{}
-	if err := r.List(ctx, shards, ns, clusterLabels); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list shards: %w", err)
-	}
-
-	cells := &multigresv1alpha1.CellList{}
-	if err := r.List(ctx, cells, ns, clusterLabels); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list cells: %w", err)
-	}
-
-	remaining := len(shards.Items) + len(cells.Items)
-	if remaining > 0 {
-		logger.Info("Waiting for shards and cells to be deleted before allowing topo cleanup",
-			"remainingShards", len(shards.Items),
-			"remainingCells", len(cells.Items),
-		)
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-	}
-
-	logger.Info("All shards and cells deleted, removing topo finalizer")
-	return r.removeFinalizer(ctx, toposerver)
-}
-
-// topoWasEverReady returns true if the TopoServer's StatefulSet has (or
-// had) at least one ready replica. When the topo was never initialised,
-// there is nothing in etcd to protect, so callers can skip the drain wait.
-func (r *TopoServerReconciler) topoWasEverReady(
-	ctx context.Context,
-	toposerver *multigresv1alpha1.TopoServer,
-) bool {
-	// Status phase is set to Healthy once all replicas are ready.
-	// If it was ever healthy, the status condition will reflect it.
-	for _, cond := range toposerver.Status.Conditions {
-		if cond.Type == "Ready" && cond.Status == metav1.ConditionTrue {
-			return true
-		}
-	}
-	// Fall back to checking the live StatefulSet.
-	sts := &appsv1.StatefulSet{}
-	key := client.ObjectKey{Namespace: toposerver.Namespace, Name: toposerver.Name}
-	if err := r.Get(ctx, key, sts); err != nil {
-		return false
-	}
-	return sts.Status.ReadyReplicas > 0
-}
-
-func (r *TopoServerReconciler) removeFinalizer(
-	ctx context.Context,
-	toposerver *multigresv1alpha1.TopoServer,
-) (ctrl.Result, error) {
-	toposerver.Finalizers = slices.DeleteFunc(toposerver.Finalizers, func(s string) bool {
-		return s == topoFinalizerName
-	})
-	if err := r.Update(ctx, toposerver); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
-	}
 	return ctrl.Result{}, nil
 }
 

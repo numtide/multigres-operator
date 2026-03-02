@@ -500,6 +500,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					Name:              "test-shard-deletion",
 					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Finalizers:        []string{"kubernetes.io/test"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
@@ -1677,9 +1678,9 @@ func TestScaleDown_ExternallyDeletedExtraPod(t *testing.T) {
 		pod.Annotations[metadata.AnnotationSpecHash] = desiredPod.Annotations[metadata.AnnotationSpecHash]
 
 		// For the extra pod (index 2), simulate an external deletion:
-		// Give it a DeletionTimestamp and the PoolPodFinalizer.
+		// Give it a DeletionTimestamp.
 		if i == 2 {
-			pod.Finalizers = []string{PoolPodFinalizer}
+			pod.Finalizers = []string{"kubernetes.io/test"}
 			now := metav1.Now()
 			pod.DeletionTimestamp = &now
 		}
@@ -1752,7 +1753,6 @@ func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
 				Name:        name,
 				Namespace:   "default",
 				Annotations: map[string]string{},
-				Finalizers:  []string{PoolPodFinalizer},
 				Labels: map[string]string{
 					metadata.LabelMultigresCell: cellName,
 				},
@@ -2170,7 +2170,7 @@ func TestHandleDeletion(t *testing.T) {
 			Name:              "test-shard",
 			Namespace:         "default",
 			DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-			Finalizers:        []string{ShardFinalizer},
+			Finalizers:        []string{"kubernetes.io/test"},
 			Labels:            shardLabels,
 		},
 		Spec: multigresv1alpha1.ShardSpec{
@@ -2180,7 +2180,7 @@ func TestHandleDeletion(t *testing.T) {
 		},
 	}
 
-	makePod := func(name string, scheduled bool, drainState string, finalizer bool) *corev1.Pod {
+	makePod := func(name string, scheduled bool, drainState string) *corev1.Pod {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        name,
@@ -2188,9 +2188,6 @@ func TestHandleDeletion(t *testing.T) {
 				Labels:      shardLabels,
 				Annotations: map[string]string{},
 			},
-		}
-		if finalizer {
-			pod.Finalizers = []string{PoolPodFinalizer}
 		}
 		if drainState != "" {
 			pod.Annotations[metadata.AnnotationDrainState] = drainState
@@ -2204,10 +2201,10 @@ func TestHandleDeletion(t *testing.T) {
 		return pod
 	}
 
-	t.Run("scheduled pod gets finalizer removed directly", func(t *testing.T) {
+	t.Run("scheduled pod gets deleted during shard deletion", func(t *testing.T) {
 		t.Parallel()
 
-		pod := makePod("pod-0", true, "", true)
+		pod := makePod("pod-0", true, "")
 		shard := baseShard.DeepCopy()
 
 		c := fake.NewClientBuilder().
@@ -2228,12 +2225,10 @@ func TestHandleDeletion(t *testing.T) {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
 		if result.RequeueAfter != 0 {
-			t.Error(
-				"Expected no requeue — finalizer should be removed directly during shard deletion",
-			)
+			t.Error("Expected no requeue during best-effort cleanup")
 		}
 
-		// Pod should be fully deleted (finalizer removed + Delete called)
+		// Pod should be deleted
 		updatedPod := &corev1.Pod{}
 		err = c.Get(
 			context.Background(),
@@ -2241,19 +2236,14 @@ func TestHandleDeletion(t *testing.T) {
 			updatedPod,
 		)
 		if err == nil {
-			for _, f := range updatedPod.Finalizers {
-				if f == PoolPodFinalizer {
-					t.Error("Expected PoolPodFinalizer to be removed")
-				}
-			}
+			t.Error("Expected pod to be deleted")
 		}
-		// NotFound is expected: fake client deletes when finalizer removed + Delete called
 	})
 
-	t.Run("unscheduled pod gets finalizer removed directly", func(t *testing.T) {
+	t.Run("unscheduled pod gets deleted during shard deletion", func(t *testing.T) {
 		t.Parallel()
 
-		pod := makePod("pod-unsched", false, "", true)
+		pod := makePod("pod-unsched", false, "")
 		shard := baseShard.DeepCopy()
 
 		c := fake.NewClientBuilder().
@@ -2277,7 +2267,7 @@ func TestHandleDeletion(t *testing.T) {
 			t.Error("Expected no requeue for unscheduled pod")
 		}
 
-		// Pod should be fully deleted (finalizer removed + Delete called → fake client removes it)
+		// Pod should be deleted
 		updatedPod := &corev1.Pod{}
 		err = c.Get(
 			context.Background(),
@@ -2285,19 +2275,14 @@ func TestHandleDeletion(t *testing.T) {
 			updatedPod,
 		)
 		if err == nil {
-			for _, f := range updatedPod.Finalizers {
-				if f == PoolPodFinalizer {
-					t.Error("Expected PoolPodFinalizer to be removed from unscheduled pod")
-				}
-			}
+			t.Error("Expected pod to be deleted")
 		}
-		// NotFound is expected: fake client deletes when finalizer removed + Delete called
 	})
 
-	t.Run("ready-for-deletion pod gets finalizer removed", func(t *testing.T) {
+	t.Run("ready-for-deletion pod gets deleted", func(t *testing.T) {
 		t.Parallel()
 
-		pod := makePod("pod-rfd", true, metadata.DrainStateReadyForDeletion, true)
+		pod := makePod("pod-rfd", true, metadata.DrainStateReadyForDeletion)
 		shard := baseShard.DeepCopy()
 
 		c := fake.NewClientBuilder().
@@ -2321,7 +2306,7 @@ func TestHandleDeletion(t *testing.T) {
 			t.Error("Expected no requeue when drain is complete")
 		}
 
-		// Pod should be fully deleted
+		// Pod should be deleted
 		updatedPod := &corev1.Pod{}
 		err = c.Get(
 			context.Background(),
@@ -2329,19 +2314,14 @@ func TestHandleDeletion(t *testing.T) {
 			updatedPod,
 		)
 		if err == nil {
-			for _, f := range updatedPod.Finalizers {
-				if f == PoolPodFinalizer {
-					t.Error("Expected PoolPodFinalizer to be removed from ready-for-deletion pod")
-				}
-			}
+			t.Error("Expected pod to be deleted")
 		}
-		// NotFound is expected
 	})
 
-	t.Run("mid-drain pod gets finalizer removed directly", func(t *testing.T) {
+	t.Run("mid-drain pod gets deleted directly", func(t *testing.T) {
 		t.Parallel()
 
-		pod := makePod("pod-draining", true, metadata.DrainStateDraining, true)
+		pod := makePod("pod-draining", true, metadata.DrainStateDraining)
 		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().UTC().Format(time.RFC3339)
 		shard := baseShard.DeepCopy()
 
@@ -2363,12 +2343,10 @@ func TestHandleDeletion(t *testing.T) {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
 		if result.RequeueAfter != 0 {
-			t.Error(
-				"Expected no requeue — finalizer should be removed directly during shard deletion",
-			)
+			t.Error("Expected no requeue during best-effort cleanup")
 		}
 
-		// Pod should be fully deleted (finalizer removed directly, no drain wait)
+		// Pod should be deleted directly, no drain wait
 		updatedPod := &corev1.Pod{}
 		err = c.Get(
 			context.Background(),
@@ -2376,19 +2354,14 @@ func TestHandleDeletion(t *testing.T) {
 			updatedPod,
 		)
 		if err == nil {
-			for _, f := range updatedPod.Finalizers {
-				if f == PoolPodFinalizer {
-					t.Error("Expected PoolPodFinalizer to be removed from mid-drain pod")
-				}
-			}
+			t.Error("Expected pod to be deleted")
 		}
-		// NotFound is expected
 	})
 
-	t.Run("expired drain pod gets finalizer removed directly", func(t *testing.T) {
+	t.Run("expired drain pod gets deleted directly", func(t *testing.T) {
 		t.Parallel()
 
-		pod := makePod("pod-timeout", true, metadata.DrainStateDraining, true)
+		pod := makePod("pod-timeout", true, metadata.DrainStateDraining)
 		pod.Annotations[metadata.AnnotationDrainRequestedAt] = time.Now().
 			Add(-2 * time.Hour).
 			UTC().
@@ -2413,10 +2386,10 @@ func TestHandleDeletion(t *testing.T) {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
 		if result.RequeueAfter != 0 {
-			t.Error("Expected no requeue after timeout force-removes finalizer")
+			t.Error("Expected no requeue during best-effort cleanup")
 		}
 
-		// Pod should be fully cleaned up (finalizer removed + Delete called)
+		// Pod should be deleted
 		updatedPod := &corev1.Pod{}
 		err = c.Get(
 			context.Background(),
@@ -2424,15 +2397,11 @@ func TestHandleDeletion(t *testing.T) {
 			updatedPod,
 		)
 		if err == nil {
-			for _, f := range updatedPod.Finalizers {
-				if f == PoolPodFinalizer {
-					t.Error("Expected PoolPodFinalizer to be force-removed after timeout")
-				}
-			}
+			t.Error("Expected pod to be deleted")
 		}
 	})
 
-	t.Run("shard finalizer removed when all pods are done", func(t *testing.T) {
+	t.Run("cleanup completes when no pods exist", func(t *testing.T) {
 		t.Parallel()
 
 		shard := baseShard.DeepCopy()
@@ -2455,22 +2424,7 @@ func TestHandleDeletion(t *testing.T) {
 			t.Fatalf("handleDeletion returned error: %v", err)
 		}
 		if result.RequeueAfter != 0 {
-			t.Error("Expected no requeue when all pods are gone")
-		}
-
-		// Shard should be fully cleaned up (finalizer removed → fake client auto-deletes)
-		updatedShard := &multigresv1alpha1.Shard{}
-		err = c.Get(
-			context.Background(),
-			types.NamespacedName{Name: "test-shard", Namespace: "default"},
-			updatedShard,
-		)
-		if err == nil {
-			for _, f := range updatedShard.Finalizers {
-				if f == ShardFinalizer {
-					t.Error("Expected ShardFinalizer to be removed when all pods are gone")
-				}
-			}
+			t.Error("Expected no requeue when no pods exist")
 		}
 	})
 }

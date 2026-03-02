@@ -20,7 +20,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -45,13 +44,8 @@ const (
 
 	// conditionDatabaseRegistered tracks whether the database was ever
 	// successfully registered in the global topology. Used during deletion
-	// to distinguish "never initialized" from "temporarily unreachable".
+	// to decide whether best-effort topology cleanup is needed.
 	conditionDatabaseRegistered = "DatabaseRegistered"
-
-	// topoCleanupTimeout is the maximum duration to retry topology cleanup
-	// during deletion when the database was previously registered but is now
-	// unreachable. After this period, the finalizer is removed with a warning.
-	topoCleanupTimeout = 2 * time.Minute
 )
 
 // ShardReconciler reconciles a Shard object.
@@ -100,23 +94,9 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion before adding finalizer to avoid "no new finalizers
-	// can be added if the object is being deleted" errors.
+	// Best-effort cleanup on deletion — no finalizers are used.
 	if !shard.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
-			return r.handleDeletion(ctx, shard)
-		}
-		// Shard is being deleted but never got its finalizer — nothing to clean up.
-		return ctrl.Result{}, nil
-	}
-
-	// Add finalizer if missing
-	if !controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
-		controllerutil.AddFinalizer(shard, ShardFinalizer)
-		if err := r.Update(ctx, shard); err != nil {
-			monitoring.RecordSpanError(span, err)
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-		}
+		return r.handleDeletion(ctx, shard)
 	}
 
 	// Reconcile pg_hba ConfigMap first (required by all pools before starting)
@@ -282,9 +262,9 @@ func (r *ShardReconciler) Reconcile(
 	return ctrl.Result{}, nil
 }
 
-// handleDeletion ensures all child resources (Pods) go through cleanup
-// before the shard finalizer is removed. It also performs best-effort
-// topology cleanup (database unregistration).
+// handleDeletion performs best-effort cleanup when a Shard is deleted.
+// Without finalizers, Kubernetes GC handles cascade deletion via ownerRefs.
+// This method does best-effort topo cleanup and PVC policy enforcement.
 func (r *ShardReconciler) handleDeletion(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -297,36 +277,19 @@ func (r *ShardReconciler) handleDeletion(
 			if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
 				logger.Info("Topology never initialized, skipping cleanup")
 			} else {
-				deletionAge := time.Since(shard.DeletionTimestamp.Time)
-				if deletionAge > topoCleanupTimeout {
-					logger.Info(
-						"Topology unreachable beyond cleanup timeout, forcing finalizer removal",
-						"deletionAge",
-						deletionAge.Round(time.Second).String(),
-					)
-					r.Recorder.Eventf(shard, "Warning", "CleanupSkipped",
-						"Topology unreachable for %s during deletion, skipping cleanup",
-						deletionAge.Round(time.Second))
-				} else {
-					logger.Info("Topology temporarily unreachable, will retry cleanup",
-						"deletionAge", deletionAge.Round(time.Second).String())
-					return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
-				}
+				logger.Info("Topology unreachable during deletion, skipping cleanup")
+				r.Recorder.Eventf(shard, "Warning", "CleanupSkipped",
+					"Topology unreachable during deletion, skipping cleanup")
 			}
 		} else {
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"CleanupFailed",
-				"Failed to clean up database from topology: %v",
-				err,
-			)
+			// Log but don't block deletion for non-topo errors.
 			logger.Error(err, "Failed to unregister database from topology")
-			return ctrl.Result{}, err
+			r.Recorder.Eventf(shard, "Warning", "CleanupFailed",
+				"Failed to clean up database from topology: %v", err)
 		}
 	}
 
-	// Determine matching labels for all pods belonging to this shard
+	// Determine matching labels for all resources belonging to this shard.
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 	selector := map[string]string{
 		metadata.LabelMultigresCluster:    clusterName,
@@ -335,17 +298,7 @@ func (r *ShardReconciler) handleDeletion(
 		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
 	}
 
-	podList := &corev1.PodList{}
-	if err := r.List(
-		ctx,
-		podList,
-		client.InNamespace(shard.Namespace),
-		client.MatchingLabels(selector),
-	); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list pods for deletion: %w", err)
-	}
-
-	// Delete all Deployments owned by this shard
+	// Delete all Deployments owned by this shard.
 	deployList := &appsv1.DeploymentList{}
 	if err := r.List(
 		ctx,
@@ -358,22 +311,14 @@ func (r *ShardReconciler) handleDeletion(
 	for i := range deployList.Items {
 		deploy := &deployList.Items[i]
 		if deploy.DeletionTimestamp.IsZero() {
-			logger.Info(
-				"Initiating deployment deletion during shard cleanup",
-				"deployment",
-				deploy.Name,
-			)
+			logger.Info("Initiating deployment deletion during shard cleanup", "deployment", deploy.Name)
 			if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf(
-					"failed to delete deployment %s: %w",
-					deploy.Name,
-					err,
-				)
+				return ctrl.Result{}, fmt.Errorf("failed to delete deployment %s: %w", deploy.Name, err)
 			}
 		}
 	}
 
-	// Evaluate and process PVC deletions based on PVCDeletionPolicy before pod finalizers are removed
+	// Evaluate and process PVC deletions based on PVCDeletionPolicy.
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := r.List(
 		ctx,
@@ -387,12 +332,10 @@ func (r *ShardReconciler) handleDeletion(
 	for i := range pvcList.Items {
 		pvc := &pvcList.Items[i]
 
-		// Determine the PVC policy
 		poolName := pvc.Labels[metadata.LabelMultigresPool]
 		var policy *multigresv1alpha1.PVCDeletionPolicy
 
 		if poolName != "" {
-			// Pool Data PVC
 			if poolSpec, exists := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]; exists {
 				policy = multigresv1alpha1.MergePVCDeletionPolicy(
 					poolSpec.PVCDeletionPolicy,
@@ -402,11 +345,9 @@ func (r *ShardReconciler) handleDeletion(
 				policy = shard.Spec.PVCDeletionPolicy
 			}
 		} else {
-			// Shared Backup PVC
 			policy = shard.Spec.PVCDeletionPolicy
 		}
 
-		// Default to Retain
 		whenDeleted := multigresv1alpha1.RetainPVCRetentionPolicy
 		if policy != nil && policy.WhenDeleted != "" {
 			whenDeleted = policy.WhenDeleted
@@ -424,30 +365,18 @@ func (r *ShardReconciler) handleDeletion(
 		}
 	}
 
-	// During shard deletion, remove pod finalizers directly. The database has
-	// been unregistered from topology above, so pooler entries are cleaned up
-	// at the database level.
-	//
-	// For full cluster deletion this is safe: the topo server is also being
-	// deleted so any residual entries are destroyed with it.
-	//
-	// TODO: For individual shard deletion within a live cluster, residual pooler
-	// entries may be left in topo. Not addressed now because the operator only
-	// supports single-shard, single-database clusters — shards are only ever
-	// deleted as part of full cluster teardown where the topo server is also
-	// destroyed.
+	// Best-effort pod deletion. Without finalizers, pods are deleted directly.
+	podList := &corev1.PodList{}
+	if err := r.List(
+		ctx,
+		podList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list pods for deletion: %w", err)
+	}
 	for i := range podList.Items {
 		pod := &podList.Items[i]
-		if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
-			if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf(
-					"failed to remove finalizer from pod %s: %w",
-					pod.Name,
-					err,
-				)
-			}
-			logger.Info("Removed finalizer from pod during shard deletion", "pod", pod.Name)
-		}
 		if pod.DeletionTimestamp.IsZero() {
 			if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
 				return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
@@ -455,15 +384,7 @@ func (r *ShardReconciler) handleDeletion(
 		}
 	}
 
-	// Remove Shard finalizer
-	if controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
-		controllerutil.RemoveFinalizer(shard, ShardFinalizer)
-		if err := r.Update(ctx, shard); err != nil && !errors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("failed to remove shard finalizer: %w", err)
-		}
-	}
-
-	logger.Info("Shard cleanup complete, finalizer removed")
+	logger.Info("Shard best-effort cleanup complete")
 	return ctrl.Result{}, nil
 }
 

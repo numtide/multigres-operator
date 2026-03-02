@@ -17,7 +17,7 @@ import (
 )
 
 func TestReconcile_Status(t *testing.T) {
-	_, _, _, _, clusterName, _, _ := setupFixtures(t)
+	_, _, _, _, clusterName, _ := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]reconcileTestCase{

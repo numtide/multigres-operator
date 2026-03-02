@@ -424,7 +424,7 @@ func TestReconcileGlobal_ErrorPaths(t *testing.T) {
 }
 
 func TestReconcile_Global(t *testing.T) {
-	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, _ := setupFixtures(t)
+	coreTpl, cellTpl, shardTpl, _, clusterName, namespace := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]reconcileTestCase{
@@ -836,7 +836,7 @@ func TestReconcile_Global_BuilderErrors(t *testing.T) {
 	// t.Parallel() is intentionally omitted.
 
 	scheme := setupScheme()
-	coreTpl, _, _, baseCluster, _, _, _ := setupFixtures(t)
+	coreTpl, _, _, baseCluster, _, _ := setupFixtures(t)
 
 	t.Run("Error: Build MultiAdmin Service Failed (Mock)", func(t *testing.T) {
 		// Mock the builder

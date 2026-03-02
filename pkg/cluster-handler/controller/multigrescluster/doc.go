@@ -25,6 +25,6 @@
 //     summary of the cluster's health (e.g., "All cells ready", "Database X has Y/Z shards ready").
 //
 //  5. Lifecycle Management:
-//     It utilizes finalizers to ensure that all child resources are gracefully terminated
+//     It relies on Kubernetes owner references for garbage collection of child resources
 //     and cleaned up before the parent MultigresCluster is removed.
 package multigrescluster
