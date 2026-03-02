@@ -229,7 +229,7 @@ These operations are **not supported by the operator** and should be documented 
 2. **Rolling updates**: To update replicas first and the primary last (minimizing downtime)
 3. **Status reporting**: To report primary/replica counts and roles in the MultigresCluster status
 
-**How the operator can determine primary/replica**: The operator's data-handler already has an etcd client connection. It can read the pooler topology to check each pooler's `PoolerType` (PRIMARY, REPLICA, DRAINED). The `--service-id` registered in etcd matches the pod name (`$(POD_NAME)`), so the operator can correlate etcd entries with K8s pods.
+**How the operator can determine primary/replica**: The shard controller has an etcd client connection. It can read the pooler topology to check each pooler's `PoolerType` (PRIMARY, REPLICA, DRAINED). The `--service-id` registered in etcd matches the pod name (`$(POD_NAME)`), so the operator can correlate etcd entries with K8s pods.
 
 ### Pod Naming Scheme
 
@@ -306,7 +306,7 @@ This means:
 > The operator SHOULD clean up etcd topology entries when permanently removing a pod. This is an improvement over the current StatefulSet behavior.
 
 Options:
-1. **Operator calls `ts.UnregisterMultiPooler()` on scale-down** — this function already exists in multigres's `CellStore` interface (`go/common/topoclient/store.go:170`, implementation in `multipooler.go:283`). It deletes the pooler's etcd entry by path. The operator's data-handler already has a topology store client and can call this directly.
+1. **Operator calls `ts.UnregisterMultiPooler()` on scale-down** — this function already exists in multigres's `CellStore` interface (`go/common/topoclient/store.go:170`, implementation in `multipooler.go:283`). It deletes the pooler's etcd entry by path. The shard controller has a topology store client and can call this directly.
 2. **Operator calls `ts.UpdateMultiPoolerFields()` to set type to DRAINED** — this exists, but the stale entry still persists
 3. **Wait for upstream multigres to add a decommission RPC** — the multipooler could accept a "decommission" command via gRPC before being killed
 4. **Accept the 4-hour stale window** — multiorch handles it eventually, but during those 4 hours it'll log errors trying to reach the dead pooler
@@ -360,7 +360,7 @@ The recommended approach uses **pod annotations** to track the decommissioning s
                     │                                      │
                     │  Action: Verify Pod termination,     │
                     │    call UnregisterMultiPooler,       │
-                    │    remove finalizer, delete PVC      │
+                    │    delete PVC (if policy)        │
                     └──────────────────────────────────────┘
 ```
 
@@ -929,7 +929,7 @@ We recommend **option 2 (controller timer)**. Here is a comparison:
 **Status**: Fully implemented and verified with end-to-end Kind deployment.
 
 All three required changes are complete:
-1.  ✅ **`registerDatabaseInTopology`** in data-handler `shard_controller.go` now writes `BackupLocation_S3{Bucket, Region, Endpoint, KeyPrefix, UseEnvCredentials}` to etcd when backup type is S3.
+1.  ✅ **`registerDatabaseInTopology`** in the shard controller's `shard_controller.go` now writes `BackupLocation_S3{Bucket, Region, Endpoint, KeyPrefix, UseEnvCredentials}` to etcd when backup type is S3.
 2.  ✅ **AWS credentials injected** via the `s3EnvVars()` helper in resource-handler `containers.go`. Both `postgres` and `multipooler` containers receive `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` (from a referenced K8s Secret via `credentialsSecret`, or from pod-level env via `useEnvCredentials`).
 3.  ✅ **Shared backup PVC skipped** for S3 — `reconcileSharedBackupPVC` returns early, and `buildSharedBackupVolume` uses `EmptyDir` instead of a PVC claim.
 
@@ -953,11 +953,11 @@ This means the operator sees a pod that is `NOT_SERVING` but has no way to disti
 
 **What we're asking multigres to do**: Write the monitor reason into the pooler's etcd topology entry alongside the existing `ServingStatus`. When `monitorPostgresIteration` calls `setMonitorReason()`, it should also update the etcd entry with a field like `monitor_reason: "waiting_for_backup"` (or `"restoring"`, `"starting"`, `"postgres_running"`). This is a small change — the multipooler already writes to its etcd entry for `ServingStatus` updates.
 
-**How the operator reads it**: The data-handler already watches etcd topology for each shard. No new mechanism is needed — the `monitor_reason` field would appear in the existing topology data the operator already reads on every reconciliation.
+**How the operator reads it**: The shard controller already watches etcd topology for each shard. No new mechanism is needed — the `monitor_reason` field would appear in the existing topology data the operator already reads on every reconciliation.
 
 **What the operator does with it** (concrete actions on the **Shard** resource — following the established pattern where conditions and events are set on the resource the controller directly manages):
 
-1. **Status condition** on the `Shard` resource: set `type: StandbyWaitingForBackup`, `status: True`, `reason: NoBaseBackupAvailable`, `message: "Pod <pod-name> has been waiting for a base backup for <duration>. Run a manual backup or enable scheduled backups to resolve."` This is visible via `kubectl get shard -o yaml`. The shard data-handler controller already reads etcd topology during reconciliation, so this is a natural fit.
+1. **Status condition** on the `Shard` resource: set `type: StandbyWaitingForBackup`, `status: True`, `reason: NoBaseBackupAvailable`, `message: "Pod <pod-name> has been waiting for a base backup for <duration>. Run a manual backup or enable scheduled backups to resolve."` This is visible via `kubectl get shard -o yaml`. The shard controller already reads etcd topology during reconciliation, so this is a natural fit.
 
 2. **Kubernetes Warning event** on the `Shard` resource: `reason: StandbyWaitingForBackup`, `message: "Standby pod <pod-name> cannot initialize — no base backup exists in the pgBackRest repository"`. This is visible via `kubectl describe shard` and `kubectl get events`.
 
@@ -977,7 +977,7 @@ This means the operator sees a pod that is `NOT_SERVING` but has no way to disti
 
 **Resolution**: The `UnregisterMultiPooler` function already exists in multigres's `CellStore` interface (`go/common/topoclient/store.go:170`, implementation in `multipooler.go:283`). It deletes the pooler's etcd entry by path. It is part of the public `Store` interface and has test coverage. The multipooler's shutdown path deliberately does NOT call it (the comment says: *"If they are actually deleted, they need to be cleaned up outside the lifecycle of starting/stopping."*) — but this is by design: shutdown ≠ permanent removal.
 
-**Operator action**: The operator should verify that the pod containers have terminated (after the pod's `DeletionTimestamp` is set), call `ts.UnregisterMultiPooler()`, remove the pod's finalizer, and delete the PVC. The data-handler already has a topology store client, so no new infrastructure is needed.
+**Operator action**: The operator should verify that the pod containers have terminated (after the pod's `DeletionTimestamp` is set), call `ts.UnregisterMultiPooler()`, and delete the PVC (if policy requires). The shard controller has a topology store client, so no new infrastructure is needed.
 
 ---
 

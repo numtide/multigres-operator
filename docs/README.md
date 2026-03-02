@@ -35,8 +35,7 @@ multigres-operator/
 ├── cmd/multigres-operator/ # Main entry point
 └── pkg/                    # Multi-module structure
     ├── cluster-handler/    # Cluster orchestration (separate module)
-    ├── data-handler/       # Data plane management (separate module)
-    └── resource-handler/   # Component resources (separate module)
+    └── resource-handler/   # Component resources and data plane management (separate module)
 
 Note: go.work can be created locally for development. It is in .gitignore
 ```

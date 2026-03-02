@@ -456,6 +456,15 @@ spec:
   #     name: "otel-sampling-config"  # ConfigMap name
   #     key: "sampling-config.yaml"
 
+  # ----------------------------------------------------------------
+  # Topology Pruning
+  # ----------------------------------------------------------------
+  # Controls whether the operator prunes stale topology entries (cells,
+  # databases) that no longer match the MultigresCluster spec.
+  # Enabled by default (nil or absent means enabled).
+  # topologyPruning:
+  #   enabled: true
+
 status:
   observedGeneration: 1
   phase: "Healthy"  # Initializing, Progressing, Healthy, Degraded, Unknown
@@ -1180,7 +1189,7 @@ status:
 
 ## Defaults & Webhooks
 
-To simplify user experience and ensure cluster stability, the operator uses a combination of **Mutating Webhooks** (for applying defaults) and **Validating Webhooks** (for synchronous checks), alongside **Controller Finalizers** (for asynchronous protection).
+To simplify user experience and ensure cluster stability, the operator uses a combination of **Mutating Webhooks** (for applying defaults) and **Validating Webhooks** (for synchronous checks), alongside **Controller Logic** (for asynchronous operations).
 
 ### 1\. Configuration Defaults (Mutating Webhook)
 
@@ -1259,15 +1268,20 @@ The Operator enforces High Availability (HA) by default while allowing user cust
     * Users can define `affinity` and `tolerations` in the `PoolSpec` (either in the Template or via Overrides).
     * **Merge Logic:** User constraints are **appended** to the Operator's mandatory constraints. This allows users to restrict scheduling further (e.g., "Only run on nodes with label `disktype=ssd`") but prevents them from violating the fundamental Cell topology (e.g., you cannot schedule a "us-east-1a" pod onto a "us-west-2b" node).
 
-### 4. Asynchronous Controller and Finalizer Logic
+### 4. Asynchronous Controller Logic
 
-Asynchronous logic is used for operations that depend on external state or require blocking deletion, handled by controllers and finalizers.
+Asynchronous logic is used for operations that depend on external state or require coordinated deletion, handled by controllers and owner references.
 
 #### `MultigresCluster`
 
-* **Deletion Protection (Finalizer):**
-    1.  The `MultigresCluster` controller adds a finalizer (e.g., `multigres.com/finalizer`) to the CR upon creation.
-    2.  **Logic:** When the user deletes the cluster, the finalizer blocks deletion until all Child CRs (`Cell`, `Shard`, `TopoServer`) have been successfully deleted and confirmed gone by the API server. This ensures no orphaned resources (like expensive cloud load balancers or PVCs) are left behind.
+* **Deletion Protection (Owner References):**
+    1.  All child CRs (`Cell`, `TableGroup`, `TopoServer`) have owner references pointing to the `MultigresCluster`, enabling Kubernetes garbage collection to cascade-delete them when the cluster is removed.
+    2.  **Logic:** When the user deletes the cluster, Kubernetes blocks deletion until all owned child CRs have been successfully deleted and confirmed gone by the API server. This ensures no orphaned resources (like expensive cloud load balancers or PVCs) are left behind. PVC lifecycle during cluster deletion is controlled by the `PVCDeletionPolicy`: when `WhenDeleted` is `Delete`, PVCs have conditional owner references to the Shard CR enabling cascade deletion; when `Retain`, PVCs have no ownerRef and persist.
+
+* **Topology Registration & Pruning:**
+    1.  The MultigresCluster controller centralizes all topology management via `reconcileTopology()`. On each reconcile, it registers all cells and databases from the spec into the global topology server (etcd).
+    2.  **Pruning:** When `spec.topologyPruning.enabled` is `true` (the default), the controller also prunes stale topology entries — cells and databases that exist in etcd but are no longer present in the MultigresCluster spec. This ensures the topology stays in sync with the desired state.
+    3.  **Grace period:** During the first 2 minutes after cluster creation, topology server unavailability is silently requeued (the topo server may still be starting). After the grace period, unavailability is reported as a reconcile error.
 
 #### `CoreTemplate`, `CellTemplate`, `ShardTemplate`
 
