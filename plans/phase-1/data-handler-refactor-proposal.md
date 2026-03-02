@@ -44,7 +44,7 @@ may already be dying.
    (already does this). Shard controller prunes stale pooler entries.
 
 3. **"Make it safe, then delete"** — parent marks child as `PendingDeletion`,
-   child drains and unregisters, sets `Idle=True`, parent then calls
+   child drains and unregisters, sets `ReadyForDeletion=True`, parent then calls
    `Delete()`. By the time deletion happens, there is nothing left to clean
    up.
 
@@ -633,8 +633,8 @@ cleanup *before* deletion, there's nothing left for the finalizer to do:
     Problem: cleanup is racing against destruction
 
   PROPOSED (without finalizers):
-    Parent sets PendingDeletion → controller drains/unregisters → sets Idle=True
-    → Parent sees Idle → Parent calls Delete() → CR gone immediately
+    Parent sets PendingDeletion → controller drains/unregisters → sets ReadyForDeletion=True
+    → Parent sees ReadyForDeletion → Parent calls Delete() → CR gone immediately
     No race: everything is safe BEFORE deletion
 ```
 
@@ -667,11 +667,12 @@ controllers are racing), adopt this pattern:
   │                        │              │                         │
   │ Shard "100-200" is     │  annotate    │ Sees PendingDeletion:   │
   │ no longer in spec      │─────────────►│  1. Drain all pods      │
-  │                        │              │  2. Set Idle=True       │
-  │ Set annotation:        │              │                         │
+  │                        │              │  2. Set                 │
+  │ Set annotation:        │              │     ReadyForDeletion    │
   │ PendingDeletion        │              │                         │
-  │                        │◄─────────────│ Status: Idle=True       │
-  │ Check: Idle=True?      │  status      │                         │
+  │                        │◄─────────────│ Status:                 │
+  │ Check:                 │  status      │  ReadyForDeletion=True  │
+  │ ReadyForDeletion=True? │              │                         │
   │ YES → delete Shard CR  │              │                         │
   │                        │              │ CR deleted immediately  │
   │                        │              │ (no finalizer to block) │
@@ -848,9 +849,9 @@ func (r *ShardReconciler) Reconcile(ctx, req) (Result, error) {
         return r.handleDeletion(ctx, shard)
     }
 
-    // Check if shard is marked for turndown by parent
+    // Check if shard is marked for deletion by parent
     if shard.Annotations[AnnotationPendingDeletion] != "" {
-        return r.prepareTurndown(ctx, shard)
+        return r.handlePendingDeletion(ctx, shard)
     }
 
     // Phase 1: Reconcile Kubernetes resources (pods, PVCs, services)
@@ -896,7 +897,7 @@ registration succeeded before allowing deletion flows.
 
 ### Phase 6: Add PendingDeletion Support
 
-- Add `AnnotationPendingDeletion` annotation and `Idle` condition
+- Add `AnnotationPendingDeletion` annotation and `ReadyForDeletion` condition
 - Update TableGroup controller to use PendingDeletion instead of direct delete
 - Update MultigresCluster controller for cell deletion flow
 - Add tests for individual shard deletion and cell removal
@@ -1137,6 +1138,6 @@ We plan to implement a prune-on-reconcile pattern where the operator:
 |---------|-----------|
 | Parent registers children | MultigresCluster registers databases and cells in topo, not the children themselves |
 | Parent prunes children | TableGroup prunes Shard CRs. Shard prunes stale pooler entries. MultigresCluster prunes stale databases/cells. |
-| PrepareForTurndown gate | Parent checks `Idle=True` condition before calling `Delete()` |
+| PendingDeletion gate | Parent checks `ReadyForDeletion=True` condition before calling `Delete()` |
 | Topo utility package | Shared helper functions (list → compare → delete), not a controller |
 | Zero finalizers | Safe deletion guaranteed by pre-deletion checks, not finalizer chains |
