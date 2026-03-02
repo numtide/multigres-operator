@@ -114,7 +114,10 @@ func (r *TableGroupReconciler) Reconcile(
 		r.Recorder.Eventf(tg, "Normal", "Applied", "Applied Shard %s", desired.Name)
 	}
 
-	// Prune orphan Shards
+	// Prune orphan Shards using PendingDeletion flow:
+	// 1. Set PendingDeletion annotation → shard controller drains pods
+	// 2. Wait for ReadyForDeletion condition
+	// 3. Delete the Shard CR
 	existingShards := &multigresv1alpha1.ShardList{}
 	if err := r.List(ctx, existingShards, client.InNamespace(tg.Namespace), client.MatchingLabels{
 		"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
@@ -132,26 +135,72 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to list shards for pruning: %w", err)
 	}
 
-	for _, s := range existingShards.Items {
-		if !activeShardNames[s.Name] {
-			if err := r.Delete(ctx, &s); err != nil {
-				l.Error(err, "Failed to delete orphan shard", "shard", s.Name)
+	var pendingDeletion bool
+
+	for i := range existingShards.Items {
+		s := &existingShards.Items[i]
+		if activeShardNames[s.Name] {
+			continue
+		}
+
+		// Step 1: Set PendingDeletion annotation if not already set.
+		if s.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "" {
+			patch := client.MergeFrom(s.DeepCopy())
+			if s.Annotations == nil {
+				s.Annotations = make(map[string]string)
+			}
+			s.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = metav1.Now().UTC().Format(time.RFC3339)
+			if err := r.Patch(ctx, s, patch); err != nil {
+				l.Error(err, "Failed to set PendingDeletion annotation", "shard", s.Name)
 				r.Recorder.Eventf(
 					tg,
 					"Warning",
 					"CleanUpError",
-					"Failed to delete orphan shard %s: %v",
+					"Failed to set PendingDeletion on shard %s: %v",
 					s.Name,
 					err,
 				)
 				return ctrl.Result{}, fmt.Errorf(
-					"failed to delete orphan shard '%s': %w",
+					"failed to set PendingDeletion on shard '%s': %w",
 					s.Name,
 					err,
 				)
 			}
-			r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
+			r.Recorder.Eventf(tg, "Normal", "PendingDeletion",
+				"Marked Shard %s for graceful deletion", s.Name)
+			pendingDeletion = true
+			continue
 		}
+
+		// Step 2: Wait for ReadyForDeletion condition.
+		if !meta.IsStatusConditionTrue(s.Status.Conditions, multigresv1alpha1.ConditionReadyForDeletion) {
+			l.V(1).Info("Shard pending deletion, waiting for drain", "shard", s.Name)
+			pendingDeletion = true
+			continue
+		}
+
+		// Step 3: Drain complete — safe to delete.
+		if err := r.Delete(ctx, s); err != nil {
+			l.Error(err, "Failed to delete orphan shard", "shard", s.Name)
+			r.Recorder.Eventf(
+				tg,
+				"Warning",
+				"CleanUpError",
+				"Failed to delete orphan shard %s: %v",
+				s.Name,
+				err,
+			)
+			return ctrl.Result{}, fmt.Errorf(
+				"failed to delete orphan shard '%s': %w",
+				s.Name,
+				err,
+			)
+		}
+		r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
+	}
+
+	if pendingDeletion {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	// Update Status

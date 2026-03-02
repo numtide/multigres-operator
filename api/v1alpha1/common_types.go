@@ -258,6 +258,18 @@ const (
 	PhaseUnknown      Phase = "Unknown"
 )
 
+const (
+	// AnnotationPendingDeletion is set by the TableGroup controller on a Shard
+	// that should be gracefully drained before deletion. The shard controller
+	// drains all pods and sets ConditionReadyForDeletion when complete.
+	AnnotationPendingDeletion = "multigres.com/pending-deletion"
+
+	// ConditionReadyForDeletion is set to True on a Shard once all pods have
+	// been drained. The TableGroup controller waits for this condition before
+	// calling Delete on the Shard CR.
+	ConditionReadyForDeletion = "ReadyForDeletion"
+)
+
 // MergePVCDeletionPolicy merges child and parent policies with child taking precedence.
 // If child is nil, returns parent. If both nil, returns nil (caller uses default Retain).
 func MergePVCDeletionPolicy(child, parent *PVCDeletionPolicy) *PVCDeletionPolicy {

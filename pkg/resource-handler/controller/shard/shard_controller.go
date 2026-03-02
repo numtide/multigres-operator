@@ -99,6 +99,14 @@ func (r *ShardReconciler) Reconcile(
 		return r.handleDeletion(ctx, shard)
 	}
 
+	// Handle graceful deletion via PendingDeletion annotation.
+	// The TableGroup controller sets this annotation when a shard is removed from
+	// spec. The shard controller drains all pods and sets ReadyForDeletion
+	// condition, at which point the TableGroup controller calls Delete.
+	if shard.Annotations[multigresv1alpha1.AnnotationPendingDeletion] != "" {
+		return r.handlePendingDeletion(ctx, shard)
+	}
+
 	// Reconcile pg_hba ConfigMap first (required by all pools before starting)
 	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
 		monitoring.RecordSpanError(span, err)
@@ -385,6 +393,123 @@ func (r *ShardReconciler) handleDeletion(
 	}
 
 	logger.Info("Shard best-effort cleanup complete")
+	return ctrl.Result{}, nil
+}
+
+// handlePendingDeletion handles graceful shard deletion. When a shard is marked
+// with the PendingDeletion annotation, this method drains all pods via the drain
+// state machine. Once all pods are drained (or gone), it sets the
+// ReadyForDeletion condition so the TableGroup controller can safely delete
+// the Shard CR.
+func (r *ShardReconciler) handlePendingDeletion(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("Handling PendingDeletion")
+
+	// List all pods belonging to this shard.
+	lbls := map[string]string{
+		metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
+	}
+	podList := &corev1.PodList{}
+	if err := r.List(
+		ctx,
+		podList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(lbls),
+	); err != nil {
+		logger.Error(err, "Failed to list pods for PendingDeletion")
+		return ctrl.Result{}, fmt.Errorf("failed to list pods for pending deletion: %w", err)
+	}
+
+	// Open topo store if we have pods that need drain state machine execution.
+	var store topoclient.Store
+	if len(podList.Items) > 0 {
+		var err error
+		store, err = r.getTopoStore(shard)
+		if err != nil {
+			logger.Error(err, "Failed to get topo store for PendingDeletion")
+			r.Recorder.Eventf(shard, "Warning", "TopologyError",
+				"Cannot connect to topology during pending deletion: %v", err)
+			return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
+		}
+		defer func() { _ = store.Close() }()
+
+		// Update PodRoles so the drain state machine has current role info.
+		r.reconcilePodRoles(ctx, store, shard)
+	}
+
+	allDrained := true
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+
+		// Skip pods already being deleted.
+		if !pod.DeletionTimestamp.IsZero() {
+			allDrained = false
+			continue
+		}
+
+		drainState := pod.Annotations[metadata.AnnotationDrainState]
+
+		switch drainState {
+		case metadata.DrainStateReadyForDeletion:
+			// Pod is fully drained, delete it.
+			logger.Info("Deleting drained pod during PendingDeletion", "pod", pod.Name)
+			if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to delete drained pod %s: %w", pod.Name, err)
+			}
+			allDrained = false
+
+		case "":
+			// Not draining yet — initiate drain.
+			logger.Info("Initiating drain for PendingDeletion", "pod", pod.Name)
+			if err := r.initiateDrain(ctx, pod); err != nil {
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to initiate drain for pod %s: %w", pod.Name, err)
+			}
+			r.Recorder.Eventf(shard, "Normal", "DrainStarted",
+				"Initiated drain for pod %s (pending deletion)", pod.Name)
+			allDrained = false
+
+		default:
+			// Drain in progress — run the drain state machine.
+			if store != nil {
+				if _, derr := drain.ExecuteDrainStateMachine(
+					ctx, r.Client, r.RPCClient, r.Recorder, store, shard, pod,
+				); derr != nil {
+					logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
+				}
+			}
+			allDrained = false
+		}
+	}
+
+	if !allDrained {
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	}
+
+	// All pods drained and deleted — set ReadyForDeletion condition.
+	if !status.IsConditionTrue(shard.Status.Conditions, multigresv1alpha1.ConditionReadyForDeletion) {
+		statusBase := shard.DeepCopy()
+		status.SetCondition(&shard.Status.Conditions, metav1.Condition{
+			Type:               multigresv1alpha1.ConditionReadyForDeletion,
+			Status:             metav1.ConditionTrue,
+			Reason:             "DrainComplete",
+			Message:            "All pods drained; shard is ready for deletion",
+			ObservedGeneration: shard.Generation,
+			LastTransitionTime: metav1.Now(),
+		})
+		if err := r.Status().Patch(ctx, shard, client.MergeFrom(statusBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("setting ReadyForDeletion condition: %w", err)
+		}
+		logger.Info("Set ReadyForDeletion condition")
+		r.Recorder.Event(shard, "Normal", "ReadyForDeletion",
+			"All pods drained; shard is ready for deletion")
+	}
+
 	return ctrl.Result{}, nil
 }
 

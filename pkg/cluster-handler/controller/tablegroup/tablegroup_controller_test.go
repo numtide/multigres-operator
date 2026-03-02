@@ -387,10 +387,9 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				}
 			},
 		},
-		"Success: Prune Orphan Shard": {
+		"Success: Prune Orphan Shard (Sets PendingDeletion)": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
-				// Clear shards from spec
 				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
 			},
 			existingObjects: []client.Object{
@@ -414,8 +413,7 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 				},
 			},
 			expectedEvents: []string{
-				"Normal Deleted Deleted orphaned Shard",
-				"Normal Synced Successfully reconciled TableGroup",
+				"Normal PendingDeletion Marked Shard",
 			},
 			validate: func(t testing.TB, c client.Client) {
 				shardName := name.JoinWithConstraints(
@@ -430,9 +428,119 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 					t.Context(),
 					types.NamespacedName{Name: shardName, Namespace: namespace},
 					shard,
-				); !apierrors.IsNotFound(
-					err,
-				) {
+				); err != nil {
+					t.Fatalf("Shard should still exist: %v", err)
+				}
+				if shard.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "" {
+					t.Error("Expected PendingDeletion annotation to be set")
+				}
+			},
+		},
+
+		"Success: Prune Orphan Shard (Waits For Drain)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+						Annotations: map[string]string{
+							multigresv1alpha1.AnnotationPendingDeletion: "2026-01-01T00:00:00Z",
+						},
+					},
+					Spec:   multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+					Status: multigresv1alpha1.ShardStatus{},
+				},
+			},
+			validate: func(t testing.TB, c client.Client) {
+				// Shard should still exist because ReadyForDeletion is not True.
+				shardName := name.JoinWithConstraints(
+					name.DefaultConstraints,
+					clusterName,
+					dbName,
+					tgLabelName,
+					"shard-0",
+				)
+				shard := &multigresv1alpha1.Shard{}
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: shardName, Namespace: namespace},
+					shard,
+				); err != nil {
+					t.Fatalf("Shard should still exist while draining: %v", err)
+				}
+			},
+		},
+
+		"Success: Prune Orphan Shard (Deletes After ReadyForDeletion)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+						Annotations: map[string]string{
+							multigresv1alpha1.AnnotationPendingDeletion: "2026-01-01T00:00:00Z",
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+					Status: multigresv1alpha1.ShardStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               multigresv1alpha1.ConditionReadyForDeletion,
+								Status:             metav1.ConditionTrue,
+								Reason:             "DrainComplete",
+								LastTransitionTime: metav1.Now(),
+							},
+						},
+					},
+				},
+			},
+			expectedEvents: []string{
+				"Normal Deleted Deleted orphaned Shard",
+			},
+			validate: func(t testing.TB, c client.Client) {
+				shardName := name.JoinWithConstraints(
+					name.DefaultConstraints,
+					clusterName,
+					dbName,
+					tgLabelName,
+					"shard-0",
+				)
+				shard := &multigresv1alpha1.Shard{}
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: shardName, Namespace: namespace},
+					shard,
+				); !apierrors.IsNotFound(err) {
 					t.Errorf("Expected Shard %s to be deleted", shardName)
 				}
 			},
@@ -600,7 +708,7 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 			},
 			expectedEvents: []string{"Warning StatusError Failed to list shards for status"},
 		},
-		"Error: Delete Orphan Shard Failed": {
+		"Error: Set PendingDeletion Failed": {
 			tableGroup: baseTG.DeepCopy(),
 			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
 				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
@@ -623,6 +731,58 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 						},
 					},
 					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(
+					name.JoinWithConstraints(
+						name.DefaultConstraints,
+						clusterName,
+						dbName,
+						tgLabelName,
+						"shard-0",
+					),
+					errSimulated,
+				),
+			},
+			expectedEvents: []string{"Warning CleanUpError Failed to set PendingDeletion"},
+		},
+		"Error: Delete Orphan Shard Failed (After ReadyForDeletion)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				tg.Spec.Shards = []multigresv1alpha1.ShardResolvedSpec{}
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+						Annotations: map[string]string{
+							multigresv1alpha1.AnnotationPendingDeletion: "2026-01-01T00:00:00Z",
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+					Status: multigresv1alpha1.ShardStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               multigresv1alpha1.ConditionReadyForDeletion,
+								Status:             metav1.ConditionTrue,
+								Reason:             "DrainComplete",
+								LastTransitionTime: metav1.Now(),
+							},
+						},
+					},
 				},
 			},
 			failureConfig: &testutil.FailureConfig{

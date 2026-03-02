@@ -2428,3 +2428,246 @@ func TestHandleDeletion(t *testing.T) {
 		}
 	})
 }
+
+func TestHandlePendingDeletion(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	baseShard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pending-shard",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+			Annotations: map[string]string{
+				multigresv1alpha1.AnnotationPendingDeletion: "2026-01-01T00:00:00Z",
+			},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			ShardName: "shard-0",
+		},
+	}
+
+	t.Run("No pods — sets ReadyForDeletion immediately", func(t *testing.T) {
+		t.Parallel()
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
+		}
+
+		result, err := r.handlePendingDeletion(t.Context(), shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.RequeueAfter != 0 {
+			t.Error("Expected no requeue when no pods exist")
+		}
+
+		updated := &multigresv1alpha1.Shard{}
+		if err := c.Get(t.Context(), types.NamespacedName{
+			Name: shard.Name, Namespace: shard.Namespace,
+		}, updated); err != nil {
+			t.Fatalf("failed to get shard: %v", err)
+		}
+
+		found := false
+		for _, cond := range updated.Status.Conditions {
+			if cond.Type == multigresv1alpha1.ConditionReadyForDeletion &&
+				cond.Status == metav1.ConditionTrue {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("Expected ReadyForDeletion condition to be True")
+		}
+	})
+
+	t.Run("Pods without drain — initiates drain and requeues", func(t *testing.T) {
+		t.Parallel()
+		shard := baseShard.DeepCopy()
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pending-shard-pool-0",
+				Namespace: "default",
+				Labels: map[string]string{
+					metadata.LabelMultigresCluster: "test-cluster",
+					metadata.LabelMultigresShard:   "shard-0",
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "pg", Image: "postgres:16"}},
+			},
+		}
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
+		}
+
+		result, err := r.handlePendingDeletion(t.Context(), shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.RequeueAfter == 0 {
+			t.Error("Expected requeue when pods exist")
+		}
+
+		// Verify drain was initiated.
+		updatedPod := &corev1.Pod{}
+		if err := c.Get(t.Context(), types.NamespacedName{
+			Name: pod.Name, Namespace: pod.Namespace,
+		}, updatedPod); err != nil {
+			t.Fatalf("failed to get pod: %v", err)
+		}
+		if updatedPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+			t.Errorf("Expected drain state %q, got %q",
+				metadata.DrainStateRequested,
+				updatedPod.Annotations[metadata.AnnotationDrainState])
+		}
+	})
+
+	t.Run("All pods ready-for-deletion — sets ReadyForDeletion", func(t *testing.T) {
+		t.Parallel()
+		shard := baseShard.DeepCopy()
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pending-shard-pool-0",
+				Namespace: "default",
+				Labels: map[string]string{
+					metadata.LabelMultigresCluster: "test-cluster",
+					metadata.LabelMultigresShard:   "shard-0",
+				},
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "pg", Image: "postgres:16"}},
+			},
+		}
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
+		}
+
+		result, err := r.handlePendingDeletion(t.Context(), shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// The pod was deleted, so we need to requeue to check again.
+		if result.RequeueAfter == 0 {
+			t.Error("Expected requeue after deleting drained pods")
+		}
+
+		// Verify the pod was deleted.
+		updatedPod := &corev1.Pod{}
+		err = c.Get(t.Context(), types.NamespacedName{
+			Name: pod.Name, Namespace: pod.Namespace,
+		}, updatedPod)
+		if err == nil {
+			t.Error("Expected pod to be deleted")
+		}
+	})
+
+	t.Run("Mix of draining and undrained pods — requeues", func(t *testing.T) {
+		t.Parallel()
+		shard := baseShard.DeepCopy()
+
+		drainingPod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pending-shard-pool-0",
+				Namespace: "default",
+				Labels: map[string]string{
+					metadata.LabelMultigresCluster: "test-cluster",
+					metadata.LabelMultigresShard:   "shard-0",
+				},
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateDraining,
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "pg", Image: "postgres:16"}},
+			},
+		}
+
+		undrainedPod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pending-shard-pool-1",
+				Namespace: "default",
+				Labels: map[string]string{
+					metadata.LabelMultigresCluster: "test-cluster",
+					metadata.LabelMultigresShard:   "shard-0",
+				},
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "pg", Image: "postgres:16"}},
+			},
+		}
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, drainingPod, undrainedPod).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		r := &ShardReconciler{
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
+		}
+
+		result, err := r.handlePendingDeletion(t.Context(), shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.RequeueAfter == 0 {
+			t.Error("Expected requeue when pods are still draining")
+		}
+
+		// Verify the undrained pod now has drain state set.
+		updatedPod := &corev1.Pod{}
+		if err := c.Get(t.Context(), types.NamespacedName{
+			Name: undrainedPod.Name, Namespace: undrainedPod.Namespace,
+		}, updatedPod); err != nil {
+			t.Fatalf("failed to get pod: %v", err)
+		}
+		if updatedPod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+			t.Errorf("Expected drain state %q, got %q",
+				metadata.DrainStateRequested,
+				updatedPod.Annotations[metadata.AnnotationDrainState])
+		}
+	})
+}
