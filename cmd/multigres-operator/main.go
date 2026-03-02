@@ -53,7 +53,6 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
 	tablegroupcontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
-	datahandlercellcontroller "github.com/numtide/multigres-operator/pkg/data-handler/controller/cell"
 	datahandlershardcontroller "github.com/numtide/multigres-operator/pkg/data-handler/controller/shard"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
@@ -431,15 +430,6 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("cell-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Cell")
-		os.Exit(1)
-	}
-
-	if err = (&datahandlercellcontroller.CellReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("cell-datahandler"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Cell-DataHandler")
 		os.Exit(1)
 	}
 

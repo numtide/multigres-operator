@@ -105,6 +105,15 @@ type PVCDeletionPolicy struct {
 	WhenScaled PVCRetentionPolicyType `json:"whenScaled,omitempty"`
 }
 
+// TopologyPruningConfig controls whether the operator prunes stale topology entries.
+type TopologyPruningConfig struct {
+	// Enabled controls whether the operator prunes stale topology entries.
+	// When false, the operator still registers entries but never removes them.
+	// Default: true (nil or empty means enabled).
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
 // ContainerConfig defines generic container configuration.
 type ContainerConfig struct {
 	// Resources defines the compute resource requirements.

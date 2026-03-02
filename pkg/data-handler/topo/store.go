@@ -51,6 +51,26 @@ func NewStoreFromCell(cell *multigresv1alpha1.Cell) (topoclient.Store, error) {
 	return store, nil
 }
 
+// NewStoreFromRef creates a topoclient.Store using a GlobalTopoServerRef.
+// This is used by the MultigresCluster controller which already computes
+// the reference via getGlobalTopoRef().
+func NewStoreFromRef(ref multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+	implementation := ref.Implementation
+	if implementation == "" {
+		implementation = "etcd"
+	}
+
+	rootPath := ref.RootPath
+	serverAddrs := []string{ref.Address}
+	config := topoclient.NewDefaultTopoConfig()
+
+	store, err := topoclient.OpenServer(implementation, rootPath, serverAddrs, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open topology store: %w", err)
+	}
+	return store, nil
+}
+
 // IsTopoUnavailable returns true if the error indicates the topology server
 // is not reachable (e.g., gRPC UNAVAILABLE during startup).
 func IsTopoUnavailable(err error) bool {

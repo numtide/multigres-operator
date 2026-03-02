@@ -23,6 +23,9 @@ import (
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
+
+	"github.com/multigres/multigres/go/common/topoclient"
+	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
 )
 
 // ============================================================================
@@ -75,6 +78,13 @@ func setupIntegration(t *testing.T) (client.Client, *testutil.ResourceWatcher) {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("multigres-cluster-controller"),
+		CreateTopoStore: func(_ multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+			_, factory := memorytopo.NewServerAndFactory(t.Context())
+			store := topoclient.NewWithFactory(
+				factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+			)
+			return store, nil
+		},
 	}
 
 	if err := reconciler.SetupWithManager(mgr, controller.Options{

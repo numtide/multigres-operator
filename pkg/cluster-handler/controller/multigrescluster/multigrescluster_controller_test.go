@@ -28,6 +28,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
+	"github.com/multigres/multigres/go/common/topoclient"
+	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	"github.com/numtide/multigres-operator/pkg/util/name"
@@ -145,6 +147,13 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 				Client:   finalClient,
 				Scheme:   reconcilerScheme,
 				Recorder: fakeRecorder,
+				CreateTopoStore: func(_ multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+					_, factory := memorytopo.NewServerAndFactory(t.Context())
+					store := topoclient.NewWithFactory(
+						factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+					)
+					return store, nil
+				},
 			}
 
 			req := ctrl.Request{

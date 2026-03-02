@@ -10023,6 +10023,18 @@ spec:
                     minLength: 1
                     type: string
                 type: object
+              topologyPruning:
+                description: |-
+                  TopologyPruning controls whether stale topology entries are pruned.
+                  Default: enabled (nil means pruning is on).
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether the operator prunes stale topology entries.
+                      When false, the operator still registers entries but never removes them.
+                      Default: true (nil or empty means enabled).
+                    type: boolean
+                type: object
             type: object
           status:
             description: MultigresClusterStatus defines the observed state.

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/multigres/multigres/go/common/topoclient"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,6 +36,9 @@ type MultigresClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+
+	// CreateTopoStore overrides the default topology store factory for testing.
+	CreateTopoStore func(multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error)
 }
 
 // Reconcile reads that state of the cluster for a MultigresCluster object and makes changes based on the state read
@@ -172,6 +176,28 @@ func (r *MultigresClusterReconciler) Reconcile(
 	}
 
 	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.ReconcileTopology")
+		result, err := r.reconcileTopology(ctx, cluster, res)
+		if err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			l.Error(err, "Failed to reconcile topology")
+			r.Recorder.Eventf(
+				cluster,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile topology: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
+		if result.RequeueAfter > 0 {
+			return result, nil
+		}
+	}
+
+	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.ReconcileCells")
 		if err := r.reconcileCells(ctx, cluster, res); err != nil {
 			monitoring.RecordSpanError(childSpan, err)
@@ -240,10 +266,9 @@ func (r *MultigresClusterReconciler) Reconcile(
 }
 
 // handleDeletion orchestrates phased deletion of the MultigresCluster.
-// It deletes Cells and TableGroups first so their data-handler finalizers
-// can run against the still-live topo servers. Once all Cells and Shards
+// It deletes Cells and TableGroups first. Once all Cells and Shards
 // are fully removed, it removes our finalizer, allowing Kubernetes GC
-// to clean up the remaining resources (topo servers, deployments).
+// to cascade-delete the remaining resources (topo servers, deployments).
 func (r *MultigresClusterReconciler) handleDeletion(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
@@ -288,7 +313,7 @@ func (r *MultigresClusterReconciler) handleDeletion(
 		}
 	}
 
-	// Check if any Cells or Shards still exist (waiting for data-handler finalizer processing).
+	// Check if any Cells or Shards still exist (waiting for child resource deletion).
 	shards := &multigresv1alpha1.ShardList{}
 	if err := r.List(ctx, shards, ns, clusterLabels); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list shards: %w", err)
@@ -296,7 +321,7 @@ func (r *MultigresClusterReconciler) handleDeletion(
 
 	remaining := len(cells.Items) + len(shards.Items)
 	if remaining > 0 {
-		l.Info("Waiting for data-handler finalizers",
+		l.Info("Waiting for child resources to be deleted",
 			"remainingCells", len(cells.Items),
 			"remainingShards", len(shards.Items),
 		)
@@ -312,7 +337,7 @@ func (r *MultigresClusterReconciler) handleDeletion(
 	}
 
 	l.Info("Cluster cleanup complete, finalizer removed")
-	r.Recorder.Event(cluster, "Normal", "CleanupComplete", "All data-handler resources cleaned up")
+	r.Recorder.Event(cluster, "Normal", "CleanupComplete", "All child resources cleaned up")
 	return ctrl.Result{}, nil
 }
 
