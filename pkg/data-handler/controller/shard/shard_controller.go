@@ -2,7 +2,6 @@ package shard
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
-	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +27,9 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/backuphealth"
+	"github.com/numtide/multigres-operator/pkg/data-handler/drain"
+	"github.com/numtide/multigres-operator/pkg/data-handler/topo"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/status"
@@ -143,7 +144,7 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			// During cluster startup the toposerver may not be ready yet.
 			// Silently requeue during the grace period to avoid noisy error metrics.
 			resourceAge := time.Since(shard.CreationTimestamp.Time)
-			if isTopoUnavailable(err) && resourceAge < topoUnavailableGracePeriod {
+			if topo.IsTopoUnavailable(err) && resourceAge < topoUnavailableGracePeriod {
 				childSpan.SetAttributes(attribute.Bool("topo.unavailable_grace", true))
 				childSpan.End()
 				logger.V(1).Info("Topology server not available yet, requeueing",
@@ -214,54 +215,26 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 		store, err := r.getTopoStore(shard)
 		if err == nil {
+			// Update PodRoles from topology
 			statusBase := shard.DeepCopy()
+			poolerStatus := topo.GetPoolerStatus(ctx, store, shard)
+
 			if shard.Status.PodRoles == nil {
 				shard.Status.PodRoles = make(map[string]string)
 			}
 			rolesChanged := false
-			seenHostnames := make(map[string]bool)
-			topoQuerySuccess := true
 
-			cells := collectCells(shard)
-			for _, cell := range cells {
-				opt := &topoclient.GetMultiPoolersByCellOptions{
-					DatabaseShard: &topoclient.DatabaseShard{
-						Database:   string(shard.Spec.DatabaseName),
-						TableGroup: string(shard.Spec.TableGroupName),
-						Shard:      string(shard.Spec.ShardName),
-					},
-				}
-				poolers, cerr := store.GetMultiPoolersByCell(ctx, cell, opt)
-				if cerr == nil {
-					for _, p := range poolers {
-						roleName := "REPLICA"
-						switch p.Type {
-						case clustermetadatapb.PoolerType_PRIMARY:
-							roleName = "PRIMARY"
-						case clustermetadatapb.PoolerType_DRAINED:
-							roleName = "DRAINED"
-						}
-						hostname := p.GetHostname()
-						if hostname == "" {
-							hostname = fmt.Sprintf("%v", p.Id)
-						}
-
-						seenHostnames[hostname] = true
-
-						if shard.Status.PodRoles[hostname] != roleName {
-							shard.Status.PodRoles[hostname] = roleName
-							rolesChanged = true
-						}
-					}
-				} else {
-					topoQuerySuccess = false
+			for hostname, role := range poolerStatus.Roles {
+				if shard.Status.PodRoles[hostname] != role {
+					shard.Status.PodRoles[hostname] = role
+					rolesChanged = true
 				}
 			}
 
 			// Prune entries for poolers that no longer exist in the topology.
-			if topoQuerySuccess {
+			if poolerStatus.QuerySuccess {
 				for hostname := range shard.Status.PodRoles {
-					if !seenHostnames[hostname] {
+					if _, exists := poolerStatus.Roles[hostname]; !exists {
 						delete(shard.Status.PodRoles, hostname)
 						rolesChanged = true
 					}
@@ -278,7 +251,9 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			for i := range podList.Items {
 				pod := &podList.Items[i]
 				if pod.Annotations[metadata.AnnotationDrainState] != "" {
-					shouldRequeue, derr := r.executeDrainStateMachine(ctx, store, shard, pod)
+					shouldRequeue, derr := drain.ExecuteDrainStateMachine(
+						ctx, r.Client, r.rpcClient, r.Recorder, store, shard, pod,
+					)
 					if derr != nil {
 						logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
 					}
@@ -320,8 +295,11 @@ func (r *ShardReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			)
 		} else if result != nil {
 			backupBase := shard.DeepCopy()
-			prevHealthy := status.IsConditionTrue(shard.Status.Conditions, conditionBackupHealthy)
-			applyBackupHealth(shard, result)
+			prevHealthy := status.IsConditionTrue(
+				shard.Status.Conditions,
+				backuphealth.ConditionBackupHealthy,
+			)
+			backuphealth.ApplyBackupHealth(shard, result)
 
 			// Emit transition events.
 			if result.Healthy && !prevHealthy {
@@ -357,7 +335,7 @@ func (r *ShardReconciler) handleDeletion(
 	if slices.Contains(shard.Finalizers, finalizerName) {
 		// Clean up database data from topology
 		if err := r.unregisterDatabaseFromTopology(ctx, shard); err != nil {
-			if isTopoUnavailable(err) {
+			if topo.IsTopoUnavailable(err) {
 				if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
 					logger.Info("Topology never initialized, skipping cleanup")
 				} else {
@@ -413,193 +391,46 @@ func (r *ShardReconciler) handleDeletion(
 	return ctrl.Result{}, nil
 }
 
-// registerDatabaseInTopology registers the database metadata in the global topology.
+// registerDatabaseInTopology delegates database registration to the topo package.
 func (r *ShardReconciler) registerDatabaseInTopology(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) error {
-	logger := log.FromContext(ctx)
-
 	store, err := r.getTopoStore(shard)
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	// TODO: handle store.Close() error properly
 	defer func() { _ = store.Close() }()
 
-	dbName := string(shard.Spec.DatabaseName)
-
-	cells := collectCells(shard)
-	slices.Sort(cells)
-
-	// Build database metadata
-	dbMetadata := &clustermetadatapb.Database{
-		Name:             dbName,
-		BackupLocation:   r.getBackupLocation(shard),
-		DurabilityPolicy: r.getDurabilityPolicy(shard),
-		Cells:            cells,
-	}
-
-	// Register database in topology
-	if err := store.CreateDatabase(ctx, dbName, dbMetadata); err != nil {
-		// Check if the error is because the database already exists
-		var topoErr topoclient.TopoError
-		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NodeExists {
-			// Database already exists — update its fields to propagate any changes
-			// to backup location or cells since initial creation. UpdateDatabaseFields
-			// uses atomic read-modify-write with automatic retry on version conflicts.
-			if err := store.UpdateDatabaseFields(
-				ctx,
-				dbName,
-				func(existing *clustermetadatapb.Database) error {
-					existing.BackupLocation = dbMetadata.BackupLocation
-					existing.Cells = dbMetadata.Cells
-					return nil
-				},
-			); err != nil {
-				return fmt.Errorf("updating existing database %s in topology: %w", dbName, err)
-			}
-			logger.V(1).Info("Updated existing database in topology", "database", dbName)
-			return nil
-		}
-		r.Recorder.Eventf(
-			shard,
-			"Warning",
-			"RegistrationFailed",
-			"Failed to register database in topology: %v",
-			err,
-		)
-		return fmt.Errorf("failed to create database in topology: %w", err)
-	}
-
-	logger.Info("Database metadata stored in topology", "database", dbName)
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"DatabaseRegistered",
-		"Registered database '%s' in topology",
-		dbName,
-	)
-	return nil
+	return topo.RegisterDatabase(ctx, store, r.Recorder, shard)
 }
 
-// unregisterDatabaseFromTopology removes the database metadata from the global topology.
+// unregisterDatabaseFromTopology delegates database unregistration to the topo package.
 func (r *ShardReconciler) unregisterDatabaseFromTopology(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) error {
-	logger := log.FromContext(ctx)
-
 	store, err := r.getTopoStore(shard)
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	// TODO: handle store.Close() error properly
 	defer func() { _ = store.Close() }()
 
-	dbName := string(shard.Spec.DatabaseName)
-
-	// Delete database from topology (force=false means it will fail if database still has references)
-	if err := store.DeleteDatabase(ctx, dbName, false); err != nil {
-		// Check if the error is because the database doesn't exist
-		var topoErr topoclient.TopoError
-		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NoNode {
-			logger.V(1).
-				Info("Database does not exist in topology, skipping deletion", "database", dbName)
-			return nil
-		}
-		if !isTopoUnavailable(err) {
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"UnregistrationFailed",
-				"Failed to remove database from topology: %v",
-				err,
-			)
-		}
-		return fmt.Errorf("failed to delete database %s from topology: %w", dbName, err)
-	}
-
-	logger.Info("Database metadata removed from topology", "database", dbName)
-	r.Recorder.Eventf(
-		shard,
-		"Normal",
-		"DatabaseUnregistered",
-		"Removed database '%s' from topology",
-		dbName,
-	)
-	return nil
+	return topo.UnregisterDatabase(ctx, store, r.Recorder, shard)
 }
 
-// getBackupLocation extracts the backup location from the shard config.
-func (r *ShardReconciler) getBackupLocation(
+// evaluateBackupHealth delegates backup health evaluation to the backuphealth package.
+func (r *ShardReconciler) evaluateBackupHealth(
+	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
-) *clustermetadatapb.BackupLocation {
-	if shard.Spec.Backup != nil &&
-		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 &&
-		shard.Spec.Backup.S3 != nil {
-		return &clustermetadatapb.BackupLocation{
-			Location: &clustermetadatapb.BackupLocation_S3{
-				S3: &clustermetadatapb.S3Backup{
-					Bucket:            shard.Spec.Backup.S3.Bucket,
-					Region:            shard.Spec.Backup.S3.Region,
-					Endpoint:          shard.Spec.Backup.S3.Endpoint,
-					KeyPrefix:         shard.Spec.Backup.S3.KeyPrefix,
-					UseEnvCredentials: shard.Spec.Backup.S3.UseEnvCredentials,
-				},
-			},
-		}
-	}
-
-	// Default to filesystem
-	path := "/backups"
-	if shard.Spec.Backup != nil &&
-		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem &&
-		shard.Spec.Backup.Filesystem != nil &&
-		shard.Spec.Backup.Filesystem.Path != "" {
-		path = shard.Spec.Backup.Filesystem.Path
-	}
-
-	return &clustermetadatapb.BackupLocation{
-		Location: &clustermetadatapb.BackupLocation_Filesystem{
-			Filesystem: &clustermetadatapb.FilesystemBackup{
-				Path: path,
-			},
-		},
-	}
-}
-
-// getDurabilityPolicy extracts the durability policy from the shard config.
-// TODO: This should come from a field in the Shard spec once available.
-func (r *ShardReconciler) getDurabilityPolicy(shard *multigresv1alpha1.Shard) string {
-	// NOTE: multiorch currently only supports ANY_2 or MULTI_CELL_ANY_2 durability policies.
-	// Single-node policies like NONE are not yet supported by multiorch.
-	// See: https://github.com/multigres/multigres/issues/XXX
-	// For now, always use ANY_2 even for single-replica setups.
-	return "ANY_2"
-}
-
-// defaultCreateTopoStore creates a topoclient.Store for interacting with the global topology.
-func defaultCreateTopoStore(shard *multigresv1alpha1.Shard) (topoclient.Store, error) {
-	// Determine the implementation type
-	implementation := shard.Spec.GlobalTopoServer.Implementation
-	if implementation == "" {
-		implementation = "etcd" // default to etcd
-	}
-
-	rootPath := shard.Spec.GlobalTopoServer.RootPath
-	serverAddrs := []string{shard.Spec.GlobalTopoServer.Address}
-
-	// Create config
-	config := topoclient.NewDefaultTopoConfig()
-
-	// Create topology store
-	store, err := topoclient.OpenServer(implementation, rootPath, serverAddrs, config)
+) (*backuphealth.Result, error) {
+	store, err := r.getTopoStore(shard)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open topology store: %w", err)
+		return nil, fmt.Errorf("creating topology store: %w", err)
 	}
+	defer func() { _ = store.Close() }()
 
-	return store, nil
+	return backuphealth.EvaluateBackupHealth(ctx, store, r.rpcClient, shard)
 }
 
 // getTopoStore returns a topology store, using the custom factory if set, otherwise the default.
@@ -607,7 +438,7 @@ func (r *ShardReconciler) getTopoStore(shard *multigresv1alpha1.Shard) (topoclie
 	if r.createTopoStore != nil {
 		return r.createTopoStore(shard)
 	}
-	return defaultCreateTopoStore(shard)
+	return topo.NewStoreFromShard(shard)
 }
 
 // SetRPCClient sets the gRPC client used for pooler management operations
@@ -621,17 +452,6 @@ func (r *ShardReconciler) SetCreateTopoStore(
 	f func(*multigresv1alpha1.Shard) (topoclient.Store, error),
 ) {
 	r.createTopoStore = f
-}
-
-// isTopoUnavailable returns true if the error indicates the topology server
-// is not reachable (e.g., gRPC UNAVAILABLE during startup).
-func isTopoUnavailable(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "UNAVAILABLE") ||
-		strings.Contains(msg, "no connection available")
 }
 
 // SetupWithManager sets up the controller with the Manager.

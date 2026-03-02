@@ -2,14 +2,11 @@ package cell
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/multigres/multigres/go/common/topoclient"
-	"github.com/multigres/multigres/go/pb/clustermetadata"
 	"go.opentelemetry.io/otel/attribute"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/topo"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/status"
 )
@@ -137,7 +135,7 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			// During cluster startup the toposerver may not be ready yet.
 			// Silently requeue during the grace period to avoid noisy error metrics.
 			resourceAge := time.Since(cell.CreationTimestamp.Time)
-			if isTopoUnavailable(err) && resourceAge < topoUnavailableGracePeriod {
+			if topo.IsTopoUnavailable(err) && resourceAge < topoUnavailableGracePeriod {
 				childSpan.SetAttributes(attribute.Bool("topo.unavailable_grace", true))
 				childSpan.End()
 				logger.V(1).Info("Topology server not available yet, requeueing",
@@ -201,7 +199,7 @@ func (r *CellReconciler) handleDeletion(
 	if slices.Contains(cell.Finalizers, finalizerName) {
 		// Clean up cell data from topology
 		if err := r.unregisterCellFromTopology(ctx, cell); err != nil {
-			if isTopoUnavailable(err) {
+			if topo.IsTopoUnavailable(err) {
 				if !status.IsConditionTrue(cell.Status.Conditions, conditionTopologyRegistered) {
 					logger.Info("Topology never initialized, skipping cleanup")
 				} else {
@@ -254,128 +252,32 @@ func (r *CellReconciler) handleDeletion(
 	return ctrl.Result{}, nil
 }
 
-// registerCellInTopology registers the cell metadata in the global topology
-// using the upstream multigres topoclient library.
+// registerCellInTopology delegates cell registration to the topo package.
 func (r *CellReconciler) registerCellInTopology(
 	ctx context.Context,
 	cell *multigresv1alpha1.Cell,
 ) error {
-	logger := log.FromContext(ctx)
-
 	store, err := r.getTopoStore(cell)
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	// TODO: handle store.Close() error properly
 	defer func() { _ = store.Close() }()
 
-	cellName := string(cell.Spec.Name)
-
-	// Build cell metadata
-	// The Cell in topology describes how to connect to the global topology server for this cell
-	cellMetadata := &clustermetadata.Cell{
-		Name:            cellName,
-		ServerAddresses: []string{cell.Spec.GlobalTopoServer.Address},
-		Root:            cell.Spec.GlobalTopoServer.RootPath,
-	}
-
-	// Register cell in topology
-	if err := store.CreateCell(ctx, cellName, cellMetadata); err != nil {
-		// Check if the error is because the cell already exists
-		var topoErr topoclient.TopoError
-		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NodeExists {
-			logger.V(1).Info("Cell already exists in topology, skipping creation")
-			return nil
-		}
-		r.Recorder.Eventf(
-			cell,
-			"Warning",
-			"RegistrationFailed",
-			"Failed to register cell in topology: %v",
-			err,
-		)
-		return fmt.Errorf("failed to create cell in topology: %w", err)
-	}
-
-	logger.Info("Cell metadata stored in topology", "cellName", cellName)
-	r.Recorder.Eventf(
-		cell,
-		"Normal",
-		"CellRegistered",
-		"Registered cell '%s' in topology",
-		cellName,
-	)
-	return nil
+	return topo.RegisterCell(ctx, store, r.Recorder, cell)
 }
 
-// unregisterCellFromTopology removes the cell metadata from the global topology.
+// unregisterCellFromTopology delegates cell unregistration to the topo package.
 func (r *CellReconciler) unregisterCellFromTopology(
 	ctx context.Context,
 	cell *multigresv1alpha1.Cell,
 ) error {
-	logger := log.FromContext(ctx)
-
 	store, err := r.getTopoStore(cell)
 	if err != nil {
 		return fmt.Errorf("failed to create topology store: %w", err)
 	}
-	// TODO: handle store.Close() error properly
 	defer func() { _ = store.Close() }()
 
-	cellName := string(cell.Spec.Name)
-
-	// Delete cell from topology (force=false means it will fail if cell still has references)
-	if err := store.DeleteCell(ctx, cellName, false); err != nil {
-		// Check if the error is because the cell doesn't exist
-		var topoErr topoclient.TopoError
-		if errors.As(err, &topoErr) && topoErr.Code == topoclient.NoNode {
-			logger.V(1).Info("Cell does not exist in topology, skipping deletion")
-			return nil
-		}
-		if !isTopoUnavailable(err) {
-			r.Recorder.Eventf(
-				cell,
-				"Warning",
-				"UnregistrationFailed",
-				"Failed to remove cell from topology: %v",
-				err,
-			)
-		}
-		return fmt.Errorf("failed to delete cell from topology: %w", err)
-	}
-
-	logger.Info("Cell metadata removed from topology", "cellName", cellName)
-	r.Recorder.Eventf(
-		cell,
-		"Normal",
-		"CellUnregistered",
-		"Removed cell '%s' from topology",
-		cellName,
-	)
-	return nil
-}
-
-// defaultCreateTopoStore creates a topoclient.Store for interacting with the global topology.
-func defaultCreateTopoStore(cell *multigresv1alpha1.Cell) (topoclient.Store, error) {
-	// Parse the global topo server configuration
-	implementation := cell.Spec.GlobalTopoServer.Implementation
-	if implementation == "" {
-		implementation = "etcd" // default to etcd
-	}
-
-	rootPath := cell.Spec.GlobalTopoServer.RootPath
-	serverAddrs := []string{cell.Spec.GlobalTopoServer.Address}
-
-	// Create config
-	config := topoclient.NewDefaultTopoConfig()
-
-	// Create topology store
-	store, err := topoclient.OpenServer(implementation, rootPath, serverAddrs, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open topology store: %w", err)
-	}
-
-	return store, nil
+	return topo.UnregisterCell(ctx, store, r.Recorder, cell)
 }
 
 // getTopoStore returns a topology store, using the custom factory if set, otherwise the default.
@@ -383,7 +285,7 @@ func (r *CellReconciler) getTopoStore(cell *multigresv1alpha1.Cell) (topoclient.
 	if r.createTopoStore != nil {
 		return r.createTopoStore(cell)
 	}
-	return defaultCreateTopoStore(cell)
+	return topo.NewStoreFromCell(cell)
 }
 
 // SetCreateTopoStore sets a custom topology store creation function for testing.
@@ -391,17 +293,6 @@ func (r *CellReconciler) SetCreateTopoStore(
 	f func(*multigresv1alpha1.Cell) (topoclient.Store, error),
 ) {
 	r.createTopoStore = f
-}
-
-// isTopoUnavailable returns true if the error indicates the topology server
-// is not reachable (e.g., gRPC UNAVAILABLE during startup).
-func isTopoUnavailable(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "UNAVAILABLE") ||
-		strings.Contains(msg, "no connection available")
 }
 
 // SetupWithManager sets up the controller with the Manager.

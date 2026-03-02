@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/topo"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
@@ -552,7 +553,7 @@ func TestDefaultCreateTopoStore(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			store, err := defaultCreateTopoStore(tc.cell)
+			store, err := topo.NewStoreFromCell(tc.cell)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("defaultCreateTopoStore() error = %v, wantErr %v", err, tc.wantErr)
@@ -586,7 +587,7 @@ func TestDefaultCreateTopoStore_MemoryImplementation(t *testing.T) {
 		},
 	}
 
-	store, err := defaultCreateTopoStore(cell)
+	store, err := topo.NewStoreFromCell(cell)
 	if err != nil {
 		t.Fatalf("defaultCreateTopoStore() with memory implementation should succeed: %v", err)
 	}
@@ -641,7 +642,7 @@ func TestIsTopoUnavailable(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if got := isTopoUnavailable(tc.err); got != tc.want {
+			if got := topo.IsTopoUnavailable(tc.err); got != tc.want {
 				t.Errorf("isTopoUnavailable(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})

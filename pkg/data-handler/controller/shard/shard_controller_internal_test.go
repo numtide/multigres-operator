@@ -10,7 +10,9 @@ import (
 	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
 	"github.com/multigres/multigres/go/pb/clustermetadata"
+	consensusdatapb "github.com/multigres/multigres/go/pb/consensusdata"
 	"github.com/multigres/multigres/go/pb/multipoolermanagerdata"
+	multipoolermanagerdatapb "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,69 +29,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/backuphealth"
+	"github.com/numtide/multigres-operator/pkg/data-handler/drain"
 	"github.com/numtide/multigres-operator/pkg/testutil"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/status"
 )
-
-// TestDefaultCreateTopoStore tests error paths in defaultCreateTopoStore
-func TestDefaultCreateTopoStore(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		shard   *multigresv1alpha1.Shard
-		wantErr bool
-	}{
-		"creates store for etcd": {
-			shard: &multigresv1alpha1.Shard{
-				Spec: multigresv1alpha1.ShardSpec{
-					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-						Address:  "localhost:2379",
-						RootPath: "/test",
-					},
-				},
-			},
-			wantErr: false,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			store, err := defaultCreateTopoStore(tc.shard)
-			if (err != nil) != tc.wantErr {
-				t.Errorf("defaultCreateTopoStore() error = %v, wantErr %v", err, tc.wantErr)
-				return
-			}
-
-			if !tc.wantErr && store != nil {
-				_ = store.Close() // TODO: handle store.Close() error properly
-			}
-		})
-	}
-}
-
-// TestDefaultCreateTopoStore_InvalidImplementation tests the error path when OpenServer fails
-func TestDefaultCreateTopoStore_InvalidImplementation(t *testing.T) {
-	shard := &multigresv1alpha1.Shard{
-		Spec: multigresv1alpha1.ShardSpec{
-			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
-				Address:        "localhost:2379",
-				RootPath:       "/test",
-				Implementation: "invalid-implementation-that-does-not-exist",
-			},
-		},
-	}
-
-	store, err := defaultCreateTopoStore(shard)
-	if err == nil {
-		if store != nil {
-			_ = store.Close() // TODO: handle store.Close() error properly
-		}
-		t.Error("defaultCreateTopoStore() should error with invalid implementation")
-	}
-}
 
 // TestGetTopoStoreUsesCustom tests that getTopoStore uses custom factory when set
 func TestGetTopoStoreUsesCustom(t *testing.T) {
@@ -425,257 +370,6 @@ func TestReconcile_ErrorDeletingDatabase(t *testing.T) {
 	}
 }
 
-func TestIsTopoUnavailable(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		err  error
-		want bool
-	}{
-		"nil error":           {err: nil, want: false},
-		"UNAVAILABLE error":   {err: errors.New("Code: UNAVAILABLE"), want: true},
-		"no connection error": {err: errors.New("no connection available"), want: true},
-		"unrelated error":     {err: errors.New("permission denied"), want: false},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			if got := isTopoUnavailable(tc.err); got != tc.want {
-				t.Errorf("isTopoUnavailable(%v) = %v, want %v", tc.err, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestEvaluateBackups_Healthy(t *testing.T) {
-	t.Parallel()
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
-		},
-	}
-
-	recentID := time.Now().Add(-1 * time.Hour).Format("20060102-150405")
-	backups := []*multipoolermanagerdata.BackupMetadata{
-		{
-			BackupId: recentID,
-			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
-			Type:     "full",
-		},
-	}
-
-	result := evaluateBackups(shard, backups)
-	if !result.Healthy {
-		t.Errorf("expected healthy, got message: %s", result.Message)
-	}
-	if result.LastBackupType != "full" {
-		t.Errorf("expected type=full, got %s", result.LastBackupType)
-	}
-	if result.LastBackupTime == nil {
-		t.Error("expected LastBackupTime to be set")
-	}
-}
-
-func TestEvaluateBackups_Stale(t *testing.T) {
-	t.Parallel()
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
-		},
-	}
-
-	oldID := time.Now().Add(-48 * time.Hour).Format("20060102-150405")
-	backups := []*multipoolermanagerdata.BackupMetadata{
-		{
-			BackupId: oldID,
-			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
-			Type:     "diff",
-		},
-	}
-
-	result := evaluateBackups(shard, backups)
-	if result.Healthy {
-		t.Error("expected unhealthy for 48h-old backup")
-	}
-	if result.LastBackupType != "diff" {
-		t.Errorf("expected type=diff, got %s", result.LastBackupType)
-	}
-}
-
-func TestEvaluateBackups_NoBackups(t *testing.T) {
-	t.Parallel()
-
-	shard := &multigresv1alpha1.Shard{}
-	result := evaluateBackups(shard, nil)
-	if result.Healthy {
-		t.Error("expected unhealthy when no backups")
-	}
-	if result.Message != "No backups found" {
-		t.Errorf("unexpected message: %s", result.Message)
-	}
-}
-
-func TestEvaluateBackups_NoCompleted(t *testing.T) {
-	t.Parallel()
-
-	shard := &multigresv1alpha1.Shard{}
-	backups := []*multipoolermanagerdata.BackupMetadata{
-		{
-			BackupId: "20260224-120000",
-			Status:   multipoolermanagerdata.BackupMetadata_INCOMPLETE,
-			Type:     "full",
-		},
-	}
-
-	result := evaluateBackups(shard, backups)
-	if result.Healthy {
-		t.Error("expected unhealthy when no completed backups")
-	}
-	if result.Message != "No completed backups found" {
-		t.Errorf("unexpected message: %s", result.Message)
-	}
-}
-
-func TestEvaluateBackups_SelectsMostRecent(t *testing.T) {
-	t.Parallel()
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
-		},
-	}
-
-	recentID := time.Now().Add(-1 * time.Hour).Format("20060102-150405")
-	olderID := time.Now().Add(-5 * time.Hour).Format("20060102-150405")
-	backups := []*multipoolermanagerdata.BackupMetadata{
-		{
-			BackupId: olderID,
-			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
-			Type:     "full",
-		},
-		{
-			BackupId: recentID,
-			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
-			Type:     "incr",
-		},
-	}
-
-	result := evaluateBackups(shard, backups)
-	if result.LastBackupType != "incr" {
-		t.Errorf("expected most recent backup type=incr, got %s", result.LastBackupType)
-	}
-}
-
-func TestApplyBackupHealth(t *testing.T) {
-	t.Parallel()
-
-	t.Run("sets healthy condition", func(t *testing.T) {
-		t.Parallel()
-
-		shard := &multigresv1alpha1.Shard{
-			ObjectMeta: metav1.ObjectMeta{Generation: 5},
-		}
-		now := metav1.Now()
-		result := &backupHealthResult{
-			Healthy:        true,
-			LastBackupTime: &now,
-			LastBackupType: "full",
-			Message:        "backup is healthy",
-		}
-
-		applyBackupHealth(shard, result)
-
-		if len(shard.Status.Conditions) != 1 {
-			t.Fatalf("expected 1 condition, got %d", len(shard.Status.Conditions))
-		}
-		c := shard.Status.Conditions[0]
-		if c.Type != conditionBackupHealthy {
-			t.Errorf("expected condition type %s, got %s", conditionBackupHealthy, c.Type)
-		}
-		if c.Status != metav1.ConditionTrue {
-			t.Errorf("expected True, got %s", c.Status)
-		}
-		if c.Reason != "BackupRecent" {
-			t.Errorf("expected reason BackupRecent, got %s", c.Reason)
-		}
-		if shard.Status.LastBackupType != "full" {
-			t.Errorf("expected LastBackupType=full, got %s", shard.Status.LastBackupType)
-		}
-	})
-
-	t.Run("sets unhealthy condition", func(t *testing.T) {
-		t.Parallel()
-
-		shard := &multigresv1alpha1.Shard{}
-		result := &backupHealthResult{
-			Healthy: false,
-			Message: "backup is stale",
-		}
-
-		applyBackupHealth(shard, result)
-
-		if len(shard.Status.Conditions) != 1 {
-			t.Fatalf("expected 1 condition, got %d", len(shard.Status.Conditions))
-		}
-		c := shard.Status.Conditions[0]
-		if c.Status != metav1.ConditionFalse {
-			t.Errorf("expected False, got %s", c.Status)
-		}
-		if c.Reason != "BackupStale" {
-			t.Errorf("expected reason BackupStale, got %s", c.Reason)
-		}
-	})
-
-	t.Run("nil result is no-op", func(t *testing.T) {
-		t.Parallel()
-
-		shard := &multigresv1alpha1.Shard{}
-		applyBackupHealth(shard, nil)
-		if len(shard.Status.Conditions) != 0 {
-			t.Error("expected no conditions for nil result")
-		}
-	})
-}
-
-func TestParseBackupTime(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		input string
-		want  time.Time
-	}{
-		"valid": {
-			input: "20260224-143055",
-			want:  time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC),
-		},
-		"with suffix": {
-			input: "20260224-143055F123456",
-			want:  time.Date(2026, 2, 24, 14, 30, 55, 0, time.UTC),
-		},
-		"too short": {input: "20260224", want: time.Time{}},
-		"empty":     {input: "", want: time.Time{}},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			got := parseBackupTime(tc.input)
-			if !got.Equal(tc.want) {
-				t.Errorf("parseBackupTime(%q) = %v, want %v", tc.input, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestIsConditionTrue(t *testing.T) {
 	t.Parallel()
 
@@ -786,90 +480,6 @@ func TestSetCondition(t *testing.T) {
 	)
 }
 
-func TestGetBackupLocation(t *testing.T) {
-	t.Parallel()
-
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	r := &ShardReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-		Scheme: scheme,
-	}
-
-	t.Run("S3 backup", func(t *testing.T) {
-		t.Parallel()
-		shard := &multigresv1alpha1.Shard{
-			Spec: multigresv1alpha1.ShardSpec{
-				Backup: &multigresv1alpha1.BackupConfig{
-					Type: multigresv1alpha1.BackupTypeS3,
-					S3: &multigresv1alpha1.S3BackupConfig{
-						Bucket:            "my-bucket",
-						Region:            "us-west-2",
-						Endpoint:          "https://s3.example.com",
-						KeyPrefix:         "prefix/",
-						UseEnvCredentials: true,
-					},
-				},
-			},
-		}
-		loc := r.getBackupLocation(shard)
-		s3 := loc.GetS3()
-		if s3 == nil {
-			t.Fatal("expected S3 backup location")
-		}
-		if s3.Bucket != "my-bucket" {
-			t.Errorf("expected bucket my-bucket, got %s", s3.Bucket)
-		}
-		if s3.Region != "us-west-2" {
-			t.Errorf("expected region us-west-2, got %s", s3.Region)
-		}
-		if s3.Endpoint != "https://s3.example.com" {
-			t.Errorf("expected endpoint, got %s", s3.Endpoint)
-		}
-		if s3.KeyPrefix != "prefix/" {
-			t.Errorf("expected key prefix, got %s", s3.KeyPrefix)
-		}
-		if !s3.UseEnvCredentials {
-			t.Error("expected UseEnvCredentials=true")
-		}
-	})
-
-	t.Run("filesystem with custom path", func(t *testing.T) {
-		t.Parallel()
-		shard := &multigresv1alpha1.Shard{
-			Spec: multigresv1alpha1.ShardSpec{
-				Backup: &multigresv1alpha1.BackupConfig{
-					Type: multigresv1alpha1.BackupTypeFilesystem,
-					Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
-						Path: "/custom/backups",
-					},
-				},
-			},
-		}
-		loc := r.getBackupLocation(shard)
-		fs := loc.GetFilesystem()
-		if fs == nil {
-			t.Fatal("expected filesystem backup location")
-		}
-		if fs.Path != "/custom/backups" {
-			t.Errorf("expected path /custom/backups, got %s", fs.Path)
-		}
-	})
-
-	t.Run("default filesystem", func(t *testing.T) {
-		t.Parallel()
-		shard := &multigresv1alpha1.Shard{}
-		loc := r.getBackupLocation(shard)
-		fs := loc.GetFilesystem()
-		if fs == nil {
-			t.Fatal("expected filesystem backup location")
-		}
-		if fs.Path != "/backups" {
-			t.Errorf("expected default path /backups, got %s", fs.Path)
-		}
-	})
-}
-
 func TestSetRPCClient(t *testing.T) {
 	t.Parallel()
 	r := &ShardReconciler{}
@@ -951,126 +561,6 @@ func TestPodToShard(t *testing.T) {
 		requests := r.podToShard(context.Background(), pod)
 		if len(requests) != 0 {
 			t.Errorf("expected 0 requests, got %d", len(requests))
-		}
-	})
-}
-
-func TestParseBackupTime_InvalidFormat(t *testing.T) {
-	t.Parallel()
-	got := parseBackupTime("ABCDEFG-HIJKLMN")
-	if !got.IsZero() {
-		t.Errorf("expected zero time for invalid format, got %v", got)
-	}
-}
-
-func TestFindPrimaryPooler(t *testing.T) {
-	t.Parallel()
-
-	t.Run("returns nil when no primary exists", func(t *testing.T) {
-		t.Parallel()
-		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
-		store := topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		)
-		defer func() { _ = store.Close() }()
-
-		shard := &multigresv1alpha1.Shard{
-			Spec: multigresv1alpha1.ShardSpec{
-				DatabaseName:   "db",
-				TableGroupName: "tg",
-				ShardName:      "0",
-			},
-		}
-
-		primary, err := findPrimaryPooler(context.Background(), store, shard, []string{"cell1"})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if primary != nil {
-			t.Error("expected nil primary when none registered")
-		}
-	})
-
-	t.Run("returns error for non-unavailable topo errors", func(t *testing.T) {
-		t.Parallel()
-		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell2")
-		store := topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		)
-		defer func() { _ = store.Close() }()
-
-		shard := &multigresv1alpha1.Shard{
-			Spec: multigresv1alpha1.ShardSpec{
-				DatabaseName:   "db",
-				TableGroupName: "tg",
-				ShardName:      "0",
-			},
-		}
-
-		// "nonexistent-cell" returns a NoNode error (not UNAVAILABLE), which should propagate.
-		_, err := findPrimaryPooler(
-			context.Background(),
-			store,
-			shard,
-			[]string{"nonexistent-cell"},
-		)
-		if err == nil {
-			t.Error("expected error for non-unavailable topo error")
-		}
-	})
-
-	t.Run("returns primary from second cell", func(t *testing.T) {
-		t.Parallel()
-		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1", "cell2")
-		store := topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		)
-		defer func() { _ = store.Close() }()
-
-		ctx := context.Background()
-		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
-			Id:         &clustermetadata.ID{Cell: "cell1", Name: "replica-pod"},
-			Hostname:   "replica-pod",
-			Type:       clustermetadata.PoolerType_REPLICA,
-			Database:   "db",
-			TableGroup: "tg",
-			Shard:      "0",
-		}, false)
-		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
-			Id:         &clustermetadata.ID{Cell: "cell2", Name: "primary-pod"},
-			Hostname:   "primary-pod",
-			Type:       clustermetadata.PoolerType_PRIMARY,
-			Database:   "db",
-			TableGroup: "tg",
-			Shard:      "0",
-		}, false)
-
-		shard := &multigresv1alpha1.Shard{
-			Spec: multigresv1alpha1.ShardSpec{
-				DatabaseName:   "db",
-				TableGroupName: "tg",
-				ShardName:      "0",
-			},
-		}
-
-		primary, err := findPrimaryPooler(ctx, store, shard, []string{"cell1", "cell2"})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if primary == nil {
-			t.Fatal("expected primary to be found")
-		}
-		if primary.Id.Name != "primary-pod" {
-			t.Errorf("expected primary-pod, got %s", primary.Id.Name)
 		}
 	})
 }
@@ -1293,175 +783,270 @@ func TestEvaluateBackupHealth(t *testing.T) {
 	})
 }
 
-func TestForceUnregister(t *testing.T) {
-	t.Parallel()
-
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	t.Run("returns nil for empty cell label", func(t *testing.T) {
-		t.Parallel()
-		r := &ShardReconciler{
-			Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			Scheme: scheme,
-		}
-		shard := &multigresv1alpha1.Shard{}
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "pod",
-				Labels: map[string]string{},
-			},
-		}
-		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
-		store := topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		)
-		defer func() { _ = store.Close() }()
-
-		err := r.forceUnregister(context.Background(), store, shard, pod)
-		if err != nil {
-			t.Errorf("expected nil error, got %v", err)
-		}
-	})
-
-	t.Run("skips unregistration when no matching pooler found", func(t *testing.T) {
-		t.Parallel()
-		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
-		store := topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		)
-		defer func() { _ = store.Close() }()
-
-		ctx := context.Background()
-		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
-			Id:         &clustermetadata.ID{Cell: "cell1", Name: "other-pod"},
-			Hostname:   "other-pod",
-			Type:       clustermetadata.PoolerType_REPLICA,
-			Database:   "db",
-			TableGroup: "tg",
-			Shard:      "0",
-		}, false)
-
-		r := &ShardReconciler{
-			Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			Scheme: scheme,
-		}
-		shard := &multigresv1alpha1.Shard{
-			Spec: multigresv1alpha1.ShardSpec{
-				DatabaseName:   "db",
-				TableGroupName: "tg",
-				ShardName:      "0",
-			},
-		}
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "nonexistent-pod",
-				Labels: map[string]string{
-					metadata.LabelMultigresCell: "cell1",
-				},
-			},
-		}
-
-		err := r.forceUnregister(ctx, store, shard, pod)
-		if err != nil {
-			t.Errorf("expected nil error for missing pooler, got %v", err)
-		}
-
-		// Verify other-pod is still registered
-		poolers, _ := store.GetMultiPoolersByCell(ctx, "cell1", nil)
-		if len(poolers) != 1 {
-			t.Errorf("expected 1 pooler remaining, got %d", len(poolers))
-		}
-	})
+// mockRPCClient is a no-op implementation of rpcclient.MultiPoolerClient for tests.
+type mockRPCClient struct {
+	promoteCalled       bool
+	updateStandbyCalled bool
 }
 
-func TestIsPrimaryDraining(t *testing.T) {
-	t.Parallel()
+func (m *mockRPCClient) BeginTerm(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *consensusdatapb.BeginTermRequest,
+) (*consensusdatapb.BeginTermResponse, error) {
+	return nil, nil
+}
 
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
+func (m *mockRPCClient) ConsensusStatus(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *consensusdatapb.StatusRequest,
+) (*consensusdatapb.StatusResponse, error) {
+	return nil, nil
+}
 
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-	}
+func (m *mockRPCClient) GetLeadershipView(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *consensusdatapb.LeadershipViewRequest,
+) (*consensusdatapb.LeadershipViewResponse, error) {
+	return nil, nil
+}
 
-	t.Run("returns false for nil primary", func(t *testing.T) {
-		t.Parallel()
-		r := &ShardReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
-		if r.isPrimaryDraining(context.Background(), shard, nil) {
-			t.Error("expected false for nil primary")
-		}
-	})
+func (m *mockRPCClient) CanReachPrimary(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *consensusdatapb.CanReachPrimaryRequest,
+) (*consensusdatapb.CanReachPrimaryResponse, error) {
+	return nil, nil
+}
 
-	t.Run("returns false for nil primary ID", func(t *testing.T) {
-		t.Parallel()
-		r := &ShardReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
-		primary := &clustermetadata.MultiPooler{}
-		if r.isPrimaryDraining(context.Background(), shard, primary) {
-			t.Error("expected false for nil primary ID")
-		}
-	})
+func (m *mockRPCClient) InitializeEmptyPrimary(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.InitializeEmptyPrimaryRequest,
+) (*multipoolermanagerdatapb.InitializeEmptyPrimaryResponse, error) {
+	return nil, nil
+}
 
-	t.Run("returns false when primary pod not found", func(t *testing.T) {
-		t.Parallel()
-		r := &ShardReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
-		primary := &clustermetadata.MultiPooler{
-			Id: &clustermetadata.ID{Cell: "cell1", Name: "missing-pod"},
-		}
-		if r.isPrimaryDraining(context.Background(), shard, primary) {
-			t.Error("expected false when pod not found")
-		}
-	})
+func (m *mockRPCClient) State(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.StateRequest,
+) (*multipoolermanagerdatapb.StateResponse, error) {
+	return nil, nil
+}
 
-	t.Run("returns false when no drain annotation", func(t *testing.T) {
-		t.Parallel()
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "primary-pod",
-				Namespace: "default",
-			},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
-		r := &ShardReconciler{Client: c}
-		primary := &clustermetadata.MultiPooler{
-			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
-		}
-		if r.isPrimaryDraining(context.Background(), shard, primary) {
-			t.Error("expected false when no drain annotation")
-		}
-	})
+func (m *mockRPCClient) WaitForLSN(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.WaitForLSNRequest,
+) (*multipoolermanagerdatapb.WaitForLSNResponse, error) {
+	return nil, nil
+}
 
-	t.Run("returns true when drain annotation present", func(t *testing.T) {
-		t.Parallel()
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "primary-pod",
-				Namespace: "default",
-				Annotations: map[string]string{
-					metadata.AnnotationDrainState: metadata.DrainStateDraining,
-				},
-			},
-		}
-		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
-		r := &ShardReconciler{Client: c}
-		primary := &clustermetadata.MultiPooler{
-			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
-		}
-		if !r.isPrimaryDraining(context.Background(), shard, primary) {
-			t.Error("expected true when drain annotation present")
-		}
-	})
+func (m *mockRPCClient) SetPrimaryConnInfo(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.SetPrimaryConnInfoRequest,
+) (*multipoolermanagerdatapb.SetPrimaryConnInfoResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) StartReplication(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.StartReplicationRequest,
+) (*multipoolermanagerdatapb.StartReplicationResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) StopReplication(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.StopReplicationRequest,
+) (*multipoolermanagerdatapb.StopReplicationResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) StandbyReplicationStatus(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.StandbyReplicationStatusRequest,
+) (*multipoolermanagerdatapb.StandbyReplicationStatusResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) Status(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.StatusRequest,
+) (*multipoolermanagerdatapb.StatusResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) ResetReplication(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.ResetReplicationRequest,
+) (*multipoolermanagerdatapb.ResetReplicationResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) StopReplicationAndGetStatus(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.StopReplicationAndGetStatusRequest,
+) (*multipoolermanagerdatapb.StopReplicationAndGetStatusResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) ConfigureSynchronousReplication(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.ConfigureSynchronousReplicationRequest,
+) (*multipoolermanagerdatapb.ConfigureSynchronousReplicationResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) PrimaryStatus(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.PrimaryStatusRequest,
+) (*multipoolermanagerdatapb.PrimaryStatusResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) PrimaryPosition(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.PrimaryPositionRequest,
+) (*multipoolermanagerdatapb.PrimaryPositionResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) GetFollowers(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.GetFollowersRequest,
+) (*multipoolermanagerdatapb.GetFollowersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) EmergencyDemote(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.EmergencyDemoteRequest,
+) (*multipoolermanagerdatapb.EmergencyDemoteResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) UndoDemote(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.UndoDemoteRequest,
+) (*multipoolermanagerdatapb.UndoDemoteResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) DemoteStalePrimary(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.DemoteStalePrimaryRequest,
+) (*multipoolermanagerdatapb.DemoteStalePrimaryResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) ChangeType(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.ChangeTypeRequest,
+) (*multipoolermanagerdatapb.ChangeTypeResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) GetDurabilityPolicy(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.GetDurabilityPolicyRequest,
+) (*multipoolermanagerdatapb.GetDurabilityPolicyResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) CreateDurabilityPolicy(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.CreateDurabilityPolicyRequest,
+) (*multipoolermanagerdatapb.CreateDurabilityPolicyResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) Backup(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.BackupRequest,
+) (*multipoolermanagerdatapb.BackupResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) RestoreFromBackup(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.RestoreFromBackupRequest,
+) (*multipoolermanagerdatapb.RestoreFromBackupResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) GetBackups(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.GetBackupsRequest,
+) (*multipoolermanagerdatapb.GetBackupsResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) GetBackupByJobId(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.GetBackupByJobIdRequest,
+) (*multipoolermanagerdatapb.GetBackupByJobIdResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) RewindToSource(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.RewindToSourceRequest,
+) (*multipoolermanagerdatapb.RewindToSourceResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRPCClient) SetMonitor(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.SetMonitorRequest,
+) (*multipoolermanagerdatapb.SetMonitorResponse, error) {
+	return nil, nil
+}
+func (m *mockRPCClient) Close()                                          {}
+func (m *mockRPCClient) CloseTablet(pooler *clustermetadata.MultiPooler) {}
+
+func (m *mockRPCClient) Promote(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.PromoteRequest,
+) (*multipoolermanagerdatapb.PromoteResponse, error) {
+	m.promoteCalled = true
+	return &multipoolermanagerdatapb.PromoteResponse{}, nil
+}
+
+func (m *mockRPCClient) UpdateSynchronousStandbyList(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest,
+) (*multipoolermanagerdatapb.UpdateSynchronousStandbyListResponse, error) {
+	m.updateStandbyCalled = true
+	return &multipoolermanagerdatapb.UpdateSynchronousStandbyListResponse{}, nil
 }
 
 // mockRPCClientWithBackups extends mockRPCClient but overrides GetBackups to return custom data.
@@ -2170,7 +1755,7 @@ func TestReconcile_BackupStaleTransition(t *testing.T) {
 		Status: multigresv1alpha1.ShardStatus{
 			Conditions: []metav1.Condition{
 				{
-					Type:   conditionBackupHealthy,
+					Type:   backuphealth.ConditionBackupHealthy,
 					Status: metav1.ConditionTrue,
 					Reason: "BackupRecent",
 				},
@@ -2234,7 +1819,7 @@ func TestReconcile_BackupStaleTransition(t *testing.T) {
 
 	updatedShard := &multigresv1alpha1.Shard{}
 	_ = c.Get(ctx, types.NamespacedName{Name: "test-shard", Namespace: "default"}, updatedShard)
-	if status.IsConditionTrue(updatedShard.Status.Conditions, conditionBackupHealthy) {
+	if status.IsConditionTrue(updatedShard.Status.Conditions, backuphealth.ConditionBackupHealthy) {
 		t.Error("expected backup condition to be False for stale backup")
 	}
 }
@@ -2841,68 +2426,6 @@ func TestReconcile_StatusPatchError(t *testing.T) {
 	}
 }
 
-func TestUpdateDrainState_NilAnnotations(t *testing.T) {
-	t.Parallel()
-
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "default",
-		},
-	}
-
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
-	r := &ShardReconciler{Client: c, Scheme: scheme}
-
-	requeue, err := r.updateDrainState(context.Background(), pod, metadata.DrainStateDraining)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !requeue {
-		t.Error("expected requeue")
-	}
-	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateDraining {
-		t.Errorf("expected state to be set, got %v", pod.Annotations)
-	}
-}
-
-func TestForceUnregister_GetPoolersError(t *testing.T) {
-	t.Parallel()
-
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	r := &ShardReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-		Scheme: scheme,
-	}
-	shard := &multigresv1alpha1.Shard{
-		Spec: multigresv1alpha1.ShardSpec{
-			DatabaseName:   "db",
-			TableGroupName: "tg",
-			ShardName:      "0",
-		},
-	}
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-pod",
-			Labels: map[string]string{
-				metadata.LabelMultigresCell: "cell1",
-			},
-		},
-	}
-
-	store := &errorGetPoolersStore{}
-	err := r.forceUnregister(context.Background(), store, shard, pod)
-	if err == nil {
-		t.Error("expected error when GetMultiPoolersByCell fails")
-	}
-}
-
 // errorGetPoolersStore returns an error for GetMultiPoolersByCell.
 type errorGetPoolersStore struct {
 	topoclient.Store
@@ -2954,11 +2477,18 @@ func TestDrain_ForceUnregisterError(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
 	store := &errorGetPoolersStore{}
 
-	_, err := r.executeDrainStateMachine(context.Background(), store, shardObj, pod)
+	_, err := drain.ExecuteDrainStateMachine(
+		context.Background(),
+		c,
+		nil,
+		record.NewFakeRecorder(10),
+		store,
+		shardObj,
+		pod,
+	)
 	if err == nil {
 		t.Error("expected error when forceUnregister fails during stuck drain timeout")
 	}
@@ -2997,14 +2527,21 @@ func TestDrain_AcknowledgedForceUnregisterError(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
 	// Use an error store that has a pooler matching our pod but fails on unregister
 	store := &errorUnregisterStore{
 		podName: "test-pod-0",
 	}
 
-	_, err := r.executeDrainStateMachine(context.Background(), store, shardObj, pod)
+	_, err := drain.ExecuteDrainStateMachine(
+		context.Background(),
+		c,
+		nil,
+		record.NewFakeRecorder(10),
+		store,
+		shardObj,
+		pod,
+	)
 	if err == nil {
 		t.Error("expected error when forceUnregister fails during Acknowledged state")
 	}
@@ -3071,13 +2608,20 @@ func TestDrain_InvalidState(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
 	defer func() { _ = store.Close() }()
 
-	requeue, err := r.executeDrainStateMachine(context.Background(), store, shardObj, pod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		context.Background(),
+		c,
+		nil,
+		record.NewFakeRecorder(10),
+		store,
+		shardObj,
+		pod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3120,10 +2664,6 @@ func TestDrain_Draining_FindPrimaryError(t *testing.T) {
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, replicaPod).Build()
 	rpcMock := &mockRPCClient{}
-	r := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
-	}
 
 	// cell1 works (has our replica), cell2 errors with non-UNAVAILABLE
 	store := &multiCellStore{
@@ -3143,7 +2683,15 @@ func TestDrain_Draining_FindPrimaryError(t *testing.T) {
 		},
 	}
 
-	requeue, err := r.executeDrainStateMachine(context.Background(), store, shardObj, replicaPod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		context.Background(),
+		c,
+		rpcMock,
+		record.NewFakeRecorder(10),
+		store,
+		shardObj,
+		replicaPod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -3214,78 +2762,5 @@ func TestEvaluateBackupHealth_FindPrimaryError(t *testing.T) {
 	_, err := r.evaluateBackupHealth(context.Background(), shard)
 	if err == nil {
 		t.Error("expected error when findPrimaryPooler fails")
-	}
-}
-
-func TestFindPrimaryPooler_TopoUnavailableSkip(t *testing.T) {
-	t.Parallel()
-
-	store := &multiCellStore{
-		cells: map[string][]*topoclient.MultiPoolerInfo{
-			"cell2": {
-				{
-					MultiPooler: &clustermetadata.MultiPooler{
-						Id:       &clustermetadata.ID{Cell: "cell2", Name: "primary-pod"},
-						Hostname: "primary-pod",
-						Type:     clustermetadata.PoolerType_PRIMARY,
-					},
-				},
-			},
-		},
-		errorCells: map[string]error{
-			"cell1": errors.New("Code: UNAVAILABLE"),
-		},
-	}
-
-	shard := &multigresv1alpha1.Shard{
-		Spec: multigresv1alpha1.ShardSpec{
-			DatabaseName:   "db",
-			TableGroupName: "tg",
-			ShardName:      "0",
-		},
-	}
-
-	primary, err := findPrimaryPooler(
-		context.Background(),
-		store,
-		shard,
-		[]string{"cell1", "cell2"},
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if primary == nil {
-		t.Fatal("expected primary from cell2 after skipping unavailable cell1")
-	}
-	if primary.Id.Name != "primary-pod" {
-		t.Errorf("expected primary-pod, got %s", primary.Id.Name)
-	}
-}
-
-func TestCollectCells(t *testing.T) {
-	t.Parallel()
-
-	shard := &multigresv1alpha1.Shard{
-		Spec: multigresv1alpha1.ShardSpec{
-			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-				"primary": {Cells: []multigresv1alpha1.CellName{"zone-a", "zone-b"}},
-				"replica": {Cells: []multigresv1alpha1.CellName{"zone-b", "zone-c"}},
-			},
-		},
-	}
-
-	cells := collectCells(shard)
-	if len(cells) != 3 {
-		t.Errorf("expected 3 unique cells, got %d: %v", len(cells), cells)
-	}
-
-	cellSet := make(map[string]bool)
-	for _, c := range cells {
-		cellSet[c] = true
-	}
-	for _, want := range []string{"zone-a", "zone-b", "zone-c"} {
-		if !cellSet[want] {
-			t.Errorf("expected cell %q in result", want)
-		}
 	}
 }
