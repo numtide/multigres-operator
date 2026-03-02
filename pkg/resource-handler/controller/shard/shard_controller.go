@@ -8,7 +8,6 @@ import (
 
 	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
-	"go.opentelemetry.io/otel/attribute"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -41,11 +40,6 @@ const (
 	// topoUnavailableRequeueDelay is the delay before retrying when the topology
 	// server is unavailable during the grace period.
 	topoUnavailableRequeueDelay = 5 * time.Second
-
-	// conditionDatabaseRegistered tracks whether the database was ever
-	// successfully registered in the global topology. Used during deletion
-	// to decide whether best-effort topology cleanup is needed.
-	conditionDatabaseRegistered = "DatabaseRegistered"
 )
 
 // ShardReconciler reconciles a Shard object.
@@ -279,24 +273,6 @@ func (r *ShardReconciler) handleDeletion(
 ) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Best-effort topology cleanup: unregister the database from etcd.
-	if err := r.unregisterDatabaseFromTopology(ctx, shard); err != nil {
-		if topo.IsTopoUnavailable(err) {
-			if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
-				logger.Info("Topology never initialized, skipping cleanup")
-			} else {
-				logger.Info("Topology unreachable during deletion, skipping cleanup")
-				r.Recorder.Eventf(shard, "Warning", "CleanupSkipped",
-					"Topology unreachable during deletion, skipping cleanup")
-			}
-		} else {
-			// Log but don't block deletion for non-topo errors.
-			logger.Error(err, "Failed to unregister database from topology")
-			r.Recorder.Eventf(shard, "Warning", "CleanupFailed",
-				"Failed to clean up database from topology: %v", err)
-		}
-	}
-
 	// Determine matching labels for all resources belonging to this shard.
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 	selector := map[string]string{
@@ -514,65 +490,13 @@ func (r *ShardReconciler) handlePendingDeletion(
 }
 
 // reconcileDataPlane opens a topo connection and runs all data-plane phases:
-// database registration, PodRoles update, drain state machine, and backup health.
+// PodRoles update, drain state machine, and backup health evaluation.
+// Database registration is handled by the MultigresCluster controller.
 func (r *ShardReconciler) reconcileDataPlane(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-
-	// Register database in topology
-	{
-		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.RegisterDatabaseInTopology")
-		if err := r.registerDatabaseInTopology(ctx, shard); err != nil {
-			resourceAge := time.Since(shard.CreationTimestamp.Time)
-			if topo.IsTopoUnavailable(err) && resourceAge < topoUnavailableGracePeriod {
-				childSpan.SetAttributes(attribute.Bool("topo.unavailable_grace", true))
-				childSpan.End()
-				logger.V(1).Info("Topology server not available yet, requeueing",
-					"resourceAge", resourceAge.Round(time.Second).String(),
-					"gracePeriod", topoUnavailableGracePeriod.String(),
-				)
-				r.Recorder.Eventf(
-					shard,
-					"Normal",
-					"TopologyWaiting",
-					"Topology server not available yet (age %s), will retry",
-					resourceAge.Round(time.Second),
-				)
-				return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
-			}
-
-			monitoring.RecordSpanError(childSpan, err)
-			childSpan.End()
-			r.Recorder.Eventf(
-				shard,
-				"Warning",
-				"TopologyError",
-				"Failed to register database in topology: %v",
-				err,
-			)
-			logger.Error(err, "Failed to register database in topology")
-			return ctrl.Result{}, err
-		}
-		childSpan.End()
-	}
-
-	// Mark the database as registered so deletion knows cleanup is needed.
-	if !status.IsConditionTrue(shard.Status.Conditions, conditionDatabaseRegistered) {
-		statusBase := shard.DeepCopy()
-		status.SetCondition(&shard.Status.Conditions, metav1.Condition{
-			Type:               conditionDatabaseRegistered,
-			Status:             metav1.ConditionTrue,
-			Reason:             "Registered",
-			Message:            "Database registered in topology",
-			ObservedGeneration: shard.Generation,
-			LastTransitionTime: metav1.Now(),
-		})
-		if err := r.Status().Patch(ctx, shard, client.MergeFrom(statusBase)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("setting DatabaseRegistered condition: %w", err)
-		}
-	}
 
 	// Open a single topo connection for PodRoles, drain, and backup health.
 	store, err := r.getTopoStore(shard)
@@ -727,34 +651,6 @@ func (r *ShardReconciler) reconcileDrainState(
 	}
 
 	return requeue, nil
-}
-
-// registerDatabaseInTopology delegates database registration to the topo package.
-func (r *ShardReconciler) registerDatabaseInTopology(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) error {
-	store, err := r.getTopoStore(shard)
-	if err != nil {
-		return fmt.Errorf("failed to create topology store: %w", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	return topo.RegisterDatabase(ctx, store, r.Recorder, shard)
-}
-
-// unregisterDatabaseFromTopology delegates database unregistration to the topo package.
-func (r *ShardReconciler) unregisterDatabaseFromTopology(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) error {
-	store, err := r.getTopoStore(shard)
-	if err != nil {
-		return fmt.Errorf("failed to create topology store: %w", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	return topo.UnregisterDatabase(ctx, store, r.Recorder, shard)
 }
 
 // getTopoStore returns a topology store, using the custom factory if set, otherwise the default.
