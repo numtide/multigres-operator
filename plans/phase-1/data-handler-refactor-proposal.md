@@ -2,7 +2,8 @@
 
 **Date:** 2026-03-01
 **Status:** Proposal
-**Scope:** Internal controller restructuring (no API/CRD changes)
+**Scope:** Internal controller restructuring + one additive API field
+(`Spec.TopologyPruning`)
 
 ---
 
@@ -607,6 +608,24 @@ Cell controller (merged, single reconciler)
       (no topo — MultigresCluster handles cell topo registration)
 ```
 
+**Topo connection management:** The merged controller opens one topo
+connection at the top of `Reconcile()` and passes the `Store` to each phase.
+All topo utility functions accept a `context.Context` so the caller can
+apply a timeout (10–20s) per operation to avoid holding the reconcile work
+queue if topo is unreachable. If a topo operation fails, the controller
+requeues with a delay rather than returning an error that triggers
+immediate retry.
+
+**Observability:** All pruning operations emit Kubernetes events on the
+parent resource so users can observe what the operator is doing:
+
+- `TopoCleanup` — "removed stale pooler entry X from topology"
+- `TopoCleanupFailed` — "unable to remove stale database Y: <error>"
+- `TopoConnectFailed` — "failed to connect to topology server"
+
+This follows the same pattern Vitess uses and gives operators visibility
+into topo self-healing without checking controller logs.
+
 ### 6.2 No Finalizers
 
 The proposed architecture eliminates **all** finalizers. This is possible
@@ -766,6 +785,35 @@ This pruning logic solves multiple problems:
 - Poolers left behind after ungraceful pod termination
 - Stale entries after controller crashes
 - The external topo gap (section 10)
+
+### 6.5 Pruning Toggle
+
+Pruning is enabled by default but can be disabled via a single toggle on the
+MultigresCluster spec:
+
+```yaml
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+spec:
+  topologyPruning:
+    enabled: true  # default: true
+```
+
+When `enabled: false`, the operator still **registers** topo entries (create
+or update, idempotent, always safe) but never **prunes** (destructive). This
+covers all pruning levels — databases, cells, and pooler entries.
+
+This is primarily relevant for external topology servers where a shared etcd
+instance may contain entries managed by other systems. In that scenario,
+pruning could accidentally delete entries the operator didn't create.
+
+For managed topology servers (the default), pruning should remain enabled.
+The managed etcd is owned by the operator, so every entry in it was created
+by the operator and is safe to prune.
+
+This is the only API/CRD change introduced by this refactor. It is additive
+and backwards compatible — existing clusters default to `enabled: true` with
+no migration needed.
 
 ---
 
