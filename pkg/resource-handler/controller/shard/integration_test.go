@@ -887,7 +887,7 @@ func TestShardReconciliation(t *testing.T) {
 						}
 						filteredResources = append(filteredResources, pod)
 
-						pvc, err := shardcontroller.BuildPoolDataPVC(tc.shard, string(poolName), string(cellName), poolSpec, i, mgr.GetScheme())
+						pvc, err := shardcontroller.BuildPoolDataPVC(tc.shard, string(poolName), string(cellName), poolSpec, i, shardcontroller.ShouldDeletePVCOnShardRemoval(tc.shard, poolSpec), mgr.GetScheme())
 						if err != nil {
 							t.Fatalf("Failed to build pvc: %v", err)
 						}
@@ -896,7 +896,7 @@ func TestShardReconciliation(t *testing.T) {
 
 					// Shared backup PVC is per-cell, not per-pod
 					if tc.shard.Spec.Backup != nil && tc.shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem && !backupCells[string(cellName)] {
-						backupPVC, err := shardcontroller.BuildSharedBackupPVC(tc.shard, string(cellName), mgr.GetScheme())
+						backupPVC, err := shardcontroller.BuildSharedBackupPVC(tc.shard, string(cellName), shardcontroller.ShouldDeleteShardLevelPVCOnRemoval(tc.shard), mgr.GetScheme())
 						if err != nil {
 							t.Fatalf("Failed to build backup pvc: %v", err)
 						}

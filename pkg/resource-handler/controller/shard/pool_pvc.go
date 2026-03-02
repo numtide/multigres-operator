@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
@@ -39,12 +40,15 @@ func BuildPoolDataPVCName(
 }
 
 // BuildPoolDataPVC creates a PersistentVolumeClaim for a pool pod's data volume.
+// When deleteOnShardRemoval is true, a controller ownerRef is set so that
+// Kubernetes GC cascade-deletes the PVC when the Shard is removed.
 func BuildPoolDataPVC(
 	shard *multigresv1alpha1.Shard,
 	poolName string,
 	cellName string,
 	poolSpec multigresv1alpha1.PoolSpec,
 	index int,
+	deleteOnShardRemoval bool,
 	scheme *runtime.Scheme,
 ) (*corev1.PersistentVolumeClaim, error) {
 	pvcName := BuildPoolDataPVCName(shard, poolName, cellName, index)
@@ -86,6 +90,12 @@ func BuildPoolDataPVC(
 		pvc.Spec.StorageClassName = storageClass
 	}
 
+	if deleteOnShardRemoval {
+		if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
+			return nil, fmt.Errorf("failed to set controller reference on PVC %s: %w", pvcName, err)
+		}
+	}
+
 	return pvc, nil
 }
 
@@ -105,9 +115,12 @@ func BuildSharedBackupPVCName(shard *multigresv1alpha1.Shard, cellName string) s
 
 // BuildSharedBackupPVC creates a ReadWriteMany PersistentVolumeClaim
 // shared by all pods in the cell.
+// When deleteOnShardRemoval is true, a controller ownerRef is set so that
+// Kubernetes GC cascade-deletes the PVC when the Shard is removed.
 func BuildSharedBackupPVC(
 	shard *multigresv1alpha1.Shard,
 	cellName string,
+	deleteOnShardRemoval bool,
 	scheme *runtime.Scheme,
 ) (*corev1.PersistentVolumeClaim, error) {
 	pvcName := BuildSharedBackupPVCName(shard, cellName)
@@ -162,6 +175,12 @@ func BuildSharedBackupPVC(
 
 	if pvcClass != nil && *pvcClass != "" {
 		pvc.Spec.StorageClassName = pvcClass
+	}
+
+	if deleteOnShardRemoval {
+		if err := ctrl.SetControllerReference(shard, pvc, scheme); err != nil {
+			return nil, fmt.Errorf("failed to set controller reference on PVC %s: %w", pvcName, err)
+		}
 	}
 
 	return pvc, nil

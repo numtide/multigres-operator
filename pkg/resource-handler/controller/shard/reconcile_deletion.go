@@ -58,52 +58,10 @@ func (r *ShardReconciler) handleDeletion(
 		}
 	}
 
-	// Evaluate and process PVC deletions based on PVCDeletionPolicy.
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(
-		ctx,
-		pvcList,
-		client.InNamespace(shard.Namespace),
-		client.MatchingLabels(selector),
-	); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list PVCs for deletion: %w", err)
-	}
-
-	for i := range pvcList.Items {
-		pvc := &pvcList.Items[i]
-
-		poolName := pvc.Labels[metadata.LabelMultigresPool]
-		var policy *multigresv1alpha1.PVCDeletionPolicy
-
-		if poolName != "" {
-			if poolSpec, exists := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]; exists {
-				policy = multigresv1alpha1.MergePVCDeletionPolicy(
-					poolSpec.PVCDeletionPolicy,
-					shard.Spec.PVCDeletionPolicy,
-				)
-			} else {
-				policy = shard.Spec.PVCDeletionPolicy
-			}
-		} else {
-			policy = shard.Spec.PVCDeletionPolicy
-		}
-
-		whenDeleted := multigresv1alpha1.RetainPVCRetentionPolicy
-		if policy != nil && policy.WhenDeleted != "" {
-			whenDeleted = policy.WhenDeleted
-		}
-
-		if whenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy {
-			if pvc.DeletionTimestamp.IsZero() {
-				logger.Info("Deleting PVC per WhenDeleted: Delete policy", "pvc", pvc.Name)
-				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, fmt.Errorf("failed to delete PVC %s: %w", pvc.Name, err)
-				}
-			}
-		} else {
-			logger.Info("Retaining PVC per WhenDeleted: Retain policy", "pvc", pvc.Name)
-		}
-	}
+	// PVCs are handled by Kubernetes GC via conditional ownerRefs set during
+	// normal reconciliation (reconcilePVCOwnerRefs). When PVCDeletionPolicy is
+	// Delete, PVCs have controller ownerRefs and are cascade-deleted with the
+	// Shard. When Retain, PVCs have no ownerRefs and survive deletion.
 
 	// Best-effort pod deletion. Without finalizers, pods are deleted directly.
 	podList := &corev1.PodList{}

@@ -1821,7 +1821,6 @@ func TestReconcilePgBackRestCerts(t *testing.T) {
 	})
 }
 
-
 func TestCreateMissingResources(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
@@ -2977,7 +2976,7 @@ func TestBuildSharedBackupPVC_Variants(t *testing.T) {
 			},
 		}
 
-		pvc, err := BuildSharedBackupPVC(shard, "zone1", testScheme())
+		pvc, err := BuildSharedBackupPVC(shard, "zone1", false, testScheme())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -3009,7 +3008,7 @@ func TestBuildSharedBackupPVC_Variants(t *testing.T) {
 			},
 		}
 
-		pvc, err := BuildSharedBackupPVC(shard, "zone1", testScheme())
+		pvc, err := BuildSharedBackupPVC(shard, "zone1", false, testScheme())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -3526,7 +3525,7 @@ func TestBuildSharedBackupPVC_InvalidStorageSize(t *testing.T) {
 	}
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-	_, err := BuildSharedBackupPVC(shard, "zone1", scheme)
+	_, err := BuildSharedBackupPVC(shard, "zone1", false, scheme)
 	if err == nil {
 		t.Fatal("expected error for invalid storage size")
 	}

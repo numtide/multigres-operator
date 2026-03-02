@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 
@@ -22,6 +23,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 const (
@@ -234,6 +236,26 @@ func (r *ShardReconciler) Reconcile(
 		childSpan.End()
 	}
 
+	// Ensure PVC ownerRefs match the current PVCDeletionPolicy.
+	// This handles mid-lifecycle policy changes (e.g., Retain → Delete).
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePVCOwnerRefs")
+		if err := r.reconcilePVCOwnerRefs(ctx, shard); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile PVC ownerRefs")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"PVCOwnerRefError",
+				"Failed to reconcile PVC ownerRefs: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
+	}
+
 	// Data-plane phases: open a single topo connection shared across all phases.
 	result, err := r.reconcileDataPlane(ctx, shard)
 	if err != nil || result.RequeueAfter > 0 || result.Requeue {
@@ -363,6 +385,111 @@ func getPoolCells(shard *multigresv1alpha1.Shard) []multigresv1alpha1.CellName {
 
 	slices.Sort(cells)
 	return cells
+}
+
+// shouldDeletePVCOnShardRemoval returns true when the effective PVCDeletionPolicy
+// for a pool resolves to Delete. Used by PVC builders to conditionally set
+// a controller ownerRef so Kubernetes GC cascade-deletes the PVC with the Shard.
+func shouldDeletePVCOnShardRemoval(
+	shard *multigresv1alpha1.Shard,
+	poolSpec multigresv1alpha1.PoolSpec,
+) bool {
+	policy := multigresv1alpha1.MergePVCDeletionPolicy(
+		poolSpec.PVCDeletionPolicy,
+		shard.Spec.PVCDeletionPolicy,
+	)
+	return policy != nil && policy.WhenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy
+}
+
+// shouldDeleteShardLevelPVCOnRemoval returns true when the shard-level
+// PVCDeletionPolicy resolves to Delete. Used for shared infrastructure PVCs
+// (e.g., backup PVCs) that are not pool-specific.
+func shouldDeleteShardLevelPVCOnRemoval(shard *multigresv1alpha1.Shard) bool {
+	p := shard.Spec.PVCDeletionPolicy
+	return p != nil && p.WhenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy
+}
+
+// reconcilePVCOwnerRefs ensures ownerRefs on existing PVCs match the current
+// PVCDeletionPolicy. When policy is Delete, a controller ownerRef is added so
+// Kubernetes GC cascade-deletes PVCs with the Shard. When policy is Retain,
+// any existing controller ownerRef is removed so PVCs survive Shard deletion.
+func (r *ShardReconciler) reconcilePVCOwnerRefs(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	logger := log.FromContext(ctx)
+
+	selector := map[string]string{
+		metadata.LabelMultigresShard: string(shard.Spec.ShardName),
+	}
+	clusterName := shard.Labels[metadata.LabelMultigresCluster]
+	if clusterName != "" {
+		selector[metadata.LabelMultigresCluster] = clusterName
+	}
+
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(
+		ctx,
+		pvcList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
+		return fmt.Errorf("failed to list PVCs for ownerRef reconciliation: %w", err)
+	}
+
+	shardUID := shard.GetUID()
+
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+
+		// Resolve effective policy for this PVC.
+		poolName := pvc.Labels[metadata.LabelMultigresPool]
+		wantOwnerRef := false
+
+		if poolName != "" {
+			if poolSpec, exists := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]; exists {
+				wantOwnerRef = shouldDeletePVCOnShardRemoval(shard, poolSpec)
+			} else {
+				// Pool removed from spec — fall back to shard-level policy.
+				wantOwnerRef = shouldDeleteShardLevelPVCOnRemoval(shard)
+			}
+		} else {
+			// Shared backup PVC — use shard-level policy.
+			wantOwnerRef = shouldDeleteShardLevelPVCOnRemoval(shard)
+		}
+
+		hasOwnerRef := false
+		for _, ref := range pvc.OwnerReferences {
+			if ref.UID == shardUID {
+				hasOwnerRef = true
+				break
+			}
+		}
+
+		if wantOwnerRef && !hasOwnerRef {
+			if err := ctrl.SetControllerReference(shard, pvc, r.Scheme); err != nil {
+				return fmt.Errorf("failed to add ownerRef to PVC %s: %w", pvc.Name, err)
+			}
+			if err := r.Update(ctx, pvc); err != nil {
+				return fmt.Errorf("failed to update PVC %s ownerRef: %w", pvc.Name, err)
+			}
+			logger.Info("Added ownerRef to PVC for Delete policy", "pvc", pvc.Name)
+		} else if !wantOwnerRef && hasOwnerRef {
+			filtered := make([]metav1.OwnerReference, 0, len(pvc.OwnerReferences))
+			for _, ref := range pvc.OwnerReferences {
+				if ref.UID != shardUID {
+					filtered = append(filtered, ref)
+				}
+			}
+			pvc.OwnerReferences = filtered
+			if err := r.Update(ctx, pvc); err != nil {
+				return fmt.Errorf("failed to remove ownerRef from PVC %s: %w", pvc.Name, err)
+			}
+			logger.Info("Removed ownerRef from PVC for Retain policy", "pvc", pvc.Name)
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
