@@ -168,7 +168,9 @@ func validateNoStorageShrink(
 		if newQty.Cmp(oldQty) < 0 {
 			return nil, fmt.Errorf(
 				"storage.size cannot be decreased (%s: %s → %s); PVC shrink is not supported by Kubernetes",
-				key, oldSize, newSize,
+				key,
+				oldSize,
+				newSize,
 			)
 		}
 	}

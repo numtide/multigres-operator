@@ -59,8 +59,14 @@ func ExecuteDrainStateMachine(
 		if reqAt, err := time.Parse(time.RFC3339, reqAtStr); err == nil {
 			drainStart = reqAt
 		} else {
-			logger.Error(err, "Malformed drain-requested-at annotation, using current time as fallback",
-				"pod", pod.Name, "value", reqAtStr)
+			logger.Error(
+				err,
+				"Malformed drain-requested-at annotation, using current time as fallback",
+				"pod",
+				pod.Name,
+				"value",
+				reqAtStr,
+			)
 			drainStart = time.Now()
 		}
 	}
@@ -126,7 +132,12 @@ func ExecuteDrainStateMachine(
 			logger.Info("Proceeding to drain replica pod", "pod", pod.Name)
 			primary, err := topo.FindPrimaryPooler(ctx, store, shard, cells)
 			if err != nil {
-				logger.Error(err, "Failed to find primary for standby removal, will retry", "pod", pod.Name)
+				logger.Error(
+					err,
+					"Failed to find primary for standby removal, will retry",
+					"pod",
+					pod.Name,
+				)
 				return true, nil
 			}
 			if primary != nil && myPooler != nil && rpcClient != nil {
@@ -261,7 +272,8 @@ func IsPrimaryTerminatingOrMissing(
 		if errors.IsNotFound(err) {
 			return true
 		}
-		log.FromContext(ctx).Error(err, "Transient error checking primary pod status", "pod", key.Name)
+		log.FromContext(ctx).
+			Error(err, "Transient error checking primary pod status", "pod", key.Name)
 		return false
 	}
 	return !primaryPod.DeletionTimestamp.IsZero()
@@ -284,8 +296,9 @@ func IsPrimaryDraining(
 		if errors.IsNotFound(err) {
 			return false
 		}
-		log.FromContext(ctx).Error(err, "Transient error checking primary drain status, assuming draining",
-			"pod", key.Name)
+		log.FromContext(ctx).
+			Error(err, "Transient error checking primary drain status, assuming draining",
+				"pod", key.Name)
 		return true
 	}
 	state := primaryPod.Annotations[metadata.AnnotationDrainState]

@@ -177,7 +177,7 @@ type FilesystemBackupConfig struct {
 // +kubebuilder:validation:XValidation:rule="!(has(self.serviceAccountName) && size(self.serviceAccountName) > 0 && has(self.useEnvCredentials) && self.useEnvCredentials)",message="serviceAccountName and useEnvCredentials are mutually exclusive — IRSA credentials are handled automatically"
 type S3BackupConfig struct {
 	// +kubebuilder:validation:MinLength=1
-	Bucket            string `json:"bucket"`
+	Bucket string `json:"bucket"`
 	// +kubebuilder:validation:MinLength=1
 	Region            string `json:"region"`
 	Endpoint          string `json:"endpoint,omitempty"`

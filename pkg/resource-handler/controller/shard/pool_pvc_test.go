@@ -181,7 +181,10 @@ func TestBuildPoolDataPVC_OwnerRefWithDeletePolicy(t *testing.T) {
 	}
 
 	if len(pvc.OwnerReferences) != 1 {
-		t.Fatalf("expected 1 owner reference with deleteOnShardRemoval=true, got %d", len(pvc.OwnerReferences))
+		t.Fatalf(
+			"expected 1 owner reference with deleteOnShardRemoval=true, got %d",
+			len(pvc.OwnerReferences),
+		)
 	}
 
 	ref := pvc.OwnerReferences[0]
@@ -206,7 +209,10 @@ func TestBuildPoolDataPVC_NoOwnerRefWithRetainPolicy(t *testing.T) {
 	}
 
 	if len(pvc.OwnerReferences) != 0 {
-		t.Fatalf("expected 0 owner references with deleteOnShardRemoval=false, got %d", len(pvc.OwnerReferences))
+		t.Fatalf(
+			"expected 0 owner references with deleteOnShardRemoval=false, got %d",
+			len(pvc.OwnerReferences),
+		)
 	}
 }
 
@@ -225,7 +231,10 @@ func TestBuildSharedBackupPVC_OwnerRefWithDeletePolicy(t *testing.T) {
 	}
 
 	if len(pvc.OwnerReferences) != 1 {
-		t.Fatalf("expected 1 owner reference with deleteOnShardRemoval=true, got %d", len(pvc.OwnerReferences))
+		t.Fatalf(
+			"expected 1 owner reference with deleteOnShardRemoval=true, got %d",
+			len(pvc.OwnerReferences),
+		)
 	}
 
 	ref := pvc.OwnerReferences[0]
@@ -249,7 +258,10 @@ func TestBuildSharedBackupPVC_NoOwnerRefWithRetainPolicy(t *testing.T) {
 	}
 
 	if len(pvc.OwnerReferences) != 0 {
-		t.Fatalf("expected 0 owner references with deleteOnShardRemoval=false, got %d", len(pvc.OwnerReferences))
+		t.Fatalf(
+			"expected 0 owner references with deleteOnShardRemoval=false, got %d",
+			len(pvc.OwnerReferences),
+		)
 	}
 }
 

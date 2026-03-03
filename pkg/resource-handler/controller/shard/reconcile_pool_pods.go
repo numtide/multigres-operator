@@ -255,7 +255,13 @@ func (r *ShardReconciler) createMissingResources(
 						pod.Name, err,
 					)
 				}
-				logger.Info("Draining pod for PVC filesystem expansion", "pod", pod.Name, "pvc", pvcName)
+				logger.Info(
+					"Draining pod for PVC filesystem expansion",
+					"pod",
+					pod.Name,
+					"pvc",
+					pvcName,
+				)
 				r.Recorder.Eventf(
 					shard, "Normal", "FilesystemResize",
 					"Draining pod %s to expand filesystem on PVC %s", pod.Name, pvcName,

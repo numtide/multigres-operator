@@ -58,9 +58,17 @@ func (r *ShardReconciler) handleDeletion(
 	for i := range deployList.Items {
 		deploy := &deployList.Items[i]
 		if deploy.DeletionTimestamp.IsZero() {
-			logger.Info("Initiating deployment deletion during shard cleanup", "deployment", deploy.Name)
+			logger.Info(
+				"Initiating deployment deletion during shard cleanup",
+				"deployment",
+				deploy.Name,
+			)
 			if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to delete deployment %s: %w", deploy.Name, err)
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to delete deployment %s: %w",
+					deploy.Name,
+					err,
+				)
 			}
 		}
 	}
@@ -201,7 +209,10 @@ func (r *ShardReconciler) handlePendingDeletion(
 	}
 
 	// All pods drained and deleted — set ReadyForDeletion condition.
-	if !status.IsConditionTrue(shard.Status.Conditions, multigresv1alpha1.ConditionReadyForDeletion) {
+	if !status.IsConditionTrue(
+		shard.Status.Conditions,
+		multigresv1alpha1.ConditionReadyForDeletion,
+	) {
 		statusBase := shard.DeepCopy()
 		status.SetCondition(&shard.Status.Conditions, metav1.Condition{
 			Type:               multigresv1alpha1.ConditionReadyForDeletion,
