@@ -236,6 +236,9 @@ func mergePoolSpec(
 	if override.Affinity != nil {
 		out.Affinity = override.Affinity.DeepCopy()
 	}
+	if len(override.Tolerations) > 0 {
+		out.Tolerations = override.Tolerations
+	}
 	if override.PVCDeletionPolicy != nil {
 		out.PVCDeletionPolicy = override.PVCDeletionPolicy
 	}

@@ -130,6 +130,39 @@ func (r *MultigresClusterReconciler) Reconcile(
 		}
 	}
 
+	// Apply tracking labels for efficient webhook template-in-use lookups.
+	{
+		trackingLabels := collectTrackingLabels(cluster)
+		labelsChanged := false
+		if cluster.Labels == nil {
+			cluster.Labels = make(map[string]string)
+		}
+		patch := client.MergeFrom(cluster.DeepCopy())
+		trackingKeys := []string{
+			metadata.LabelUsesCoreTemplate,
+			metadata.LabelUsesCellTemplate,
+			metadata.LabelUsesShardTemplate,
+		}
+		for _, key := range trackingKeys {
+			if want, ok := trackingLabels[key]; ok {
+				if cluster.Labels[key] != want {
+					cluster.Labels[key] = want
+					labelsChanged = true
+				}
+			} else if _, exists := cluster.Labels[key]; exists {
+				delete(cluster.Labels, key)
+				labelsChanged = true
+			}
+		}
+		if labelsChanged {
+			if err := r.Patch(ctx, cluster, patch); err != nil {
+				l.Error(err, "Failed to patch tracking labels")
+				return ctrl.Result{}, fmt.Errorf("failed to patch tracking labels: %w", err)
+			}
+			l.V(1).Info("Patched tracking labels on cluster")
+		}
+	}
+
 	if !cluster.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, cluster)
 	}
@@ -457,4 +490,57 @@ func collectResolvedTemplates(
 	})
 
 	return rt
+}
+
+// collectTrackingLabels walks the cluster spec and returns boolean tracking
+// labels indicating which template kinds are referenced. These labels enable
+// efficient pre-filtering in the template deletion webhook.
+func collectTrackingLabels(cluster *multigresv1alpha1.MultigresCluster) map[string]string {
+	labels := make(map[string]string)
+
+	usesCore := cluster.Spec.TemplateDefaults.CoreTemplate != "" ||
+		(cluster.Spec.GlobalTopoServer != nil && cluster.Spec.GlobalTopoServer.TemplateRef != "") ||
+		(cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.TemplateRef != "") ||
+		(cluster.Spec.MultiAdminWeb != nil && cluster.Spec.MultiAdminWeb.TemplateRef != "")
+	if usesCore {
+		labels[metadata.LabelUsesCoreTemplate] = "true"
+	}
+
+	usesCell := cluster.Spec.TemplateDefaults.CellTemplate != ""
+	if !usesCell {
+		for _, cell := range cluster.Spec.Cells {
+			if cell.CellTemplate != "" {
+				usesCell = true
+				break
+			}
+		}
+	}
+	if usesCell {
+		labels[metadata.LabelUsesCellTemplate] = "true"
+	}
+
+	usesShard := cluster.Spec.TemplateDefaults.ShardTemplate != ""
+	if !usesShard {
+		for _, db := range cluster.Spec.Databases {
+			for _, tg := range db.TableGroups {
+				for _, s := range tg.Shards {
+					if s.ShardTemplate != "" {
+						usesShard = true
+						break
+					}
+				}
+				if usesShard {
+					break
+				}
+			}
+			if usesShard {
+				break
+			}
+		}
+	}
+	if usesShard {
+		labels[metadata.LabelUsesShardTemplate] = "true"
+	}
+
+	return labels
 }

@@ -15,6 +15,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 // ============================================================================
@@ -173,8 +174,24 @@ func (v *TemplateValidator) ValidateDelete(
 	templateName := metaObj.GetName()
 	namespace := metaObj.GetNamespace()
 
+	// Pre-filter clusters by tracking label to narrow the search space.
+	kindLabel := ""
+	switch v.Kind {
+	case "CoreTemplate":
+		kindLabel = metadata.LabelUsesCoreTemplate
+	case "CellTemplate":
+		kindLabel = metadata.LabelUsesCellTemplate
+	case "ShardTemplate":
+		kindLabel = metadata.LabelUsesShardTemplate
+	}
+
+	listOpts := []client.ListOption{client.InNamespace(namespace)}
+	if kindLabel != "" {
+		listOpts = append(listOpts, client.MatchingLabels{kindLabel: "true"})
+	}
+
 	clusters := &multigresv1alpha1.MultigresClusterList{}
-	if err := v.Client.List(ctx, clusters, client.InNamespace(namespace)); err != nil {
+	if err := v.Client.List(ctx, clusters, listOpts...); err != nil {
 		return nil, fmt.Errorf("failed to list clusters for validation: %w", err)
 	}
 
