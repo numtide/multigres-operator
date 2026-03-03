@@ -20,6 +20,13 @@ import (
 	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
+const (
+	// terminatingTimeout is the maximum time to wait for a pod stuck
+	// in Terminating state before considering it gone. This prevents
+	// shard deletion from blocking indefinitely on a dead kubelet.
+	terminatingTimeout = 60 * time.Second
+)
+
 // handleDeletion performs best-effort cleanup when a Shard is deleted.
 // Without finalizers, Kubernetes GC handles cascade deletion via ownerRefs.
 // This method does best-effort topo cleanup and PVC policy enforcement.
@@ -135,9 +142,19 @@ func (r *ShardReconciler) handlePendingDeletion(
 	for i := range podList.Items {
 		pod := &podList.Items[i]
 
-		// Skip pods already being deleted.
+		// Skip pods already being deleted, but apply a timeout for pods
+		// stuck in Terminating (e.g. kubelet failure, node down).
 		if !pod.DeletionTimestamp.IsZero() {
-			allDrained = false
+			if time.Since(pod.DeletionTimestamp.Time) < terminatingTimeout {
+				allDrained = false
+			} else {
+				logger.Info("Pod stuck terminating, treating as gone",
+					"pod", pod.Name,
+					"terminatingSince", pod.DeletionTimestamp.Time)
+				r.Recorder.Eventf(shard, "Warning", "StuckTerminating",
+					"Pod %s has been terminating for >%s, treating as gone",
+					pod.Name, terminatingTimeout)
+			}
 			continue
 		}
 

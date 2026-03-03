@@ -25,7 +25,9 @@ const (
 	// server is unavailable during the grace period.
 	topoUnavailableRequeueDelay = 5 * time.Second
 
-	// topoOperationTimeout bounds all individual topo operations.
+	// topoOperationTimeout bounds all topo operations within a single reconcile.
+	// TODO: switch to per-entity timeouts when multi-database support lands.
+	// With many cells/databases, later operations could hit the deadline.
 	topoOperationTimeout = 20 * time.Second
 )
 
