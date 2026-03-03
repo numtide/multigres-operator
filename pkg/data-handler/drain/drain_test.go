@@ -125,4 +125,24 @@ func TestIsPrimaryDraining(t *testing.T) {
 			t.Error("expected true when drain annotation present")
 		}
 	})
+
+	t.Run("returns false when drain state is ReadyForDeletion", func(t *testing.T) {
+		t.Parallel()
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
+				},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		primary := &clustermetadata.MultiPooler{
+			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		}
+		if drain.IsPrimaryDraining(context.Background(), c, shard, primary) {
+			t.Error("expected false when drain state is ReadyForDeletion")
+		}
+	})
 }

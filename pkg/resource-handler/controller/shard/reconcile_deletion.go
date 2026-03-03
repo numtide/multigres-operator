@@ -107,8 +107,10 @@ func (r *ShardReconciler) handlePendingDeletion(
 
 	// List all pods belonging to this shard.
 	lbls := map[string]string{
-		metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
-		metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
+		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
+		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
+		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
 	}
 	podList := &corev1.PodList{}
 	if err := r.List(

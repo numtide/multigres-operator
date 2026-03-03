@@ -420,11 +420,10 @@ func (r *ShardReconciler) reconcilePVCOwnerRefs(
 	logger := log.FromContext(ctx)
 
 	selector := map[string]string{
-		metadata.LabelMultigresShard: string(shard.Spec.ShardName),
-	}
-	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	if clusterName != "" {
-		selector[metadata.LabelMultigresCluster] = clusterName
+		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
+		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
+		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
 	}
 
 	pvcList := &corev1.PersistentVolumeClaimList{}

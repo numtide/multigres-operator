@@ -309,6 +309,56 @@ func TestPrunePoolers(t *testing.T) {
 			t.Errorf("expected 0 pruned for unavailable cell, got %d", pruned)
 		}
 	})
+
+	t.Run("does not prune active poolers with FQDN hostnames", func(t *testing.T) {
+		t.Parallel()
+		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+		store := topoclient.NewWithFactory(
+			factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+		)
+		defer func() { _ = store.Close() }()
+
+		ctx := context.Background()
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "active-pod"},
+			Hostname: "active-pod.headless-svc.ns.svc.cluster.local",
+			Type:     clustermetadata.PoolerType_PRIMARY,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "stale-pod"},
+			Hostname: "stale-pod.headless-svc.ns.svc.cluster.local",
+			Type:     clustermetadata.PoolerType_REPLICA,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		// active-pod is in the active set; stale-pod is NOT.
+		activePods := map[string]bool{"active-pod": true}
+		pruned, err := topo.PrunePoolers(ctx, store, shard, activePods)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pruned != 1 {
+			t.Errorf("expected 1 pruned (stale-pod), got %d", pruned)
+		}
+
+		remaining, _ := store.GetMultiPoolersByCell(ctx, "cell1", nil)
+		if len(remaining) != 1 {
+			t.Fatalf("expected 1 remaining pooler, got %d", len(remaining))
+		}
+		if remaining[0].Id.Name != "active-pod" {
+			t.Errorf("expected active-pod to remain, got %s", remaining[0].Id.Name)
+		}
+	})
 }
 
 func TestForceUnregisterPod(t *testing.T) {

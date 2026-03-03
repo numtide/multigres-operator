@@ -1,21 +1,21 @@
 package shard
 
 import (
-"context"
-"testing"
-"time"
+	"context"
+	"testing"
+	"time"
 
-appsv1 "k8s.io/api/apps/v1"
-corev1 "k8s.io/api/core/v1"
-policyv1 "k8s.io/api/policy/v1"
-metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-"k8s.io/apimachinery/pkg/runtime"
-"k8s.io/apimachinery/pkg/types"
-"k8s.io/client-go/tools/record"
-"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-"github.com/numtide/multigres-operator/pkg/util/metadata"
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 func TestHandleDeletion(t *testing.T) {
@@ -309,14 +309,25 @@ func TestHandlePendingDeletion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pending-shard",
 			Namespace: "default",
-			Labels:    map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+			Labels: map[string]string{
+				metadata.LabelMultigresCluster: "test-cluster",
+			},
 			Annotations: map[string]string{
 				multigresv1alpha1.AnnotationPendingDeletion: "2026-01-01T00:00:00Z",
 			},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			ShardName: "shard-0",
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			ShardName:      "shard-0",
 		},
+	}
+
+	pendingPodLabels := map[string]string{
+		metadata.LabelMultigresCluster:    "test-cluster",
+		metadata.LabelMultigresDatabase:   "testdb",
+		metadata.LabelMultigresTableGroup: "default",
+		metadata.LabelMultigresShard:      "shard-0",
 	}
 
 	t.Run("No pods — sets ReadyForDeletion immediately", func(t *testing.T) {
@@ -371,10 +382,7 @@ func TestHandlePendingDeletion(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pending-shard-pool-0",
 				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster: "test-cluster",
-					metadata.LabelMultigresShard:   "shard-0",
-				},
+				Labels:    pendingPodLabels,
 			},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{{Name: "pg", Image: "postgres:16"}},
@@ -424,10 +432,7 @@ func TestHandlePendingDeletion(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pending-shard-pool-0",
 				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster: "test-cluster",
-					metadata.LabelMultigresShard:   "shard-0",
-				},
+				Labels:    pendingPodLabels,
 				Annotations: map[string]string{
 					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
 				},
@@ -478,10 +483,7 @@ func TestHandlePendingDeletion(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pending-shard-pool-0",
 				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster: "test-cluster",
-					metadata.LabelMultigresShard:   "shard-0",
-				},
+				Labels:    pendingPodLabels,
 				Annotations: map[string]string{
 					metadata.AnnotationDrainState: metadata.DrainStateDraining,
 				},
@@ -495,10 +497,7 @@ func TestHandlePendingDeletion(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pending-shard-pool-1",
 				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster: "test-cluster",
-					metadata.LabelMultigresShard:   "shard-0",
-				},
+				Labels:    pendingPodLabels,
 			},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{{Name: "pg", Image: "postgres:16"}},

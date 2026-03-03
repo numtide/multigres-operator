@@ -210,7 +210,7 @@ func buildMultiPoolerSidecar(
 	}
 
 	// TODO: Add remaining command line arguments:
-	// --grpc-socket-file, --log-level, --log-output, --hostname
+	// --grpc-socket-file, --log-level, --log-output
 	// --pgbackrest-stanza
 
 	args := []string{
@@ -227,6 +227,7 @@ func buildMultiPoolerSidecar(
 		"--table-group=" + string(shard.Spec.TableGroupName),
 		"--shard=" + string(shard.Spec.ShardName),
 		"--service-id=$(POD_NAME)", // Use pod name as unique service ID
+		"--hostname=$(POD_NAME)",   // Register with short pod name instead of FQDN
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
 		"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)", // Resolved from env var below

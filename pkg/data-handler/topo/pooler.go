@@ -49,6 +49,8 @@ func GetPoolerStatus(
 				hostname := p.GetHostname()
 				if hostname == "" {
 					hostname = fmt.Sprintf("%v", p.Id)
+				} else if p.Id != nil && p.Id.Name != "" {
+					hostname = p.Id.Name
 				}
 				result.Roles[hostname] = roleName
 			}
@@ -181,11 +183,11 @@ func PrunePoolers(
 		}
 
 		for _, p := range poolers {
-			hostname := p.GetHostname()
-			if hostname == "" && p.Id != nil {
-				hostname = p.Id.Name
-			}
-			if hostname != "" && !activePodNames[hostname] {
+			if !poolerMatchesAnyActivePod(p, activePodNames) {
+				hostname := p.GetHostname()
+				if hostname == "" && p.Id != nil {
+					hostname = p.Id.Name
+				}
 				if err := store.UnregisterMultiPooler(ctx, p.Id); err != nil {
 					logger.Error(err, "Failed to prune stale pooler",
 						"pooler", hostname, "cell", cell)
@@ -199,4 +201,15 @@ func PrunePoolers(
 	}
 
 	return pruned, nil
+}
+
+// poolerMatchesAnyActivePod returns true when the pooler record corresponds to
+// any pod in activePodNames. Uses PodMatchesPooler for FQDN-aware comparison.
+func poolerMatchesAnyActivePod(p *topoclient.MultiPoolerInfo, activePodNames map[string]bool) bool {
+	for podName := range activePodNames {
+		if PodMatchesPooler(podName, p) {
+			return true
+		}
+	}
+	return false
 }

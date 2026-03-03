@@ -56,6 +56,8 @@ func (r *ShardReconciler) reconcileDataPlane(
 		requeue, err := r.reconcileDrainState(ctx, store, shard)
 		if err != nil {
 			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			return ctrl.Result{}, err
 		}
 		childSpan.End()
 		if requeue {
@@ -157,8 +159,10 @@ func (r *ShardReconciler) reconcileDrainState(
 	logger := log.FromContext(ctx)
 
 	lbls := map[string]string{
-		metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
-		metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
+		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
+		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
+		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
 	}
 	podList := &corev1.PodList{}
 	if err := r.List(
@@ -208,8 +212,10 @@ func (r *ShardReconciler) reconcilePoolerPrune(
 	logger := log.FromContext(ctx)
 
 	lbls := map[string]string{
-		metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
-		metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
+		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
+		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
+		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
 	}
 	podList := &corev1.PodList{}
 	if err := r.List(

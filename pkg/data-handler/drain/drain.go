@@ -116,7 +116,11 @@ func ExecuteDrainStateMachine(
 		} else {
 			logger.Info("Proceeding to drain replica pod", "pod", pod.Name)
 			primary, err := topo.FindPrimaryPooler(ctx, store, shard, cells)
-			if err == nil && primary != nil && myPooler != nil && rpcClient != nil {
+			if err != nil {
+				logger.Error(err, "Failed to find primary for standby removal, will retry", "pod", pod.Name)
+				return true, nil
+			}
+			if primary != nil && myPooler != nil && rpcClient != nil {
 				if IsPrimaryTerminatingOrMissing(ctx, k8sClient, shard, primary) {
 					logger.Info(
 						"Primary pod is dead or terminating, skipping standby removal",
@@ -266,5 +270,6 @@ func IsPrimaryDraining(
 	if err := k8sClient.Get(ctx, key, primaryPod); err != nil {
 		return false
 	}
-	return primaryPod.Annotations[metadata.AnnotationDrainState] != ""
+	state := primaryPod.Annotations[metadata.AnnotationDrainState]
+	return state != "" && state != metadata.DrainStateReadyForDeletion
 }
