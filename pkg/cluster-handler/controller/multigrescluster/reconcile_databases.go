@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -123,16 +124,17 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 
 	for _, item := range existingTGs.Items {
 		if !activeTGNames[item.Name] {
-			if err := r.Delete(ctx, &item); err != nil {
+			if err := r.Delete(ctx, &item); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete orphaned tablegroup '%s': %w", item.Name, err)
+			} else if err == nil {
+				r.Recorder.Eventf(
+					cluster,
+					"Normal",
+					"Deleted",
+					"Deleted orphaned TableGroup %s",
+					item.Name,
+				)
 			}
-			r.Recorder.Eventf(
-				cluster,
-				"Normal",
-				"Deleted",
-				"Deleted orphaned TableGroup %s",
-				item.Name,
-			)
 		}
 	}
 

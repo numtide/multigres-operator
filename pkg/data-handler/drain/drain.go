@@ -91,6 +91,9 @@ func ExecuteDrainStateMachine(
 		if !topo.IsTopoUnavailable(err) {
 			return false, fmt.Errorf("listing poolers in cell %q: %w", cellName, err)
 		}
+		logger.Info("Topology unavailable for drain, will retry",
+			"pod", pod.Name, "cell", cellName)
+		return true, nil
 	}
 
 	for _, p := range poolers {

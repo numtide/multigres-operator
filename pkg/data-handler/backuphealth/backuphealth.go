@@ -68,6 +68,10 @@ func EvaluateBackupHealth(
 		return nil, fmt.Errorf("querying backups from primary %s: %w",
 			topoclient.MultiPoolerIDString(primary.Id), err)
 	}
+	if resp == nil {
+		return nil, fmt.Errorf("nil response from primary %s",
+			topoclient.MultiPoolerIDString(primary.Id))
+	}
 
 	return EvaluateBackups(shard, resp.Backups), nil
 }

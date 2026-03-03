@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -76,10 +77,11 @@ func (r *MultigresClusterReconciler) reconcileCells(
 
 	for _, item := range existingCells.Items {
 		if !activeCellNames[item.Spec.Name] {
-			if err := r.Delete(ctx, &item); err != nil {
+			if err := r.Delete(ctx, &item); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete orphaned cell '%s': %w", item.Name, err)
+			} else if err == nil {
+				r.Recorder.Eventf(cluster, "Normal", "Deleted", "Deleted orphaned Cell %s", item.Name)
 			}
-			r.Recorder.Eventf(cluster, "Normal", "Deleted", "Deleted orphaned Cell %s", item.Name)
 		}
 	}
 

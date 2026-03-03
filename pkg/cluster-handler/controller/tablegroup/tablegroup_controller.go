@@ -180,7 +180,7 @@ func (r *TableGroupReconciler) Reconcile(
 		}
 
 		// Step 3: Drain complete — safe to delete.
-		if err := r.Delete(ctx, s); err != nil {
+		if err := r.Delete(ctx, s); err != nil && !errors.IsNotFound(err) {
 			l.Error(err, "Failed to delete orphan shard", "shard", s.Name)
 			r.Recorder.Eventf(
 				tg,
@@ -195,8 +195,9 @@ func (r *TableGroupReconciler) Reconcile(
 				s.Name,
 				err,
 			)
+		} else if err == nil {
+			r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
 		}
-		r.Recorder.Eventf(tg, "Normal", "Deleted", "Deleted orphaned Shard %s", s.Name)
 	}
 
 	if pendingDeletion {
