@@ -936,6 +936,13 @@ func (in *PoolSpec) DeepCopyInto(out *PoolSpec) {
 		*out = new(v1.Affinity)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]v1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.PVCDeletionPolicy != nil {
 		in, out := &in.PVCDeletionPolicy, &out.PVCDeletionPolicy
 		*out = new(PVCDeletionPolicy)

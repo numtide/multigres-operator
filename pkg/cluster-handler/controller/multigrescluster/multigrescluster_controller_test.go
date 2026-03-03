@@ -31,6 +31,7 @@ import (
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -1125,6 +1126,132 @@ func TestCollectResolvedTemplates(t *testing.T) {
 
 		if len(rt.CoreTemplates) != 1 || rt.CoreTemplates[0] != "web-core" {
 			t.Errorf("CoreTemplates = %v, want [web-core]", rt.CoreTemplates)
+		}
+	})
+}
+
+func TestCollectTrackingLabels(t *testing.T) {
+	t.Run("All template kinds referenced", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+					CoreTemplate:  "default-core",
+					CellTemplate:  "default-cell",
+					ShardTemplate: "default-shard",
+				},
+			},
+		}
+
+		labels := collectTrackingLabels(cluster)
+
+		if labels[metadata.LabelUsesCoreTemplate] != "true" {
+			t.Error("Expected uses-core-template=true")
+		}
+		if labels[metadata.LabelUsesCellTemplate] != "true" {
+			t.Error("Expected uses-cell-template=true")
+		}
+		if labels[metadata.LabelUsesShardTemplate] != "true" {
+			t.Error("Expected uses-shard-template=true")
+		}
+	})
+
+	t.Run("No templates (pure inline)", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "z1", Spec: &multigresv1alpha1.CellInlineSpec{}},
+				},
+			},
+		}
+
+		labels := collectTrackingLabels(cluster)
+
+		if len(labels) != 0 {
+			t.Errorf("Expected no tracking labels for inline-only cluster, got %v", labels)
+		}
+	})
+
+	t.Run("Only cell template from per-cell ref", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Cells: []multigresv1alpha1.CellConfig{
+					{Name: "z1", CellTemplate: "cell-ha"},
+				},
+			},
+		}
+
+		labels := collectTrackingLabels(cluster)
+
+		if _, ok := labels[metadata.LabelUsesCoreTemplate]; ok {
+			t.Error("Unexpected uses-core-template label")
+		}
+		if labels[metadata.LabelUsesCellTemplate] != "true" {
+			t.Error("Expected uses-cell-template=true")
+		}
+		if _, ok := labels[metadata.LabelUsesShardTemplate]; ok {
+			t.Error("Unexpected uses-shard-template label")
+		}
+	})
+
+	t.Run("Only shard template from per-shard ref", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Databases: []multigresv1alpha1.DatabaseConfig{
+					{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Shards: []multigresv1alpha1.ShardConfig{
+									{ShardTemplate: "shard-prod"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		labels := collectTrackingLabels(cluster)
+
+		if _, ok := labels[metadata.LabelUsesCoreTemplate]; ok {
+			t.Error("Unexpected uses-core-template label")
+		}
+		if _, ok := labels[metadata.LabelUsesCellTemplate]; ok {
+			t.Error("Unexpected uses-cell-template label")
+		}
+		if labels[metadata.LabelUsesShardTemplate] != "true" {
+			t.Error("Expected uses-shard-template=true")
+		}
+	})
+
+	t.Run("Core from GlobalTopoServer templateRef", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+					TemplateRef: "gts-core",
+				},
+			},
+		}
+
+		labels := collectTrackingLabels(cluster)
+
+		if labels[metadata.LabelUsesCoreTemplate] != "true" {
+			t.Error("Expected uses-core-template=true from GlobalTopoServer ref")
+		}
+	})
+
+	t.Run("Core from MultiAdminWeb templateRef", func(t *testing.T) {
+		cluster := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+					TemplateRef: "web-core",
+				},
+			},
+		}
+
+		labels := collectTrackingLabels(cluster)
+
+		if labels[metadata.LabelUsesCoreTemplate] != "true" {
+			t.Error("Expected uses-core-template=true from MultiAdminWeb ref")
 		}
 	})
 }

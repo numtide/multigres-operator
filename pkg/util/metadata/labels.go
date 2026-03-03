@@ -124,6 +124,17 @@ const (
 	LabelMultigresShardTemplate = "multigres.com/shard-template"
 )
 
+const (
+	// LabelUsesCoreTemplate is set to "true" on clusters that reference any CoreTemplate.
+	LabelUsesCoreTemplate = "multigres.com/uses-core-template"
+
+	// LabelUsesCellTemplate is set to "true" on clusters that reference any CellTemplate.
+	LabelUsesCellTemplate = "multigres.com/uses-cell-template"
+
+	// LabelUsesShardTemplate is set to "true" on clusters that reference any ShardTemplate.
+	LabelUsesShardTemplate = "multigres.com/uses-shard-template"
+)
+
 // BuildStandardLabels returns a map of standard kubernetes labels.
 // clusterName should be the name of the MultigresCluster CR (used for instance label).
 // component is the name of the component (e.g. multigateway, multiorch, pool).

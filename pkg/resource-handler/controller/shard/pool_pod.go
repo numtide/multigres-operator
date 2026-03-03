@@ -94,6 +94,7 @@ func BuildPoolPod(
 			},
 			Volumes:      volumes,
 			Affinity:     poolSpec.Affinity,
+			Tolerations:  poolSpec.Tolerations,
 			NodeSelector: shard.Spec.CellTopologyLabels[multigresv1alpha1.CellName(cellName)],
 			// Hostname is set to the pod name for DNS resolution via headless service.
 			Hostname:  podName,
@@ -153,6 +154,12 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 	if spec.Affinity != nil {
 		if b, err := json.Marshal(spec.Affinity); err == nil {
+			_, _ = h.Write(b)
+		}
+	}
+
+	if len(spec.Tolerations) > 0 {
+		if b, err := json.Marshal(spec.Tolerations); err == nil {
 			_, _ = h.Write(b)
 		}
 	}

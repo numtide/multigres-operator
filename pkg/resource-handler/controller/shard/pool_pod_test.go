@@ -224,6 +224,56 @@ func TestBuildPoolPod_Affinity(t *testing.T) {
 	}
 }
 
+func TestBuildPoolPod_Tolerations(t *testing.T) {
+	pool := newTestPoolSpec()
+	pool.Tolerations = []corev1.Toleration{
+		{
+			Key:      "dedicated",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "database",
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+	}
+
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", pool, 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pod.Spec.Tolerations) != 1 {
+		t.Fatalf("expected 1 toleration, got %d", len(pod.Spec.Tolerations))
+	}
+	if pod.Spec.Tolerations[0].Key != "dedicated" {
+		t.Errorf("toleration key = %q, want %q", pod.Spec.Tolerations[0].Key, "dedicated")
+	}
+	if pod.Spec.Tolerations[0].Value != "database" {
+		t.Errorf("toleration value = %q, want %q", pod.Spec.Tolerations[0].Value, "database")
+	}
+}
+
+func TestComputeSpecHash_ChangesOnTolerations(t *testing.T) {
+	pool1 := newTestPoolSpec()
+	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", pool1, 0, testScheme())
+
+	pool2 := newTestPoolSpec()
+	pool2.Tolerations = []corev1.Toleration{
+		{
+			Key:      "dedicated",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "database",
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+	}
+	pod2, _ := BuildPoolPod(newTestShard(), "main", "z1", pool2, 0, testScheme())
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when tolerations change")
+	}
+}
+
 func TestBuildPoolPod_NodeSelector(t *testing.T) {
 	shard := newTestShard()
 	shard.Spec.CellTopologyLabels = map[multigresv1alpha1.CellName]map[string]string{

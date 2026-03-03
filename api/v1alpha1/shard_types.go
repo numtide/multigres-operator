@@ -100,6 +100,10 @@ type PoolSpec struct {
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
+	// Tolerations defines the pod tolerations for scheduling onto tainted nodes.
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
 	// PVCDeletionPolicy controls PVC lifecycle for this pool.
 	// Overrides Shard, TableGroup, and MultigresCluster settings.
 	// +optional

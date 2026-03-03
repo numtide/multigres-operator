@@ -90,7 +90,7 @@ func (r *ShardReconciler) reconcileDataPlane(
 
 			if result.Healthy && !prevHealthy {
 				r.Recorder.Event(shard, "Normal", "BackupHealthy", result.Message)
-			} else if !result.Healthy {
+			} else if !result.Healthy && prevHealthy {
 				r.Recorder.Eventf(shard, "Warning", "BackupStale", result.Message)
 			}
 
