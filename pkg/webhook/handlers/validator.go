@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -47,7 +48,13 @@ func (v *MultigresClusterValidator) ValidateUpdate(
 	ctx context.Context,
 	oldObj, newObj runtime.Object,
 ) (admission.Warnings, error) {
-	return v.validate(ctx, newObj)
+	warnings, err := v.validate(ctx, newObj)
+	if err != nil {
+		return warnings, err
+	}
+	shrinkWarnings, shrinkErr := validateNoStorageShrink(oldObj, newObj)
+	warnings = append(warnings, shrinkWarnings...)
+	return warnings, shrinkErr
 }
 
 func (v *MultigresClusterValidator) ValidateDelete(
@@ -126,6 +133,73 @@ func (v *MultigresClusterValidator) validateLogic(
 	// Create an ephemeral resolver for validation
 	res := resolver.NewResolver(v.Client, cluster.Namespace)
 	return res.ValidateClusterLogic(ctx, cluster)
+}
+
+// validateNoStorageShrink compares pool storage sizes between old and new cluster
+// specs, rejecting any decrease. PVC shrink is not supported by Kubernetes.
+func validateNoStorageShrink(
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
+	oldCluster, ok := oldObj.(*multigresv1alpha1.MultigresCluster)
+	if !ok {
+		return nil, nil
+	}
+	newCluster, ok := newObj.(*multigresv1alpha1.MultigresCluster)
+	if !ok {
+		return nil, nil
+	}
+
+	oldSizes := collectPoolStorageSizes(oldCluster)
+	newSizes := collectPoolStorageSizes(newCluster)
+
+	for key, oldSize := range oldSizes {
+		newSize, exists := newSizes[key]
+		if !exists {
+			continue
+		}
+		oldQty, err := resource.ParseQuantity(oldSize)
+		if err != nil {
+			continue
+		}
+		newQty, err := resource.ParseQuantity(newSize)
+		if err != nil {
+			continue
+		}
+		if newQty.Cmp(oldQty) < 0 {
+			return nil, fmt.Errorf(
+				"storage.size cannot be decreased (%s: %s → %s); PVC shrink is not supported by Kubernetes",
+				key, oldSize, newSize,
+			)
+		}
+	}
+
+	return nil, nil
+}
+
+// collectPoolStorageSizes walks the cluster spec and returns a map of
+// "db/tg/shard/pool" → storage size string for all pools.
+func collectPoolStorageSizes(cluster *multigresv1alpha1.MultigresCluster) map[string]string {
+	sizes := make(map[string]string)
+	for _, db := range cluster.Spec.Databases {
+		for _, tg := range db.TableGroups {
+			for _, shard := range tg.Shards {
+				var pools map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec
+				if shard.Spec != nil {
+					pools = shard.Spec.Pools
+				} else if shard.Overrides != nil {
+					pools = shard.Overrides.Pools
+				}
+				for poolName, pool := range pools {
+					if pool.Storage.Size != "" {
+						key := fmt.Sprintf("%s/%s/%s/%s",
+							db.Name, tg.Name, shard.Name, poolName)
+						sizes[key] = pool.Storage.Size
+					}
+				}
+			}
+		}
+	}
+	return sizes
 }
 
 // ============================================================================

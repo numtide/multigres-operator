@@ -7,6 +7,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -629,37 +630,55 @@ func TestTemplateValidator(t *testing.T) {
 
 	// Fixtures
 	configUsingCore := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c-core", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "c-core", Namespace: "default",
+			Labels: map[string]string{metadata.LabelUsesCoreTemplate: "true"},
+		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			TemplateDefaults: multigresv1alpha1.TemplateDefaults{CoreTemplate: "prod-core"},
 		},
 	}
 	configUsingCoreAdmin := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c-admin", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "c-admin", Namespace: "default",
+			Labels: map[string]string{metadata.LabelUsesCoreTemplate: "true"},
+		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			MultiAdmin: &multigresv1alpha1.MultiAdminConfig{TemplateRef: "prod-core"},
 		},
 	}
 	configUsingCoreAdminWeb := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c-admin-web", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "c-admin-web", Namespace: "default",
+			Labels: map[string]string{metadata.LabelUsesCoreTemplate: "true"},
+		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{TemplateRef: "prod-core"},
 		},
 	}
 	configUsingCell := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c-cell", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "c-cell", Namespace: "default",
+			Labels: map[string]string{metadata.LabelUsesCellTemplate: "true"},
+		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			Cells: []multigresv1alpha1.CellConfig{{Name: "c1", CellTemplate: "prod-cell"}},
 		},
 	}
 	configUsingCellDefault := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c-cell-def", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "c-cell-def", Namespace: "default",
+			Labels: map[string]string{metadata.LabelUsesCellTemplate: "true"},
+		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			TemplateDefaults: multigresv1alpha1.TemplateDefaults{CellTemplate: "prod-cell"},
 		},
 	}
 	configUsingShard := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c-shard", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "c-shard", Namespace: "default",
+			Labels: map[string]string{metadata.LabelUsesShardTemplate: "true"},
+		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{Databases: []multigresv1alpha1.DatabaseConfig{{
 			TableGroups: []multigresv1alpha1.TableGroupConfig{{
 				Shards: []multigresv1alpha1.ShardConfig{{Name: "s0", ShardTemplate: "prod-shard"}},
@@ -667,7 +686,10 @@ func TestTemplateValidator(t *testing.T) {
 		}}},
 	}
 	configUsingShardDefault := &multigresv1alpha1.MultigresCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c-shard-def", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "c-shard-def", Namespace: "default",
+			Labels: map[string]string{metadata.LabelUsesShardTemplate: "true"},
+		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			TemplateDefaults: multigresv1alpha1.TemplateDefaults{ShardTemplate: "prod-shard"},
 		},
@@ -705,7 +727,10 @@ func TestTemplateValidator(t *testing.T) {
 			targetName: "prod-core",
 			existing: []client.Object{
 				&multigresv1alpha1.MultigresCluster{
-					ObjectMeta: metav1.ObjectMeta{Name: "c-topo", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "c-topo", Namespace: "default",
+						Labels: map[string]string{metadata.LabelUsesCoreTemplate: "true"},
+					},
 					Spec: multigresv1alpha1.MultigresClusterSpec{
 						GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
 							TemplateRef: "prod-core",
@@ -942,6 +967,75 @@ func TestChildResourceValidator(t *testing.T) {
 		_, err := validator.ValidateCreate(t.Context(), &TrulyOnlyRuntimeObject{})
 		if err == nil {
 			t.Error("Expected error for wrong type, got nil")
+		}
+	})
+}
+
+func TestValidateNoStorageShrink(t *testing.T) {
+	t.Parallel()
+
+	makeCluster := func(size string) *multigresv1alpha1.MultigresCluster {
+		return &multigresv1alpha1.MultigresCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Databases: []multigresv1alpha1.DatabaseConfig{{
+					Name: "postgres",
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Name: "default",
+						Shards: []multigresv1alpha1.ShardConfig{{
+							Name: "0-inf",
+							Spec: &multigresv1alpha1.ShardInlineSpec{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+									"main": {
+										Storage: multigresv1alpha1.StorageSpec{Size: size},
+									},
+								},
+							},
+						}},
+					}},
+				}},
+			},
+		}
+	}
+
+	t.Run("allows storage grow", func(t *testing.T) {
+		t.Parallel()
+		oldObj := makeCluster("10Gi")
+		newObj := makeCluster("20Gi")
+		_, err := validateNoStorageShrink(oldObj, newObj)
+		if err != nil {
+			t.Fatalf("expected no error for storage grow, got: %v", err)
+		}
+	})
+
+	t.Run("rejects storage shrink", func(t *testing.T) {
+		t.Parallel()
+		oldObj := makeCluster("20Gi")
+		newObj := makeCluster("10Gi")
+		_, err := validateNoStorageShrink(oldObj, newObj)
+		if err == nil {
+			t.Fatal("expected error for storage shrink, got nil")
+		}
+		if !strings.Contains(err.Error(), "cannot be decreased") {
+			t.Errorf("expected 'cannot be decreased' error, got: %v", err)
+		}
+	})
+
+	t.Run("no-op when sizes equal", func(t *testing.T) {
+		t.Parallel()
+		oldObj := makeCluster("10Gi")
+		newObj := makeCluster("10Gi")
+		_, err := validateNoStorageShrink(oldObj, newObj)
+		if err != nil {
+			t.Fatalf("expected no error for equal sizes, got: %v", err)
+		}
+	})
+
+	t.Run("ignores non-MultigresCluster objects", func(t *testing.T) {
+		t.Parallel()
+		_, err := validateNoStorageShrink(&TrulyOnlyRuntimeObject{}, &TrulyOnlyRuntimeObject{})
+		if err != nil {
+			t.Fatalf("expected no error for wrong types, got: %v", err)
 		}
 	})
 }

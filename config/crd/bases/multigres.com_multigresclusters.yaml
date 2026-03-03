@@ -110,6 +110,7 @@ spec:
                       Required when type is "s3".
                     properties:
                       bucket:
+                        minLength: 1
                         type: string
                       credentialsSecret:
                         description: CredentialsSecret is the name of the Secret containing
@@ -120,6 +121,7 @@ spec:
                       keyPrefix:
                         type: string
                       region:
+                        minLength: 1
                         type: string
                       serviceAccountName:
                         description: |-
@@ -2519,6 +2521,7 @@ spec:
                             Required when type is "s3".
                           properties:
                             bucket:
+                              minLength: 1
                               type: string
                             credentialsSecret:
                               description: CredentialsSecret is the name of the Secret
@@ -2529,6 +2532,7 @@ spec:
                             keyPrefix:
                               type: string
                             region:
+                              minLength: 1
                               type: string
                             serviceAccountName:
                               description: |-
@@ -2642,6 +2646,7 @@ spec:
                                   Required when type is "s3".
                                 properties:
                                   bucket:
+                                    minLength: 1
                                     type: string
                                   credentialsSecret:
                                     description: CredentialsSecret is the name of
@@ -2653,6 +2658,7 @@ spec:
                                   keyPrefix:
                                     type: string
                                   region:
+                                    minLength: 1
                                     type: string
                                   serviceAccountName:
                                     description: |-
@@ -2795,6 +2801,7 @@ spec:
                                         Required when type is "s3".
                                       properties:
                                         bucket:
+                                          minLength: 1
                                           type: string
                                         credentialsSecret:
                                           description: CredentialsSecret is the name
@@ -2806,6 +2813,7 @@ spec:
                                         keyPrefix:
                                           type: string
                                         region:
+                                          minLength: 1
                                           type: string
                                         serviceAccountName:
                                           description: |-

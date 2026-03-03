@@ -31,6 +31,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	multigreswebhook "github.com/numtide/multigres-operator/pkg/webhook"
 )
 
@@ -296,7 +297,11 @@ func TestWebhook_TemplateProtection(t *testing.T) {
 		}
 
 		cluster := &multigresv1alpha1.MultigresCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod-cluster", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "prod-cluster",
+				Namespace: testNamespace,
+				Labels:    map[string]string{metadata.LabelUsesCoreTemplate: "true"},
+			},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
 				TemplateDefaults: multigresv1alpha1.TemplateDefaults{
 					CoreTemplate: "production-core",
@@ -573,7 +578,11 @@ func TestWebhook_DeepTemplateProtection(t *testing.T) {
 		}
 
 		cluster := &multigresv1alpha1.MultigresCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "deep-ref-cluster", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "deep-ref-cluster",
+				Namespace: testNamespace,
+				Labels:    map[string]string{metadata.LabelUsesShardTemplate: "true"},
+			},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
 				Cells: []multigresv1alpha1.CellConfig{{Name: "default-cell", Zone: "us-east-1a"}},
 				Databases: []multigresv1alpha1.DatabaseConfig{
