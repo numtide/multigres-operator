@@ -47,10 +47,10 @@ func GetPoolerStatus(
 					roleName = "DRAINED"
 				}
 				hostname := p.GetHostname()
-				if hostname == "" {
-					hostname = fmt.Sprintf("%v", p.Id)
-				} else if p.Id != nil && p.Id.Name != "" {
+				if p.Id != nil && p.Id.Name != "" {
 					hostname = p.Id.Name
+				} else if hostname == "" {
+					hostname = fmt.Sprintf("unknown-pooler-%v", p.Id)
 				}
 				result.Roles[hostname] = roleName
 			}

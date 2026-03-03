@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
 	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
@@ -56,6 +58,10 @@ func ExecuteDrainStateMachine(
 	if reqAtStr := pod.Annotations[metadata.AnnotationDrainRequestedAt]; reqAtStr != "" {
 		if reqAt, err := time.Parse(time.RFC3339, reqAtStr); err == nil {
 			drainStart = reqAt
+		} else {
+			logger.Error(err, "Malformed drain-requested-at annotation, using current time as fallback",
+				"pod", pod.Name, "value", reqAtStr)
+			drainStart = time.Now()
 		}
 	}
 	if drainStart.IsZero() && !pod.DeletionTimestamp.IsZero() {
@@ -252,7 +258,11 @@ func IsPrimaryTerminatingOrMissing(
 	primaryPod := &corev1.Pod{}
 	key := client.ObjectKey{Namespace: shard.Namespace, Name: primary.Id.Name}
 	if err := k8sClient.Get(ctx, key, primaryPod); err != nil {
-		return true
+		if errors.IsNotFound(err) {
+			return true
+		}
+		log.FromContext(ctx).Error(err, "Transient error checking primary pod status", "pod", key.Name)
+		return false
 	}
 	return !primaryPod.DeletionTimestamp.IsZero()
 }
@@ -271,7 +281,12 @@ func IsPrimaryDraining(
 	primaryPod := &corev1.Pod{}
 	key := client.ObjectKey{Namespace: shard.Namespace, Name: primary.Id.Name}
 	if err := k8sClient.Get(ctx, key, primaryPod); err != nil {
-		return false
+		if errors.IsNotFound(err) {
+			return false
+		}
+		log.FromContext(ctx).Error(err, "Transient error checking primary drain status, assuming draining",
+			"pod", key.Name)
+		return true
 	}
 	state := primaryPod.Annotations[metadata.AnnotationDrainState]
 	return state != "" && state != metadata.DrainStateReadyForDeletion

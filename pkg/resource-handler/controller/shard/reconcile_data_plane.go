@@ -31,6 +31,10 @@ func (r *ShardReconciler) reconcileDataPlane(
 	// Open a single topo connection for PodRoles, drain, and backup health.
 	store, err := r.getTopoStore(shard)
 	if err != nil {
+		if !topo.IsTopoUnavailable(err) {
+			r.Recorder.Eventf(shard, "Warning", "TopologyError",
+				"Failed to connect to topology store: %v", err)
+		}
 		logger.Error(err, "Failed to get topo store, cannot update roles or execute drain")
 		return ctrl.Result{RequeueAfter: topoUnavailableRequeueDelay}, nil
 	}
