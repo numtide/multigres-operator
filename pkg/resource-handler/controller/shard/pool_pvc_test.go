@@ -14,7 +14,7 @@ func TestBuildPoolDataPVC_BasicStructure(t *testing.T) {
 	shard := newTestShard()
 	pool := newTestPoolSpec()
 
-	pvc, err := BuildPoolDataPVC(shard, "main", "z1", pool, 0, testScheme())
+	pvc, err := BuildPoolDataPVC(shard, "main", "z1", pool, 0, false, testScheme())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestBuildPoolDataPVC_BasicStructure(t *testing.T) {
 
 	if len(pvc.OwnerReferences) != 0 {
 		t.Fatalf(
-			"expected 0 owner references, got %d. OwnerReference overrides WhenDeleted policies.",
+			"expected 0 owner references with deleteOnShardRemoval=false, got %d",
 			len(pvc.OwnerReferences),
 		)
 	}
@@ -49,7 +49,7 @@ func TestBuildPoolDataPVC_StorageDefaults(t *testing.T) {
 		Storage: multigresv1alpha1.StorageSpec{},
 	}
 
-	pvc, err := BuildPoolDataPVC(newTestShard(), "main", "z1", pool, 0, testScheme())
+	pvc, err := BuildPoolDataPVC(newTestShard(), "main", "z1", pool, 0, false, testScheme())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestBuildPoolDataPVC_CustomStorage(t *testing.T) {
 		},
 	}
 
-	pvc, err := BuildPoolDataPVC(newTestShard(), "main", "z1", pool, 0, testScheme())
+	pvc, err := BuildPoolDataPVC(newTestShard(), "main", "z1", pool, 0, false, testScheme())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestBuildPoolDataPVC_NameConsistency(t *testing.T) {
 	shard := newTestShard()
 	pool := newTestPoolSpec()
 
-	pvc, _ := BuildPoolDataPVC(shard, "main", "z1", pool, 0, testScheme())
+	pvc, _ := BuildPoolDataPVC(shard, "main", "z1", pool, 0, false, testScheme())
 	pod, _ := BuildPoolPod(shard, "main", "z1", pool, 0, testScheme())
 
 	// Find the data volume in the pod
@@ -168,6 +168,88 @@ func TestBuildPoolDataPVCName_MatchesPodReference(t *testing.T) {
 				t.Errorf("BuildPoolDataPVCName() = %q, pod references %q", pvcName, podPVCRef)
 			}
 		})
+	}
+}
+
+func TestBuildPoolDataPVC_OwnerRefWithDeletePolicy(t *testing.T) {
+	shard := newTestShard()
+	pool := newTestPoolSpec()
+
+	pvc, err := BuildPoolDataPVC(shard, "main", "z1", pool, 0, true, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pvc.OwnerReferences) != 1 {
+		t.Fatalf("expected 1 owner reference with deleteOnShardRemoval=true, got %d", len(pvc.OwnerReferences))
+	}
+
+	ref := pvc.OwnerReferences[0]
+	if ref.Name != shard.Name {
+		t.Errorf("ownerRef name = %q, want %q", ref.Name, shard.Name)
+	}
+	if ref.UID != shard.UID {
+		t.Errorf("ownerRef UID = %q, want %q", ref.UID, shard.UID)
+	}
+	if ref.Controller == nil || !*ref.Controller {
+		t.Error("ownerRef Controller should be true")
+	}
+}
+
+func TestBuildPoolDataPVC_NoOwnerRefWithRetainPolicy(t *testing.T) {
+	shard := newTestShard()
+	pool := newTestPoolSpec()
+
+	pvc, err := BuildPoolDataPVC(shard, "main", "z1", pool, 0, false, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pvc.OwnerReferences) != 0 {
+		t.Fatalf("expected 0 owner references with deleteOnShardRemoval=false, got %d", len(pvc.OwnerReferences))
+	}
+}
+
+func TestBuildSharedBackupPVC_OwnerRefWithDeletePolicy(t *testing.T) {
+	shard := newTestShard()
+	shard.Spec.Backup = &multigresv1alpha1.BackupConfig{
+		Type: multigresv1alpha1.BackupTypeFilesystem,
+		Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+			Storage: multigresv1alpha1.StorageSpec{Size: "5Gi"},
+		},
+	}
+
+	pvc, err := BuildSharedBackupPVC(shard, "z1", true, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pvc.OwnerReferences) != 1 {
+		t.Fatalf("expected 1 owner reference with deleteOnShardRemoval=true, got %d", len(pvc.OwnerReferences))
+	}
+
+	ref := pvc.OwnerReferences[0]
+	if ref.Name != shard.Name {
+		t.Errorf("ownerRef name = %q, want %q", ref.Name, shard.Name)
+	}
+}
+
+func TestBuildSharedBackupPVC_NoOwnerRefWithRetainPolicy(t *testing.T) {
+	shard := newTestShard()
+	shard.Spec.Backup = &multigresv1alpha1.BackupConfig{
+		Type: multigresv1alpha1.BackupTypeFilesystem,
+		Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+			Storage: multigresv1alpha1.StorageSpec{Size: "5Gi"},
+		},
+	}
+
+	pvc, err := BuildSharedBackupPVC(shard, "z1", false, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pvc.OwnerReferences) != 0 {
+		t.Fatalf("expected 0 owner references with deleteOnShardRemoval=false, got %d", len(pvc.OwnerReferences))
 	}
 }
 

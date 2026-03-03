@@ -579,7 +579,7 @@ sts.Spec.PersistentVolumeClaimRetentionPolicy = pvc.BuildRetentionPolicy(
 ```
 
 **Shard Pool Pods** (`pkg/resource-handler/controller/shard/reconcile_pool_pods.go`):
-Pool pod PVCs are managed directly by the operator. During scale-down, the `cleanupDrainedPod` function checks `shard.Spec.PVCDeletionPolicy.WhenScaled` and deletes the data PVC if the policy is `Delete`. During shard deletion, the `handleDeletion` function removes pod finalizers and PVCs are garbage-collected via owner references.
+Pool pod PVCs are managed directly by the operator. During scale-down, the `cleanupDrainedPod` function checks `shard.Spec.PVCDeletionPolicy.WhenScaled` and deletes the data PVC if the policy is `Delete`. During shard/cluster deletion, PVCs are garbage-collected by Kubernetes via conditional owner references: when `WhenDeleted` is `Delete`, PVCs are created with an ownerRef to the Shard CR, enabling cascade deletion. When `WhenDeleted` is `Retain`, PVCs have no ownerRef and persist after deletion. The `reconcilePVCOwnerRefs` function ensures existing PVCs stay in sync with the current policy during mid-lifecycle changes.
 
 **Utility Function** (`pkg/util/pvc/retention.go:BuildRetentionPolicy`):
 - Used by TopoServer StatefulSets to convert operator's `PVCDeletionPolicy` to Kubernetes `StatefulSetPersistentVolumeClaimRetentionPolicy`
@@ -1123,7 +1123,7 @@ Specifically:
 
 3. **No upstream testing or validation of separate per-cell etcd**: While `ConnForCell()` would technically connect to a different etcd address if a cell had one, this path has never been exercised in production or in the upstream test suite. There may be undiscovered issues with connection lifecycle, failure handling, or data consistency when cells use independent etcd clusters.
 
-4. **The operator's `topologyReconciliation` field**: The Cell CR includes a `topologyReconciliation.registerCell` flag, indicating that cell registration in the global topology server is a controller concern. This registration currently always sets the cell's topo address to the global topo server. Supporting local topo servers would require the operator to register cells with different `ServerAddresses` pointing to the local etcd.
+4. **The operator's topology registration**: Cell and database registration in the global topology server is centralized in the MultigresCluster controller (`reconcileTopology`), not in individual Cell or Shard controllers. The Cell CR includes a `topologyReconciliation.registerCell` flag that is set by the MultigresCluster controller when building Cell CRs, but the actual registration is performed centrally. This registration currently always sets the cell's topo address to the global topo server. Supporting local topo servers would require the operator to register cells with different `ServerAddresses` pointing to the local etcd.
 
 ### How to Implement When Upstream Adds Support
 

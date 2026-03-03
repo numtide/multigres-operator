@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/multigres/multigres/go/common/topoclient"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,13 +29,14 @@ import (
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
-const finalizerName = "multigres.com/cluster-cleanup"
-
 // MultigresClusterReconciler reconciles a MultigresCluster object.
 type MultigresClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+
+	// CreateTopoStore overrides the default topology store factory for testing.
+	CreateTopoStore func(multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error)
 }
 
 // Reconcile reads that state of the cluster for a MultigresCluster object and makes changes based on the state read
@@ -128,24 +130,6 @@ func (r *MultigresClusterReconciler) Reconcile(
 		}
 	}
 
-	// Add finalizer on first reconcile to guarantee ordered deletion.
-	// We do not return early here because GenerationChangedPredicate would
-	// filter out the metadata-only update, preventing child resource creation.
-	if !slices.Contains(cluster.Finalizers, finalizerName) {
-		cluster.Finalizers = append(cluster.Finalizers, finalizerName)
-		if err := r.Update(ctx, cluster); err != nil {
-			l.Error(err, "Failed to add finalizer")
-			r.Recorder.Eventf(
-				cluster,
-				"Warning",
-				"FinalizerFailed",
-				"Failed to add finalizer: %v",
-				err,
-			)
-			return ctrl.Result{}, err
-		}
-	}
-
 	if !cluster.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, cluster)
 	}
@@ -169,6 +153,28 @@ func (r *MultigresClusterReconciler) Reconcile(
 			return ctrl.Result{}, err
 		}
 		childSpan.End()
+	}
+
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.ReconcileTopology")
+		result, err := r.reconcileTopology(ctx, cluster, res)
+		if err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			l.Error(err, "Failed to reconcile topology")
+			r.Recorder.Eventf(
+				cluster,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile topology: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
+		if result.RequeueAfter > 0 {
+			return result, nil
+		}
 	}
 
 	{
@@ -239,11 +245,8 @@ func (r *MultigresClusterReconciler) Reconcile(
 	return ctrl.Result{}, nil
 }
 
-// handleDeletion orchestrates phased deletion of the MultigresCluster.
-// It deletes Cells and TableGroups first so their data-handler finalizers
-// can run against the still-live topo servers. Once all Cells and Shards
-// are fully removed, it removes our finalizer, allowing Kubernetes GC
-// to clean up the remaining resources (topo servers, deployments).
+// handleDeletion performs best-effort cleanup by deleting Cells and TableGroups.
+// Without finalizers, Kubernetes GC cascade via ownerReferences handles the rest.
 func (r *MultigresClusterReconciler) handleDeletion(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
@@ -288,31 +291,8 @@ func (r *MultigresClusterReconciler) handleDeletion(
 		}
 	}
 
-	// Check if any Cells or Shards still exist (waiting for data-handler finalizer processing).
-	shards := &multigresv1alpha1.ShardList{}
-	if err := r.List(ctx, shards, ns, clusterLabels); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list shards: %w", err)
-	}
-
-	remaining := len(cells.Items) + len(shards.Items)
-	if remaining > 0 {
-		l.Info("Waiting for data-handler finalizers",
-			"remainingCells", len(cells.Items),
-			"remainingShards", len(shards.Items),
-		)
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-	}
-
-	// All Cells and Shards are gone — safe to remove our finalizer.
-	cluster.Finalizers = slices.DeleteFunc(cluster.Finalizers, func(s string) bool {
-		return s == finalizerName
-	})
-	if err := r.Update(ctx, cluster); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
-	}
-
-	l.Info("Cluster cleanup complete, finalizer removed")
-	r.Recorder.Event(cluster, "Normal", "CleanupComplete", "All data-handler resources cleaned up")
+	l.Info("Cluster best-effort cleanup complete")
+	r.Recorder.Event(cluster, "Normal", "CleanupComplete", "Initiated deletion of child resources")
 	return ctrl.Result{}, nil
 }
 

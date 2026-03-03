@@ -75,22 +75,6 @@ func (r *ShardReconciler) updateStatus(
 		Status: shard.Status,
 	}
 
-	// Exclude fields owned by the data-handler to prevent SSA from overwriting
-	// them with stale cached values from the resource-handler's informer.
-	patchObj.Status.PodRoles = nil
-	patchObj.Status.LastBackupTime = nil
-	patchObj.Status.LastBackupType = ""
-
-	// Filter conditions owned by the data-handler so this SSA patch does not
-	// claim ownership of BackupHealthy and revert data-handler updates.
-	var filtered []metav1.Condition
-	for _, c := range patchObj.Status.Conditions {
-		if c.Type != "BackupHealthy" {
-			filtered = append(filtered, c)
-		}
-	}
-	patchObj.Status.Conditions = filtered
-
 	// 2. Apply the Patch
 	if oldPhase != shard.Status.Phase {
 		r.Recorder.Eventf(

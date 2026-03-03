@@ -4,6 +4,7 @@
 package tablegroup_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -172,8 +173,45 @@ func TestTableGroup_Lifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// 3. Verify Pruning using testutil
-		// This uses the deletion watcher to confirm the resource is truly gone
+		// 3. Wait for PendingDeletion annotation (set by the TableGroup controller).
+		// The shard controller is not running in this test, so we simulate its
+		// role by manually setting the ReadyForDeletion condition below.
+		deleteMeName := nameutil.JoinWithConstraints(nameutil.DefaultConstraints, clusterName, "db1", "tg1", "delete-me")
+		var deleteMe multigresv1alpha1.Shard
+		waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer waitCancel()
+		for {
+			if err := k8sClient.Get(waitCtx, client.ObjectKey{Name: deleteMeName, Namespace: "default"}, &deleteMe); err == nil {
+				if deleteMe.Annotations[multigresv1alpha1.AnnotationPendingDeletion] != "" {
+					break
+				}
+			}
+			select {
+			case <-waitCtx.Done():
+				t.Fatalf("Shard 'delete-me' was not marked PendingDeletion: %v", waitCtx.Err())
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+
+		// 4. Simulate the shard controller: set ReadyForDeletion condition.
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &multigresv1alpha1.Shard{}
+			if err := k8sClient.Get(ctx, client.ObjectKey{Name: deleteMeName, Namespace: "default"}, latest); err != nil {
+				return err
+			}
+			latest.Status.Conditions = append(latest.Status.Conditions, metav1.Condition{
+				Type:               multigresv1alpha1.ConditionReadyForDeletion,
+				Status:             metav1.ConditionTrue,
+				Reason:             "DrainComplete",
+				Message:            "Simulated by integration test",
+				LastTransitionTime: metav1.Now(),
+			})
+			return k8sClient.Status().Update(ctx, latest)
+		}); err != nil {
+			t.Fatalf("Failed to set ReadyForDeletion condition: %v", err)
+		}
+
+		// 5. Verify the shard is deleted by the TableGroup controller.
 		if err := watcher.WaitForDeletion(shard2); err != nil {
 			t.Errorf("Shard 'delete-me' was not pruned: %v", err)
 		}

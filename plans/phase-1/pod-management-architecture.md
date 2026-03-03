@@ -53,7 +53,7 @@ This architectural change was motivated by the fact that multigres has its own i
 |---|---|
 | **Targeted decommissioning** | Any specific pod can be drained and removed without affecting others. |
 | **Simpler PVC lifecycle** | PVC creation/deletion is handled directly in the reconcile loop. Previously delegated to StatefulSet's `PersistentVolumeClaimRetentionPolicy`, which had version and behavior quirks. |
-| **Drain state machine** | Scale-down coordinates with the data-handler to safely remove standbys from the sync standby list and clean up etcd entries. |
+| **Drain state machine** | Scale-down coordinates drain and etcd cleanup within the shard controller to safely remove standbys from the sync standby list. |
 | **Rolling updates with primary awareness** | Updates replicas first, primary last, with switchover coordination. |
 | **Sequential provisioning** | New pods are created one at a time, waiting for readiness before creating the next. This prevents multiple pods from simultaneously trying to restore from backup. |
 | **Pod Disruption Budgets** | Per-pool PDBs with `maxUnavailable: 1` protect against voluntary evictions. |
@@ -90,8 +90,8 @@ This architectural change was motivated by the fact that multigres has its own i
                 │
                 ├── 🧠 MultiOrch (Deployment + Service, per-cell)
                 └── 🏊 Pools (per pool × per cell):
-                     ├── Pod-0  ← operator-managed, has finalizer
-                     ├── Pod-1  ← operator-managed, has finalizer
+                     ├── Pod-0  ← operator-managed
+                     ├── Pod-1  ← operator-managed
                      ├── PVC-0  ← operator-managed (per-pod data)
                      ├── PVC-1  ← operator-managed (per-pod data)
                      ├── Backup PVC (shared across pods in cell)
@@ -124,28 +124,22 @@ Scale-down uses the [drain state machine](#5-drain-state-machine). Extra pods be
 
 ### External Deletion
 
-When a pod is deleted externally (e.g., `kubectl delete pod`):
-- If the pod was never scheduled (no `spec.nodeName`), the finalizer is removed immediately.
-- If the pod was scheduled (had a running container), it enters the drain state machine to ensure etcd cleanup.
+When a pod is deleted externally (e.g., `kubectl delete pod`), it enters the drain state machine to ensure etcd cleanup before the pod is fully removed.
 
-### Finalizer
+### PVC Lifecycle via Owner References
 
-Every pool pod gets a `multigres.com/pool-pod-protection` finalizer at creation. This prevents Kubernetes from garbage-collecting the pod before the operator can:
-1. Coordinate with the data-handler for etcd cleanup.
-2. Delete the associated data PVC (if the deletion policy says so).
+PVC lifecycle is managed through **conditional owner references** based on the `PVCDeletionPolicy`:
 
-The Shard itself has a `multigres.com/shard-resource-protection` finalizer to ensure all child pod finalizers are removed before the Shard is deleted.
+- When `WhenDeleted` is `Delete`: PVCs are created with an ownerRef pointing to the Shard CR, enabling Kubernetes garbage collection to cascade-delete them when the Shard is removed.
+- When `WhenDeleted` is `Retain`: PVCs are created without ownerRefs, ensuring they persist after Shard deletion.
+- The shard controller's `reconcilePVCOwnerRefs` function ensures existing PVCs stay in sync with the current policy — adding or removing ownerRefs as the policy changes mid-lifecycle.
+- During scale-down, `cleanupDrainedPod` still checks `WhenScaled` and deletes data PVCs directly if the policy is `Delete`.
 
 ---
 
 ## 5. Drain State Machine
 
-The drain state machine coordinates pod removal between two controllers:
-
-| Controller | Responsibility |
-|---|---|
-| **resource-handler** (shard controller) | Selects which pod to drain, sets `drain.multigres.com/state=requested`, removes finalizer and deletes PVC after `ready-for-deletion` |
-| **data-handler** (shard controller) | Watches for the `requested` annotation, removes the pod from `synchronous_standby_names`, unregisters from etcd, sets `ready-for-deletion` |
+The drain state machine coordinates pod removal within the shard controller. The controller handles the full drain lifecycle: selecting which pod to drain, initiating the drain (removing from `synchronous_standby_names`, unregistering from etcd), and cleaning up the pod and PVC afterward.
 
 ### State Flow
 
@@ -167,17 +161,16 @@ The drain state machine coordinates pod removal between two controllers:
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
-                    │  Data-handler drains the pod:    │
+                    │  Shard controller drains the pod: │
                     │  1. Remove from sync standby     │
                     │  2. Unregister from etcd         │
                     │  3. Set state=ready-for-deletion │
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
-                    │  Resource-handler cleans up:     │
-                    │  1. Remove finalizer             │
-                    │  2. Delete data PVC (if policy)  │
-                    │  3. Pod is garbage collected     │
+                    │  Shard controller cleans up:     │
+                    │  1. Delete data PVC (if policy)  │
+                    │  2. Pod is garbage collected     │
                     └──────────────────────────────────┘
 ```
 
@@ -185,7 +178,7 @@ The drain state machine coordinates pod removal between two controllers:
 
 When choosing which pod to remove during scale-down:
 
-1. **Never select the primary.** The pod role is read from `shard.Status.PodRoles`, which the data-handler populates by reading etcd topology.
+1. **Never select the primary.** The pod role is read from `shard.Status.PodRoles`, which the shard controller populates by reading etcd topology.
 2. **Prefer non-ready pods.** Pods that are already failing are better candidates.
 3. **Among ready non-primary pods, select the highest index.** This makes order deterministic and predictable.
 4. **If no suitable pod is found, defer.** Requeue and try again.
@@ -194,23 +187,23 @@ When choosing which pod to remove during scale-down:
 
 - At most **one pod per pool** can be in the drain state at any time.
 - Scale-down and rolling-update operations do not run concurrently — if a drain is in progress, rolling updates are deferred.
-- If the data-handler is unavailable, the drain annotation sits untouched and the resource-handler retries on the next reconcile.
+- If the topology store is temporarily unreachable, the drain annotation sits untouched and the shard controller retries on the next reconcile.
 - **Health gate**: Scale-down drains are deferred when any non-draining pod is not Ready, preventing removal of pods from an already degraded pool.
 
 ### Shard/Cluster Deletion (No Drain)
 
-The drain state machine is **not used during shard or cluster deletion**. When a Shard is deleted, the data-handler's `handleDeletion` runs first: it unregisters the database from the global topology (`DeleteDatabase`) and removes its own finalizer. By the time the resource-handler processes the pods, the data-handler has already stopped reconciling — there is nobody to drive the drain state machine.
+The drain state machine is **not used during shard or cluster deletion**. When a Shard is deleted, the shard controller's `handleDeletion` runs: it unregisters the database from the global topology (`DeleteDatabase`) and deletes pods directly. PVCs are garbage-collected via owner references (when `WhenDeleted` is `Delete`) or retained (when `Retain`).
 
-Instead, the resource-handler removes pod finalizers directly and deletes pods. This is safe for full cluster deletion because the topo server is also being destroyed. For individual shard deletion within a live cluster, residual pooler entries may remain in topo — see [Known Gaps](#15-known-gaps-and-future-work).
+This is safe for full cluster deletion because the topo server is also being destroyed. For individual shard deletion within a live cluster, residual pooler entries may remain in topo — see [Known Gaps](#15-known-gaps-and-future-work).
 
-The drain state machine remains fully functional for **rolling updates** and **scale-down**, where the cluster is alive and the data-handler is actively reconciling.
+The drain state machine remains fully functional for **rolling updates** and **scale-down**, where the cluster is alive and the shard controller is actively reconciling.
 
 #### Topology Cleanup Timeout
 
 During deletion, both Cell and Shard controllers use a `TopologyRegistered` / `DatabaseRegistered` status condition to determine whether topology cleanup is needed. This prevents two failure modes:
 
 - **Never initialized**: If the condition was never set (e.g., the topology server was unreachable since creation), cleanup is skipped immediately — there's nothing to clean up.
-- **Transient failure**: If the condition is `True` but the topology is temporarily unreachable, the controller retries for up to `topoCleanupTimeout` (currently 2 minutes). After the timeout, the controller force-skips cleanup with a `CleanupSkipped` warning event and removes the finalizer.
+- **Transient failure**: If the condition is `True` but the topology is temporarily unreachable, the controller retries for up to `topoCleanupTimeout` (currently 2 minutes). After the timeout, the controller force-skips cleanup with a `CleanupSkipped` warning event and proceeds with deletion.
 
 > **Future consideration**: The 2-minute timeout is conservative for the current deployment model. As real-world usage patterns emerge, this value may need tuning. It could also be made configurable via the MultigresCluster spec if operators need per-cluster control.
 
@@ -223,7 +216,7 @@ When a pod's spec has drifted from the desired state (detected via spec-hash mis
 1. **Identify drifted pods** — `podNeedsUpdate` compares each pod's `multigres.com/spec-hash` annotation against the hash of the currently desired spec.
 2. **Skip if drain in progress** — Rolling updates are deferred if any pod is currently being drained (scale-down takes precedence).
 3. **Update replicas first** — Non-primary drifted pods are selected first.
-4. **Primary last** — When only the primary remains, a controlled switchover is needed before draining and recreating. (Note: the switchover is coordinated via the data-handler using the same drain annotation mechanism.)
+4. **Primary last** — When only the primary remains, a controlled switchover is needed before draining and recreating. (Note: the switchover is coordinated via the shard controller using the same drain annotation mechanism.)
 5. **One at a time** — Only one pod is drained per reconcile cycle. The reconciler returns early after initiating a drain, waiting for the pod to reach `ready-for-deletion` before proceeding to the next.
 6. **RollingUpdate status condition** — A `RollingUpdate` condition is set on the Shard to track progress (e.g., `"2/5 pods updated"`).
 
@@ -251,7 +244,7 @@ Each pool pod gets its own data PVC named `data-{base-name}-{index}`. These PVCs
 - Are created before the pod (if missing).
 - Persist across pod deletions — a restarted pod reattaches to its existing PVC and finds its PGDATA intact.
 - Are deleted during scale-down only if `PVCDeletionPolicy.WhenScaled` is `Delete`.
-- Are deleted during cluster teardown only if `PVCDeletionPolicy.WhenDeleted` is `Delete`.
+- During cluster/shard deletion, PVCs are garbage-collected by Kubernetes via conditional owner references when `PVCDeletionPolicy.WhenDeleted` is `Delete`. When the policy is `Retain`, PVCs have no ownerRef and persist after deletion.
 
 ### Shared Backup PVC
 
@@ -302,8 +295,8 @@ The `updatePoolsStatus` function directly lists pods by label selector and aggre
 | `shard.Status.OrchReady` | MultiOrch deployment readiness |
 | `shard.Status.Phase` | `Healthy` when both pools and orch are ready; `Progressing` otherwise |
 | `shard.Status.Cells` | Observed cells from pod labels |
-| `shard.Status.PodRoles` | Pod → role mapping (populated by data-handler from etcd) |
-| `shard.Status.LastBackupTime` | Timestamp of last completed backup (from `GetBackups` RPC via data-handler) |
+| `shard.Status.PodRoles` | Pod → role mapping (populated by the shard controller from etcd) |
+| `shard.Status.LastBackupTime` | Timestamp of last completed backup (from `GetBackups` RPC) |
 | `shard.Status.LastBackupType` | Type of last backup (full/diff/incr) |
 | `shard.Status.Conditions` | `Available`, `BackupHealthy`, `DatabaseRegistered`, `RollingUpdate` |
 
@@ -325,11 +318,11 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **Shared backup PVC** | Per-shard-per-cell, skipped for S3 |
 | **Headless Service for DNS** | Pod hostname + subdomain for FQDN resolution |
 | **PodDisruptionBudgets** | `maxUnavailable: 1` per pool per cell |
-| **Drain state machine** | Annotation-based, coordinated across resource/data handlers |
+| **Drain state machine** | Annotation-based, coordinated within the shard controller |
 | **Pod selection for scale-down** | Primary avoidance, prefer non-ready, highest index |
 | **Rolling updates** | Spec-hash drift detection, replicas first, primary last |
-| **Finalizer-based cleanup** | Pod finalizer prevents premature GC |
-| **Shard deletion handling** | Removes pod finalizers directly (no drain), deletes deployments and PVCs per policy |
+| **Owner-reference-based PVC cleanup** | Conditional ownerRefs on PVCs enable Kubernetes GC cascade-delete per `PVCDeletionPolicy` |
+| **Shard deletion handling** | Deletes pods and deployments directly (no drain); PVCs garbage-collected via ownerRefs per policy |
 | **Status aggregation from pods** | Direct pod count, no StatefulSet intermediary |
 | **Zone/region scheduling** | `nodeSelector` injection from `CellTopologyLabels` |
 | **Cell topology propagation** | Labels carry cluster/db/tg/shard/pool/cell hierarchy |
@@ -337,7 +330,8 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **S3 and filesystem backup support** | Full backup configuration propagation |
 | **PVC deletion policy** | Hierarchical merge, Retain/Delete per whenDeleted/whenScaled |
 | **Etcd topology cleanup** | `UnregisterMultiPooler` called during drain flow; stale entries removed on pod termination |
-| **Backup health reporting** | Data-handler calls `GetBackups` RPC, sets `BackupHealthy` condition and `LastBackupTime` status |
+| **Topology registration & pruning** | Cell and database registration centralized in MultigresCluster controller; stale entries pruned when `topologyPruning.enabled` (default) |
+| **Backup health reporting** | Shard controller calls `GetBackups` RPC, sets `BackupHealthy` condition and `LastBackupTime` status |
 | **DRAINED pod replacement** | Pods with `DRAINED` role in etcd are detected and replaced via the drain state machine |
 | **Scale-down health gate** | Drains deferred when pool has non-ready pods to prevent cascading failures |
 | **Observability** | Events, conditions, metrics, tracing spans |
@@ -366,17 +360,20 @@ All pod management code lives in `pkg/resource-handler/controller/shard/`:
 
 | File | Purpose |
 |---|---|
-| `shard_controller.go` | Main reconciler. Orchestrates pool reconciliation, handles deletion, sets up watches. |
+| `shard_controller.go` | Main reconciler. Orchestrates pool reconciliation, sets up watches, PVC owner-reference management. |
 | `reconcile_pool_pods.go` | Core pod lifecycle: `reconcilePoolPods`, `createMissingResources`, `handleScaleDown`, `handleRollingUpdates`, `selectPodToDrain`, `cleanupDrainedPod`, `podNeedsUpdate`. |
+| `reconcile_deletion.go` | Shard deletion: `handleDeletion`, topology unregistration, child resource cleanup. |
+| `reconcile_multiorch.go` | MultiOrch deployment and service reconciliation. |
+| `reconcile_shared_infra.go` | Shared infrastructure: pgBackRest TLS certs, pg_hba ConfigMap, postgres password Secret, shared backup PVC. |
+| `reconcile_data_plane.go` | Data-plane reconciliation: pod role reporting, drain state machine execution, backup health evaluation. |
 | `pool_pod.go` | Pod builder: `BuildPoolPod`, `BuildPoolPodName`, `ComputeSpecHash`. |
-| `pool_pvc.go` | PVC builders: `BuildPoolDataPVC`, `BuildPoolDataPVCName`, `BuildSharedBackupPVC`. |
+| `pool_pvc.go` | PVC builders: `BuildPoolDataPVC`, `BuildPoolDataPVCName`, `BuildSharedBackupPVC` (with conditional ownerRef support). |
 | `pool_pdb.go` | PDB builder: `BuildPoolPodDisruptionBudget`. |
 | `pool_service.go` | Headless service builder for DNS resolution. |
 | `drain_helpers.go` | Drain utilities: `resolvePodRole` (reads `PodRoles` from shard status), `initiateDrain` (sets drain annotation). |
 | `labels.go` | Label builder: `buildPoolLabelsWithCell` — creates the standard label set for pool resources. |
 | `status.go` | Status aggregation: `updateStatus`, `updatePoolsStatus` (counts pods directly), `updateMultiOrchStatus`, `setConditions`. |
-| `containers.go` | Container builders for pgctld and multipooler (reused from the StatefulSet era, unchanged). |
-| `reconcile_shared_infra.go` | Shared infrastructure: pgBackRest TLS certs, pg_hba ConfigMap, postgres password Secret, shared backup PVC. |
+| `containers.go` | Container builders for pgctld and multipooler. |
 | `multiorch.go` | MultiOrch deployment and service builders. |
 | `doc.go` | Package documentation. |
 
@@ -385,25 +382,18 @@ All pod management code lives in `pkg/resource-handler/controller/shard/`:
 | File | Coverage |
 |---|---|
 | `pool_pod_test.go` | Pod builder, spec-hash computation, naming |
-| `pool_pvc_test.go` | PVC builder, naming, storage class handling |
+| `pool_pvc_test.go` | PVC builder, naming, storage class handling, ownerRef tests |
 | `pool_service_test.go` | Headless service labels and selector |
 | `shard_controller_test.go` | Unit tests for reconcile behavior (envtest-based) |
 | `shard_controller_internal_test.go` | Internal function tests (podNeedsUpdate, etc.) |
+| `reconcile_deletion_test.go` | Deletion handler envtest tests |
+| `reconcile_deletion_internal_test.go` | Deletion handler internal tests |
 | `integration_test.go` | Full integration tests: scale up/down, PDB creation, ConfigMap, services |
 | `containers_test.go` | Container builder tests |
 | `configmap_test.go` | pg_hba ConfigMap generation |
 | `multiorch_test.go` | MultiOrch deployment/service builders |
 | `secret_test.go` | Postgres password secret |
 | `ports_test.go` | Port constant tests |
-
-### Data-Handler Side
-
-The drain annotations are consumed by the data-handler shard controller (`pkg/data-handler/controller/shard/`), which:
-- Watches pods with drain annotations.
-- Reads etcd topology to determine pod roles.
-- Calls `UpdateSynchronousStandbyList(REMOVE)` on the primary.
-- Calls `UnregisterMultiPooler` to delete the etcd entry.
-- Sets the pod annotation to `ready-for-deletion`.
 
 ---
 
@@ -451,17 +441,20 @@ Pods reference this via `spec.subdomain`, combined with `spec.hostname` (set to 
 
 ### Etcd Topology
 
-The operator reads from etcd topology (via the data-handler) to:
+The operator reads from etcd topology (via the shard controller) to:
 - Determine pod roles (`PRIMARY`, `REPLICA`, `DRAINED`) for scale-down and rolling-update decisions.
 - Clean up stale topology entries on permanent pod removal (`UnregisterMultiPooler`).
 
-The operator writes to etcd topology (via the data-handler) to:
-- Register databases, shards, and cells during initial setup.
+The operator writes to etcd topology (via the MultigresCluster controller) to:
+- Register cells and databases during initial setup and on every reconcile.
+- Prune stale cells and databases that no longer exist in the spec (when `topologyPruning.enabled`, the default).
+
+The operator writes to etcd topology (via the shard controller) to:
 - Unregister poolers during drain cleanup.
 
 ### gRPC Operations
 
-Through the data-handler:
+Through the shard controller:
 - `UpdateSynchronousStandbyList(REMOVE)` — Removes a standby before pod deletion.
 - `UnregisterMultiPooler` — Deletes the etcd entry for a permanently removed pod.
 
@@ -505,7 +498,7 @@ Through the data-handler:
 ### Operator-Side Future Work
 
 - **Scheduled base backups**: Designed as a controller-timer approach (like CloudNativePG) but deferred per team decision.
-- **Individual shard deletion drain cleanup**: When a single shard is deleted within a live cluster (not full cluster teardown), pooler entries may be left in topo because the data-handler removes its finalizer before the resource-handler can initiate drains. Fixing this requires either making the data-handler keep its finalizer until drains complete, or having the resource-handler drive drains directly (single-controller pattern). Not addressed now because the operator currently only supports single-shard, single-database clusters — shards are only ever deleted as part of full cluster teardown where the topo server is also destroyed.
+- **Individual shard deletion drain cleanup**: When a single shard is deleted within a live cluster (not full cluster teardown), pooler entries may be left in topo because `handleDeletion` skips the drain state machine and deletes pods directly. Addressing this would require running the drain flow during deletion to unregister individual poolers before pod removal. Not addressed now because the operator currently only supports single-shard, single-database clusters — shards are only ever deleted as part of full cluster teardown where the topo server is also destroyed.
 
 ### Design Constraints (v1alpha1)
 

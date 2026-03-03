@@ -100,6 +100,11 @@ type MultigresClusterSpec struct {
 	// Backup configures the default backup settings for the entire cluster.
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
+
+	// TopologyPruning controls whether stale topology entries are pruned.
+	// Default: enabled (nil means pruning is on).
+	// +optional
+	TopologyPruning *TopologyPruningConfig `json:"topologyPruning,omitempty"`
 }
 
 // ============================================================================

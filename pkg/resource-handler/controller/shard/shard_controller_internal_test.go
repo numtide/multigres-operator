@@ -658,10 +658,11 @@ func TestReconcile_PostgresSecretError(t *testing.T) {
 	})
 
 	reconciler := &ShardReconciler{
-		Client:    fakeClient,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: fakeClient,
+		Client:          fakeClient,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(100),
+		APIReader:       fakeClient,
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	req := ctrl.Request{
@@ -881,15 +882,10 @@ func TestUpdateStatus_GetError(t *testing.T) {
 }
 
 // statusPatchCapture wraps a client.Client to snapshot the state of the
-// patch object and options before delegating to the real Status().Patch().
-// Snapshotting before the call is necessary because the fake client's SSA
-// implementation may mutate the object in place during the merge.
+// patch options before delegating to the real Status().Patch().
 type statusPatchCapture struct {
 	client.Client
-	podRolesWasNil       bool
-	lastBackupTimeWasNil bool
-	lastBackupTypeEmpty  bool
-	capturedOpts         []client.SubResourcePatchOption
+	capturedOpts []client.SubResourcePatchOption
 }
 
 func (c *statusPatchCapture) Status() client.StatusWriter {
@@ -911,102 +907,7 @@ func (w *capturingStatusWriter) Patch(
 	opts ...client.SubResourcePatchOption,
 ) error {
 	w.capture.capturedOpts = opts
-	if s, ok := obj.(*multigresv1alpha1.Shard); ok {
-		w.capture.podRolesWasNil = s.Status.PodRoles == nil
-		w.capture.lastBackupTimeWasNil = s.Status.LastBackupTime == nil
-		w.capture.lastBackupTypeEmpty = s.Status.LastBackupType == ""
-	}
 	return w.StatusWriter.Patch(ctx, obj, patch, opts...)
-}
-
-// TestUpdateStatus_NilsDataHandlerFields verifies that updateStatus clears
-// data-handler-owned fields (PodRoles, LastBackupTime, LastBackupType) from
-// the SSA patch object so the resource-handler never overwrites them.
-func TestUpdateStatus_NilsDataHandlerFields(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-	_ = policyv1.AddToScheme(scheme)
-
-	now := metav1.Now()
-
-	tests := map[string]struct {
-		preStatus multigresv1alpha1.ShardStatus
-	}{
-		"PodRoles populated": {
-			preStatus: multigresv1alpha1.ShardStatus{
-				PodRoles: map[string]string{
-					"pod-0": "PRIMARY",
-					"pod-1": "REPLICA",
-				},
-			},
-		},
-		"LastBackupTime and LastBackupType populated": {
-			preStatus: multigresv1alpha1.ShardStatus{
-				LastBackupTime: &now,
-				LastBackupType: "full",
-			},
-		},
-		"all data-handler fields populated": {
-			preStatus: multigresv1alpha1.ShardStatus{
-				PodRoles: map[string]string{
-					"pod-0": "PRIMARY",
-				},
-				LastBackupTime: &now,
-				LastBackupType: "incr",
-			},
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			shard := &multigresv1alpha1.Shard{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-shard",
-					Namespace: "default",
-				},
-				Spec: multigresv1alpha1.ShardSpec{
-					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-						"pool1": {
-							Cells: []multigresv1alpha1.CellName{"cell1"},
-						},
-					},
-				},
-				Status: tc.preStatus,
-			}
-
-			baseClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(shard).
-				WithStatusSubresource(&multigresv1alpha1.Shard{}).
-				Build()
-
-			capture := &statusPatchCapture{Client: baseClient}
-
-			reconciler := &ShardReconciler{
-				Client:    capture,
-				Scheme:    scheme,
-				Recorder:  record.NewFakeRecorder(100),
-				APIReader: baseClient,
-			}
-
-			err := reconciler.updateStatus(context.Background(), shard)
-			if err != nil {
-				t.Fatalf("updateStatus() unexpected error: %v", err)
-			}
-
-			if !capture.podRolesWasNil {
-				t.Error("PodRoles should be nil in SSA patch object")
-			}
-			if !capture.lastBackupTimeWasNil {
-				t.Error("LastBackupTime should be nil in SSA patch object")
-			}
-			if !capture.lastBackupTypeEmpty {
-				t.Error("LastBackupType should be empty in SSA patch object")
-			}
-		})
-	}
 }
 
 // TestUpdateStatus_FieldOwner verifies that the SSA status patch uses
@@ -1105,7 +1006,6 @@ func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
 				Name:        podName,
 				Namespace:   "default",
 				Annotations: annotations,
-				Finalizers:  []string{PoolPodFinalizer},
 				Labels: map[string]string{
 					metadata.LabelMultigresCell: cellName,
 				},
@@ -1252,6 +1152,7 @@ func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
 					p := makePod(podName0, nil)
 					now := metav1.Now()
 					p.DeletionTimestamp = &now
+					p.Finalizers = []string{"kubernetes.io/test"}
 					return p
 				}(),
 				makePod(podName1, nil),
@@ -1470,9 +1371,8 @@ func TestCleanupDrainedPod_PVCDeletion(t *testing.T) {
 	makePod := func(n string) *corev1.Pod {
 		return &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       n,
-				Namespace:  "default",
-				Finalizers: []string{PoolPodFinalizer},
+				Name:      n,
+				Namespace: "default",
 				Labels: map[string]string{
 					metadata.LabelMultigresCell: cellName,
 				},
@@ -1591,11 +1491,7 @@ func TestCleanupDrainedPod_PVCDeletion(t *testing.T) {
 			); err != nil {
 				t.Fatalf("failed to get pod after cleanup: %v", err)
 			}
-			for _, f := range podAfter.Finalizers {
-				if f == PoolPodFinalizer {
-					t.Errorf("finalizer %q should have been removed from pod", PoolPodFinalizer)
-				}
-			}
+
 		})
 	}
 }
@@ -1618,12 +1514,11 @@ func TestHandleExternalDeletion(t *testing.T) {
 		},
 	}
 
-	t.Run("unscheduled pod gets finalizer removed directly", func(t *testing.T) {
+	t.Run("unscheduled pod is ignored", func(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       "pod-unsched",
-				Namespace:  "default",
-				Finalizers: []string{PoolPodFinalizer},
+				Name:      "pod-unsched",
+				Namespace: "default",
 			},
 			Status: corev1.PodStatus{
 				Conditions: []corev1.PodCondition{
@@ -1647,11 +1542,7 @@ func TestHandleExternalDeletion(t *testing.T) {
 		); err != nil {
 			t.Fatalf("failed to get pod: %v", err)
 		}
-		for _, f := range updated.Finalizers {
-			if f == PoolPodFinalizer {
-				t.Error("finalizer should have been removed from unscheduled pod")
-			}
-		}
+
 	})
 
 	t.Run("scheduled pod without drain annotation gets drain initiated", func(t *testing.T) {
@@ -1659,7 +1550,6 @@ func TestHandleExternalDeletion(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        "pod-sched",
 				Namespace:   "default",
-				Finalizers:  []string{PoolPodFinalizer},
 				Annotations: map[string]string{},
 			},
 			Status: corev1.PodStatus{
@@ -1703,9 +1593,8 @@ func TestHandleExternalDeletion(t *testing.T) {
 	t.Run("scheduled pod with existing drain annotation is left alone", func(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       "pod-draining",
-				Namespace:  "default",
-				Finalizers: []string{PoolPodFinalizer},
+				Name:      "pod-draining",
+				Namespace: "default",
 				Annotations: map[string]string{
 					metadata.AnnotationDrainState: metadata.DrainStateDraining,
 				},
@@ -1738,12 +1627,11 @@ func TestHandleExternalDeletion(t *testing.T) {
 		}
 	})
 
-	t.Run("unscheduled pod without scheduled condition gets finalizer removed", func(t *testing.T) {
+	t.Run("unscheduled pod without scheduled condition is ignored", func(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:       "pod-no-conditions",
-				Namespace:  "default",
-				Finalizers: []string{PoolPodFinalizer},
+				Name:      "pod-no-conditions",
+				Namespace: "default",
 			},
 			Status: corev1.PodStatus{},
 		}
@@ -1763,38 +1651,7 @@ func TestHandleExternalDeletion(t *testing.T) {
 		); err != nil {
 			t.Fatalf("failed to get pod: %v", err)
 		}
-		for _, f := range updated.Finalizers {
-			if f == PoolPodFinalizer {
-				t.Error("finalizer should have been removed from pod with no conditions")
-			}
-		}
-	})
 
-	t.Run("error removing finalizer from unscheduled pod", func(t *testing.T) {
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:       "pod-fail-update",
-				Namespace:  "default",
-				Finalizers: []string{PoolPodFinalizer},
-			},
-			Status: corev1.PodStatus{},
-		}
-
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnUpdate: func(obj client.Object) error {
-				if obj.GetName() == "pod-fail-update" {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		err := r.handleExternalDeletion(context.Background(), shard, pod)
-		if err == nil {
-			t.Error("expected error when Update fails")
-		}
 	})
 
 	t.Run("error initiating drain for scheduled pod", func(t *testing.T) {
@@ -1802,7 +1659,6 @@ func TestHandleExternalDeletion(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        "pod-fail-drain",
 				Namespace:   "default",
-				Finalizers:  []string{PoolPodFinalizer},
 				Annotations: map[string]string{},
 			},
 			Status: corev1.PodStatus{
@@ -1965,497 +1821,6 @@ func TestReconcilePgBackRestCerts(t *testing.T) {
 	})
 }
 
-func TestHandleDeletion_ErrorPaths(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-	_ = policyv1.AddToScheme(scheme)
-
-	shardLabels := map[string]string{
-		metadata.LabelMultigresCluster:    "test-cluster",
-		metadata.LabelMultigresDatabase:   "testdb",
-		metadata.LabelMultigresTableGroup: "default",
-		metadata.LabelMultigresShard:      "shard0",
-	}
-
-	baseShard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "test-shard",
-			Namespace:         "default",
-			DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-			Finalizers:        []string{ShardFinalizer},
-			Labels:            shardLabels,
-		},
-		Spec: multigresv1alpha1.ShardSpec{
-			DatabaseName:   "testdb",
-			TableGroupName: "default",
-			ShardName:      "shard0",
-		},
-	}
-
-	t.Run("error listing pods", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnList: func(list client.ObjectList) error {
-				if _, ok := list.(*corev1.PodList); ok {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on Pod list failure")
-		}
-	})
-
-	t.Run("error listing deployments", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnList: func(list client.ObjectList) error {
-				if _, ok := list.(*appsv1.DeploymentList); ok {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on Deployment list failure")
-		}
-	})
-
-	t.Run("error listing PVCs", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnList: func(list client.ObjectList) error {
-				if _, ok := list.(*corev1.PersistentVolumeClaimList); ok {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on PVC list failure")
-		}
-	})
-
-	t.Run("error deleting deployment", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		deploy := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-deploy",
-				Namespace: "default",
-				Labels:    shardLabels,
-			},
-		}
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, deploy).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnDelete: func(obj client.Object) error {
-				if _, ok := obj.(*appsv1.Deployment); ok {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on Deployment delete failure")
-		}
-	})
-
-	t.Run("WhenDeleted Delete policy deletes PVCs", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		shard.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
-			WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
-		}
-		shard.Spec.Pools = map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-			"primary": {
-				Cells: []multigresv1alpha1.CellName{"zone1"},
-			},
-		}
-
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "data-pvc-0",
-				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster:    "test-cluster",
-					metadata.LabelMultigresDatabase:   "testdb",
-					metadata.LabelMultigresTableGroup: "default",
-					metadata.LabelMultigresShard:      "shard0",
-					metadata.LabelMultigresPool:       "primary",
-				},
-			},
-		}
-
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard, pvc).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err != nil {
-			t.Fatalf("handleDeletion returned error: %v", err)
-		}
-
-		// PVC should be deleted
-		got := &corev1.PersistentVolumeClaim{}
-		err = c.Get(
-			context.Background(),
-			types.NamespacedName{Name: "data-pvc-0", Namespace: "default"},
-			got,
-		)
-		if !errors.IsNotFound(err) {
-			t.Errorf("PVC should have been deleted, but Get returned: %v", err)
-		}
-	})
-
-	t.Run("WhenDeleted Retain policy keeps PVCs", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		shard.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
-			WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
-		}
-
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "data-pvc-retain",
-				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster:    "test-cluster",
-					metadata.LabelMultigresDatabase:   "testdb",
-					metadata.LabelMultigresTableGroup: "default",
-					metadata.LabelMultigresShard:      "shard0",
-				},
-			},
-		}
-
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard, pvc).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err != nil {
-			t.Fatalf("handleDeletion returned error: %v", err)
-		}
-
-		got := &corev1.PersistentVolumeClaim{}
-		if err := c.Get(
-			context.Background(),
-			types.NamespacedName{Name: "data-pvc-retain", Namespace: "default"},
-			got,
-		); err != nil {
-			t.Errorf("PVC should have been retained, but Get returned: %v", err)
-		}
-	})
-
-	t.Run("error deleting PVC with Delete policy", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		shard.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
-			WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
-		}
-
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "data-pvc-fail",
-				Namespace: "default",
-				Labels:    shardLabels,
-			},
-		}
-
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pvc).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnDelete: func(obj client.Object) error {
-				if _, ok := obj.(*corev1.PersistentVolumeClaim); ok {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on PVC delete failure")
-		}
-	})
-
-	t.Run("error removing finalizer from pod", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:       "pod-fail-finalizer",
-				Namespace:  "default",
-				Labels:     shardLabels,
-				Finalizers: []string{PoolPodFinalizer},
-			},
-		}
-
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnUpdate: func(obj client.Object) error {
-				if p, ok := obj.(*corev1.Pod); ok && p.Name == "pod-fail-finalizer" {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on pod finalizer removal failure")
-		}
-	})
-
-	t.Run("error deleting pod without finalizer", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pod-no-finalizer",
-				Namespace: "default",
-				Labels:    shardLabels,
-			},
-		}
-
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnDelete: func(obj client.Object) error {
-				if p, ok := obj.(*corev1.Pod); ok && p.Name == "pod-no-finalizer" {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on pod delete failure")
-		}
-	})
-
-	t.Run("error removing shard finalizer", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		base := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnUpdate: func(obj client.Object) error {
-				if _, ok := obj.(*multigresv1alpha1.Shard); ok {
-					return testutil.ErrNetworkTimeout
-				}
-				return nil
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err == nil {
-			t.Error("expected error on shard finalizer removal failure")
-		}
-	})
-
-	t.Run("pool-level PVC policy overrides shard-level", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		shard.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
-			WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
-		}
-		shard.Spec.Pools = map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-			"primary": {
-				Cells: []multigresv1alpha1.CellName{"zone1"},
-				PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
-					WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
-				},
-			},
-		}
-
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "pool-pvc-override",
-				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster:    "test-cluster",
-					metadata.LabelMultigresDatabase:   "testdb",
-					metadata.LabelMultigresTableGroup: "default",
-					metadata.LabelMultigresShard:      "shard0",
-					metadata.LabelMultigresPool:       "primary",
-				},
-			},
-		}
-
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard, pvc).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err != nil {
-			t.Fatalf("handleDeletion returned error: %v", err)
-		}
-
-		got := &corev1.PersistentVolumeClaim{}
-		err = c.Get(
-			context.Background(),
-			types.NamespacedName{Name: "pool-pvc-override", Namespace: "default"},
-			got,
-		)
-		if !errors.IsNotFound(err) {
-			t.Errorf(
-				"PVC should have been deleted per pool-level policy override, but Get returned: %v",
-				err,
-			)
-		}
-	})
-
-	t.Run("shared backup PVC uses shard-level policy when no pool label", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		shard.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
-			WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
-		}
-
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "backup-pvc-shared",
-				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster:    "test-cluster",
-					metadata.LabelMultigresDatabase:   "testdb",
-					metadata.LabelMultigresTableGroup: "default",
-					metadata.LabelMultigresShard:      "shard0",
-					// no pool label => shared backup PVC
-				},
-			},
-		}
-
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard, pvc).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err != nil {
-			t.Fatalf("handleDeletion returned error: %v", err)
-		}
-
-		got := &corev1.PersistentVolumeClaim{}
-		err = c.Get(
-			context.Background(),
-			types.NamespacedName{Name: "backup-pvc-shared", Namespace: "default"},
-			got,
-		)
-		if !errors.IsNotFound(err) {
-			t.Errorf("shared backup PVC should have been deleted, but Get returned: %v", err)
-		}
-	})
-
-	t.Run("pool PVC with unknown pool name falls back to shard policy", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		shard.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
-			WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
-		}
-		shard.Spec.Pools = map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-			"primary": {Cells: []multigresv1alpha1.CellName{"zone1"}},
-		}
-
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "orphan-pool-pvc",
-				Namespace: "default",
-				Labels: map[string]string{
-					metadata.LabelMultigresCluster:    "test-cluster",
-					metadata.LabelMultigresDatabase:   "testdb",
-					metadata.LabelMultigresTableGroup: "default",
-					metadata.LabelMultigresShard:      "shard0",
-					metadata.LabelMultigresPool:       "removed-pool",
-				},
-			},
-		}
-
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard, pvc).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err != nil {
-			t.Fatalf("handleDeletion returned error: %v", err)
-		}
-
-		got := &corev1.PersistentVolumeClaim{}
-		err = c.Get(
-			context.Background(),
-			types.NamespacedName{Name: "orphan-pool-pvc", Namespace: "default"},
-			got,
-		)
-		if !errors.IsNotFound(err) {
-			t.Errorf(
-				"PVC for removed pool should be deleted per shard policy, but Get returned: %v",
-				err,
-			)
-		}
-	})
-
-	t.Run("deletion with existing deployments deletes them", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		deploy := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mo-deploy",
-				Namespace: "default",
-				Labels:    shardLabels,
-			},
-		}
-
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard, deploy).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		_, err := r.handleDeletion(context.Background(), shard)
-		if err != nil {
-			t.Fatalf("handleDeletion returned error: %v", err)
-		}
-
-		got := &appsv1.Deployment{}
-		err = c.Get(
-			context.Background(),
-			types.NamespacedName{Name: "mo-deploy", Namespace: "default"},
-			got,
-		)
-		if !errors.IsNotFound(err) {
-			t.Errorf("deployment should have been deleted, but Get returned: %v", err)
-		}
-	})
-}
-
 func TestCreateMissingResources(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
@@ -2580,7 +1945,7 @@ func TestCreateMissingResources(t *testing.T) {
 					Name:              podName,
 					Namespace:         "default",
 					DeletionTimestamp: &now,
-					Finalizers:        []string{PoolPodFinalizer},
+					Finalizers:        []string{"kubernetes.io/test"},
 					Annotations:       map[string]string{},
 				},
 				Status: corev1.PodStatus{
@@ -3005,6 +2370,7 @@ func TestIsPoolHealthy(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "pod-0",
 					DeletionTimestamp: &now,
+					Finalizers:        []string{"kubernetes.io/test"},
 				},
 				Status: corev1.PodStatus{
 					Conditions: []corev1.PodCondition{
@@ -3053,6 +2419,7 @@ func TestPodNeedsUpdate(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				DeletionTimestamp: &now,
+				Finalizers:        []string{"kubernetes.io/test"},
 				Annotations:       map[string]string{metadata.AnnotationSpecHash: "old"},
 			},
 		}
@@ -3609,7 +2976,7 @@ func TestBuildSharedBackupPVC_Variants(t *testing.T) {
 			},
 		}
 
-		pvc, err := BuildSharedBackupPVC(shard, "zone1", testScheme())
+		pvc, err := BuildSharedBackupPVC(shard, "zone1", false, testScheme())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -3641,7 +3008,7 @@ func TestBuildSharedBackupPVC_Variants(t *testing.T) {
 			},
 		}
 
-		pvc, err := BuildSharedBackupPVC(shard, "zone1", testScheme())
+		pvc, err := BuildSharedBackupPVC(shard, "zone1", false, testScheme())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -3680,8 +3047,7 @@ func TestCleanupDrainedPod_ErrorPaths(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName, Namespace: "default",
-				Finalizers: []string{PoolPodFinalizer},
-				Labels:     map[string]string{metadata.LabelMultigresCell: cellName},
+				Labels: map[string]string{metadata.LabelMultigresCell: cellName},
 				Annotations: map[string]string{
 					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
 				},
@@ -3718,8 +3084,7 @@ func TestCleanupDrainedPod_ErrorPaths(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName, Namespace: "default",
-				Finalizers: []string{PoolPodFinalizer},
-				Labels:     map[string]string{metadata.LabelMultigresCell: cellName},
+				Labels: map[string]string{metadata.LabelMultigresCell: cellName},
 				Annotations: map[string]string{
 					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
 				},
@@ -3752,41 +3117,6 @@ func TestCleanupDrainedPod_ErrorPaths(t *testing.T) {
 		}
 	})
 
-	t.Run("error removing finalizer from pod", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		podName := BuildPoolPodName(shard, poolName, cellName, 0)
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: podName, Namespace: "default",
-				Finalizers: []string{PoolPodFinalizer},
-				Labels:     map[string]string{metadata.LabelMultigresCell: cellName},
-				Annotations: map[string]string{
-					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
-				},
-			},
-		}
-
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnUpdate: func(obj client.Object) error {
-				return testutil.ErrNetworkTimeout
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		err := r.cleanupDrainedPod(
-			context.Background(),
-			shard,
-			pod,
-			poolName,
-			multigresv1alpha1.PoolSpec{},
-			3,
-		)
-		if err == nil {
-			t.Error("expected error on pod update failure")
-		}
-	})
-
 	t.Run("nil PVC deletion policy retains PVC", func(t *testing.T) {
 		shard := baseShard.DeepCopy()
 		podName := BuildPoolPodName(shard, poolName, cellName, 5)
@@ -3794,8 +3124,7 @@ func TestCleanupDrainedPod_ErrorPaths(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName, Namespace: "default",
-				Finalizers: []string{PoolPodFinalizer},
-				Labels:     map[string]string{metadata.LabelMultigresCell: cellName},
+				Labels: map[string]string{metadata.LabelMultigresCell: cellName},
 				Annotations: map[string]string{
 					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
 				},
@@ -3924,7 +3253,6 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName0, Namespace: "default",
 				Annotations: map[string]string{},
-				Finalizers:  []string{PoolPodFinalizer},
 				Labels:      map[string]string{metadata.LabelMultigresCell: cellName},
 			},
 			Status: corev1.PodStatus{
@@ -3937,7 +3265,6 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName1, Namespace: "default",
 				Annotations: map[string]string{},
-				Finalizers:  []string{PoolPodFinalizer},
 				Labels:      map[string]string{metadata.LabelMultigresCell: cellName},
 			},
 			Status: corev1.PodStatus{
@@ -3974,7 +3301,6 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName0, Namespace: "default",
 				Annotations: map[string]string{},
-				Finalizers:  []string{PoolPodFinalizer},
 				Labels:      map[string]string{metadata.LabelMultigresCell: cellName},
 			},
 			Status: corev1.PodStatus{
@@ -3999,39 +3325,6 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 		)
 		if err == nil {
 			t.Error("expected error on drain initiation failure for DRAINED pod")
-		}
-	})
-
-	t.Run("error cleaning up ready-for-deletion pod", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		podName0 := BuildPoolPodName(shard, poolName, cellName, 0)
-
-		pod0 := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: podName0, Namespace: "default",
-				Annotations: map[string]string{
-					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
-				},
-				Finalizers: []string{PoolPodFinalizer},
-				Labels:     map[string]string{metadata.LabelMultigresCell: cellName},
-			},
-		}
-
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod0).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnUpdate: func(obj client.Object) error {
-				return testutil.ErrNetworkTimeout
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		existingPods := map[string]*corev1.Pod{podName0: pod0}
-		_, _, err := r.handleScaleDown(
-			context.Background(), shard, poolName,
-			multigresv1alpha1.PoolSpec{}, existingPods, 1, false,
-		)
-		if err == nil {
-			t.Error("expected error on cleanup failure for ready-for-deletion pod")
 		}
 	})
 
@@ -4080,9 +3373,9 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: podName1, Namespace: "default",
 				Annotations:       map[string]string{},
-				Finalizers:        []string{PoolPodFinalizer},
 				Labels:            map[string]string{metadata.LabelMultigresCell: cellName},
 				DeletionTimestamp: &now,
+				Finalizers:        []string{"kubernetes.io/test"},
 			},
 			Status: corev1.PodStatus{
 				Conditions: []corev1.PodCondition{
@@ -4178,10 +3471,11 @@ func TestReconcile_BackupCertsError(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: c,
+		Client:          c,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(100),
+		APIReader:       c,
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(shard)}
@@ -4191,54 +3485,6 @@ func TestReconcile_BackupCertsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected 'not found' error, got: %v", err)
-	}
-}
-
-func TestReconcile_AddFinalizerError(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard-finalizer-err",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.ShardSpec{
-			DatabaseName:   "testdb",
-			TableGroupName: "default",
-		},
-	}
-
-	base := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(shard).
-		Build()
-
-	c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-		OnUpdate: func(obj client.Object) error {
-			if _, ok := obj.(*multigresv1alpha1.Shard); ok {
-				return testutil.ErrNetworkTimeout
-			}
-			return nil
-		},
-	})
-
-	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: c,
-	}
-
-	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(shard)}
-	_, err := reconciler.Reconcile(t.Context(), req)
-	if err == nil {
-		t.Error("expected error when adding finalizer fails")
-	}
-	if !strings.Contains(err.Error(), "failed to add finalizer") {
-		t.Errorf("expected finalizer error, got: %v", err)
 	}
 }
 
@@ -4279,7 +3525,7 @@ func TestBuildSharedBackupPVC_InvalidStorageSize(t *testing.T) {
 	}
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-	_, err := BuildSharedBackupPVC(shard, "zone1", scheme)
+	_, err := BuildSharedBackupPVC(shard, "zone1", false, scheme)
 	if err == nil {
 		t.Fatal("expected error for invalid storage size")
 	}
@@ -4345,7 +3591,6 @@ func TestReconcilePoolPods_ErrorPropagation(t *testing.T) {
 				Annotations: map[string]string{
 					metadata.AnnotationSpecHash: desiredPod.Annotations[metadata.AnnotationSpecHash],
 				},
-				Finalizers: []string{PoolPodFinalizer},
 			},
 			Status: corev1.PodStatus{
 				Conditions: []corev1.PodCondition{
@@ -4369,7 +3614,6 @@ func TestReconcilePoolPods_ErrorPropagation(t *testing.T) {
 				Annotations: map[string]string{
 					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
 				},
-				Finalizers: []string{PoolPodFinalizer},
 			},
 		}
 
@@ -4378,7 +3622,7 @@ func TestReconcilePoolPods_ErrorPropagation(t *testing.T) {
 			WithObjects(shard, pod, pvc, extraPod).
 			Build()
 		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnUpdate: func(obj client.Object) error {
+			OnDelete: func(obj client.Object) error {
 				if p, ok := obj.(*corev1.Pod); ok && p.Name == extraPodName {
 					return testutil.ErrInjected
 				}
@@ -4404,7 +3648,6 @@ func TestReconcilePoolPods_ErrorPropagation(t *testing.T) {
 				Namespace:   "default",
 				Labels:      labels,
 				Annotations: map[string]string{metadata.AnnotationSpecHash: "old-hash"},
-				Finalizers:  []string{PoolPodFinalizer},
 			},
 			Status: corev1.PodStatus{
 				Conditions: []corev1.PodCondition{
@@ -4519,8 +3762,8 @@ func TestCreateMissingResources_ExternalDeletionError(t *testing.T) {
 			Name:              podName,
 			Namespace:         "default",
 			Labels:            labels,
-			Finalizers:        []string{PoolPodFinalizer},
 			DeletionTimestamp: &now,
+			Finalizers:        []string{"kubernetes.io/test"},
 		},
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
@@ -4580,8 +3823,8 @@ func TestHandleScaleDown_ExternalDeletionSetsActionTaken(t *testing.T) {
 			Name:              extraPodName,
 			Namespace:         "default",
 			Labels:            buildPoolLabelsWithCell(shard, poolName, cellName),
-			Finalizers:        []string{PoolPodFinalizer},
 			DeletionTimestamp: &now,
+			Finalizers:        []string{"kubernetes.io/test"},
 		},
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
@@ -4745,7 +3988,7 @@ func TestReconcileSharedBackupPVC_BuildErrorAndNilReturn(t *testing.T) {
 	})
 }
 
-func TestReconcile_DeletionWithFinalizer(t *testing.T) {
+func TestReconcile_Deletion(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -4758,7 +4001,7 @@ func TestReconcile_DeletionWithFinalizer(t *testing.T) {
 			Name:              "test-shard-del",
 			Namespace:         "default",
 			DeletionTimestamp: &now,
-			Finalizers:        []string{ShardFinalizer},
+			Finalizers:        []string{"kubernetes.io/test"},
 			Labels: map[string]string{
 				metadata.LabelMultigresCluster:    "test-cluster",
 				metadata.LabelMultigresDatabase:   "testdb",
@@ -4780,10 +4023,11 @@ func TestReconcile_DeletionWithFinalizer(t *testing.T) {
 		Build()
 
 	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(100),
-		APIReader: c,
+		Client:          c,
+		Scheme:          scheme,
+		Recorder:        record.NewFakeRecorder(100),
+		APIReader:       c,
+		CreateTopoStore: newMemoryTopoFactory(),
 	}
 
 	req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(shard)}
@@ -5131,7 +4375,7 @@ func TestUpdatePoolsStatus_TerminatingPodExcluded(t *testing.T) {
 			Namespace:         "default",
 			Labels:            labels,
 			DeletionTimestamp: &now,
-			Finalizers:        []string{PoolPodFinalizer},
+			Finalizers:        []string{"kubernetes.io/test"},
 		},
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{

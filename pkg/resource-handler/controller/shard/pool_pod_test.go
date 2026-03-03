@@ -185,14 +185,14 @@ func TestBuildPoolPod_SpecHash(t *testing.T) {
 	}
 }
 
-func TestBuildPoolPod_Finalizer(t *testing.T) {
+func TestBuildPoolPod_NoFinalizers(t *testing.T) {
 	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(pod.Finalizers) != 1 || pod.Finalizers[0] != PoolPodFinalizer {
-		t.Errorf("finalizers = %v, want [%q]", pod.Finalizers, PoolPodFinalizer)
+	if len(pod.Finalizers) != 0 {
+		t.Errorf("finalizers = %v, want none", pod.Finalizers)
 	}
 }
 

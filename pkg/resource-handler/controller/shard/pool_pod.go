@@ -20,14 +20,6 @@ import (
 )
 
 const (
-	// PoolPodFinalizer prevents Kubernetes from removing pods before the
-	// operator can clean up etcd topology entries.
-	PoolPodFinalizer = "multigres.com/pool-pod-protection"
-
-	// ShardFinalizer ensures the operator cleans up child resources (Pods, PVCs)
-	// that have their own finalizers before the Shard resource is removed.
-	ShardFinalizer = "multigres.com/shard-resource-protection"
-
 	// defaultTerminationGracePeriod gives multipooler time to gracefully close
 	// connections and set NOT_SERVING in etcd before SIGKILL.
 	defaultTerminationGracePeriod int64 = 30
@@ -88,7 +80,6 @@ func BuildPoolPod(
 			Annotations: map[string]string{
 				metadata.AnnotationSpecHash: "", // placeholder, computed below
 			},
-			Finalizers: []string{PoolPodFinalizer},
 		},
 		Spec: corev1.PodSpec{
 			SecurityContext: &corev1.PodSecurityContext{

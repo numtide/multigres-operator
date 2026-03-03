@@ -20,7 +20,7 @@ import (
 )
 
 func TestReconcile_Databases(t *testing.T) {
-	coreTpl, cellTpl, shardTpl, _, clusterName, namespace, _ := setupFixtures(t)
+	coreTpl, cellTpl, shardTpl, _, clusterName, namespace := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
 	tests := map[string]reconcileTestCase{
@@ -334,7 +334,7 @@ func TestReconcileDatabases_BuildError_SchemeMismatch(t *testing.T) {
 // steps might have been skipped or reordered, ensuring defensive programming is covered.
 func TestReconcileDatabases_Direct_Error_GlobalTopoRef(t *testing.T) {
 	scheme := setupScheme()
-	_, cellTpl, shardTpl, _, namespace, _, _ := setupFixtures(t)
+	_, cellTpl, shardTpl, _, namespace, _ := setupFixtures(t)
 	errSimulated := errors.New("simulated error for testing")
 
 	// Setup Cluster to use a failing template

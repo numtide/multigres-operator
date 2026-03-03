@@ -32,8 +32,8 @@ func resolvePodRole(shard *multigresv1alpha1.Shard, podName string) string {
 }
 
 // initiateDrain sets the drain-requested annotation on a pod via merge patch,
-// starting the drain state machine: resource-handler requests -> data-handler
-// removes from sync standby -> unregisters from etcd -> ready-for-deletion.
+// starting the drain state machine: the reconciler removes the pod from the
+// sync standby list, unregisters it from etcd, then marks it ready-for-deletion.
 func (r *ShardReconciler) initiateDrain(ctx context.Context, pod *corev1.Pod) error {
 	patch := client.MergeFrom(pod.DeepCopy())
 	if pod.Annotations == nil {

@@ -1,33 +1,42 @@
-package shard
+// Package drain implements the drain state machine for graceful pod removal.
+// It handles the lifecycle of a pod being drained: from the initial drain
+// request through standby removal, topo unregistration, and final readiness
+// for deletion.
+package drain
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
 	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	multipoolermanagerdatapb "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/topo"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 const (
-	// drainTimeout is the maximum time to wait for a failover or drain operation
+	// DrainTimeout is the maximum time to wait for a failover or drain operation
 	// before giving up and reporting an error.
-	drainTimeout = 5 * time.Minute
+	DrainTimeout = 5 * time.Minute
 )
 
-// executeDrainStateMachine handles the graceful scale down and etcd unregistration for a pod.
+// ExecuteDrainStateMachine handles the graceful scale down and etcd unregistration for a pod.
 // Returns true if reconciliation should be requeued.
-func (r *ShardReconciler) executeDrainStateMachine(
+func ExecuteDrainStateMachine(
 	ctx context.Context,
+	k8sClient client.Client,
+	rpcClient rpcclient.MultiPoolerClient,
+	recorder record.EventRecorder,
 	store topoclient.Store,
 	shard *multigresv1alpha1.Shard,
 	pod *corev1.Pod,
@@ -53,44 +62,42 @@ func (r *ShardReconciler) executeDrainStateMachine(
 		drainStart = pod.DeletionTimestamp.Time
 	}
 
-	if !drainStart.IsZero() && time.Since(drainStart) > drainTimeout {
+	if !drainStart.IsZero() && time.Since(drainStart) > DrainTimeout {
 		logger.Info("Pod is stuck draining, forcing unregistration", "pod", pod.Name)
-		if err := r.forceUnregister(ctx, store, shard, pod); err != nil {
+		cellName := pod.Labels[metadata.LabelMultigresCell]
+		if err := topo.ForceUnregisterPod(ctx, store, shard, pod.Name, cellName); err != nil {
 			return false, fmt.Errorf("forcing unregistration: %w", err)
 		}
-		return r.updateDrainState(ctx, pod, metadata.DrainStateReadyForDeletion)
+		return UpdateDrainState(ctx, k8sClient, pod, metadata.DrainStateReadyForDeletion)
 	}
 
-	cells := collectCells(shard)
+	cells := topo.CollectCells(shard)
 	cellName := pod.Labels[metadata.LabelMultigresCell]
 
-	opt := &topoclient.GetMultiPoolersByCellOptions{
-		DatabaseShard: &topoclient.DatabaseShard{
-			Database:   string(shard.Spec.DatabaseName),
-			TableGroup: string(shard.Spec.TableGroupName),
-			Shard:      string(shard.Spec.ShardName),
-		},
-	}
+	opt := topo.ShardFilter(shard)
 
 	// Find the pooler entry for this pod
 	var myPooler *topoclient.MultiPoolerInfo
 	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, opt)
 	if err != nil {
-		if isTopoUnavailable(err) && !pod.DeletionTimestamp.IsZero() {
+		if topo.IsTopoUnavailable(err) && !pod.DeletionTimestamp.IsZero() {
 			logger.Info(
 				"Topology is unavailable while pod is being deleted. Bypassing drain",
 				"pod",
 				pod.Name,
 			)
-			return r.updateDrainState(ctx, pod, metadata.DrainStateReadyForDeletion)
+			return UpdateDrainState(ctx, k8sClient, pod, metadata.DrainStateReadyForDeletion)
 		}
-		if !isTopoUnavailable(err) {
+		if !topo.IsTopoUnavailable(err) {
 			return false, fmt.Errorf("listing poolers in cell %q: %w", cellName, err)
 		}
+		logger.Info("Topology unavailable for drain, will retry",
+			"pod", pod.Name, "cell", cellName)
+		return true, nil
 	}
 
 	for _, p := range poolers {
-		if podMatchesPooler(pod.Name, p) {
+		if topo.PodMatchesPooler(pod.Name, p) {
 			myPooler = p
 			break
 		}
@@ -98,15 +105,11 @@ func (r *ShardReconciler) executeDrainStateMachine(
 
 	isPrimary := myPooler != nil && myPooler.Type == clustermetadatapb.PoolerType_PRIMARY
 
-	// We only want to handle valid states
 	switch state {
 	case metadata.DrainStateRequested:
 		if isPrimary {
-			// Failover is multiorch's responsibility via its consensus protocol
-			// (BeginTerm + Promote). The operator proceeds with the drain and
-			// multiorch will elect a new leader once this pod is removed.
 			logger.Info("Draining PRIMARY pod, multiorch will handle failover", "pod", pod.Name)
-			r.Recorder.Eventf(
+			recorder.Eventf(
 				shard,
 				"Warning",
 				"PrimaryDrain",
@@ -114,18 +117,20 @@ func (r *ShardReconciler) executeDrainStateMachine(
 				pod.Name,
 			)
 		} else {
-			// Remove this replica from the synchronous standby list on the primary
-			// so that quorum calculations no longer include it.
 			logger.Info("Proceeding to drain replica pod", "pod", pod.Name)
-			primary, err := findPrimaryPooler(ctx, store, shard, cells)
-			if err == nil && primary != nil && myPooler != nil && r.rpcClient != nil {
-				if r.isPrimaryTerminatingOrMissing(ctx, shard, primary) {
+			primary, err := topo.FindPrimaryPooler(ctx, store, shard, cells)
+			if err != nil {
+				logger.Error(err, "Failed to find primary for standby removal, will retry", "pod", pod.Name)
+				return true, nil
+			}
+			if primary != nil && myPooler != nil && rpcClient != nil {
+				if IsPrimaryTerminatingOrMissing(ctx, k8sClient, shard, primary) {
 					logger.Info(
 						"Primary pod is dead or terminating, skipping standby removal",
 						"pod",
 						pod.Name,
 					)
-				} else if r.isPrimaryDraining(ctx, shard, primary) {
+				} else if IsPrimaryDraining(ctx, k8sClient, shard, primary) {
 					logger.Info(
 						"Primary pod is being drained, delaying standby removal",
 						"pod",
@@ -137,7 +142,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 						Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
 						StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
 					}
-					_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
+					_, rpcErr := rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 					if rpcErr != nil {
 						logger.Error(
 							rpcErr,
@@ -151,13 +156,11 @@ func (r *ShardReconciler) executeDrainStateMachine(
 			}
 		}
 
-		return r.updateDrainState(ctx, pod, metadata.DrainStateDraining)
+		return UpdateDrainState(ctx, k8sClient, pod, metadata.DrainStateDraining)
 
 	case metadata.DrainStateDraining:
 		if !isPrimary {
-			// Verify that the standby removal actually took effect by re-attempting
-			// the idempotent REMOVE call on the primary.
-			primary, err := findPrimaryPooler(ctx, store, shard, cells)
+			primary, err := topo.FindPrimaryPooler(ctx, store, shard, cells)
 			if err != nil {
 				logger.Error(
 					err,
@@ -167,14 +170,14 @@ func (r *ShardReconciler) executeDrainStateMachine(
 				)
 				return true, nil
 			}
-			if primary != nil && myPooler != nil && r.rpcClient != nil {
-				if r.isPrimaryTerminatingOrMissing(ctx, shard, primary) {
+			if primary != nil && myPooler != nil && rpcClient != nil {
+				if IsPrimaryTerminatingOrMissing(ctx, k8sClient, shard, primary) {
 					logger.Info(
 						"Primary pod is dead or terminating, skipping standby removal verification",
 						"pod",
 						pod.Name,
 					)
-				} else if r.isPrimaryDraining(ctx, shard, primary) {
+				} else if IsPrimaryDraining(ctx, k8sClient, shard, primary) {
 					logger.Info(
 						"Primary pod is being drained, delaying standby removal verification",
 						"pod",
@@ -186,7 +189,7 @@ func (r *ShardReconciler) executeDrainStateMachine(
 						Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
 						StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
 					}
-					_, rpcErr := r.rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
+					_, rpcErr := rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 					if rpcErr != nil {
 						logger.Error(
 							rpcErr,
@@ -199,26 +202,28 @@ func (r *ShardReconciler) executeDrainStateMachine(
 				}
 			}
 		}
-		return r.updateDrainState(ctx, pod, metadata.DrainStateAcknowledged)
+		return UpdateDrainState(ctx, k8sClient, pod, metadata.DrainStateAcknowledged)
 
 	case metadata.DrainStateAcknowledged:
-		// Finally, call UnregisterMultiPooler
 		if myPooler != nil {
-			if err := r.forceUnregister(ctx, store, shard, pod); err != nil {
+			cellName := pod.Labels[metadata.LabelMultigresCell]
+			if err := topo.ForceUnregisterPod(ctx, store, shard, pod.Name, cellName); err != nil {
 				return false, fmt.Errorf("unregistering pooler: %w", err)
 			}
 		}
 
 		monitoring.IncrementDrainOperations(clusterName, shard.Name, "success")
-		r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Pod %s completely drained", pod.Name)
-		return r.updateDrainState(ctx, pod, metadata.DrainStateReadyForDeletion)
+		recorder.Eventf(shard, "Normal", "DrainCompleted", "Pod %s completely drained", pod.Name)
+		return UpdateDrainState(ctx, k8sClient, pod, metadata.DrainStateReadyForDeletion)
 	}
 
 	return false, nil
 }
 
-func (r *ShardReconciler) updateDrainState(
+// UpdateDrainState patches a pod's drain state annotation.
+func UpdateDrainState(
 	ctx context.Context,
+	k8sClient client.Client,
 	pod *corev1.Pod,
 	newState string,
 ) (bool, error) {
@@ -227,50 +232,17 @@ func (r *ShardReconciler) updateDrainState(
 		pod.Annotations = make(map[string]string)
 	}
 	pod.Annotations[metadata.AnnotationDrainState] = newState
-	if err := r.Patch(ctx, pod, patch); err != nil {
+	if err := k8sClient.Patch(ctx, pod, patch); err != nil {
 		return false, fmt.Errorf("updating pod drain state to %s: %w", newState, err)
 	}
 	return true, nil
 }
 
-func (r *ShardReconciler) forceUnregister(
-	ctx context.Context,
-	store topoclient.Store,
-	shard *multigresv1alpha1.Shard,
-	pod *corev1.Pod,
-) error {
-	cellName := pod.Labels[metadata.LabelMultigresCell]
-	if cellName == "" {
-		return nil
-	}
-
-	opt := &topoclient.GetMultiPoolersByCellOptions{
-		DatabaseShard: &topoclient.DatabaseShard{
-			Database:   string(shard.Spec.DatabaseName),
-			TableGroup: string(shard.Spec.TableGroupName),
-			Shard:      string(shard.Spec.ShardName),
-		},
-	}
-	poolers, err := store.GetMultiPoolersByCell(ctx, cellName, opt)
-	if err != nil {
-		return err
-	}
-
-	for _, p := range poolers {
-		if podMatchesPooler(pod.Name, p) {
-			return store.UnregisterMultiPooler(ctx, p.Id)
-		}
-	}
-	log.FromContext(ctx).
-		Info("No matching pooler found in topology for pod, skipping unregistration",
-			"pod", pod.Name, "cell", cellName)
-	return nil
-}
-
-// isPrimaryTerminatingOrMissing checks if the primary pooler's corresponding Kubernetes pod
+// IsPrimaryTerminatingOrMissing checks if the primary pooler's corresponding Kubernetes pod
 // is unavailable for receiving RPCs because it is either missing or terminating.
-func (r *ShardReconciler) isPrimaryTerminatingOrMissing(
+func IsPrimaryTerminatingOrMissing(
 	ctx context.Context,
+	k8sClient client.Client,
 	shard *multigresv1alpha1.Shard,
 	primary *clustermetadatapb.MultiPooler,
 ) bool {
@@ -279,18 +251,17 @@ func (r *ShardReconciler) isPrimaryTerminatingOrMissing(
 	}
 	primaryPod := &corev1.Pod{}
 	key := client.ObjectKey{Namespace: shard.Namespace, Name: primary.Id.Name}
-	if err := r.Get(ctx, key, primaryPod); err != nil {
-		// If the pod doesn't exist or we can't get it, it's unavailable for RPC.
+	if err := k8sClient.Get(ctx, key, primaryPod); err != nil {
 		return true
 	}
-	// If the pod is terminating, it's shutting down and unavailable for RPC.
 	return !primaryPod.DeletionTimestamp.IsZero()
 }
 
-// isPrimaryDraining checks if the primary pooler's corresponding Kubernetes pod
+// IsPrimaryDraining checks if the primary pooler's corresponding Kubernetes pod
 // has drain annotations, indicating it is mid-drain and should not receive RPCs.
-func (r *ShardReconciler) isPrimaryDraining(
+func IsPrimaryDraining(
 	ctx context.Context,
+	k8sClient client.Client,
 	shard *multigresv1alpha1.Shard,
 	primary *clustermetadatapb.MultiPooler,
 ) bool {
@@ -299,17 +270,9 @@ func (r *ShardReconciler) isPrimaryDraining(
 	}
 	primaryPod := &corev1.Pod{}
 	key := client.ObjectKey{Namespace: shard.Namespace, Name: primary.Id.Name}
-	if err := r.Get(ctx, key, primaryPod); err != nil {
+	if err := k8sClient.Get(ctx, key, primaryPod); err != nil {
 		return false
 	}
-	return primaryPod.Annotations[metadata.AnnotationDrainState] != ""
-}
-
-// podMatchesPooler checks if the topology pooler record corresponds to the given Kubernetes pod name.
-func podMatchesPooler(podName string, p *topoclient.MultiPoolerInfo) bool {
-	if p.Id != nil && p.Id.Name == podName {
-		return true
-	}
-	h := p.GetHostname()
-	return h == podName || strings.HasPrefix(h, podName+".")
+	state := primaryPod.Annotations[metadata.AnnotationDrainState]
+	return state != "" && state != metadata.DrainStateReadyForDeletion
 }

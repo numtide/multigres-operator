@@ -6,22 +6,36 @@ import (
 	"slices"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
+	"github.com/multigres/multigres/go/common/topoclient"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
+)
+
+const (
+	// topoUnavailableGracePeriod is the duration after resource creation during
+	// which topology UNAVAILABLE errors are silently requeued instead of being
+	// reported as reconcile errors. This prevents noisy error metrics during
+	// normal cluster startup while the toposerver is still initializing.
+	topoUnavailableGracePeriod = 2 * time.Minute
+
+	// topoUnavailableRequeueDelay is the delay before retrying when the topology
+	// server is unavailable during the grace period.
+	topoUnavailableRequeueDelay = 5 * time.Second
 )
 
 // ShardReconciler reconciles a Shard object.
@@ -34,7 +48,9 @@ type ShardReconciler struct {
 	// "app.kubernetes.io/managed-by: multigres-operator" due to the informer
 	// cache's label filter. External Secrets (e.g., cert-manager) lack this
 	// label, so we need APIReader to validate user-provided pgBackRest TLS Secrets.
-	APIReader client.Reader
+	APIReader       client.Reader
+	RPCClient       rpcclient.MultiPoolerClient
+	CreateTopoStore func(*multigresv1alpha1.Shard) (topoclient.Store, error)
 }
 
 // Reconcile handles Shard resource reconciliation.
@@ -68,23 +84,17 @@ func (r *ShardReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Handle deletion before adding finalizer to avoid "no new finalizers
-	// can be added if the object is being deleted" errors.
+	// Best-effort cleanup on deletion — no finalizers are used.
 	if !shard.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
-			return r.handleDeletion(ctx, shard)
-		}
-		// Shard is being deleted but never got its finalizer — nothing to clean up.
-		return ctrl.Result{}, nil
+		return r.handleDeletion(ctx, shard)
 	}
 
-	// Add finalizer if missing
-	if !controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
-		controllerutil.AddFinalizer(shard, ShardFinalizer)
-		if err := r.Update(ctx, shard); err != nil {
-			monitoring.RecordSpanError(span, err)
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-		}
+	// Handle graceful deletion via PendingDeletion annotation.
+	// The TableGroup controller sets this annotation when a shard is removed from
+	// spec. The shard controller drains all pods and sets ReadyForDeletion
+	// condition, at which point the TableGroup controller calls Delete.
+	if shard.Annotations[multigresv1alpha1.AnnotationPendingDeletion] != "" {
+		return r.handlePendingDeletion(ctx, shard)
 	}
 
 	// Reconcile pg_hba ConfigMap first (required by all pools before starting)
@@ -226,6 +236,32 @@ func (r *ShardReconciler) Reconcile(
 		childSpan.End()
 	}
 
+	// Ensure PVC ownerRefs match the current PVCDeletionPolicy.
+	// This handles mid-lifecycle policy changes (e.g., Retain → Delete).
+	{
+		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePVCOwnerRefs")
+		if err := r.reconcilePVCOwnerRefs(ctx, shard); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile PVC ownerRefs")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"PVCOwnerRefError",
+				"Failed to reconcile PVC ownerRefs: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
+	}
+
+	// Data-plane phases: open a single topo connection shared across all phases.
+	result, err := r.reconcileDataPlane(ctx, shard)
+	if err != nil || result.RequeueAfter > 0 || result.Requeue {
+		return result, err
+	}
+
 	// Update status
 	{
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.UpdateStatus")
@@ -241,160 +277,6 @@ func (r *ShardReconciler) Reconcile(
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(shard, "Normal", "Synced", "Successfully reconciled Shard")
-	return ctrl.Result{}, nil
-}
-
-// handleDeletion ensures all child resources (Pods) go through the drain state machine
-// to unregister from etcd before their finalizers are removed. Pods that were never
-// scheduled or whose drain times out get their finalizers removed directly.
-func (r *ShardReconciler) handleDeletion(
-	ctx context.Context,
-	shard *multigresv1alpha1.Shard,
-) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	// Determine matching labels for all pods belonging to this shard
-	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	selector := map[string]string{
-		metadata.LabelMultigresCluster:    clusterName,
-		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
-		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
-		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
-	}
-
-	podList := &corev1.PodList{}
-	if err := r.List(
-		ctx,
-		podList,
-		client.InNamespace(shard.Namespace),
-		client.MatchingLabels(selector),
-	); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list pods for deletion: %w", err)
-	}
-
-	// Delete all Deployments owned by this shard
-	deployList := &appsv1.DeploymentList{}
-	if err := r.List(
-		ctx,
-		deployList,
-		client.InNamespace(shard.Namespace),
-		client.MatchingLabels(selector),
-	); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list deployments for deletion: %w", err)
-	}
-	for i := range deployList.Items {
-		deploy := &deployList.Items[i]
-		if deploy.DeletionTimestamp.IsZero() {
-			logger.Info(
-				"Initiating deployment deletion during shard cleanup",
-				"deployment",
-				deploy.Name,
-			)
-			if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf(
-					"failed to delete deployment %s: %w",
-					deploy.Name,
-					err,
-				)
-			}
-		}
-	}
-
-	// Evaluate and process PVC deletions based on PVCDeletionPolicy before pod finalizers are removed
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(
-		ctx,
-		pvcList,
-		client.InNamespace(shard.Namespace),
-		client.MatchingLabels(selector),
-	); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list PVCs for deletion: %w", err)
-	}
-
-	for i := range pvcList.Items {
-		pvc := &pvcList.Items[i]
-
-		// Determine the PVC policy
-		poolName := pvc.Labels[metadata.LabelMultigresPool]
-		var policy *multigresv1alpha1.PVCDeletionPolicy
-
-		if poolName != "" {
-			// Pool Data PVC
-			if poolSpec, exists := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]; exists {
-				policy = multigresv1alpha1.MergePVCDeletionPolicy(
-					poolSpec.PVCDeletionPolicy,
-					shard.Spec.PVCDeletionPolicy,
-				)
-			} else {
-				policy = shard.Spec.PVCDeletionPolicy
-			}
-		} else {
-			// Shared Backup PVC
-			policy = shard.Spec.PVCDeletionPolicy
-		}
-
-		// Default to Retain
-		whenDeleted := multigresv1alpha1.RetainPVCRetentionPolicy
-		if policy != nil && policy.WhenDeleted != "" {
-			whenDeleted = policy.WhenDeleted
-		}
-
-		if whenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy {
-			if pvc.DeletionTimestamp.IsZero() {
-				logger.Info("Deleting PVC per WhenDeleted: Delete policy", "pvc", pvc.Name)
-				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, fmt.Errorf("failed to delete PVC %s: %w", pvc.Name, err)
-				}
-			}
-		} else {
-			logger.Info("Retaining PVC per WhenDeleted: Retain policy", "pvc", pvc.Name)
-		}
-	}
-
-	// During shard deletion, remove pod finalizers directly and skip the drain
-	// state machine. The data-handler has already unregistered the database from
-	// topology in its own handleDeletion, so pooler entries are cleaned up at the
-	// database level. The drain state machine (which removes individual poolers
-	// from the sync standby list) cannot run reliably here because the
-	// data-handler has already removed its finalizer and stopped reconciling
-	// before the resource-handler gets a chance to set drain annotations.
-	//
-	// For full cluster deletion this is safe: the topo server is also being
-	// deleted so any residual entries are destroyed with it.
-	//
-	// TODO: For individual shard deletion within a live cluster, residual pooler
-	// entries may be left in topo. Not addressed now because the operator only
-	// supports single-shard, single-database clusters — shards are only ever
-	// deleted as part of full cluster teardown where the topo server is also
-	// destroyed.
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		if controllerutil.RemoveFinalizer(pod, PoolPodFinalizer) {
-			if err := r.Update(ctx, pod); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf(
-					"failed to remove finalizer from pod %s: %w",
-					pod.Name,
-					err,
-				)
-			}
-			logger.Info("Removed finalizer from pod during shard deletion", "pod", pod.Name)
-		}
-		if pod.DeletionTimestamp.IsZero() {
-			if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
-			}
-		}
-	}
-
-	// Remove Shard finalizer
-	if controllerutil.ContainsFinalizer(shard, ShardFinalizer) {
-		controllerutil.RemoveFinalizer(shard, ShardFinalizer)
-		if err := r.Update(ctx, shard); err != nil && !errors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("failed to remove shard finalizer: %w", err)
-		}
-	}
-
-	logger.Info("Shard cleanup complete, finalizer removed")
 	return ctrl.Result{}, nil
 }
 
@@ -503,6 +385,110 @@ func getPoolCells(shard *multigresv1alpha1.Shard) []multigresv1alpha1.CellName {
 
 	slices.Sort(cells)
 	return cells
+}
+
+// ShouldDeletePVCOnShardRemoval returns true when the effective PVCDeletionPolicy
+// for a pool resolves to Delete. Used by PVC builders to conditionally set
+// a controller ownerRef so Kubernetes GC cascade-deletes the PVC with the Shard.
+func ShouldDeletePVCOnShardRemoval(
+	shard *multigresv1alpha1.Shard,
+	poolSpec multigresv1alpha1.PoolSpec,
+) bool {
+	policy := multigresv1alpha1.MergePVCDeletionPolicy(
+		poolSpec.PVCDeletionPolicy,
+		shard.Spec.PVCDeletionPolicy,
+	)
+	return policy != nil && policy.WhenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy
+}
+
+// ShouldDeleteShardLevelPVCOnRemoval returns true when the shard-level
+// PVCDeletionPolicy resolves to Delete. Used for shared infrastructure PVCs
+// (e.g., backup PVCs) that are not pool-specific.
+func ShouldDeleteShardLevelPVCOnRemoval(shard *multigresv1alpha1.Shard) bool {
+	p := shard.Spec.PVCDeletionPolicy
+	return p != nil && p.WhenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy
+}
+
+// reconcilePVCOwnerRefs ensures ownerRefs on existing PVCs match the current
+// PVCDeletionPolicy. When policy is Delete, a controller ownerRef is added so
+// Kubernetes GC cascade-deletes PVCs with the Shard. When policy is Retain,
+// any existing controller ownerRef is removed so PVCs survive Shard deletion.
+func (r *ShardReconciler) reconcilePVCOwnerRefs(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) error {
+	logger := log.FromContext(ctx)
+
+	selector := map[string]string{
+		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
+		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
+		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
+	}
+
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(
+		ctx,
+		pvcList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(selector),
+	); err != nil {
+		return fmt.Errorf("failed to list PVCs for ownerRef reconciliation: %w", err)
+	}
+
+	shardUID := shard.GetUID()
+
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+
+		// Resolve effective policy for this PVC.
+		poolName := pvc.Labels[metadata.LabelMultigresPool]
+		wantOwnerRef := false
+
+		if poolName != "" {
+			if poolSpec, exists := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]; exists {
+				wantOwnerRef = ShouldDeletePVCOnShardRemoval(shard, poolSpec)
+			} else {
+				// Pool removed from spec — fall back to shard-level policy.
+				wantOwnerRef = ShouldDeleteShardLevelPVCOnRemoval(shard)
+			}
+		} else {
+			// Shared backup PVC — use shard-level policy.
+			wantOwnerRef = ShouldDeleteShardLevelPVCOnRemoval(shard)
+		}
+
+		hasOwnerRef := false
+		for _, ref := range pvc.OwnerReferences {
+			if ref.UID == shardUID {
+				hasOwnerRef = true
+				break
+			}
+		}
+
+		if wantOwnerRef && !hasOwnerRef {
+			if err := ctrl.SetControllerReference(shard, pvc, r.Scheme); err != nil {
+				return fmt.Errorf("failed to add ownerRef to PVC %s: %w", pvc.Name, err)
+			}
+			if err := r.Update(ctx, pvc); err != nil {
+				return fmt.Errorf("failed to update PVC %s ownerRef: %w", pvc.Name, err)
+			}
+			logger.Info("Added ownerRef to PVC for Delete policy", "pvc", pvc.Name)
+		} else if !wantOwnerRef && hasOwnerRef {
+			filtered := make([]metav1.OwnerReference, 0, len(pvc.OwnerReferences))
+			for _, ref := range pvc.OwnerReferences {
+				if ref.UID != shardUID {
+					filtered = append(filtered, ref)
+				}
+			}
+			pvc.OwnerReferences = filtered
+			if err := r.Update(ctx, pvc); err != nil {
+				return fmt.Errorf("failed to remove ownerRef from PVC %s: %w", pvc.Name, err)
+			}
+			logger.Info("Removed ownerRef from PVC for Retain policy", "pvc", pvc.Name)
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

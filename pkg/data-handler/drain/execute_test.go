@@ -1,4 +1,4 @@
-package shard
+package drain_test
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/data-handler/drain"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
@@ -338,24 +339,9 @@ func TestReplicaDrainFlow(t *testing.T) {
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod, primaryPod).Build()
 	rpcMock := &mockRPCClient{}
-
-	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(10),
-		rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
-
-	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
-		return topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		), nil
-	}
 
 	ctx := context.Background()
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -381,7 +367,7 @@ func TestReplicaDrainFlow(t *testing.T) {
 	}, false)
 
 	// Step 1: Requested -> Draining
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	requeue, err := drain.ExecuteDrainStateMachine(ctx, c, rpcMock, recorder, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -398,7 +384,7 @@ func TestReplicaDrainFlow(t *testing.T) {
 	}
 
 	// Step 2: Draining -> Acknowledged
-	_, _ = reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	_, _ = drain.ExecuteDrainStateMachine(ctx, c, rpcMock, recorder, store, shardObj, pod)
 	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
 	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateAcknowledged {
 		t.Fatalf(
@@ -408,7 +394,7 @@ func TestReplicaDrainFlow(t *testing.T) {
 	}
 
 	// Step 3: Acknowledged -> ReadyForDeletion
-	_, _ = reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	_, _ = drain.ExecuteDrainStateMachine(ctx, c, rpcMock, recorder, store, shardObj, pod)
 	_ = c.Get(ctx, client.ObjectKeyFromObject(pod), pod)
 	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateReadyForDeletion {
 		t.Fatalf(
@@ -464,23 +450,9 @@ func TestPrimaryDrainFlow(t *testing.T) {
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
 	rpcMock := &mockRPCClient{}
-	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(10),
-		rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
-
-	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
-		return topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		), nil
-	}
 
 	ctx := context.Background()
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -503,7 +475,7 @@ func TestPrimaryDrainFlow(t *testing.T) {
 
 	// PRIMARY drain should advance to DrainStateDraining without calling Promote.
 	// Failover is multiorch's responsibility via its consensus protocol.
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	requeue, err := drain.ExecuteDrainStateMachine(ctx, c, rpcMock, recorder, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -557,23 +529,8 @@ func TestPrimaryDrainFlowNilRPCClient(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	reconciler := &ShardReconciler{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(10),
-		// rpcClient intentionally nil
-	}
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
-
-	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) {
-		return topoclient.NewWithFactory(
-			factory,
-			"",
-			[]string{""},
-			topoclient.NewDefaultTopoConfig(),
-		), nil
-	}
 
 	ctx := context.Background()
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -595,7 +552,8 @@ func TestPrimaryDrainFlowNilRPCClient(t *testing.T) {
 	}, false)
 
 	// With nil rpcClient, drain should proceed instead of looping forever
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	recorder := record.NewFakeRecorder(10)
+	requeue, err := drain.ExecuteDrainStateMachine(ctx, c, nil, recorder, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -649,17 +607,10 @@ func TestStuckTerminatingPod(t *testing.T) {
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
 	rpcMock := &mockRPCClient{}
-	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(10),
-		rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	store, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	defer func() { _ = store.Close() }()
-
-	reconciler.createTopoStore = func(s *multigresv1alpha1.Shard) (topoclient.Store, error) { return store, nil }
 
 	ctx := context.Background()
 	_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
@@ -675,7 +626,7 @@ func TestStuckTerminatingPod(t *testing.T) {
 
 	// Since we set AnnotationDrainRequestedAt to 10 minutes ago,
 	// executeDrainStateMachine should force unregister it due to timeout.
-	_, _ = reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	_, _ = drain.ExecuteDrainStateMachine(ctx, c, rpcMock, recorder, store, shardObj, pod)
 	// Recreate a new inspector store to verify unregistration without reuse
 	inspectorStore := topoclient.NewWithFactory(
 		factory,
@@ -705,8 +656,7 @@ func TestIsPrimaryTerminatingOrMissing(t *testing.T) {
 
 	t.Run("returns true for nil primary", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		r := &ShardReconciler{Client: c}
-		if !r.isPrimaryTerminatingOrMissing(context.Background(), shard, nil) {
+		if !drain.IsPrimaryTerminatingOrMissing(context.Background(), c, shard, nil) {
 			t.Error("Expected true for nil primary")
 		}
 	})
@@ -719,24 +669,22 @@ func TestIsPrimaryTerminatingOrMissing(t *testing.T) {
 			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(primaryPod).Build()
-		r := &ShardReconciler{Client: c}
 
 		primary := &clustermetadata.MultiPooler{
 			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
 		}
-		if r.isPrimaryTerminatingOrMissing(context.Background(), shard, primary) {
+		if drain.IsPrimaryTerminatingOrMissing(context.Background(), c, shard, primary) {
 			t.Error("Expected false for primary without drain annotation")
 		}
 	})
 
 	t.Run("returns false when primary pod not found", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		r := &ShardReconciler{Client: c}
 
 		primary := &clustermetadata.MultiPooler{
 			Id: &clustermetadata.ID{Cell: "cell1", Name: "nonexistent-pod"},
 		}
-		if !r.isPrimaryTerminatingOrMissing(context.Background(), shard, primary) {
+		if !drain.IsPrimaryTerminatingOrMissing(context.Background(), c, shard, primary) {
 			t.Error("Expected true when primary pod not found")
 		}
 	})
@@ -795,13 +743,7 @@ func TestReplicaDrain_SkipsRPCWhenPrimaryDraining(t *testing.T) {
 		WithObjects(shardObj, primaryPod, replicaPod).
 		Build()
 	rpcMock := &mockRPCClient{}
-
-	reconciler := &ShardReconciler{
-		Client:    c,
-		Scheme:    scheme,
-		Recorder:  record.NewFakeRecorder(10),
-		rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -828,7 +770,15 @@ func TestReplicaDrain_SkipsRPCWhenPrimaryDraining(t *testing.T) {
 	}, false)
 
 	// Execute drain for replica while primary is draining
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		ctx,
+		c,
+		rpcMock,
+		recorder,
+		store,
+		shardObj,
+		replicaPod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -883,10 +833,7 @@ func TestReplicaDrain_DrainingState_FindPrimaryError(t *testing.T) {
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
 	rpcMock := &mockRPCClient{}
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	// Create a topo where the replica exists but finding primary will fail
 	// because cell1 has a pooler error condition (e.g., non-UNAVAILABLE error).
@@ -903,7 +850,7 @@ func TestReplicaDrain_DrainingState_FindPrimaryError(t *testing.T) {
 
 	// Since there's no primary in topo, findPrimaryPooler returns nil,nil.
 	// So the replica draining state should advance to Acknowledged.
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	requeue, err := drain.ExecuteDrainStateMachine(ctx, c, rpcMock, recorder, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -961,10 +908,7 @@ func TestReplicaDrain_DrainingState_PrimaryDraining(t *testing.T) {
 		WithObjects(shardObj, primaryPod, replicaPod).
 		Build()
 	rpcMock := &mockRPCClient{}
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -983,7 +927,15 @@ func TestReplicaDrain_DrainingState_PrimaryDraining(t *testing.T) {
 	}, false)
 
 	// In DrainStateDraining, if primary is draining, should requeue without advancing
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		ctx,
+		c,
+		rpcMock,
+		recorder,
+		store,
+		shardObj,
+		replicaPod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1035,15 +987,12 @@ func TestDrain_TopoUnavailableDuringPodDeletion(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	store := &unavailableTopoStore{}
 
 	ctx := context.Background()
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	requeue, err := drain.ExecuteDrainStateMachine(ctx, c, nil, recorder, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1118,10 +1067,7 @@ func TestReplicaDrain_PrimaryTerminatingOrMissing(t *testing.T) {
 		WithObjects(shardObj, replicaPod, primaryPod).
 		Build()
 	rpcMock := &mockRPCClient{}
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -1139,7 +1085,15 @@ func TestReplicaDrain_PrimaryTerminatingOrMissing(t *testing.T) {
 		Database: "test-db", TableGroup: "test-tg", Shard: "0",
 	}, false)
 
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		ctx,
+		c,
+		rpcMock,
+		recorder,
+		store,
+		shardObj,
+		replicaPod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1200,10 +1154,7 @@ func TestReplicaDrain_DrainingState_PrimaryTerminating(t *testing.T) {
 		WithObjects(shardObj, replicaPod, primaryPod).
 		Build()
 	rpcMock := &mockRPCClient{}
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -1222,7 +1173,15 @@ func TestReplicaDrain_DrainingState_PrimaryTerminating(t *testing.T) {
 	}, false)
 
 	// In DrainStateDraining, primary is terminating, should skip standby verification
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		ctx,
+		c,
+		rpcMock,
+		recorder,
+		store,
+		shardObj,
+		replicaPod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1273,10 +1232,7 @@ func TestDrain_AcknowledgedState_NoPoolerInTopo(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -1285,7 +1241,7 @@ func TestDrain_AcknowledgedState_NoPoolerInTopo(t *testing.T) {
 	ctx := context.Background()
 	// Don't register any pooler — the pod won't be found in topo
 
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	requeue, err := drain.ExecuteDrainStateMachine(ctx, c, nil, recorder, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1335,10 +1291,7 @@ func TestDrain_StuckDrainTimeout_DeletionTimestampFallback(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	store, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	defer func() { _ = store.Close() }()
@@ -1350,7 +1303,7 @@ func TestDrain_StuckDrainTimeout_DeletionTimestampFallback(t *testing.T) {
 		Database: "test-db", TableGroup: "test-tg", Shard: "0",
 	}, false)
 
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, pod)
+	requeue, err := drain.ExecuteDrainStateMachine(ctx, c, nil, recorder, store, shardObj, pod)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1409,14 +1362,19 @@ func TestDrain_NonTopoError(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardObj, pod).Build()
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	store := &nonTopoErrorStore{}
 
-	_, err := reconciler.executeDrainStateMachine(context.Background(), store, shardObj, pod)
+	_, err := drain.ExecuteDrainStateMachine(
+		context.Background(),
+		c,
+		nil,
+		recorder,
+		store,
+		shardObj,
+		pod,
+	)
 	if err == nil {
 		t.Error("expected error for non-topo-unavailable error when pod is not being deleted")
 	}
@@ -1478,10 +1436,7 @@ func TestReplicaDrain_RPCError(t *testing.T) {
 		WithObjects(shardObj, replicaPod, primaryPod).
 		Build()
 	rpcMock := &failingRPCClient{}
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -1500,7 +1455,15 @@ func TestReplicaDrain_RPCError(t *testing.T) {
 	}, false)
 
 	// RPC error on UpdateSynchronousStandbyList should requeue
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		ctx,
+		c,
+		rpcMock,
+		recorder,
+		store,
+		shardObj,
+		replicaPod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1557,10 +1520,7 @@ func TestReplicaDrain_DrainingState_RPCError(t *testing.T) {
 		WithObjects(shardObj, replicaPod, primaryPod).
 		Build()
 	rpcMock := &failingRPCClient{}
-	reconciler := &ShardReconciler{
-		Client: c, Scheme: scheme,
-		Recorder: record.NewFakeRecorder(10), rpcClient: rpcMock,
-	}
+	recorder := record.NewFakeRecorder(10)
 
 	_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 	store := topoclient.NewWithFactory(factory, "", []string{""}, topoclient.NewDefaultTopoConfig())
@@ -1578,7 +1538,15 @@ func TestReplicaDrain_DrainingState_RPCError(t *testing.T) {
 		Database: "test-db", TableGroup: "test-tg", Shard: "0",
 	}, false)
 
-	requeue, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, replicaPod)
+	requeue, err := drain.ExecuteDrainStateMachine(
+		ctx,
+		c,
+		rpcMock,
+		recorder,
+		store,
+		shardObj,
+		replicaPod,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1711,11 +1679,7 @@ func TestDrainStateMachine_RandomizedInvariants(t *testing.T) {
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 		rpcMock := &mockRPCClient{}
-		reconciler := &ShardReconciler{
-			Client: c, Scheme: scheme,
-			Recorder:  record.NewFakeRecorder(100),
-			rpcClient: rpcMock,
-		}
+		recorder := record.NewFakeRecorder(10)
 
 		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
 		store := topoclient.NewWithFactory(
@@ -1754,7 +1718,15 @@ func TestDrainStateMachine_RandomizedInvariants(t *testing.T) {
 				stateBefore := fresh.Annotations[metadata.AnnotationDrainState]
 				orderBefore := drainStateOrder[stateBefore]
 
-				_, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, fresh)
+				_, err := drain.ExecuteDrainStateMachine(
+					ctx,
+					c,
+					rpcMock,
+					recorder,
+					store,
+					shardObj,
+					fresh,
+				)
 				// INVARIANT 1: No errors on valid drain states.
 				if err != nil {
 					t.Fatalf("iter=%d seed=%d round=%d pod=%s state=%q: unexpected error: %v",
@@ -1836,7 +1808,15 @@ func TestDrainStateMachine_RandomizedInvariants(t *testing.T) {
 			_ = c.Get(ctx, client.ObjectKeyFromObject(pods[j]), fresh)
 			stateBefore := fresh.Annotations[metadata.AnnotationDrainState]
 
-			_, err := reconciler.executeDrainStateMachine(ctx, store, shardObj, fresh)
+			_, err := drain.ExecuteDrainStateMachine(
+				ctx,
+				c,
+				rpcMock,
+				recorder,
+				store,
+				shardObj,
+				fresh,
+			)
 			if err != nil {
 				t.Fatalf(
 					"iter=%d seed=%d pod=%s: idempotency check error: %v",

@@ -105,6 +105,15 @@ type PVCDeletionPolicy struct {
 	WhenScaled PVCRetentionPolicyType `json:"whenScaled,omitempty"`
 }
 
+// TopologyPruningConfig controls whether the operator prunes stale topology entries.
+type TopologyPruningConfig struct {
+	// Enabled controls whether the operator prunes stale topology entries.
+	// When false, the operator still registers entries but never removes them.
+	// Default: true (nil or empty means enabled).
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
 // ContainerConfig defines generic container configuration.
 type ContainerConfig struct {
 	// Resources defines the compute resource requirements.
@@ -247,6 +256,18 @@ const (
 	PhaseHealthy      Phase = "Healthy"      // Desired state reached
 	PhaseDegraded     Phase = "Degraded"     // Resource is failing / crashing
 	PhaseUnknown      Phase = "Unknown"
+)
+
+const (
+	// AnnotationPendingDeletion is set by the TableGroup controller on a Shard
+	// that should be gracefully drained before deletion. The shard controller
+	// drains all pods and sets ConditionReadyForDeletion when complete.
+	AnnotationPendingDeletion = "multigres.com/pending-deletion"
+
+	// ConditionReadyForDeletion is set to True on a Shard once all pods have
+	// been drained. The TableGroup controller waits for this condition before
+	// calling Delete on the Shard CR.
+	ConditionReadyForDeletion = "ReadyForDeletion"
 )
 
 // MergePVCDeletionPolicy merges child and parent policies with child taking precedence.
