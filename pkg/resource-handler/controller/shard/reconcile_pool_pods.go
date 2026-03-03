@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -137,7 +138,7 @@ func (r *ShardReconciler) createMissingResources(
 		podName := BuildPoolPodName(shard, poolName, cellName, int(i))
 		pvcName := BuildPoolDataPVCName(shard, poolName, cellName, int(i))
 
-		// Create PVC if missing
+		// Create PVC if missing, or expand if storage.size increased
 		if _, exists := existingPVCs[pvcName]; !exists {
 			if !actionTaken {
 				desiredPVC, buildErr := BuildPoolDataPVC(
@@ -160,6 +161,10 @@ func (r *ShardReconciler) createMissingResources(
 					return 0, false, fmt.Errorf("failed to create PVC %s: %w", pvcName, createErr)
 				}
 				logger.Info("Created missing pool PVC", "pvc", pvcName)
+			}
+		} else {
+			if err := r.expandPVCIfNeeded(ctx, shard, existingPVCs[pvcName], poolSpec); err != nil {
+				return 0, false, err
 			}
 		}
 
@@ -237,6 +242,26 @@ func (r *ShardReconciler) createMissingResources(
 		isDrifted := podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, int(i), r.Scheme)
 		if isDrifted {
 			driftedCount++
+		}
+
+		// Check if the data PVC needs a pod restart for filesystem expansion.
+		// Some CSI drivers require the pod to be restarted after the block device
+		// has been expanded so the filesystem can grow.
+		if !actionTaken && pvcNeedsFilesystemResize(existingPVCs, pvcName) {
+			if pod.Annotations[metadata.AnnotationDrainState] == "" {
+				if err := r.initiateDrain(ctx, pod); err != nil {
+					return 0, false, fmt.Errorf(
+						"failed to drain pod %s for filesystem resize: %w",
+						pod.Name, err,
+					)
+				}
+				logger.Info("Draining pod for PVC filesystem expansion", "pod", pod.Name, "pvc", pvcName)
+				r.Recorder.Eventf(
+					shard, "Normal", "FilesystemResize",
+					"Draining pod %s to expand filesystem on PVC %s", pod.Name, pvcName,
+				)
+				actionTaken = true
+			}
 		}
 
 		// Block subsequent creations or updates if this pod is not ready and not already pending an update.
@@ -730,6 +755,73 @@ func podNeedsUpdate(
 
 	desiredHash := ComputeSpecHash(desired)
 	return existingHash != desiredHash
+}
+
+// expandPVCIfNeeded patches an existing PVC's storage request when the desired
+// size (from poolSpec.Storage.Size) exceeds the current PVC spec. This enables
+// in-place volume expansion without pod deletion.
+func (r *ShardReconciler) expandPVCIfNeeded(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	pvc *corev1.PersistentVolumeClaim,
+	poolSpec multigresv1alpha1.PoolSpec,
+) error {
+	logger := log.FromContext(ctx)
+
+	storageSize := DefaultDataVolumeSize
+	if poolSpec.Storage.Size != "" {
+		storageSize = poolSpec.Storage.Size
+	}
+
+	desired, err := resource.ParseQuantity(storageSize)
+	if err != nil {
+		return fmt.Errorf("invalid storage size %q: %w", storageSize, err)
+	}
+
+	var current resource.Quantity
+	if pvc.Spec.Resources.Requests != nil {
+		current = pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+	}
+	if desired.Cmp(current) <= 0 {
+		return nil
+	}
+
+	patch := client.MergeFrom(pvc.DeepCopy())
+	if pvc.Spec.Resources.Requests == nil {
+		pvc.Spec.Resources.Requests = corev1.ResourceList{}
+	}
+	pvc.Spec.Resources.Requests[corev1.ResourceStorage] = desired
+	if err := r.Patch(ctx, pvc, patch); err != nil {
+		r.Recorder.Eventf(shard, "Warning", "ExpandPVCFailed",
+			"Failed to expand PVC %s from %s to %s: %v",
+			pvc.Name, current.String(), desired.String(), err)
+		return fmt.Errorf("failed to expand PVC %s from %s to %s: %w",
+			pvc.Name, current.String(), desired.String(), err)
+	}
+
+	logger.Info("Expanded PVC storage",
+		"pvc", pvc.Name, "from", current.String(), "to", desired.String())
+	r.Recorder.Eventf(shard, "Normal", "PVCExpanded",
+		"Expanded PVC %s from %s to %s", pvc.Name, current.String(), desired.String())
+
+	return nil
+}
+
+// pvcNeedsFilesystemResize returns true if the named PVC has the
+// FileSystemResizePending condition, meaning the block device has been expanded
+// but the filesystem needs a pod restart to grow.
+func pvcNeedsFilesystemResize(pvcs map[string]*corev1.PersistentVolumeClaim, pvcName string) bool {
+	pvc, ok := pvcs[pvcName]
+	if !ok {
+		return false
+	}
+	for _, cond := range pvc.Status.Conditions {
+		if cond.Type == corev1.PersistentVolumeClaimFileSystemResizePending &&
+			cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 // resolvePodIndex parses the index from the pod name (the number after the last dash).

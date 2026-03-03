@@ -310,9 +310,39 @@ spec:
 - Reducing storage costs in non-production environments
 - Stateless-like workloads where data is ephemeral
 
-**Note**: This does NOT affect storage size. Changing PVC storage capacity is a separate operation and is not controlled by this policy.
+**Note**: This does NOT affect storage size. Changing PVC storage capacity is handled separately by the operator's **PVC Volume Expansion** feature (see below).
 
 ✅ **Production Recommendation**: For production clusters, use the default `Retain/Retain` policy and implement proper backup/restore procedures.
+
+### 5. PVC Volume Expansion
+
+The operator supports **in-place PVC volume expansion**. When you increase `storage.size` on a pool (or backup filesystem storage), the operator patches the existing PVC spec and Kubernetes handles the underlying volume expansion.
+
+```yaml
+spec:
+  databases:
+    - name: postgres
+      tableGroups:
+        - name: default
+          shards:
+            - name: "0-inf"
+              spec:
+                pools:
+                  main-app:
+                    storage:
+                      size: "200Gi"  # ← Increase from 100Gi to 200Gi
+```
+
+**Requirements:**
+- The `StorageClass` must have `allowVolumeExpansion: true`
+- Volume expansion is **grow-only** — decreasing `storage.size` is rejected at admission
+
+**Behavior:**
+- Most modern CSI drivers (EBS CSI ≥ v1.5, GCE PD CSI) expand the filesystem **online without pod restart**
+- For drivers that require restart, the operator detects the `FileSystemResizePending` PVC condition and drains the affected pod automatically
+
+> [!IMPORTANT]
+> If your `StorageClass` does not have `allowVolumeExpansion: true`, the Kubernetes API will reject the PVC update and the operator will emit a warning event. Check your StorageClass before changing storage sizes.
 
 
 ---

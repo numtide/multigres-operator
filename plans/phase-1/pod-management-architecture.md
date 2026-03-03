@@ -272,6 +272,22 @@ See the backup architecture section in `implementation-notes.md` for the shared 
 
 The `PVCDeletionPolicy` type (`whenDeleted`, `whenScaled`) controls lifecycle. Both default to `Retain` for maximum data safety. This is no longer tied to Kubernetes's `StatefulSetPersistentVolumeClaimRetentionPolicy` — the operator manages PVC deletion directly.
 
+### PVC Volume Expansion
+
+The operator supports in-place PVC volume expansion for data and backup PVCs. When a user increases `storage.size` on a pool, the operator patches the existing PVC's `spec.resources.requests.storage` to the new value. Kubernetes and the CSI driver handle the actual block device expansion.
+
+**Requirements:**
+- The `StorageClass` used by the PVC must have `allowVolumeExpansion: true`. Without this, the Kubernetes API server will reject the PVC patch and the operator will emit a `Warning` event.
+- Volume expansion is **grow-only**. Decreasing `storage.size` is rejected at admission time — PVC shrinks are not supported by Kubernetes.
+
+**How it works:**
+1. The operator detects that the desired `storage.size` exceeds the current PVC spec.
+2. The PVC spec is patched in-place (no pod restart needed for block device expansion).
+3. For CSI drivers that support **online filesystem expansion** (EBS CSI ≥ v1.5, GCE PD CSI), the filesystem grows live without pod restart.
+4. For CSI drivers that require pod restart for filesystem expansion, the operator detects the `FileSystemResizePending` PVC condition and initiates a drain on the affected pod via the existing drain state machine.
+
+> **Note:** The same mechanism applies to shared backup PVCs when using filesystem-based backups.
+
 ---
 
 ## 9. Pod Disruption Budgets
