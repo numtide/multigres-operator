@@ -60,7 +60,12 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
+		r := &ShardReconciler{
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
+		}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -79,7 +84,12 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 				return nil
 			},
 		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
+		r := &ShardReconciler{
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
+		}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err == nil {
@@ -102,7 +112,12 @@ func TestHandleDeletion_ErrorPaths(t *testing.T) {
 			WithObjects(shard, deploy).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), CreateTopoStore: newMemoryTopoFactory()}
+		r := &ShardReconciler{
+			Client:          c,
+			Scheme:          scheme,
+			Recorder:        record.NewFakeRecorder(10),
+			CreateTopoStore: newMemoryTopoFactory(),
+		}
 
 		_, err := r.handleDeletion(context.Background(), shard)
 		if err != nil {

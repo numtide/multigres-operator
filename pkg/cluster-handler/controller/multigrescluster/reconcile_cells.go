@@ -80,7 +80,13 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			if err := r.Delete(ctx, &item); err != nil && !errors.IsNotFound(err) {
 				return fmt.Errorf("failed to delete orphaned cell '%s': %w", item.Name, err)
 			} else if err == nil {
-				r.Recorder.Eventf(cluster, "Normal", "Deleted", "Deleted orphaned Cell %s", item.Name)
+				r.Recorder.Eventf(
+					cluster,
+					"Normal",
+					"Deleted",
+					"Deleted orphaned Cell %s",
+					item.Name,
+				)
 			}
 		}
 	}

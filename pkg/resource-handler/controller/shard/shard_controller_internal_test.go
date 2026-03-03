@@ -1492,7 +1492,6 @@ func TestCleanupDrainedPod_PVCDeletion(t *testing.T) {
 			); err != nil {
 				t.Fatalf("failed to get pod after cleanup: %v", err)
 			}
-
 		})
 	}
 }
@@ -1543,7 +1542,6 @@ func TestHandleExternalDeletion(t *testing.T) {
 		); err != nil {
 			t.Fatalf("failed to get pod: %v", err)
 		}
-
 	})
 
 	t.Run("scheduled pod without drain annotation gets drain initiated", func(t *testing.T) {
@@ -1652,7 +1650,6 @@ func TestHandleExternalDeletion(t *testing.T) {
 		); err != nil {
 			t.Fatalf("failed to get pod: %v", err)
 		}
-
 	})
 
 	t.Run("error initiating drain for scheduled pod", func(t *testing.T) {
@@ -3721,7 +3718,10 @@ func TestCreateMissingResources_PodBuildError(t *testing.T) {
 		},
 	}
 
-	base := fake.NewClientBuilder().WithScheme(goodScheme).WithObjects(shardCopy, existingPVCs[pvcName]).Build()
+	base := fake.NewClientBuilder().
+		WithScheme(goodScheme).
+		WithObjects(shardCopy, existingPVCs[pvcName]).
+		Build()
 	r := &ShardReconciler{Client: base, Scheme: emptyScheme, Recorder: record.NewFakeRecorder(10)}
 
 	_, _, err := r.createMissingResources(

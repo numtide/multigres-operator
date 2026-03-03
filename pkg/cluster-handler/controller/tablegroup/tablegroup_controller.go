@@ -149,7 +149,9 @@ func (r *TableGroupReconciler) Reconcile(
 			if s.Annotations == nil {
 				s.Annotations = make(map[string]string)
 			}
-			s.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = metav1.Now().UTC().Format(time.RFC3339)
+			s.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = metav1.Now().
+				UTC().
+				Format(time.RFC3339)
 			if err := r.Patch(ctx, s, patch); err != nil {
 				l.Error(err, "Failed to set PendingDeletion annotation", "shard", s.Name)
 				r.Recorder.Eventf(
@@ -173,7 +175,10 @@ func (r *TableGroupReconciler) Reconcile(
 		}
 
 		// Step 2: Wait for ReadyForDeletion condition.
-		if !meta.IsStatusConditionTrue(s.Status.Conditions, multigresv1alpha1.ConditionReadyForDeletion) {
+		if !meta.IsStatusConditionTrue(
+			s.Status.Conditions,
+			multigresv1alpha1.ConditionReadyForDeletion,
+		) {
 			l.V(1).Info("Shard pending deletion, waiting for drain", "shard", s.Name)
 			pendingDeletion = true
 			continue

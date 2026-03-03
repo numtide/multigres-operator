@@ -163,7 +163,8 @@ func runReconcileTest(t *testing.T, tests map[string]reconcileTestCase) {
 				},
 			}
 
-			_, err := reconciler.Reconcile(t.Context(), req)
+			result, err := reconciler.Reconcile(t.Context(), req)
+			t.Logf("DEBUG: Reconcile result=%+v err=%v", result, err)
 
 			if tc.wantErrMsg != "" {
 				if err == nil {
@@ -285,7 +286,14 @@ func setupFixtures(tb testing.TB) (
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: namespace,
-			// Finalizers removed
+			Labels: map[string]string{
+				metadata.LabelUsesCoreTemplate:  "true",
+				metadata.LabelUsesCellTemplate:  "true",
+				metadata.LabelUsesShardTemplate: "true",
+			},
+			// Pre-set CreationTimestamp so the fake client preserves it on Create.
+			// This bypasses the 2-minute topology startup grace period in reconcileTopology.
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour)),
 		},
 		Spec: multigresv1alpha1.MultigresClusterSpec{
 			Images: multigresv1alpha1.ClusterImages{

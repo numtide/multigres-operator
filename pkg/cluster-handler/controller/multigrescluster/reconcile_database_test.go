@@ -45,6 +45,17 @@ func TestReconcile_Databases(t *testing.T) {
 					types.NamespacedName{Name: tgName, Namespace: namespace},
 					tg,
 				); err != nil {
+					list := &multigresv1alpha1.TableGroupList{}
+					_ = c.List(ctx, list)
+					t.Logf("Expected TG name: %s", tgName)
+					for _, item := range list.Items {
+						t.Logf(
+							"Existing TG: %s (db=%s, tg=%s)",
+							item.Name,
+							item.Spec.DatabaseName,
+							item.Spec.TableGroupName,
+						)
+					}
 					t.Fatalf("System Catalog TableGroup not found: %v", err)
 				}
 
