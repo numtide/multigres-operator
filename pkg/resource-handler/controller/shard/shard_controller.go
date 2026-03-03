@@ -387,10 +387,10 @@ func getPoolCells(shard *multigresv1alpha1.Shard) []multigresv1alpha1.CellName {
 	return cells
 }
 
-// shouldDeletePVCOnShardRemoval returns true when the effective PVCDeletionPolicy
+// ShouldDeletePVCOnShardRemoval returns true when the effective PVCDeletionPolicy
 // for a pool resolves to Delete. Used by PVC builders to conditionally set
 // a controller ownerRef so Kubernetes GC cascade-deletes the PVC with the Shard.
-func shouldDeletePVCOnShardRemoval(
+func ShouldDeletePVCOnShardRemoval(
 	shard *multigresv1alpha1.Shard,
 	poolSpec multigresv1alpha1.PoolSpec,
 ) bool {
@@ -401,10 +401,10 @@ func shouldDeletePVCOnShardRemoval(
 	return policy != nil && policy.WhenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy
 }
 
-// shouldDeleteShardLevelPVCOnRemoval returns true when the shard-level
+// ShouldDeleteShardLevelPVCOnRemoval returns true when the shard-level
 // PVCDeletionPolicy resolves to Delete. Used for shared infrastructure PVCs
 // (e.g., backup PVCs) that are not pool-specific.
-func shouldDeleteShardLevelPVCOnRemoval(shard *multigresv1alpha1.Shard) bool {
+func ShouldDeleteShardLevelPVCOnRemoval(shard *multigresv1alpha1.Shard) bool {
 	p := shard.Spec.PVCDeletionPolicy
 	return p != nil && p.WhenDeleted == multigresv1alpha1.DeletePVCRetentionPolicy
 }
@@ -448,14 +448,14 @@ func (r *ShardReconciler) reconcilePVCOwnerRefs(
 
 		if poolName != "" {
 			if poolSpec, exists := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]; exists {
-				wantOwnerRef = shouldDeletePVCOnShardRemoval(shard, poolSpec)
+				wantOwnerRef = ShouldDeletePVCOnShardRemoval(shard, poolSpec)
 			} else {
 				// Pool removed from spec — fall back to shard-level policy.
-				wantOwnerRef = shouldDeleteShardLevelPVCOnRemoval(shard)
+				wantOwnerRef = ShouldDeleteShardLevelPVCOnRemoval(shard)
 			}
 		} else {
 			// Shared backup PVC — use shard-level policy.
-			wantOwnerRef = shouldDeleteShardLevelPVCOnRemoval(shard)
+			wantOwnerRef = ShouldDeleteShardLevelPVCOnRemoval(shard)
 		}
 
 		hasOwnerRef := false

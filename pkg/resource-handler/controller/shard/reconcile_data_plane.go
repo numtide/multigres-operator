@@ -43,6 +43,13 @@ func (r *ShardReconciler) reconcileDataPlane(
 		childSpan.End()
 	}
 
+	// Phase: Prune stale pooler entries from topology
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePoolerPrune")
+		r.reconcilePoolerPrune(ctx, store, shard)
+		childSpan.End()
+	}
+
 	// Phase: Execute drain state machine for pods with drain annotations
 	{
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileDrainState")
@@ -189,4 +196,43 @@ func (r *ShardReconciler) getTopoStore(shard *multigresv1alpha1.Shard) (topoclie
 		return r.CreateTopoStore(shard)
 	}
 	return topo.NewStoreFromShard(shard)
+}
+
+// reconcilePoolerPrune lists active pods for the shard and prunes topology
+// entries for poolers that no longer have a running pod.
+func (r *ShardReconciler) reconcilePoolerPrune(
+	ctx context.Context,
+	store topoclient.Store,
+	shard *multigresv1alpha1.Shard,
+) {
+	logger := log.FromContext(ctx)
+
+	lbls := map[string]string{
+		metadata.LabelMultigresCluster: shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresShard:   string(shard.Spec.ShardName),
+	}
+	podList := &corev1.PodList{}
+	if err := r.List(
+		ctx,
+		podList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(lbls),
+	); err != nil {
+		logger.Error(err, "Failed to list pods for pooler pruning")
+		return
+	}
+
+	activePodNames := make(map[string]bool, len(podList.Items))
+	for _, pod := range podList.Items {
+		activePodNames[pod.Name] = true
+	}
+
+	pruned, err := topo.PrunePoolers(ctx, store, shard, activePodNames)
+	if err != nil {
+		logger.Error(err, "Failed to prune stale poolers")
+	}
+	if pruned > 0 {
+		r.Recorder.Eventf(shard, "Normal", "PoolersPruned",
+			"Pruned %d stale pooler(s) from topology", pruned)
+	}
 }

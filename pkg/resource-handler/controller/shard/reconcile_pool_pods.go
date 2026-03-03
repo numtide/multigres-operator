@@ -146,7 +146,7 @@ func (r *ShardReconciler) createMissingResources(
 					cellName,
 					poolSpec,
 					int(i),
-					shouldDeletePVCOnShardRemoval(shard, poolSpec),
+					ShouldDeletePVCOnShardRemoval(shard, poolSpec),
 					r.Scheme,
 				)
 				if buildErr != nil {

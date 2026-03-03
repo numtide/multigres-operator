@@ -129,38 +129,186 @@ func (s *multiCellStore) Close() error { return nil }
 func TestFindPrimaryPooler_TopoUnavailableSkip(t *testing.T) {
 	t.Parallel()
 
-	store := &multiCellStore{
-		cells: map[string][]*topoclient.MultiPoolerInfo{
-			"cell2": {{
-				MultiPooler: &clustermetadata.MultiPooler{
-					Id:       &clustermetadata.ID{Cell: "cell2", Name: "primary-pod"},
-					Hostname: "primary-pod", Type: clustermetadata.PoolerType_PRIMARY,
+	t.Run("skips unavailable cell and finds primary in next cell", func(t *testing.T) {
+		t.Parallel()
+		store := &multiCellStore{
+			cells: map[string][]*topoclient.MultiPoolerInfo{
+				"cell2": {{
+					MultiPooler: &clustermetadata.MultiPooler{
+						Id:       &clustermetadata.ID{Cell: "cell2", Name: "primary-pod"},
+						Hostname: "primary-pod", Type: clustermetadata.PoolerType_PRIMARY,
+					},
+				}},
+			},
+			errorCells: map[string]error{
+				"cell1": errors.New("Code: UNAVAILABLE"),
+			},
+		}
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+			},
+		}
+
+		primary, err := topo.FindPrimaryPooler(
+			context.Background(), store, shard, []string{"cell1", "cell2"},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if primary == nil {
+			t.Fatal("expected primary from cell2 after skipping unavailable cell1")
+		}
+		if primary.Id.Name != "primary-pod" {
+			t.Errorf("expected primary-pod, got %s", primary.Id.Name)
+		}
+	})
+
+	t.Run("returns error when all cells are unavailable", func(t *testing.T) {
+		t.Parallel()
+		store := &multiCellStore{
+			errorCells: map[string]error{
+				"cell1": errors.New("Code: UNAVAILABLE"),
+				"cell2": errors.New("Code: UNAVAILABLE"),
+			},
+		}
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+			},
+		}
+
+		primary, err := topo.FindPrimaryPooler(
+			context.Background(), store, shard, []string{"cell1", "cell2"},
+		)
+		if err == nil {
+			t.Fatal("expected error when all cells are unavailable")
+		}
+		if primary != nil {
+			t.Error("expected nil primary when all cells are unavailable")
+		}
+	})
+}
+
+func TestPrunePoolers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("prunes stale poolers", func(t *testing.T) {
+		t.Parallel()
+		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+		store := topoclient.NewWithFactory(
+			factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+		)
+		defer func() { _ = store.Close() }()
+
+		ctx := context.Background()
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "active-pod"},
+			Hostname: "active-pod", Type: clustermetadata.PoolerType_REPLICA,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "stale-pod"},
+			Hostname: "stale-pod", Type: clustermetadata.PoolerType_REPLICA,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "dead-pod"},
+			Hostname: "dead-pod", Type: clustermetadata.PoolerType_DRAINED,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
 				},
-			}},
-		},
-		errorCells: map[string]error{
-			"cell1": errors.New("Code: UNAVAILABLE"),
-		},
-	}
+			},
+		}
 
-	shard := &multigresv1alpha1.Shard{
-		Spec: multigresv1alpha1.ShardSpec{
-			DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
-		},
-	}
+		activePods := map[string]bool{"active-pod": true}
+		pruned, err := topo.PrunePoolers(ctx, store, shard, activePods)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pruned != 2 {
+			t.Errorf("expected 2 pruned, got %d", pruned)
+		}
 
-	primary, err := topo.FindPrimaryPooler(
-		context.Background(), store, shard, []string{"cell1", "cell2"},
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if primary == nil {
-		t.Fatal("expected primary from cell2 after skipping unavailable cell1")
-	}
-	if primary.Id.Name != "primary-pod" {
-		t.Errorf("expected primary-pod, got %s", primary.Id.Name)
-	}
+		// Verify only active-pod remains.
+		remaining, _ := store.GetMultiPoolersByCell(ctx, "cell1", nil)
+		if len(remaining) != 1 {
+			t.Fatalf("expected 1 remaining pooler, got %d", len(remaining))
+		}
+		if remaining[0].Id.Name != "active-pod" {
+			t.Errorf("expected active-pod to remain, got %s", remaining[0].Id.Name)
+		}
+	})
+
+	t.Run("noop when all poolers are active", func(t *testing.T) {
+		t.Parallel()
+		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+		store := topoclient.NewWithFactory(
+			factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+		)
+		defer func() { _ = store.Close() }()
+
+		ctx := context.Background()
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "pod-1"},
+			Hostname: "pod-1", Type: clustermetadata.PoolerType_REPLICA,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		activePods := map[string]bool{"pod-1": true}
+		pruned, err := topo.PrunePoolers(ctx, store, shard, activePods)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pruned != 0 {
+			t.Errorf("expected 0 pruned, got %d", pruned)
+		}
+	})
+
+	t.Run("skips unavailable cells gracefully", func(t *testing.T) {
+		t.Parallel()
+		store := &multiCellStore{
+			errorCells: map[string]error{
+				"cell1": errors.New("Code: UNAVAILABLE"),
+			},
+		}
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		pruned, err := topo.PrunePoolers(
+			context.Background(), store, shard, map[string]bool{},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pruned != 0 {
+			t.Errorf("expected 0 pruned for unavailable cell, got %d", pruned)
+		}
+	})
 }
 
 func TestForceUnregisterPod(t *testing.T) {

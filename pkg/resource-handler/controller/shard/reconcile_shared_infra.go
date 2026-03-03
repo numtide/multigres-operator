@@ -135,7 +135,7 @@ func (r *ShardReconciler) reconcileSharedBackupPVC(
 		return nil
 	}
 
-	desired, err := BuildSharedBackupPVC(shard, cellName, shouldDeleteShardLevelPVCOnRemoval(shard), r.Scheme)
+	desired, err := BuildSharedBackupPVC(shard, cellName, ShouldDeleteShardLevelPVCOnRemoval(shard), r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build shared backup PVC: %w", err)
 	}

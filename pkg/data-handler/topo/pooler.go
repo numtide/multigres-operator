@@ -60,13 +60,16 @@ func GetPoolerStatus(
 }
 
 // FindPrimaryPooler discovers the PRIMARY multipooler from the given cells
-// in the topology. Returns nil (no error) if no primary is found.
+// in the topology. Returns (nil, nil) only if at least one cell was
+// successfully queried but no primary was found. Returns an error if all
+// cells are unavailable.
 func FindPrimaryPooler(
 	ctx context.Context,
 	store topoclient.Store,
 	shard *multigresv1alpha1.Shard,
 	cells []string,
 ) (*clustermetadatapb.MultiPooler, error) {
+	var anySuccess bool
 	for _, cell := range cells {
 		opt := ShardFilter(shard)
 		poolers, err := store.GetMultiPoolersByCell(ctx, cell, opt)
@@ -76,11 +79,15 @@ func FindPrimaryPooler(
 			}
 			return nil, fmt.Errorf("listing poolers in cell %q: %w", cell, err)
 		}
+		anySuccess = true
 		for _, p := range poolers {
 			if p.Type == clustermetadatapb.PoolerType_PRIMARY {
 				return p.MultiPooler, nil
 			}
 		}
+	}
+	if !anySuccess && len(cells) > 0 {
+		return nil, fmt.Errorf("all %d cell(s) unavailable, cannot determine primary", len(cells))
 	}
 	return nil, nil
 }
@@ -148,4 +155,48 @@ func ForceUnregisterPod(
 		Info("No matching pooler found in topology for pod, skipping unregistration",
 			"pod", podName, "cell", cellName)
 	return nil
+}
+
+// PrunePoolers removes topology entries for poolers that have no corresponding
+// running pod. activePodNames should contain the names of all pods currently
+// managed by the shard. Returns the number of pruned entries.
+func PrunePoolers(
+	ctx context.Context,
+	store topoclient.Store,
+	shard *multigresv1alpha1.Shard,
+	activePodNames map[string]bool,
+) (int, error) {
+	logger := log.FromContext(ctx)
+	pruned := 0
+
+	cells := CollectCells(shard)
+	for _, cell := range cells {
+		opt := ShardFilter(shard)
+		poolers, err := store.GetMultiPoolersByCell(ctx, cell, opt)
+		if err != nil {
+			if IsTopoUnavailable(err) {
+				continue
+			}
+			return pruned, fmt.Errorf("listing poolers in cell %q for pruning: %w", cell, err)
+		}
+
+		for _, p := range poolers {
+			hostname := p.GetHostname()
+			if hostname == "" && p.Id != nil {
+				hostname = p.Id.Name
+			}
+			if hostname != "" && !activePodNames[hostname] {
+				if err := store.UnregisterMultiPooler(ctx, p.Id); err != nil {
+					logger.Error(err, "Failed to prune stale pooler",
+						"pooler", hostname, "cell", cell)
+					continue
+				}
+				logger.Info("Pruned stale pooler from topology",
+					"pooler", hostname, "cell", cell)
+				pruned++
+			}
+		}
+	}
+
+	return pruned, nil
 }
