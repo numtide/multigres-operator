@@ -116,8 +116,8 @@ func RegisterCellFromSpec(
 	if err := store.CreateCell(ctx, cellName, cellMetadata); err != nil {
 		var topoErr topoclient.TopoError
 		if isNodeExists(err, &topoErr) {
-			logger.V(1).Info("Cell already exists in topology; "+
-				"if cell config changed, manual topo cleanup may be required",
+			logger.Info("Cell already registered in topology, skipping update "+
+				"(cell fields are immutable in v1alpha1)",
 				"cellName", cellName)
 			return nil
 		}

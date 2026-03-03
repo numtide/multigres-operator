@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/data-handler/drain"
@@ -686,6 +687,21 @@ func TestIsPrimaryTerminatingOrMissing(t *testing.T) {
 		}
 		if !drain.IsPrimaryTerminatingOrMissing(context.Background(), c, shard, primary) {
 			t.Error("Expected true when primary pod not found")
+		}
+	})
+
+	t.Run("returns false on transient API error", func(t *testing.T) {
+		t.Parallel()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				return fmt.Errorf("connection refused")
+			},
+		}).Build()
+		primary := &clustermetadata.MultiPooler{
+			Id: &clustermetadata.ID{Cell: "cell1", Name: "primary-pod"},
+		}
+		if drain.IsPrimaryTerminatingOrMissing(context.Background(), c, shard, primary) {
+			t.Error("Expected false on transient error (should retry, not skip standby removal)")
 		}
 	})
 }

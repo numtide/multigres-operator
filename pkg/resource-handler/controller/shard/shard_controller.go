@@ -27,12 +27,6 @@ import (
 )
 
 const (
-	// topoUnavailableGracePeriod is the duration after resource creation during
-	// which topology UNAVAILABLE errors are silently requeued instead of being
-	// reported as reconcile errors. This prevents noisy error metrics during
-	// normal cluster startup while the toposerver is still initializing.
-	topoUnavailableGracePeriod = 2 * time.Minute
-
 	// topoUnavailableRequeueDelay is the delay before retrying when the topology
 	// server is unavailable during the grace period.
 	topoUnavailableRequeueDelay = 5 * time.Second

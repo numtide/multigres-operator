@@ -178,7 +178,7 @@ The drain state machine coordinates pod removal within the shard controller. The
 
 When choosing which pod to remove during scale-down:
 
-1. **Never select the primary.** The pod role is read from `shard.Status.PodRoles`, which the shard controller populates by reading etcd topology.
+1. **Strongly disfavor the primary (score penalty −1000).** The pod role is read from `shard.Status.PodRoles`, which the shard controller populates by reading etcd topology. The primary is never the *preferred* target, but it is **not hard-excluded**: if the primary is the only extra pod remaining (e.g. after all replicas have already been removed), it can still be selected to avoid deadlocking the scale-down. Rolling updates handle the primary separately via `handleRollingUpdates` (replicas first, primary last with switchover).
 2. **Prefer non-ready pods.** Pods that are already failing are better candidates.
 3. **Among ready non-primary pods, select the highest index.** This makes order deterministic and predictable.
 4. **If no suitable pod is found, defer.** Requeue and try again.

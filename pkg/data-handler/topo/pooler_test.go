@@ -541,4 +541,38 @@ func TestGetPoolerStatus(t *testing.T) {
 			t.Error("expected QuerySuccess=false when store errors")
 		}
 	})
+
+	t.Run("uses Id.Name when hostname is empty", func(t *testing.T) {
+		t.Parallel()
+		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+		store := topoclient.NewWithFactory(
+			factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+		)
+		defer func() { _ = store.Close() }()
+
+		ctx := context.Background()
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "my-pod-0"},
+			Hostname: "", Type: clustermetadata.PoolerType_PRIMARY,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		result := topo.GetPoolerStatus(ctx, store, shard)
+		if !result.QuerySuccess {
+			t.Error("expected QuerySuccess=true")
+		}
+		if result.Roles["my-pod-0"] != "PRIMARY" {
+			t.Errorf("expected key 'my-pod-0' with PRIMARY, got roles: %v", result.Roles)
+		}
+	})
 }
