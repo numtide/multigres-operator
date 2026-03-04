@@ -1,6 +1,6 @@
 # Observability
 
-The operator ships with built-in support for **metrics**, **alerting**, **distributed tracing**, and **structured logging**.
+The operator ships with built-in support for **metrics**, **alerting**, **distributed tracing**, and **structured logging**. These features constitute the operator's [Level IV (Deep Insights)](operator-capability-levels.md#level-4-deep-insights) capabilities.
 
 ## Metrics
 

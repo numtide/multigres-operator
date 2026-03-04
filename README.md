@@ -260,6 +260,7 @@ Please be aware of the following constraints in the current version:
 
 | Resource | Description |
 | :--- | :--- |
+| [Operator Capability Levels](docs/operator-capability-levels.md) | Maturity assessment against the [Operator Framework capability model](https://operatorframework.io/operator-capabilities/) |
 | [Storage Management](docs/storage.md) | PVC deletion policies (Retain/Delete) and volume expansion |
 | [Configuration Reference](docs/configuration.md) | Operator flags, environment variables, and logging |
 | [Demos](demo/) | Guided walkthroughs (webhook, cert-manager, observability) |

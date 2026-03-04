@@ -6,20 +6,15 @@ framework.
 
 ![Operator Capability Levels](./images/operator-capability-level.png)
 
-> Based on the Operator Capability Levels model, the Multigres Operator
-> achieves **Level IV (Deep Insights)** fully, with **partial Level V
-> (Auto Pilot)** capabilities. Auto-healing, certificate rotation, and
-> connection pool auto-tuning (via upstream Multigres) are implemented.
-> Auto-scaling and anomaly detection are not yet implemented.
+## Summary
 
-Each capability level is associated with a certain set of management features
-the operator offers:
-
-1. [Basic install](#level-1-basic-install)
-2. [Seamless upgrades](#level-2-seamless-upgrades)
-3. [Full lifecycle](#level-3-full-lifecycle)
-4. [Deep insights](#level-4-deep-insights)
-5. [Auto pilot](#level-5-auto-pilot)
+| Level | Name | Status | Highlights |
+|:------|:-----|:-------|:-----------|
+| I | [Basic Install](#level-1-basic-install) | **Full** | 10 CRDs, mutating/validating webhooks (17 CEL rules), template resolution, hierarchical defaults, TLS management, status reporting |
+| II | [Seamless Upgrades](#level-2-seamless-upgrades) | **Full** | Spec-hash rolling updates, drain state machine, primary-last ordering, SHA-pinned images, upgrade metrics and alerts |
+| III | [Full Lifecycle](#level-3-full-lifecycle) | **Full** | pgBackRest backups (S3 + filesystem), backup health monitoring, 4-state drain machine, safe scale up/down, PDBs, deletion ordering finalizers, PVC lifecycle policies |
+| IV | [Deep Insights](#level-4-deep-insights) | **Full** | 12 Prometheus metrics, 10 alerts with runbooks, 3 Grafana dashboards, OpenTelemetry distributed tracing, structured JSON logging with log-trace correlation |
+| V | [Auto Pilot](#level-5-auto-pilot) | **Partial** | Auto-healing (operator + upstream Multigres), cert auto-rotation, connection pool auto-tuning (upstream Multigres). Not yet: auto-scaling, PG parameter tuning, anomaly detection |
 
 We consider this framework as a guide for current status and future work.
 
