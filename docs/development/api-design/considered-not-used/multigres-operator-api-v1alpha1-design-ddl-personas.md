@@ -125,7 +125,7 @@ For DDL-driven databases, we can advise users to add an annotation to the `Multi
 >   name: "prod-analytics-db"
 >   annotations:
 >     # Tells Argo CD to "hands off"
->     "argocd.argoproj.io/ignore-resource": "true" 
+>     "argocd.argoproj.io/ignore-resource": "true"
 > spec:
 >   ...
 > ```
@@ -193,7 +193,7 @@ spec:
           namespace: "payments-prod"
         - role: "engineering_team"
           namespace: "engineering-dev"
-      
+
       # The default namespace to use if a user's role
       # does not match any of the mappings above.
       fallbackNamespace: "default-db-claims"
@@ -233,7 +233,7 @@ spec:
 
     # --- OPTION 2: Inline External Spec ---
     # external:
-    #   endpoints: 
+    #   endpoints:
     #     - "https://etcd-1.infra.local:2379"
     #     - "https://etcd-2.infra.local:2379"
     #   caSecret: "etcd-ca-secret"
@@ -247,7 +247,7 @@ spec:
     managedSpec:
       replicas: 2
       resources:
-        requests: 
+        requests:
           cpu: "200m"
           memory: "256Mi"
         limits:
@@ -256,7 +256,7 @@ spec:
 
     # --- OPTION 2: Explicit Template Reference ---
     # templateRef: "my-explicit-core-template"
-  
+
   # ----------------------------------------------------------------
   # System Catalog (Implicit "Default Database")
   # ----------------------------------------------------------------
@@ -278,9 +278,9 @@ spec:
   # ----------------------------------------------------------------
   cells:
     - name: "us-east-1a"
-      zone: "us-east-1a" 
+      zone: "us-east-1a"
       cellTemplate: "standard-cell-ha"
-    
+
     - name: "us-east-1b"
       zone: "us-east-1b"
       spec:
@@ -308,10 +308,10 @@ status:
       status: "True"
       message: "All core components are available."
   cells:
-    us-east-1a: 
+    us-east-1a:
       ready: True
       gatewayReplicas: 3
-    us-east-1b: 
+    us-east-1b:
       ready: True
       gatewayReplicas: 2
 ```
@@ -345,7 +345,7 @@ spec:
           memory: "2Gi"
     # --- ALTERNATIVE OPTION 2: External Etcd ---
     # external:
-    #   endpoints: 
+    #   endpoints:
     #     - "https://etcd-1.infra.local:2379"
     #   caSecret: "etcd-ca-secret"
     #   clientCertSecret: "etcd-client-cert-secret"
@@ -355,7 +355,7 @@ spec:
     managedSpec:
       replicas: 2
       resources:
-        requests: 
+        requests:
           cpu: "200m"
           memory: "256Mi"
         limits:
@@ -425,13 +425,13 @@ metadata:
   namespace: app-team-1
   annotations:
     # Allows DDL-driven DBs to coexist with GitOps
-    "argocd.argoproj.io/ignore-resource": "true" 
+    "argocd.argoproj.io/ignore-resource": "true"
 spec:
   # Reference to the MultigresCluster (can be in another namespace)
   clusterRef:
     name: "example-cluster"
     namespace: "platform-system"
-  
+
   # The logical database name
   databaseName: "production_db"
 
@@ -449,7 +449,7 @@ spec:
           keyRange:
             start: "80"
             end: "inf"
-    
+
     - name: "users_tg"
       # This tablegroup has a single shard, covering the whole range
       shards:
@@ -475,7 +475,7 @@ metadata:
 spec:
   # Reference to the logical database in the same namespace
   databaseRef: "production-db"
-  
+
   # Default template for all shards in this DB that
   # do not have an explicit 'shardTemplate' defined below.
   #
@@ -486,7 +486,7 @@ spec:
   # An SRE/Infra user can override that default by
   # setting this field explicitly.
   defaultShardTemplate: "standard-shard-ha"
-  
+
   # The physical specs, mirroring the logical structure.
   tablegroups:
     - name: "orders_tg" # MUST match name in MultigresDatabase
@@ -498,7 +498,7 @@ spec:
              pools:
                primary:
                  cell: "us-east-1a"
-        
+
         # --- SHARD 1: Using Inline Spec ---
         - name: "1"
           spec:
@@ -535,7 +535,7 @@ spec:
                     limits:
                       cpu: "1"
                       memory: "2Gi"
-    
+
     - name: "users_tg"
       shards:
         # --- SHARD 0: Using Database Default Template ---
@@ -560,10 +560,10 @@ metadata:
   namespace: platform-system
 spec:
   # Template strictly defines only Shard-scoped components.
-  
+
   # MultiOrch is a shard-level component (one per Raft group).
   multiOrch:
-    replicas: 1 
+    replicas: 1
     resources:
       requests:
         cpu: "100m"
@@ -578,7 +578,7 @@ spec:
       type: "readWrite"
       # 'cell' MUST be overridden in MultigresDatabaseResources
       # if left empty here.
-      cell: "" 
+      cell: ""
       replicas: 2
       storage:
         class: "standard-gp3"
@@ -710,7 +710,7 @@ spec:
       limits:
         cpu: "1"
         memory: "1Gi"
-  
+
   # A reference to the GLOBAL TopoServer.
   # Always populated by the parent controller if no local server is used.
   globalTopoServer:
@@ -826,7 +826,7 @@ spec:
                 limits:
                   cpu: "2"
                   memory: "1Gi"
-    
+
     - name: "1"
       # --- Logical Spec (from MultigresDatabase) ---
       keyRange:
@@ -867,7 +867,7 @@ spec:
                 limits:
                   cpu: "1"
                   memory: "2Gi"
-        
+
 status:
   readyShards: 2
   totalShards: 2
@@ -903,7 +903,7 @@ spec:
   keyRange:
     start: "0"
     end: "80"
-  
+
   # Fully resolved from parent TableGroup spec
   multiOrch:
     replicas: 1
@@ -918,7 +918,7 @@ spec:
 
   pools:
     primary:
-      cell: "us-east-1a" 
+      cell: "us-east-1a"
       type: "readWrite"
       replicas: 2
       storage:
@@ -1039,7 +1039,7 @@ spec:
   # All core components (globalTopoServer, multiadmin)
   # will use the 'CoreTemplate' named 'default' in this
   # namespace, or be defaulted by the webhook.
-  
+
   # The system catalog will use the 'ShardTemplate'
   # named 'default' or be defaulted by the webhook.
   # It MUST be pinned to a cell.
@@ -1107,7 +1107,7 @@ spec:
     multipooler: "multigres/pooler:latest"
     multiadmin: "multigres/admin:latest"
     postgres: "postgres:15.3"
-  
+
   templateDefaults:
     coreTemplate: "dev-defaults-core"
     cellTemplate: "dev-defaults-cell"
@@ -1203,7 +1203,7 @@ spec:
   # This SRE explicitly sets the default for this DB,
   # overriding the cluster-wide default.
   defaultShardTemplate: "standard-shard"
-  
+
   tablegroups:
     - name: "users_tg"
       shards:
@@ -1217,7 +1217,7 @@ spec:
                 storage:
                   size: "500Gi" # Atomic override for storage
                   class: "io1"
-        
+
         # Shard 1: Use the 'defaultShardTemplate' from this CR
         - name: "1"
           # No 'shardTemplate', uses 'defaultShardTemplate' ("standard-shard")

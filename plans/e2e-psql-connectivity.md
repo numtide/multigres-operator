@@ -1,10 +1,19 @@
 # E2E Tests: Full psql Connectivity Verification
 
+**Status:** 📋 Not Started
+
+> [!NOTE]
+> **This proposal has not been implemented yet.** It describes an aspirational E2E test suite that
+> would verify full PostgreSQL query serving through the multigateway. The basic E2E infrastructure
+> (kind cluster utilities, CRD installation) is in place from the [E2E Testing](e2e-testing.md)
+> proposal, but the per-test kind cluster creation, psql connectivity tests, and helper functions
+> described here are not yet built.
+
 ## Architecture
 
 Each test case gets its **own kind cluster** for full isolation:
 - `e2e-minimal` — minimal cluster with defaults
-- `e2e-inline` — inline configuration (no templates)  
+- `e2e-inline` — inline configuration (no templates)
 - `e2e-templated` — template-based multi-cell cluster
 
 Each test:
@@ -33,7 +42,7 @@ Currently `SetUpKind` expects a pre-existing cluster. Add `WithKindCreateCluster
 Each test file creates its own cluster via `WithKindCreateCluster()`:
 ```go
 func TestMinimalCluster(t *testing.T) {
-    mgr, c, ns := setUpOperator(t, 
+    mgr, c, ns := setUpOperator(t,
         withKindCluster("e2e-minimal-"+randomSuffix()),
         withImages(multigresImages...),
     )
@@ -53,7 +62,7 @@ Or use port-forward + Go's `database/sql` with `lib/pq` driver.
 ## Timeouts (from upstream research)
 - etcd ready: 120s
 - multipooler pods ready: 180s (includes postgres init)
-- multiorch ready: 120s  
+- multiorch ready: 120s
 - multigateway ready: 120s
 - Shard bootstrap: 60s
 - Query serving after bootstrap: 30s

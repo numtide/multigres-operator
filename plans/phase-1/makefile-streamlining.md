@@ -1,11 +1,21 @@
 ---
 title: Streamline Makefile for Multi-Module Architecture and Developer Experience
-state: work-in-progress
+state: largely-completed
 tags:
 - cicd
 - tooling
 - multi-module
 ---
+
+> [!NOTE]
+> **This proposal has been largely completed.** The Makefile supports multi-module operations
+> (`test`, `lint`, `fmt`, `vet`), kind cluster lifecycle (`kind-up`, `kind-deploy`, `kind-down`),
+> and container builds. Key items not yet implemented:
+> - **Renovate integration**: `.github/renovate.json` and Makefile markers are not in place.
+> - **Build metadata (ldflags)**: Version, build date, and git commit are not yet injected into the binary.
+> - **`make verify` target**: Generated file verification is not implemented.
+> - **`make pre-commit` target**: Not implemented as a dedicated target.
+> - Some target names and implementation details differ from the proposal.
 
 # Summary
 

@@ -1,16 +1,22 @@
 ---
 title: Create Cell management Go module with upstream Multigres dependency
-state: draft
+state: completed
 tags:
 - toposerver
 - crd
 ---
 
+> [!NOTE]
+> **This proposal has been completed, but the final implementation diverges significantly from the
+> original design.** Key differences:
+> - Cell is a **child CR of MultigresCluster**, not a standalone resource with its own etcd endpoints.
+> - Cell topology registration is handled by the **MultigresCluster controller** (parent-registers-children pattern), not by a Cell reconciler with its own finalizer.
+> - The Cell controller only reconciles **MultiGateway Deployments and Services** — it has no direct topo operations.
+> - The `data-handler` module pattern described here was replaced by utility packages under `pkg/topo/`.
+>
+> See [API Design](../../docs/development/api-design/multigres-operator-api-v1alpha1-design.md) for the current Cell architecture.
+
 # Summary
-
-Implement Cell management functionality through a `Cell` CRD and reconciler in the `pkg/data-handler` module. A Cell represents a logical grouping of Multigres components and must be registered in the Topo Server (etcd) for the cluster to function. The Cell reconciler automates Cell registration, updates, and cleanup by interacting with the Topo Server using Multigres APIs.
-
-This allows users to manage Cell lifecycle declaratively through Kubernetes, rather than manually configuring entries in etcd.
 
 # Motivation
 

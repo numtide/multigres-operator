@@ -1,9 +1,15 @@
 # Data-handler Refactor Proposal (v2)
 
 **Date:** 2026-03-01
-**Status:** Proposal
+**Status:** ✅ Completed (2026-03-03)
 **Scope:** Internal controller restructuring + one additive API field
 (`Spec.TopologyPruning`)
+
+> [!NOTE]
+> **This proposal has been fully implemented.** The data-handler controllers were merged into their
+> respective resource-handler controllers (Shard and Cell), all six finalizers were removed, and
+> topology registration was moved to the MultigresCluster parent controller. The data-handler module
+> was converted into utility packages under `pkg/topo/`. See git history for the implementation commits.
 
 ---
 

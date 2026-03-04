@@ -284,7 +284,7 @@ webhooks:
     sideEffects: None
     timeoutSeconds: 10
     failurePolicy: Fail
-    
+
   # Protect CoreTemplates
   - name: vcoretemplate.kb.io
     rules:
