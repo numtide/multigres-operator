@@ -4,11 +4,22 @@
 
 | Document | Description |
 |:---|:---|
-| [README](../README.md) | Installation, configuration, resource hierarchy, PVC policies, and constraints |
+| [README](../README.md) | Installation, configuration, resource hierarchy, and constraints |
 | [Backup & Restore](backup-restore.md) | pgBackRest integration, S3 and filesystem backends, TLS certificates |
 | [Observability](observability.md) | Metrics, alerts, dashboards, distributed tracing, structured logging |
-| [Observability Demo](../demo/observability/demo.md) | Hands-on tutorial for the full observability stack |
+| [Storage Management](storage.md) | PVC deletion policies and volume expansion |
+| [Configuration Reference](configuration.md) | Operator flags, environment variables, and logging |
 | [Sample Configurations](../config/samples/README.md) | YAML examples with override hierarchy walkthrough |
+
+## Demos
+
+Guided walkthroughs for specific user journeys: [demo/](../demo/)
+
+| Demo | Description |
+|:---|:---|
+| [Webhook & Admission Control](../demo/webhook/demo.md) | Hybrid admission architecture, template resolution, safety gates |
+| [Cert-Manager Integration](../demo/cert-manager/) | External certificate management with cert-manager |
+| [Observability Stack](../demo/observability/) | Full metrics, tracing, and dashboards setup |
 
 ## Operations
 
