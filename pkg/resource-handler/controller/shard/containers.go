@@ -227,7 +227,6 @@ func buildMultiPoolerSidecar(
 		"--table-group=" + string(shard.Spec.TableGroupName),
 		"--shard=" + string(shard.Spec.ShardName),
 		"--service-id=$(POD_NAME)", // Use pod name as unique service ID
-		"--hostname=$(POD_NAME)",   // Register with short pod name instead of FQDN
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
 		"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)", // Resolved from env var below
@@ -332,7 +331,7 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 	}
 
 	// TODO: Add remaining command line arguments:
-	// --log-level, --log-output, --hostname
+	// --log-level, --log-output
 
 	// TODO: Verify correct format for --watch-targets flag.
 	// Currently using static "postgres" based on demo, but may need to be:
