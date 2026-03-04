@@ -34,6 +34,7 @@ spec:
     s3:
       bucket: my-database-backups
       region: us-east-1
+      endpoint: https://s3.us-east-1.amazonaws.com  # Optional, for S3-compatible stores (MinIO, etc.)
       keyPrefix: prod/cluster-1
 
       # Option 1: IRSA (recommended for EKS)

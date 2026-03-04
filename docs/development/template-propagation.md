@@ -18,6 +18,9 @@ For beta this is acceptable because we want to rapidly test template effects acr
 
 ## Proposed Improvement: Update Policy
 
+> [!IMPORTANT]
+> **Status: Not Implemented — Proposal Only.** The fields and behavior described in this section do not exist in the current API. This is a design proposal for a future release.
+
 Add a `spec.updatePolicy` field to `MultigresCluster` that controls when template changes are applied:
 
 ```yaml

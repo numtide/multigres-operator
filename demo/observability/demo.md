@@ -1027,7 +1027,7 @@ separately. The operator provides ready-to-use resources under
 | Resource | File | Purpose |
 |--|--|--|
 | PrometheusRule | `config/monitoring/prometheus-rules.yaml` | Alert definitions |
-| ConfigMap (dashboards) | `config/monitoring/grafana-dashboards.yaml` | Grafana dashboard JSON |
+| ConfigMap (dashboards) | `config/monitoring/grafana-dashboard-*.json` | Grafana dashboard JSON (assembled via kustomization) |
 
 Apply them with:
 

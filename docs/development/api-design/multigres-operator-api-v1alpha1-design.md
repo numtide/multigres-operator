@@ -822,7 +822,7 @@ spec:
   globalTopoServer:
     address: "example-cluster-global-client.example.svc.cluster.local:2379"
     rootPath: "/multigres/global"
-    implementation: "etcd2"
+    implementation: "etcd"
 
   # Option 1: Using the Global TopoServer (Default)
   #
@@ -832,9 +832,10 @@ spec:
   #
   # topoServer:
   #   external:
-  #     address: "my-etcd.some-namespace.svc.cluster.local:2379"
+  #     endpoints:
+  #       - "https://my-etcd.some-namespace.svc.cluster.local:2379"
   #     rootPath: "/multigres/us-east-1a"
-  #     implementation: "etcd2"
+  #     implementation: "etcd"
 
   # Option 3: Managed Local
   #
@@ -912,7 +913,7 @@ spec:
   globalTopoServer:
     address: "example-cluster-global-client.example.svc.cluster.local:2379"
     rootPath: "/multigres/global"
-    implementation: "etcd2"
+    implementation: "etcd"
 
   # The list of FULLY RESOLVED shard specifications.
   # This is pushed down from the MultigresCluster controller.
@@ -1099,7 +1100,7 @@ spec:
   globalTopoServer:
     address: "example-cluster-global-client.example.svc.cluster.local:2379"
     rootPath: "/multigres/global"
-    implementation: "etcd2"
+    implementation: "etcd"
 
   # Fully resolved from parent TableGroup spec
   multiorch:
