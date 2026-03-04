@@ -252,7 +252,7 @@ With StatefulSets, pods get an ordinal suffix appended by Kubernetes: `{sts-name
 {cluster}-{db}-{tg}-{shard}-pool-{pool}-{cell}-{hash}-{index}
 ```
 
-Where `{index}` is a numeric index (0, 1, 2...) that the operator tracks. The hash ensures uniqueness across different pool/cell combinations even after truncation (see [implementation-notes.md § Resource Naming Strategy](./implementation-notes.md#resource-naming-strategy) for the full naming design).
+Where `{index}` is a numeric index (0, 1, 2...) that the operator tracks. The hash ensures uniqueness across different pool/cell combinations even after truncation (see [Naming Strategy](naming-strategy.md) for the full naming design).
 
 ### Do NOT Name Pods by Role
 

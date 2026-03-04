@@ -2,6 +2,19 @@
 
 The **[Multigres](https://github.com/multigres/multigres) Operator** is a Kubernetes operator for managing distributed, sharded PostgreSQL clusters across multiple failure domains (zones or regions). It provides a unified API to define the topology of your database system, handling the complex orchestration of `shards`, `cells` (failure domains), and `gateways`.
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [How it Works](#how-it-works)
+- [Configuration & Defaults](#configuration--defaults)
+- [Backup & Restore](#backup--restore)
+- [Observability](#observability)
+- [Webhook & Certificate Management](#webhook--certificate-management)
+- [Operator Flags](#operator-flags)
+- [Pool Replication & Quorum](#pool-replication--quorum)
+- [Constraints & Limits](#constraints--limits-v1alpha1)
+
 ## Features
 - **Global Cluster Management**: Single source of truth (`MultigresCluster`) for the entire database topology.
 - **Automated Sharding**: Manages `TableGroups` and `Shards` as first-class citizens.
@@ -201,7 +214,7 @@ spec:
 > [!NOTE]
 > Avoid using `default`-named templates (the namespace-level fallback) in production if you need controlled rollouts. They cannot be versioned since any cluster without an explicit template reference will automatically use whichever template is named `default`.
 >
-> This mechanism may change in future versions. See [Implementation Notes](plans/phase-1/implementation-notes.md#template-update-propagation) for details on planned improvements.
+> This mechanism may change in future versions. See [Template Propagation](docs/development/template-propagation.md) for details on planned improvements.
 
 ### 4. PVC Deletion Policy
 
@@ -349,278 +362,29 @@ spec:
 
 ## Backup & Restore
 
-The operator integrates **pgBackRest** to handle automated backups, WAL archiving, and point-in-time recovery (PITR). Backup configuration is fully declarative and propagates from the Cluster level down to individual Shards.
+The operator integrates **pgBackRest** for automated backups, WAL archiving, and point-in-time recovery (PITR). Two storage backends are supported: **S3** (recommended for production and multi-cell clusters) and **Filesystem** (PVC-based, for development/single-node). Backup configuration is fully declarative and propagates from the cluster level down to individual shards.
 
-### Architecture
-
-Every Shard in the cluster has its own independent backup repository.
-- **Replica-Based Backups:** To avoid impacting the primary's performance, backups are always performed by a **replica**. The operator's MultiAdmin component selects a healthy replica (typically in the primary zone/cell) to execute the backup.
-- **Universal Availability:** While only one replica performs the backup, **all replicas** (current and future) need access to the backup repository to:
-  1.  Bootstrap new replicas (via `pgbackrest restore`).
-  2.  Perform Point-in-Time Recovery (PITR).
-  3.  Catch up if they fall too far behind (WAL replay).
-
-### Supported Storage Backends
-
-#### 1. S3 (Recommended for Production)
-
-S3 (or any S3-compatible object storage) is the **only supported method for multi-cell / multi-zone clusters**.
-- **Why:** All replicas across all failure domains (zones/regions) can access the same S3 bucket.
-- **Behavior:** The operator configures all pods to read/write to the specified bucket and path.
-
-**S3 Credential Options** (mutually exclusive):
-
-| Option | Field | Description |
-|--------|-------|-------------|
-| **IRSA** (recommended for EKS) | `serviceAccountName` | User creates a ServiceAccount annotated with `eks.amazonaws.com/role-arn`. The EKS pod identity webhook injects OIDC tokens automatically. |
-| **Static credentials** | `credentialsSecret` + `useEnvCredentials: true` | Operator injects `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from a K8s Secret. |
-| **EC2 instance metadata** | *(none)* | Default fallback — uses the node's IAM instance profile. |
-
-```yaml
-spec:
-  backup:
-    type: s3
-    s3:
-      bucket: my-database-backups
-      region: us-east-1
-      keyPrefix: prod/cluster-1
-
-      # Option 1: IRSA (recommended for EKS)
-      # User creates the SA externally with eks.amazonaws.com/role-arn annotation
-      serviceAccountName: "multigres-backup"
-
-      # Option 2: Static credentials from a Secret
-      # (mutually exclusive with serviceAccountName)
-      # credentialsSecret: "my-aws-secret"
-      # useEnvCredentials: true
-
-      # Option 3: EC2 instance metadata (default, no fields needed)
-```
-
-#### 2. Filesystem (Development / Single-Node Only)
-
-The `filesystem` backend stores backups on a Persistent Volume Claim (PVC).
-- **Architecture:** The operator creates **One Shared PVC per Shard per Cell**.
-- **Naming:** `backup-data-{cluster}-{db}-{tg}-{shard}-{cell}`.
-- **Constraint:** All replicas in a specific Cell mount the *same* PVC.
+Key features:
+- **Replica-based backups** — backups run on a replica to avoid impacting the primary
+- **S3 credential options** — IRSA, static credentials, or EC2 instance metadata
+- **Auto-generated TLS** — pgBackRest inter-node TLS is managed automatically, with optional cert-manager support
 
 > [!WARNING]
-> **CRITICAL LIMITATION:** Filesystem backups are **Cell-Local**.
-> A backup taken by a replica in `zone-a` is stored in `zone-a`'s PVC. Replicas in `zone-b` have their own empty PVC and **cannot see or restore** from `zone-a`'s backups.
->
-> **Do not use `filesystem` backups for multi-cell clusters** unless you understand that cross-cell failover will result in a split-brain backup state.
+> Filesystem backups are **cell-local**. Cross-cell failover cannot restore from another cell's backup. Use S3 for multi-cell clusters.
 
-**ReadWriteMany (RWX) or S3 Required for Multi-Replica Cells:**
-If you have multiple replicas in the same Cell (e.g., `replicasPerCell: 2`), they must all access the same backup repository. Standard block storage (EBS gp2/gp3) uses `ReadWriteOnce` (RWO) and **cannot be attached to multiple nodes simultaneously**.
-
-> [!CAUTION]
-> **Multi-Attach Failure with RWO Storage:** The operator creates pool pods **sequentially** (one at a time, waiting for readiness). By the time the second pod is created, the shared backup EBS volume is already attached to the first pod's node. The Kubernetes scheduler has no mechanism to detect this active RWO attachment when scheduling the second pod, so it may place it on a different node. The `attachdetach-controller` then fails with a `Multi-Attach error` because EBS volumes physically cannot attach to two nodes. This is a known Kubernetes limitation — the scheduler does not prevent cross-node scheduling of pods referencing an already-bound RWO PVC via `spec.volumes[]`.
->
-> **Note:** The previous StatefulSet-based architecture (v0.2.6) avoided this because `ParallelPodManagement` submitted all pods to the scheduler simultaneously. With `WaitForFirstConsumer`, the first pod to be processed annotated the unbound PVC with `volume.kubernetes.io/selected-node`, constraining all other pods to the same AZ. If only one node existed per AZ, all pods landed on the same node deterministically — but this was a **silent HA loss**, not a solution.
-
-**For multi-replica cells, use one of these backends:**
-- **S3 (Recommended):** No shared PVC needed — each pod writes to S3 independently via an `EmptyDir` scratch volume.
-- **RWX Storage:** Use a StorageClass that supports `ReadWriteMany` (e.g., NFS, EFS, CephFS) so multiple pods can mount the backup PVC from different nodes.
-
-```yaml
-spec:
-  backup:
-    type: filesystem
-    filesystem:
-      path: /backups
-      storage:
-        size: 10Gi
-        storageClassName: "nfs-client" # Requires RWX support
-```
-
-### pgBackRest TLS Certificates
-
-pgBackRest uses TLS for secure inter-node communication between replicas in a shard. The operator supports two modes for certificate provisioning:
-
-#### Auto-Generated Certificates (Default)
-
-When no `pgbackrestTLS` configuration is specified, the operator automatically generates and rotates a CA and server certificate per Shard using the built-in `pkg/cert` module. No user action is required.
-
-#### User-Provided Certificates (cert-manager)
-
-To use certificates from [cert-manager](https://cert-manager.io/) or any external PKI, provide the Secret name in the backup configuration:
-
-```yaml
-spec:
-  backup:
-    type: filesystem
-    filesystem:
-      path: /backups
-      storage:
-        size: 10Gi
-    pgbackrestTLS:
-      secretName: my-pgbackrest-certs  # Must contain ca.crt, tls.crt, tls.key
-```
-
-The referenced Secret must contain three keys: `ca.crt`, `tls.crt`, and `tls.key`. This is directly compatible with cert-manager's default Certificate output:
-
-```yaml
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: pgbackrest-tls
-spec:
-  secretName: my-pgbackrest-certs
-  commonName: pgbackrest
-  usages: [server auth, client auth]
-  issuerRef:
-    name: my-issuer
-    kind: Issuer
-```
-
-> [!NOTE]
-> The operator internally renames `tls.crt` → `pgbackrest.crt` and `tls.key` → `pgbackrest.key` via projected volumes to match upstream pgBackRest expectations. Users do not need to perform any manual key renaming.
+📖 **Full documentation:** [Backup & Restore Guide](docs/backup-restore.md)
 
 ## Observability
 
 The operator ships with built-in support for **metrics**, **alerting**, **distributed tracing**, and **structured logging**.
 
-### Metrics
+- **Metrics** — Prometheus endpoint with 8 operator-specific metrics + controller-runtime framework metrics
+- **Alerts** — 7 pre-configured PrometheusRule alerts with dedicated runbooks ([view runbooks](docs/monitoring/runbooks/))
+- **Grafana Dashboards** — Operator health dashboard + per-cluster topology dashboard
+- **Distributed Tracing** — OpenTelemetry OTLP support, disabled by default, zero overhead when off
+- **Structured Logging** — JSON logging with automatic `trace_id`/`span_id` injection for log-trace correlation
 
-Metrics are served via the standard controller-runtime Prometheus endpoint. Set `--metrics-bind-address=:8080` (or any port) to enable it.
-
-The operator exposes two classes of metrics:
-
-**Framework Metrics** (provided automatically by controller-runtime):
-- `controller_runtime_reconcile_total` — total reconcile count per controller
-- `controller_runtime_reconcile_errors_total` — reconcile error rate
-- `controller_runtime_reconcile_time_seconds` — reconcile latency histogram
-- `workqueue_depth` — work queue backlog
-
-**Operator-Specific Metrics**:
-
-| Metric | Type | Labels | Description |
-|:---|:---|:---|:---|
-| `multigres_operator_cluster_info` | Gauge | `name`, `namespace`, `phase` | Cluster phase tracking (always 1) |
-| `multigres_operator_cluster_cells_total` | Gauge | `cluster`, `namespace` | Cell count |
-| `multigres_operator_cluster_shards_total` | Gauge | `cluster`, `namespace` | Shard count |
-| `multigres_operator_cell_gateway_replicas` | Gauge | `cell`, `namespace`, `state` | Gateway ready/desired replicas |
-| `multigres_operator_shard_pool_replicas` | Gauge | `shard`, `pool`, `namespace`, `state` | Pool ready/desired replicas |
-| `multigres_operator_toposerver_replicas` | Gauge | `name`, `namespace`, `state` | TopoServer ready/desired replicas |
-| `multigres_operator_webhook_request_total` | Counter | `operation`, `resource`, `result` | Webhook admission request count |
-| `multigres_operator_webhook_request_duration_seconds` | Histogram | `operation`, `resource` | Webhook latency |
-
-### Alerts
-
-Pre-configured PrometheusRule alerts are provided in `config/monitoring/prometheus-rules.yaml`. Apply them to a Prometheus Operator installation:
-
-```bash
-kubectl apply -f config/monitoring/prometheus-rules.yaml
-```
-
-| Alert | Severity | Fires When |
-|:---|:---:|:---|
-| [`MultigresClusterReconcileErrors`](docs/monitoring/runbooks/MultigresClusterReconcileErrors.md) | warning | Sustained non-zero reconcile error rate (5m) |
-| [`MultigresClusterDegraded`](docs/monitoring/runbooks/MultigresClusterDegraded.md) | warning | Cluster phase ≠ "Healthy" for >10m |
-| [`MultigresCellGatewayUnavailable`](docs/monitoring/runbooks/MultigresCellGatewayUnavailable.md) | critical | Zero ready gateway replicas in a cell (5m) |
-| [`MultigresShardPoolDegraded`](docs/monitoring/runbooks/MultigresShardPoolDegraded.md) | warning | Ready < desired replicas for >10m |
-| [`MultigresWebhookErrors`](docs/monitoring/runbooks/MultigresWebhookErrors.md) | warning | Webhook returning errors (5m) |
-| [`MultigresReconcileSlow`](docs/monitoring/runbooks/MultigresReconcileSlow.md) | warning | p99 reconcile latency >30s (5m) |
-| [`MultigresControllerSaturated`](docs/monitoring/runbooks/MultigresControllerSaturated.md) | warning | Work queue depth >50 for >10m |
-
-Each alert links to a dedicated runbook with investigation steps, PromQL queries, and remediation actions.
-
-### Grafana Dashboards
-
-Two Grafana dashboards are included in `config/monitoring/`:
-
-- **Operator Dashboard** (`grafana-dashboard-operator.json`) — reconcile rates, error rates, latencies, queue depth, and webhook performance.
-- **Cluster Dashboard** (`grafana-dashboard-cluster.json`) — per-cluster topology (cells, shards), replica health, and phase tracking.
-
-Import via the Grafana dashboards ConfigMap:
-```bash
-kubectl apply -f config/monitoring/grafana-dashboards.yaml
-```
-
-### Local Development
-
-For local development, the observability overlay in `config/deploy-observability/` deploys the OTel Collector, Prometheus (via the Prometheus Operator), Tempo, and Grafana as separate pods. Both dashboards and datasources are pre-provisioned.
-
-```bash
-make kind-deploy-observability
-make kind-portforward
-```
-
-This deploys the operator with tracing enabled and opens port-forwards to:
-
-| Service | URL |
-| :--- | :--- |
-| Grafana | [http://localhost:3000](http://localhost:3000) |
-| Prometheus | [http://localhost:9090](http://localhost:9090) |
-| Tempo | [http://localhost:3200](http://localhost:3200) |
-
-**Metrics collection:** The operator and data-plane components use different metric collection models:
-
-| Component | Metric Model | How it works |
-| :--- | :--- | :--- |
-| **Operator** | **Pull** (Prometheus scrape) | Prometheus scrapes the operator's `/metrics` endpoint via controller-runtime's built-in Prometheus integration |
-| **Data plane** (multiorch, multipooler, etc.) | **Push** (OTLP) | Multigres binaries push metrics via OpenTelemetry to the configured OTLP endpoint |
-
-The OTel Collector receives all pushed OTLP signals from the data plane and routes them: **traces → Tempo**, **metrics → Prometheus** (via its OTLP receiver). This is necessary because multigres components send all signals to a single OTLP endpoint and cannot split them by signal type.
-
-### Distributed Tracing
-
-The operator supports **OpenTelemetry distributed tracing** via OTLP. Tracing is **disabled by default** and incurs zero overhead when off.
-
-**Enabling tracing:** Set a single environment variable on the operator Deployment:
-
-```yaml
-env:
-  - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "http://otel-collector.monitoring.svc:4318"  # OTel Collector or Tempo
-```
-
-The endpoint must speak **OTLP** (HTTP or gRPC) — this can be an OpenTelemetry Collector, Grafana Tempo, Jaeger, or any compatible backend.
-
-**What gets traced:**
-- Every controller reconciliation (MultigresCluster, Cell, Shard, TableGroup, TopoServer)
-- Sub-operations within a reconcile (ReconcileCells, UpdateStatus, PopulateDefaults, etc.)
-- Webhook admission handling (defaulting and validation)
-- Webhook-to-reconcile trace propagation: the defaulter webhook injects a trace context into cluster annotations so the first reconciliation appears as a child span of the webhook trace
-
-**Additional OTel configuration:** The operator respects all standard [OTel environment variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/) including `OTEL_TRACES_SAMPLER`, `OTEL_EXPORTER_OTLP_INSECURE`, and `OTEL_SERVICE_NAME`.
-
-### Structured Logging
-
-The operator uses structured JSON logging (`zap` via controller-runtime). When tracing is enabled, every log line within a traced operation automatically includes `trace_id` and `span_id` fields, enabling **log-trace correlation** — click a log line in Grafana Loki to jump directly to the associated trace.
-
-**Log level configuration:** The operator accepts standard controller-runtime zap flags on its command line:
-
-| Flag | Default | Description |
-| :--- | :--- | :--- |
-| `--zap-devel` | `true` | Development mode preset (see table below) |
-| `--zap-log-level` | depends on mode | Log verbosity: `debug`, `info`, `error`, or an integer (0=debug, 1=info, 2=error) |
-| `--zap-encoder` | depends on mode | Log format: `console` or `json` |
-| `--zap-stacktrace-level` | depends on mode | Minimum level that triggers stacktraces |
-
-`--zap-devel` is a **mode** that sets multiple defaults at once. `--zap-log-level` overrides the mode's default level when specified explicitly:
-
-| Setting | `--zap-devel=true` (default) | `--zap-devel=false` (production) |
-| :--- | :--- | :--- |
-| Default log level | `debug` | `info` |
-| Encoder | `console` (human-readable) | `json` |
-| Stacktraces from | `warn` | `error` |
-
-To change the log level in a deployed operator, add `args` to the manager container:
-
-```yaml
-spec:
-  template:
-    spec:
-      containers:
-        - name: manager
-          args:
-            - --zap-devel=false       # Production mode (JSON, info level default)
-            - --zap-log-level=info    # Explicit level (overrides mode default)
-```
-
-> [!NOTE]
-> The default build ships with `Development: true`, which sets the default level to `debug` and uses the human-readable console encoder. For production deployments, set `--zap-devel=false` to switch to JSON encoding and `info`-level logging.
+📖 **Full documentation:** [Observability Guide](docs/observability.md) · [Observability Demo](demo/observability/demo.md)
 
 ---
 
@@ -639,9 +403,12 @@ By default, the operator manages its own TLS certificates using the generic `pkg
 ### Using external Cert-Manager
 If you prefer to use `cert-manager` or another external tool, deploy using the cert-manager overlay (`install-certmanager.yaml`). This overlay:
 
-1.  Disables the internal cert rotator via the `--webhook-use-internal-certs=false` flag.
-2.  Creates a `Certificate` and `ClusterIssuer` resource for cert-manager to manage.
-3.  Mounts the cert-manager-provisioned secret to `/var/run/secrets/webhook`.
+1.  Creates a `Certificate` and `ClusterIssuer` resource for cert-manager to manage.
+2.  Mounts the cert-manager-provisioned secret to `/var/run/secrets/webhook` so certificates exist on disk at startup.
+
+The operator **automatically detects** the certificate management strategy on startup:
+- If certificates already exist on disk and the operator did not previously manage them (no cert-strategy annotation), it assumes an external provider (e.g. cert-manager) and skips internal rotation.
+- If no certificates exist on disk, or the operator previously annotated the ValidatingWebhookConfiguration, internal certificate rotation is enabled.
 
 ---
 
@@ -649,13 +416,28 @@ If you prefer to use `cert-manager` or another external tool, deploy using the c
 
 You can customize the operator's behavior by passing flags to the binary (or editing the Deployment args).
 
+**Required Environment Variables:**
+
+The operator requires two environment variables to be set on the Deployment (these are pre-configured in the install manifests):
+
+| Variable | Description |
+| :--- | :--- |
+| `POD_NAMESPACE` | Namespace where the operator is deployed. Used for leader election, cert secrets, and cache filtering. |
+| `POD_SERVICE_ACCOUNT` | Service account name of the operator pod. Used for webhook configuration. |
+
+**Flags:**
+
 | Flag | Default | Description |
 | :--- | :--- | :--- |
 | `--webhook-enable` | `true` | Enable the admission webhook server. |
+| `--webhook-port` | `9443` | The port that the webhook server serves at. |
 | `--webhook-cert-dir` | `/var/run/secrets/webhook` | Directory to read/write webhook certificates. |
 | `--webhook-service-name` | `multigres-operator-webhook-service` | Name of the Service pointing to the webhook. |
-| `--webhook-service-namespace`| *Current Namespace* | Namespace of the webhook service. |
-| `--metrics-bind-address` | `"0"` | Address for metrics (set to `:8080` to enable). |
+| `--webhook-service-namespace`| `$POD_NAMESPACE` | Namespace of the webhook service. |
+| `--webhook-service-account` | `$POD_SERVICE_ACCOUNT` | Service Account name of the operator. |
+| `--metrics-bind-address` | `:8443` | Address for the metrics endpoint. Set to `0` to disable. |
+| `--metrics-secure` | `true` | Serve metrics over HTTPS with authentication and authorization. |
+| `--enable-http2` | `false` | Enable HTTP/2 for metrics and webhook servers. |
 | `--leader-elect` | `false` | Enable leader election (recommended for HA deployments). |
 
 ---

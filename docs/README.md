@@ -1,61 +1,29 @@
-# Project Overview
+# Multigres Operator Documentation
 
-## What is This?
+## User Documentation
 
-Kubernetes operator for deploying and managing Multigres clusters.
+| Document | Description |
+|:---|:---|
+| [README](../README.md) | Installation, configuration, resource hierarchy, PVC policies, and constraints |
+| [Backup & Restore](backup-restore.md) | pgBackRest integration, S3 and filesystem backends, TLS certificates |
+| [Observability](observability.md) | Metrics, alerts, dashboards, distributed tracing, structured logging |
+| [Observability Demo](../demo/observability/demo.md) | Hands-on tutorial for the full observability stack |
+| [Sample Configurations](../config/samples/README.md) | YAML examples with override hierarchy walkthrough |
 
-## Core Principle
+## Operations
 
-**Clean Separation**: The operator manages Kubernetes resources (Deployments, StatefulSets, Services) only. It has no knowledge of Multigres application internals. Multigres components handle their own startup dependencies and coordination.
+| Document | Description |
+|:---|:---|
+| [Alert Runbooks](monitoring/runbooks/) | Investigation and remediation guides for all 7 operator alerts |
 
-## What Does It Deploy?
+## Developer Documentation
 
-A Multigres cluster consists of:
-- **etcd**: Distributed key-value store for cluster coordination
-- **MultiGateway**: PostgreSQL protocol gateway
-- **MultiOrch**: Orchestration service
-- **MultiPooler**: Connection pooling with embedded PostgreSQL and pgctld
+Internal architecture and implementation references: [docs/development/](development/)
 
-The operator creates and manages all necessary Kubernetes resources for these components.
+## Contributing
 
-## Technology
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for development setup, code style, and making changes.
 
-- **Language**: Go
-- **Framework**: Kubebuilder
-- **Observability**: OpenTelemetry (traces, metrics, logs)
-- **Testing**: Go testing + envtest (100% coverage goal)
+## Changelog
 
-## Project Structure
-
-### Code
-
-```
-multigres-operator/
-├── go.mod                  # Root module
-├── cmd/multigres-operator/ # Main entry point
-└── pkg/                    # Multi-module structure
-    ├── cluster-handler/    # Cluster orchestration (separate module)
-    └── resource-handler/   # Component resources and data plane management (separate module)
-
-Note: go.work can be created locally for development. It is in .gitignore
-```
-
-### Documentation and Configuration
-
-```
-multigres-operator/
-├── config/                 # Kubernetes manifests
-├── docs/                   # Architecture and guides
-└── plans/                  # Planning documents
-```
-
-## Documentation
-
-- **architecture.md**: System design, components, technology choices
-- **implementation-guide.md**: Development workflow, testing, coding standards
-- **interface-design.md**: CRD API design, status fields, kubectl output
-
-### Multigres Documentation
-
-- https://multigres.com/: Documentation for Multigres architecture and design details
-- https://github.com/multigres/multigres: Main repository for Multigres implementation
+See [CHANGELOG.md](../CHANGELOG.md) for release history.

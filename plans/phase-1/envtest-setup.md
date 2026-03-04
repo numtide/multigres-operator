@@ -1,12 +1,19 @@
 ---
 title: Full envtest integration and validation for integration test spec
-state: work-in-progress
+state: completed
 tags:
 - testing
 - envtest
 - integration
 - nix
 ---
+
+> [!NOTE]
+> **This proposal has been completed.** The envtest setup is operational and used across all modules.
+> Minor deviations from the original proposal:
+> - The Nix `devshell.nix` configuration details differ slightly from what was proposed.
+> - Integration tests do not use `//go:build integration` build tags — they run as regular tests with envtest auto-detected via `KUBEBUILDER_ASSETS`.
+> - CI/CD integration uses GitHub Actions but the matrix strategy is not yet implemented for multiple K8s versions.
 
 # Summary
 

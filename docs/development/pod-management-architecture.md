@@ -266,7 +266,7 @@ One shared PVC per shard per cell for filesystem-based backups, mounted at `/bac
 > - **RWX Storage:** Use a StorageClass that supports `ReadWriteMany` (NFS, EFS, CephFS).
 > - **Single replica per cell:** With `replicasPerCell: 1`, only one pod mounts the PVC and the issue does not arise.
 
-See the backup architecture section in `implementation-notes.md` for the shared PVC design rationale.
+See the [Backup Architecture](backup-architecture.md) document for the shared PVC design rationale.
 
 ### PVC Deletion Policy
 

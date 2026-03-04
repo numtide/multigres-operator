@@ -1,5 +1,13 @@
 # E2E Testing with Kind
 
+**Status:** ✅ Completed
+
+> [!NOTE]
+> **This proposal has been implemented.** The kind-based E2E infrastructure is in place under `test/e2e/`
+> with `pkg/testutil/kind.go` providing the `SetUpKind` and `SetUpKindManager` utilities as described.
+> The Makefile includes a `test-e2e` target. The tests exercise full operator lifecycle including
+> resource creation/deletion with real Kubernetes GC.
+
 ## Overview
 Add e2e testing infrastructure that uses kind (real Kubernetes cluster) instead
 of envtest, following the same testutil patterns as integration tests.

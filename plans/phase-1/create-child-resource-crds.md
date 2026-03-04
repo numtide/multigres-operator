@@ -1,6 +1,6 @@
 ---
 title: Create CRDs for each resource to be deployed
-state: ready
+state: completed
 tags:
 - multigateway
 - multipooler
@@ -9,6 +9,16 @@ tags:
 - crd
 - kubebuilder
 ---
+
+> [!NOTE]
+> **This proposal has been completed, but the final CRD architecture evolved significantly.**
+> Key differences from this proposal:
+> - **No standalone component CRDs**: `MultiGateway`, `MultiOrch`, `MultiPooler`, and `Etcd` are not independent CRDs. Instead, they are internal resources managed by their parent controllers.
+> - **Hierarchical CRDs**: The actual hierarchy is `MultigresCluster → Cell, TableGroup, TopoServer → Shard`. Each is a proper CRD with its own controller.
+> - **Template CRDs**: `CoreTemplate`, `CellTemplate`, and `ShardTemplate` were added for configuration inheritance.
+> - **Inline specs replaced embedded component CRDs**: Components are configured inline within their parent CRs (e.g., `CellSpec.MultiGateway`, `ShardSpec.Pools`).
+>
+> See [API Design](../../docs/development/api-design/multigres-operator-api-v1alpha1-design.md) for the current CRD architecture.
 
 # Summary
 
