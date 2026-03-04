@@ -114,6 +114,7 @@ pkg/
 - **User-facing docs** go in the [README](README.md) or `docs/` (backup-restore, observability, runbooks)
 - **Developer docs** go in `docs/development/`
 - **Design proposals** go in `plans/` (mark completed proposals with `## Status: Completed`)
+- **Operator capability assessment** is tracked in [docs/operator-capability-levels.md](docs/operator-capability-levels.md) — update it when adding features that advance a capability level
 
 ## Commit Messages
 
