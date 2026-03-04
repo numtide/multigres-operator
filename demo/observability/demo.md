@@ -242,14 +242,56 @@ Normal    Applied       tablegroup/minimal-postgres-default  Applied Shard minim
 
 #### Event categories
 
+**Lifecycle:**
+
 | Reason | Type | Meaning |
 |--------|------|---------|
 | `Synced` | Normal | Reconcile completed successfully |
 | `Applied` | Normal | A child resource was created or updated |
-| `PhaseChange` | Normal | Resource transitioned to a new phase |
+| `Deleted` | Normal | A child resource was deleted |
 | `ImplicitDefault` | Normal | Operator injected a default configuration |
-| `RegistrationFailed` | Warning | Data-plane registration failed (transient) |
-| `Debug` | Normal | Informational message about template resolution |
+| `Generated` | Normal | Certificate or config was generated |
+| `Rotated` | Normal | Certificate was rotated |
+
+**Topology & Status:**
+
+| Reason | Type | Meaning |
+|--------|------|---------|
+| `TopologyWaiting` | Normal | Waiting for topology server connectivity |
+| `CleanupComplete` | Normal | Topology deregistration completed |
+| `PoolersPruned` | Normal | Stale pooler entries removed from topology |
+| `TopoConnectFailed` | Warning | Topology server connection failed (transient) |
+| `TopologyError` | Warning | Topology registration or query failed |
+
+**Drain & Deletion:**
+
+| Reason | Type | Meaning |
+|--------|------|---------|
+| `PendingDeletion` | Normal | Shard entered PendingDeletion flow |
+| `DrainStarted` | Normal | Graceful drain initiated for a pod |
+| `DrainCompleted` | Normal | Pod drain completed successfully |
+| `ReadyForDeletion` | Normal | All pods drained; safe to delete |
+| `StuckTerminating` | Warning | Pod stuck in Terminating state; force-deleted |
+
+**Backup & Storage:**
+
+| Reason | Type | Meaning |
+|--------|------|---------|
+| `BackupHealthy` | Normal | Backup age is within threshold |
+| `BackupStale` | Warning | Backup is older than threshold |
+| `PVCExpanded` | Normal | PVC volume expansion succeeded |
+| `ExpandPVCFailed` | Warning | PVC volume expansion failed |
+| `FilesystemResize` | Normal | Filesystem resize triggered |
+
+**Errors:**
+
+| Reason | Type | Meaning |
+|--------|------|---------|
+| `ConfigError` | Warning | Configuration generation failed (e.g. pg_hba) |
+| `FailedApply` | Warning | Failed to create or update a child resource |
+| `StatusError` | Warning | Failed to update resource status |
+| `TemplateMissing` | Warning | Referenced template not found |
+| `PodReplaced` | Warning | A drained pod was replaced |
 
 You can also see events directly on the resource:
 
@@ -289,10 +331,14 @@ Defined in `pkg/monitoring/metrics.go` and set by `pkg/monitoring/recorder.go`.
 | `multigres_operator_cluster_cells_total` | Gauge | `cluster`, `namespace` | Number of cells in the cluster |
 | `multigres_operator_cluster_shards_total` | Gauge | `cluster`, `namespace` | Number of shards in the cluster |
 | `multigres_operator_cell_gateway_replicas` | Gauge | `cell`, `namespace`, `state` | Gateway replicas (desired vs ready) |
-| `multigres_operator_shard_pool_replicas` | Gauge | `shard`, `pool`, `namespace`, `state` | Pool replicas (desired vs ready) |
+| `multigres_operator_shard_pool_replicas` | Gauge | `cluster`, `shard`, `pool`, `cell`, `namespace`, `state` | Pool replicas (desired vs ready) |
+| `multigres_operator_pool_pods_drifted` | Gauge | `cluster`, `shard`, `pool`, `cell`, `namespace` | Pods with spec-hash mismatch pending rolling update |
 | `multigres_operator_toposerver_replicas` | Gauge | `name`, `namespace`, `state` | TopoServer replicas (desired vs ready) |
-| `multigres_operator_webhook_request_total` | Counter | `operation`, `result` | Webhook admission request count |
-| `multigres_operator_webhook_request_duration_seconds` | Histogram | `operation` | Webhook latency distribution |
+| `multigres_operator_webhook_request_total` | Counter | `operation`, `resource`, `result` | Webhook admission request count |
+| `multigres_operator_webhook_request_duration_seconds` | Histogram | `operation`, `resource` | Webhook latency distribution |
+| `multigres_operator_last_backup_age_seconds` | Gauge | `cluster`, `shard`, `namespace` | Age of the most recent completed backup |
+| `multigres_operator_drain_operations_total` | Counter | `cluster`, `shard`, `result` | Total graceful pod drain operations |
+| `multigres_operator_rolling_update_in_progress` | Gauge | `cluster`, `shard`, `pool`, `cell`, `namespace` | Whether a rolling update is active (0/1) |
 
 #### Framework metrics
 
@@ -416,21 +462,17 @@ sum by (controller, result) (controller_runtime_reconcile_total)
 
 ```
 controller=cell            result=success   count=3
-controller=cell-datahandler result=error    count=15
-controller=cell-datahandler result=success  count=1
 controller=multigrescluster result=success  count=12
 controller=shard           result=success   count=9
-controller=shard-datahandler result=error   count=14
-controller=shard-datahandler result=success count=4
+controller=shard           result=error     count=5
 controller=tablegroup      result=success   count=8
 controller=toposerver      result=success   count=6
 ```
 
 > [!NOTE]
-> The `cell-datahandler` and `shard-datahandler` errors are **expected** —
-> these controllers register cells/shards in the topology server, which is
-> unavailable while etcd is still starting. They reconcile again once
-> connectivity is established.
+> Early `shard` controller errors are **expected** — the shard controller
+> registers shards in the topology server, which is unavailable while etcd
+> is still starting. It reconciles again once connectivity is established.
 
 ---
 
@@ -460,19 +502,19 @@ reconciliations:
 ```
 MultigresCluster.Reconcile
   ├── creates Cell → triggers Cell.Reconcile
-  │     ├── creates MultiGateway Deployment
-  │     └── triggers CellData.Reconcile (registers cell in topology)
+  │     └── creates MultiGateway Deployment
   ├── creates TopoServer → triggers TopoServer.Reconcile
   │     └── creates StatefulSet
   ├── creates TableGroup → triggers TableGroup.Reconcile
   │     └── creates Shard → triggers Shard.Reconcile
+  │           ├── creates pool Pods (primary, replica)
   │           ├── creates MultiOrch Deployment
   │           ├── creates MultiPooler Deployment
-  │           └── triggers ShardData.Reconcile (registers shard in topology)
+  │           └── registers shard in topology
   └── creates MultiAdmin Deployment
 ```
 
-Without tracing, debugging a failure in `ShardData.Reconcile` means grepping
+Without tracing, debugging a failure in `Shard.Reconcile` means grepping
 logs across multiple controllers and mentally reconstructing the timeline.
 With tracing, you open a single trace and see the full waterfall — which
 controllers ran, in what order, how long each took, and where the failure
@@ -532,11 +574,9 @@ You should see traces for every controller reconciliation:
 |------|----------|-------------|
 | `MultigresCluster.Reconcile` | <1ms | Root reconcile of the cluster |
 | `Cell.Reconcile` | 74ms | Cell controller reconcile |
-| `Shard.Reconcile` | 134ms | Shard controller reconcile |
+| `Shard.Reconcile` | 134ms | Shard controller reconcile (includes topology registration) |
 | `TableGroup.Reconcile` | 21–53ms | TableGroup reconcile |
 | `TopoServer.Reconcile` | 32ms | TopoServer reconcile |
-| `CellData.Reconcile` | 1.0s | Cell data handler (topology registration) |
-| `ShardData.Reconcile` | 1.0s | Shard data handler (topology registration) |
 
 #### Filtering traces
 
@@ -597,15 +637,13 @@ Go to Grafana → Explore → Tempo and search by trace ID
   [Cell.Reconcile]            ──────────────────────────── 74ms
   [TopoServer.Reconcile]      ────────────────────── 32ms
   [TableGroup.Reconcile]      ──────────────────────── 53ms
-    [Shard.Reconcile]         ─────────────────────────── 134ms
-  [CellData.Reconcile]        ─── ERROR ── 1.0s ──────────
-  [ShardData.Reconcile]       ─── ERROR ── 1.0s ──────────
+    [Shard.Reconcile]         ─── ERROR ── 1.0s ──────────
 ```
 
 **Step 3 — Identify the problem:**
 
-The `CellData.Reconcile` and `ShardData.Reconcile` spans show errors with
-1.0s duration — they are timing out trying to register with the TopoServer.
+The `Shard.Reconcile` span shows an error with 1.0s duration — the shard
+controller is timing out trying to register the shard in the topology server.
 Clicking the span reveals the error attribute:
 
 ```
@@ -613,7 +651,7 @@ status: ERROR
 error.message: "rpc error: code = Unavailable desc = connection refused"
 ```
 
-This tells you the data-handler controllers cannot reach the TopoServer's etcd
+This tells you the shard controller cannot reach the TopoServer's etcd
 cluster, which is still starting. The operator will automatically retry and
 the errors will resolve once etcd is ready.
 
@@ -667,6 +705,10 @@ This dashboard shows the health of the **clusters being managed**:
 | MultiGateway Replicas | Desired vs ready replicas (dashed vs solid lines) |
 | Pool Replicas | Shard pool desired vs ready replicas |
 | TopoServer Replicas | TopoServer desired vs ready replicas |
+| Last Backup Age | Age of most recent backup per shard (thresholds at 24h/48h) |
+| Drain Operations | Rate of drain operations by result (success/timeout/failure) |
+| Rolling Update In Progress | Which pools are actively rolling (0/1) |
+| Spec-Hash Drifted Pods | Count of pods with configuration mismatch pending update |
 
 ### 7.3 Multigres Data Plane
 
@@ -752,17 +794,20 @@ consumes this CRD — no manual rule file configuration needed.
 
 Verify the rules are loaded at http://localhost:9090/alerts.
 
-The rules define seven alerts:
+The rules define ten alerts:
 
 | Alert | Severity | `for` | Condition |
 |-------|----------|-------|-----------|
-| `MultigresClusterReconcileErrors` | warning | 5m | Reconcile error rate > 0 for cluster/tablegroup controllers |
+| `MultigresClusterReconcileErrors` | warning | 5m | Reconcile error rate > 0 for any controller |
 | `MultigresClusterDegraded` | warning | 10m | Cluster phase ≠ Healthy for > 10 min |
 | `MultigresCellGatewayUnavailable` | critical | 5m | Zero ready gateway replicas |
-| `MultigresShardPoolDegraded` | warning | 5m | Ready < desired pool replicas |
+| `MultigresShardPoolDegraded` | warning | 10m | Ready < desired pool replicas |
 | `MultigresWebhookErrors` | warning | 5m | Webhook error rate > 0 |
-| `MultigresReconcileSlow` | warning | 15m | p99 reconcile duration > 30s |
-| `MultigresControllerSaturated` | critical | 5m | Work queue depth > 50 |
+| `MultigresBackupStale` | warning | 30m | Backup age > 24 hours |
+| `MultigresRollingUpdateStuck` | warning | 30m | Rolling update in progress > 30 min |
+| `MultigresDrainTimeout` | warning | 10m | Drain timeout rate > 0 |
+| `MultigresReconcileSlow` | warning | 5m | p99 reconcile duration > 30s |
+| `MultigresControllerSaturated` | warning | 10m | Work queue depth > 50 |
 
 #### Example: Alert Expression
 
