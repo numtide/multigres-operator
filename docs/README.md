@@ -9,6 +9,7 @@
 | [Observability](observability.md) | Metrics, alerts, dashboards, distributed tracing, structured logging |
 | [Storage Management](storage.md) | PVC deletion policies and volume expansion |
 | [Configuration Reference](configuration.md) | Operator flags, environment variables, and logging |
+| [Operator Capability Levels](operator-capability-levels.md) | Assessment against Operator Framework capability model |
 | [Sample Configurations](../config/samples/README.md) | YAML examples with override hierarchy walkthrough |
 
 ## Demos
