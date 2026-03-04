@@ -12,7 +12,7 @@ spec:
         # ── Errors ────────────────────────────────────────────────
 
         - alert: MultigresClusterReconcileErrors
-          expr: rate(controller_runtime_reconcile_errors_total{controller=~"multigrescluster|tablegroup"}[5m]) > 0
+          expr: rate(controller_runtime_reconcile_errors_total{controller=~"multigrescluster|tablegroup|shard|cell|toposerver"}[5m]) > 0
           for: 5m
           labels:
             severity: warning
@@ -77,6 +77,48 @@ spec:
               (current: {{ $value | humanize }}/s).
             runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresWebhookErrors.md"
 
+        # ── Backup & Drain ────────────────────────────────────────
+
+        - alert: MultigresBackupStale
+          expr: multigres_operator_last_backup_age_seconds > 86400
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Shard {{ $labels.shard }} backup is older than 24 hours"
+            description: >-
+              The most recent backup for shard {{ $labels.shard }} in cluster
+              {{ $labels.cluster }} (namespace {{ $labels.namespace }}) is
+              {{ $value | humanizeDuration }} old. Check backup job health.
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresBackupStale.md"
+
+        - alert: MultigresRollingUpdateStuck
+          expr: multigres_operator_rolling_update_in_progress == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Rolling update stuck for {{ $labels.shard }}/{{ $labels.pool }}"
+            description: >-
+              Pool {{ $labels.pool }} of shard {{ $labels.shard }} in cell
+              {{ $labels.cell }} (namespace {{ $labels.namespace }}) has been
+              performing a rolling update for more than 30 minutes. Check for
+              pods stuck in pending or crash-looping state.
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresRollingUpdateStuck.md"
+
+        - alert: MultigresDrainTimeout
+          expr: rate(multigres_operator_drain_operations_total{result="timeout"}[5m]) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Drain operations are timing out for {{ $labels.shard }}"
+            description: >-
+              Shard {{ $labels.shard }} in cluster {{ $labels.cluster }} has
+              had drain timeouts for the last 10 minutes. Pods may be stuck
+              in a drain state. Check pod logs and topology server connectivity.
+            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresDrainTimeout.md"
+
         # ── Latency ───────────────────────────────────────────────
 
         - alert: MultigresReconcileSlow
@@ -95,7 +137,7 @@ spec:
         # ── Saturation ────────────────────────────────────────────
 
         - alert: MultigresControllerSaturated
-          expr: workqueue_depth{name=~"multigrescluster|tablegroup"} > 50
+          expr: workqueue_depth{name=~"multigrescluster|tablegroup|shard|cell|toposerver"} > 50
           for: 10m
           labels:
             severity: warning
