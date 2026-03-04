@@ -39,7 +39,17 @@ kubectl get multigrescluster,cell,shard,tablegroup,toposerver -A -w
 make kind-down
 ```
 
-See the [README](README.md#local-development-kind) for additional Kind deployment options (cert-manager, observability stack).
+**All Kind deployment targets:**
+
+| Command | Description |
+| :--- | :--- |
+| `make kind-deploy` | Deploy operator to local Kind cluster using self-signed certs (Default). |
+| `make kind-deploy-certmanager` | Deploy operator to Kind, installing `cert-manager` for certificate handling. |
+| `make kind-deploy-no-webhook` | Deploy operator to Kind with the webhook fully disabled. |
+| `make kind-deploy-observability` | Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana). |
+| `make kind-portforward` | Port-forward Grafana (3000), Prometheus (9090), Tempo (3200) to localhost. Re-run if connection drops. |
+
+See the [demo/](demo/) folder for guided walkthroughs of cert-manager and observability deployments.
 
 ## Code Style
 
