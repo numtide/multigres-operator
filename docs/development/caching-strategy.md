@@ -29,6 +29,7 @@ For high-volume resources in regular user namespaces, we strictly filter the cac
 - `Secret`
 - `Service`
 - `StatefulSet` (still used for TopoServer)
+- `Pod`
 
 **Mechanism:**
 We use `cache.AllNamespaces` with a `LabelSelector`:
@@ -71,7 +72,8 @@ Since ConfigMaps are generally lower volume and lower security risk than Secrets
 | **Service** | Operator NS | **NONE (All)** | Self-discovery. |
 | **StatefulSet** | All Namespaces | `managed-by=multigres` | Noise reduction (still used for TopoServer). |
 | **StatefulSet** | Operator NS | **NONE (All)** | Self-discovery. |
-| **Pod** | All Namespaces | **NONE (All)** | Pool pods are operator-managed; needs full visibility. |
+| **Pod** | All Namespaces | `managed-by=multigres` | OOM prevention; operator only manages its own pool pods. |
+| **Pod** | Operator NS | **NONE (All)** | Self-discovery. |
 | **ConfigMap** | All Namespaces | **NONE (All)** | User Configs (postgresql.conf). |
 
 ## Developer Guide: Reading Secrets

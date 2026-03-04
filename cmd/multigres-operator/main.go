@@ -253,7 +253,7 @@ func main() {
 	// We implement a Split-Brain Caching strategy to balance Scalability vs. Usability.
 	//
 	// 1. GLOBAL FILTER ("The Noise Cancelling"):
-	//    For high-volume resources (Secrets, Services, StatefulSets), we strictly
+	//    For high-volume resources (Secrets, Services, StatefulSets, Pods), we strictly
 	//    filter the cache to ONLY store objects managed by this operator.
 	//    This prevents the "Memory Bomb" where the operator caches 5,000+ Helm
 	//    secrets from other tenants, leading to OOMs.
@@ -316,7 +316,7 @@ func main() {
 					},
 				},
 				// -----------------------------------------------------------
-				// STATEFULSETS & SERVICES: High Volume Resources
+				// STATEFULSETS, SERVICES, PODS: High Volume Resources
 				// -----------------------------------------------------------
 				&appsv1.StatefulSet{}: {
 					Namespaces: map[string]cache.Config{
@@ -325,6 +325,12 @@ func main() {
 					},
 				},
 				&corev1.Service{}: {
+					Namespaces: map[string]cache.Config{
+						defaultNS:           unfilteredConfig,
+						cache.AllNamespaces: filteredConfig,
+					},
+				},
+				&corev1.Pod{}: {
 					Namespaces: map[string]cache.Config{
 						defaultNS:           unfilteredConfig,
 						cache.AllNamespaces: filteredConfig,
