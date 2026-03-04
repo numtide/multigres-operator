@@ -155,16 +155,26 @@ The drain state machine coordinates pod removal within the shard controller. The
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
-                    │  Annotation: state=requested     │
+                    │  state=requested                 │
                     │  + drain-requested-at timestamp  │
                     │  (set by resource-handler)       │
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
-                    │  Shard controller drains the pod: │
-                    │  1. Remove from sync standby     │
-                    │  2. Unregister from etcd         │
-                    │  3. Set state=ready-for-deletion │
+                    │  state=draining                  │
+                    │  Remove pod from synchronous     │
+                    │  standby list on the primary     │
+                    └──────────────┬───────────────────┘
+                                   │
+                    ┌──────────────▼───────────────────┐
+                    │  state=acknowledged              │
+                    │  Verify standby removal is       │
+                    │  reflected in pg_stat_replication │
+                    └──────────────┬───────────────────┘
+                                   │
+                    ┌──────────────▼───────────────────┐
+                    │  state=ready-for-deletion        │
+                    │  Unregister from etcd topology   │
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
@@ -380,7 +390,7 @@ All pod management code lives in `pkg/resource-handler/controller/shard/`:
 | `reconcile_pool_pods.go` | Core pod lifecycle: `reconcilePoolPods`, `createMissingResources`, `handleScaleDown`, `handleRollingUpdates`, `selectPodToDrain`, `cleanupDrainedPod`, `podNeedsUpdate`. |
 | `reconcile_deletion.go` | Shard deletion: `handleDeletion`, topology unregistration, child resource cleanup. |
 | `reconcile_multiorch.go` | MultiOrch deployment and service reconciliation. |
-| `reconcile_shared_infra.go` | Shared infrastructure: pgBackRest TLS certs, pg_hba ConfigMap, postgres password Secret, shared backup PVC. |
+| `reconcile_shared_infra.go` | Shared infrastructure: pgBackRest TLS certs, pg_hba ConfigMap, postgres password Secret, shared backup PVC, PDB, headless service. |
 | `reconcile_data_plane.go` | Data-plane reconciliation: pod role reporting, drain state machine execution, backup health evaluation. |
 | `pool_pod.go` | Pod builder: `BuildPoolPod`, `BuildPoolPodName`, `ComputeSpecHash`. |
 | `pool_pvc.go` | PVC builders: `BuildPoolDataPVC`, `BuildPoolDataPVCName`, `BuildSharedBackupPVC` (with conditional ownerRef support). |

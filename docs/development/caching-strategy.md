@@ -106,7 +106,7 @@ When the operator must **read and validate** a Secret that it does not own (e.g.
 }
 ```
 
-**Usage** (in `shard_controller.go:reconcilePgBackRestCerts`):
+**Usage** (in `reconcile_shared_infra.go:reconcilePgBackRestCerts`):
 ```go
 // User-provided Secret: validate via uncached API reader.
 // External Secrets (e.g., cert-manager) lack the managed-by label

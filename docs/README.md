@@ -25,7 +25,7 @@ Guided walkthroughs for specific user journeys: [demo/](../demo/)
 
 | Document | Description |
 |:---|:---|
-| [Alert Runbooks](monitoring/runbooks/) | Investigation and remediation guides for all 7 operator alerts |
+| [Alert Runbooks](monitoring/runbooks/) | Investigation and remediation guides for all 10 operator alerts |
 
 ## Developer Documentation
 

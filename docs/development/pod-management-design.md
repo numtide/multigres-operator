@@ -334,6 +334,16 @@ The recommended approach uses **pod annotations** to track the decommissioning s
                     └──────────────┬───────────────────────┘
                                    │
                     ┌──────────────▼───────────────────────┐
+                    │  State: REQUESTED                    │
+                    │  Annotation: drain.multigres.com/    │
+                    │    state=requested                   │
+                    │                                      │
+                    │  Set by resource-handler to signal   │
+                    │  that drain should begin             │
+                    │  Then: Requeue                       │
+                    └──────────────┬───────────────────────┘
+                                   │
+                    ┌──────────────▼───────────────────────┐
                     │  State: DRAINING                     │
                     │  Annotation: drain.multigres.com/    │
                     │    state=draining                    │
@@ -354,13 +364,13 @@ The recommended approach uses **pod annotations** to track the decommissioning s
                     └──────────────┬───────────────────────┘
                                    │
                     ┌──────────────▼───────────────────────┐
-                    │  State: FINISHED                     │
+                    │  State: READY-FOR-DELETION           │
                     │  Annotation: drain.multigres.com/    │
-                    │    state=finished                    │
+                    │    state=ready-for-deletion          │
                     │                                      │
-                    │  Action: Verify Pod termination,     │
-                    │    call UnregisterMultiPooler,       │
-                    │    delete PVC (if policy)        │
+                    │  Action: Unregister from etcd,       │
+                    │    delete PVC (if policy),           │
+                    │    pod is garbage collected          │
                     └──────────────────────────────────────┘
 ```
 

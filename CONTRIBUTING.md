@@ -73,11 +73,13 @@ docs/               # User-facing docs, runbooks, developer docs
 pkg/
   cluster-handler/  # MultigresCluster controller (top-level reconciler)
   resource-handler/ # Cell, Shard, TableGroup, TopoServer controllers
+  data-handler/     # Shared libraries: drain state machine, topo operations, backup health
   resolver/         # Configuration resolution (4-level override chain)
   webhook/          # Admission webhook (mutating + validating)
   cert/             # Generic TLS certificate lifecycle manager
   monitoring/       # Metrics, tracing, log-trace correlation
   util/             # Shared utilities (naming, status, PVC helpers)
+  testutil/         # Shared test infrastructure (envtest, Kind helpers)
 ```
 
 ## Making Changes

@@ -343,7 +343,7 @@ webhooks:
 
 ### 2. Implementation Components
 
-Located in `pkg/data-handler/webhook/`:
+Located in `pkg/webhook/handlers/`:
 
 ```go
 // +kubebuilder:webhook:path=/mutate-multigres-com-v1alpha1-multigrescluster,mutating=true,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=multigresclusters,verbs=create;update,versions=v1alpha1,name=mmultigrescluster.kb.io,admissionReviewVersions=v1

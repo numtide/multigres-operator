@@ -98,4 +98,7 @@ if !reflect.DeepEqual(cluster.Status, newStatus) {
     r.Status().Patch(...)
 }
 ```
-**Decision:** We prefer the cleaner code of SSA rely on the API Server's optimized diffing engine until proven otherwise.
+**Decision:** We prefer the cleaner code of SSA and rely on the API Server's optimized diffing engine until proven otherwise.
+
+> [!NOTE]
+> The shard controller's `updateStatus` in `status.go` uses `FieldOwner("multigres-resource-handler")` instead of `"multigres-operator"` to avoid SSA field ownership conflicts with the cluster-handler, which also patches Shard status fields. All other SSA operations across both handlers use `"multigres-operator"`.

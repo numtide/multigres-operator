@@ -14,7 +14,7 @@ tags:
 > - **Renovate integration**: `.github/renovate.json` and Makefile markers are not in place.
 > - **Build metadata (ldflags)**: Version, build date, and git commit are not yet injected into the binary.
 > - **`make verify` target**: Generated file verification is not implemented.
-> - **`make pre-commit` target**: Not implemented as a dedicated target.
+> - **`make pre-commit` target**: Implemented (`pre-commit: modules-tidy fmt vet lint test`).
 > - Some target names and implementation details differ from the proposal.
 
 # Summary
