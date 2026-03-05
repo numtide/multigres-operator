@@ -139,8 +139,8 @@ func TestTemplatedCluster(t *testing.T) {
 						TemplateRef: "standard-core",
 					},
 					Cells: []multigresv1alpha1.CellConfig{
-						{Name: "us-east-1a", Zone: "us-east-1a"},
-						{Name: "us-east-1b", Zone: "us-east-1b"},
+						{Name: "us-east-1a"},
+						{Name: "us-east-1b"},
 					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
@@ -202,7 +202,7 @@ func TestTemplatedCluster(t *testing.T) {
 				t.Errorf("multiadmin replicas = %d, want 2", *dep.Spec.Replicas)
 			}
 
-			waitForStatefulSetWithContainer(t, c, ns, "postgres")
+			waitForPodWithContainer(t, c, ns, "postgres")
 			waitForDeploymentWithContainer(t, c, ns, "multiorch")
 			return ctx
 		}).

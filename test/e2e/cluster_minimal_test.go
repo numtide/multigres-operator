@@ -37,7 +37,7 @@ func TestMinimalCluster(t *testing.T) {
 						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
 					},
 					Cells: []multigresv1alpha1.CellConfig{
-						{Name: "zone-a", Zone: "us-east-1a"},
+						{Name: "zone-a"},
 					},
 				},
 			}
@@ -74,7 +74,7 @@ func TestMinimalCluster(t *testing.T) {
 			waitForDeploymentWithContainer(t, c, ns, "multiadmin")
 			waitForDeploymentWithContainer(t, c, ns, "multigateway")
 			waitForDeploymentWithContainer(t, c, ns, "multiorch")
-			waitForStatefulSetWithContainer(t, c, ns, "postgres")
+			waitForPodWithContainer(t, c, ns, "postgres")
 			waitForServiceWithPort(t, c, ns, "postgres", 15432)
 			waitForServiceWithPort(t, c, ns, "client", 2379)
 			return ctx
