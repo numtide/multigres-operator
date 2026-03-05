@@ -1,0 +1,36 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: multigres-chaos
+    app.kubernetes.io/managed-by: kustomize
+  name: multigres-chaos-exerciser
+rules:
+  # Write access to multigres CRDs for exerciser scenarios
+  - apiGroups: [multigres.com]
+    resources: ["*"]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # Pod deletion for restart scenarios
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, delete]
+  # Chaos Mesh CRDs for fault injection (Levels 2-3)
+  - apiGroups: [chaos-mesh.org]
+    resources: ["*"]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: multigres-chaos
+    app.kubernetes.io/managed-by: kustomize
+  name: multigres-chaos-exerciser
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: multigres-chaos-exerciser
+subjects:
+  - kind: ServiceAccount
+    name: multigres-chaos
+    namespace: multigres-operator

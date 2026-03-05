@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multigres-chaos
+spec:
+  template:
+    spec:
+      containers:
+        - name: multigres-chaos
+          env:
+            - name: CHAOS_LEVEL
+              value: "1"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi

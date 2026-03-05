@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: multigres-chaos
+    app.kubernetes.io/managed-by: kustomize
+  name: multigres-chaos-observer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: multigres-chaos-observer
+subjects:
+  - kind: ServiceAccount
+    name: multigres-chaos
+    namespace: multigres-operator
