@@ -252,7 +252,7 @@ func (r *ShardReconciler) Reconcile(
 
 	// Data-plane phases: open a single topo connection shared across all phases.
 	result, err := r.reconcileDataPlane(ctx, shard)
-	if err != nil || result.RequeueAfter > 0 || result.Requeue {
+	if err != nil || result.RequeueAfter > 0 {
 		return result, err
 	}
 

@@ -4,6 +4,47 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.4.1] — 2026-03-05
+
+**Previous release:** v0.4.0 (2026-03-03)
+
+Maintenance release with container image upgrades, observability improvements, bug fixes, and a major documentation reorganization. No breaking changes.
+
+**69 files changed across 10 PRs (#335–#344).**
+
+### Features
+
+- Upgrade multigres container images from `sha-b0a47e1` to `sha-4f39f4a` (pgctld, multigres core, multiorch, multipooler, multigateway).
+- New Grafana dashboard (`grafana-dashboard-cluster.json`) with panels for backup age, drain operations, rolling update progress, and spec-hash drifted pods.
+- Three new Prometheus alerting rules: `MultigresBackupStale` (backup older than 24h), `MultigresRollingUpdateStuck` (rolling update >30min), `MultigresDrainTimeout` (drain timeouts for 10min).
+- Prometheus alert and saturation rules now cover all five controllers (multigrescluster, tablegroup, shard, cell, toposerver) instead of only multigrescluster and tablegroup.
+- E2E test timeout increased from 20m to 30m with parallelism set to 2.
+
+### Bug Fixes
+
+- **Multipooler `--hostname` flag removed:** The `--hostname=$(POD_NAME)` flag added in v0.4.0 caused multipooler to register with a short name that collided with FQDN-based pooler topology entries. Removed to restore correct registration behavior.
+- **Pod cache filter added:** Pods were not included in the split-brain cache filter, causing the operator to cache all pods in the cluster. Pods are now filtered by `app.kubernetes.io/managed-by` label like other high-volume resources.
+- **Deprecated `result.Requeue` removed:** Replaced deprecated `result.Requeue` with `result.RequeueAfter > 0` in the shard controller data-plane reconciliation path, fixing a staticcheck SA1019 warning.
+
+### Testing
+
+- E2E tests adapted to pod-based pool management: replaced `waitForStatefulSetWithContainer` assertions with `waitForPodWithContainer` to match the v0.4.0 architecture change from StatefulSets to direct Pods.
+- Removed zone constraints from E2E test cell configs to allow scheduling on Kind nodes without zone topology labels.
+
+### Documentation
+
+- **README slimmed down:** Moved detailed sections (cert-manager integration, observability, webhook demo, local development) to dedicated files under `demo/` and `docs/`.
+- **New user-facing docs:** `docs/storage.md` (PVC lifecycle and volume expansion), `docs/configuration.md` (operator flags), `docs/observability.md` (monitoring setup), `docs/backup-restore.md` (backup guide), `docs/operator-capability-levels.md` (capability assessment with diagram).
+- **New developer docs:** `docs/development/` now contains 12 focused documents covering caching strategy, cell topology, certificate management, controller patterns, naming strategy, observability internals, pod management architecture, PostgreSQL image strategy, PVC lifecycle, template propagation, backup architecture, and known behaviors.
+- **New demo directories:** `demo/cert-manager/README.md`, `demo/observability/README.md`, `demo/webhook/demo.md` with full step-by-step guides.
+- **New runbooks:** `docs/monitoring/runbooks/` with runbooks for `MultigresBackupStale`, `MultigresDrainTimeout`, and `MultigresRollingUpdateStuck` alerts.
+- **CONTRIBUTING.md** created with local development setup, testing, and PR guidelines.
+- Fixed 15 stale references across all documentation.
+- Removed obsolete `docs/architecture.md`, `docs/implementation-guide.md`, `docs/interface-design.md`, and `plans/phase-1/implementation-notes.md`.
+- Removed stale E2E config files (`pkg/testutil/e2e-config/`) that referenced the old StatefulSet-based architecture.
+
+---
+
 ## [v0.4.0] — 2026-03-03
 
 **Previous release:** v0.3.2 (2026-03-01)
