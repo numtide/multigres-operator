@@ -273,6 +273,9 @@ func (o *Observer) checkPodCounts(ctx context.Context, pods *corev1.PodList) {
 			continue
 		}
 
+		// Pod labels use the short shard name from the label, not the CRD name.
+		shardLabelValue := shard.Labels[common.LabelMultigresShard]
+
 		for poolName, poolSpec := range shard.Spec.Pools {
 			expectedPerCell := int32(1)
 			if poolSpec.ReplicasPerCell != nil {
@@ -280,7 +283,7 @@ func (o *Observer) checkPodCounts(ctx context.Context, pods *corev1.PodList) {
 			}
 
 			for _, cellName := range poolSpec.Cells {
-				actual := countPodsForPoolCell(pods, shard.Name, string(poolName), string(cellName))
+				actual := countPodsForPoolCell(pods, shardLabelValue, string(poolName), string(cellName))
 				if int32(actual) != expectedPerCell {
 					o.reporter.Report(report.Finding{
 						Severity:  report.SeverityError,

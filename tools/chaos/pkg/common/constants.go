@@ -34,7 +34,7 @@ const (
 
 // Component names for app.kubernetes.io/component labels.
 const (
-	ComponentPool         = "pool"
+	ComponentPool         = "shard-pool"
 	ComponentMultiOrch    = "multiorch"
 	ComponentMultiGateway = "multigateway"
 	ComponentGlobalTopo   = "global-topo"
@@ -51,7 +51,11 @@ const (
 	PortEtcdClient       = 2379
 	PortEtcdPeer         = 2380
 	PortOperatorHealth   = 8081
+	PortPostgres         = 5432
 )
+
+// PostgreSQL NAMEDATALEN limit for application_name.
+const PGNameDataLen = 63
 
 // Default thresholds for observer checks.
 const (
@@ -72,6 +76,8 @@ const (
 	TerminatingResourceTimeout   = 5 * time.Minute
 	ConnectivityTimeout          = 5 * time.Second
 	ConnectivityLatencyThreshold = 500 * time.Millisecond
+	ReplicationLagWarnSecs       = 10
+	ReplicationLagErrorSecs      = 60
 )
 
 // Operator event reasons to monitor.

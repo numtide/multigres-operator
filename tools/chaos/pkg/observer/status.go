@@ -152,12 +152,15 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 	comp := fmt.Sprintf("shard/%s/%s", shard.Namespace, shard.Name)
 	now := time.Now()
 
+	// Pod labels use the short shard name from the label, not the CRD name.
+	shardLabelValue := shard.Labels[common.LabelMultigresShard]
+
 	// Check for stale podRoles entries (pods that no longer exist).
 	if shard.Status.PodRoles != nil {
 		var existingPods map[string]bool
 		var pods corev1.PodList
 		if err := o.client.List(ctx, &pods,
-			o.listOpts(client.MatchingLabels{common.LabelMultigresShard: shard.Name})...,
+			o.listOpts(client.MatchingLabels{common.LabelMultigresShard: shardLabelValue})...,
 		); err == nil {
 			existingPods = make(map[string]bool, len(pods.Items))
 			for i := range pods.Items {
@@ -191,7 +194,7 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 	var poolPods corev1.PodList
 	if err := o.client.List(ctx, &poolPods,
 		o.listOpts(client.MatchingLabels{
-			common.LabelMultigresShard: shard.Name,
+			common.LabelMultigresShard: shardLabelValue,
 			common.LabelAppComponent:   common.ComponentPool,
 		})...,
 	); err != nil {
@@ -269,11 +272,12 @@ func (o *Observer) checkShardReadiness(ctx context.Context, shard *multigresv1al
 		return
 	}
 	comp := fmt.Sprintf("shard/%s/%s", shard.Namespace, shard.Name)
+	shardLabelValue := shard.Labels[common.LabelMultigresShard]
 
 	var pods corev1.PodList
 	if err := o.client.List(ctx, &pods,
 		o.listOpts(client.MatchingLabels{
-			common.LabelMultigresShard: shard.Name,
+			common.LabelMultigresShard: shardLabelValue,
 			common.LabelAppComponent:   common.ComponentPool,
 		})...,
 	); err != nil {
@@ -355,12 +359,17 @@ func (o *Observer) checkShardConditions(shard *multigresv1alpha1.Shard, comp str
 				})
 			}
 		case "BackupHealthy":
-			if cond.Status == "False" && cond.Reason == "BackupStale" {
+			if cond.Status == "False" {
+				sev := report.SeverityWarn
+				if cond.Reason == "BackupFailed" {
+					sev = report.SeverityError
+				}
 				o.reporter.Report(report.Finding{
-					Severity:  report.SeverityWarn,
+					Severity:  sev,
 					Check:     "crd-status",
 					Component: comp,
-					Message:   fmt.Sprintf("Shard %s backup is stale: %s", shard.Name, cond.Message),
+					Message:   fmt.Sprintf("Shard %s backup unhealthy (%s): %s", shard.Name, cond.Reason, cond.Message),
+					Details:   map[string]any{"reason": cond.Reason},
 				})
 			}
 		}

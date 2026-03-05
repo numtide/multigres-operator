@@ -68,11 +68,14 @@ func (o *Observer) checkCellOwnership(ctx context.Context, cluster *multigresv1a
 }
 
 func (o *Observer) checkMultiGatewayResources(ctx context.Context, cell *multigresv1alpha1.Cell) {
+	// Use the short cell name from the Cell's label, not the CRD name.
+	cellLabelValue := cell.Labels[common.LabelMultigresCell]
+
 	var deploys appsv1.DeploymentList
 	if err := o.client.List(ctx, &deploys,
 		o.listOpts(client.MatchingLabels{
 			common.LabelAppComponent:  common.ComponentMultiGateway,
-			common.LabelMultigresCell: string(multigresv1alpha1.CellName(cell.Name)),
+			common.LabelMultigresCell: cellLabelValue,
 		})...,
 	); err != nil {
 		return
@@ -94,7 +97,7 @@ func (o *Observer) checkMultiGatewayResources(ctx context.Context, cell *multigr
 	if err := o.client.List(ctx, &svcs,
 		o.listOpts(client.MatchingLabels{
 			common.LabelAppComponent:  common.ComponentMultiGateway,
-			common.LabelMultigresCell: string(multigresv1alpha1.CellName(cell.Name)),
+			common.LabelMultigresCell: cellLabelValue,
 		})...,
 	); err != nil {
 		return

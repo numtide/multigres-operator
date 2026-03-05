@@ -46,7 +46,7 @@ func main() {
 	flag.BoolVar(&once, "once", false, "Run one observer cycle and exit (useful for CI)")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":9090", "Address for Prometheus metrics endpoint")
 	flag.IntVar(&logTailLines, "log-tail-lines", 100, "Number of log lines to tail per component per cycle")
-	flag.BoolVar(&enableSQLProbe, "enable-sql-probe", false, "Enable SQL connectivity probes via MultiGateway (requires pg connectivity)")
+	flag.BoolVar(&enableSQLProbe, "enable-sql-probe", true, "Enable SQL probes for replication health and connectivity checks")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))

@@ -22,7 +22,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: multigres-chaos
-          image: multigres-chaos:latest
+          image: chaos:latest
+          imagePullPolicy: IfNotPresent
           args:
             - --level=0
             - --metrics-addr=:9090

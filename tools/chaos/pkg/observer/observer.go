@@ -140,6 +140,7 @@ func (o *Observer) runCycle(ctx context.Context) {
 	track("logs", o.checkLogs)
 	track("events", o.checkEvents)
 	track("topology", o.checkTopology)
+	track("replication", o.checkReplication)
 
 	dur := time.Since(start)
 	if o.metrics != nil {
