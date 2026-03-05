@@ -247,10 +247,9 @@ func (tc *TestCluster) maybeDestroyCluster() {
 }
 
 func (tc *TestCluster) destroyCluster() {
-	ctx := context.Background()
-	destroyFn := envfuncs.DestroyCluster(tc.clusterName)
-	if _, err := destroyFn(ctx, tc.cfg); err != nil {
-		tc.t.Logf("e2e: failed to destroy cluster %q: %v", tc.clusterName, err)
+	cmd := exec.Command("kind", "delete", "cluster", "--name", tc.clusterName)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		tc.t.Logf("e2e: failed to destroy cluster %q: %v\n%s", tc.clusterName, err, out)
 	}
 }
 
@@ -337,7 +336,7 @@ func DeployOperator(t *testing.T, kubeconfigFile, clusterName, operatorImg strin
 
 	overlayRelPath := os.Getenv("KUSTOMIZE_OVERLAY")
 	if overlayRelPath == "" {
-		overlayRelPath = "config/no-webhook"
+		overlayRelPath = "config/default"
 	}
 	// Make relative to repo root so it works with the temp copy.
 	if strings.HasPrefix(overlayRelPath, repoRoot) {

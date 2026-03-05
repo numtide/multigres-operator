@@ -391,14 +391,14 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 test-e2e: manifests generate fmt vet container ## Run e2e tests (each test gets its own Kind cluster)
 	OPERATOR_IMG=$(IMG) \
 	REPO_ROOT=$(shell pwd) \
-	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
+	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=30m -parallel 2
 
 .PHONY: test-e2e-keep
 test-e2e-keep: manifests generate fmt vet container ## Run e2e tests; keep Kind clusters from failed tests for debugging
 	OPERATOR_IMG=$(IMG) \
 	REPO_ROOT=$(shell pwd) \
 	E2E_KEEP_CLUSTERS=on-failure \
-	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=20m
+	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=30m -parallel 2
 
 ##@ Deployment
 

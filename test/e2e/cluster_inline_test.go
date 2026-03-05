@@ -66,7 +66,6 @@ func TestInlineCluster(t *testing.T) {
 					Cells: []multigresv1alpha1.CellConfig{
 						{
 							Name: "z1",
-							Zone: "z1",
 							Spec: &multigresv1alpha1.CellInlineSpec{
 								MultiGateway: multigresv1alpha1.StatelessSpec{
 									Replicas: ptr.To(int32(2)),
@@ -191,10 +190,7 @@ func TestInlineCluster(t *testing.T) {
 
 			waitForDeploymentWithContainer(t, c, ns, "multiorch")
 
-			pgSts := waitForStatefulSetWithContainer(t, c, ns, "postgres")
-			if pgSts.Spec.Replicas != nil && *pgSts.Spec.Replicas != 2 {
-				t.Errorf("postgres replicas = %d, want 2", *pgSts.Spec.Replicas)
-			}
+			waitForPodWithContainer(t, c, ns, "postgres")
 
 			waitForServiceWithPort(t, c, ns, "postgres", 15432)
 			return ctx

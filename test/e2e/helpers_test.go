@@ -260,7 +260,36 @@ func waitForStatefulSetWithContainer(t *testing.T, c client.Client, ns, containe
 	return found
 }
 
-// waitForServiceWithPort waits for a Service with the given port name and number.
+// waitForPodWithContainer waits for at least one Pod containing a container
+// with the given name to appear in the namespace. Used for resources that
+// create individual Pods rather than StatefulSets (e.g., postgres pool pods).
+func waitForPodWithContainer(t *testing.T, c client.Client, ns, containerName string) *corev1.Pod {
+	t.Helper()
+	var found *corev1.Pod
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	err := wait.PollUntilContextCancel(ctx, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+		list := &corev1.PodList{}
+		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
+			return false, nil
+		}
+		for i := range list.Items {
+			for _, cont := range list.Items[i].Spec.Containers {
+				if cont.Name == containerName {
+					found = &list.Items[i]
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("timed out waiting for Pod with container %q: %v", containerName, err)
+	}
+	return found
+}
+
 func waitForServiceWithPort(t *testing.T, c client.Client, ns, portName string, port int32) *corev1.Service {
 	t.Helper()
 	var found *corev1.Service
@@ -327,5 +356,3 @@ func waitForEmpty[T client.ObjectList](
 		t.Fatalf("timed out waiting for %s to be empty: %v (count=%d)", desc, err, countFn(list))
 	}
 }
-
-

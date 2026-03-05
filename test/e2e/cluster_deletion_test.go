@@ -44,7 +44,7 @@ func TestClusterDeletion(t *testing.T) {
 						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
 					},
 					Cells: []multigresv1alpha1.CellConfig{
-						{Name: "zone-a", Zone: "us-east-1a"},
+						{Name: "zone-a"},
 					},
 				},
 			}
