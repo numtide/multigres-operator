@@ -248,6 +248,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     "etcd:latest",
 							Replicas:  ptr.To(resolver.DefaultEtcdReplicas),
+							RootPath:  resolver.DefaultTopoRootPath,
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
 							Resources: resolver.DefaultResourcesEtcd(),
 						},
@@ -542,6 +543,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     "etcd:default",
 							Replicas:  ptr.To(resolver.DefaultEtcdReplicas),
+							RootPath:  resolver.DefaultTopoRootPath,
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
 							Resources: resolver.DefaultResourcesEtcd(),
 						},
@@ -831,6 +833,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     "etcd:default",
 							Replicas:  ptr.To(resolver.DefaultEtcdReplicas),
+							RootPath:  resolver.DefaultTopoRootPath,
 							Storage:   multigresv1alpha1.StorageSpec{Size: resolver.DefaultEtcdStorageSize},
 							Resources: resolver.DefaultResourcesEtcd(),
 						},

@@ -30,8 +30,14 @@ func (r *Resolver) ResolveCell(
 	defaultStatelessSpec(gateway, DefaultResourcesGateway(), 1)
 
 	// Note: We do NOT default LocalTopo here because it is optional.
-	if localTopo != nil && localTopo.Etcd != nil {
-		defaultEtcdSpec(localTopo.Etcd)
+	if localTopo != nil {
+		defaultRootPath := fmt.Sprintf("/multigres/%s", cellSpec.Name)
+		if localTopo.Etcd != nil {
+			defaultEtcdSpec(localTopo.Etcd, defaultRootPath)
+		}
+		if localTopo.External != nil {
+			defaultExternalTopoSpec(localTopo.External, defaultRootPath)
+		}
 	}
 
 	return gateway, localTopo, nil

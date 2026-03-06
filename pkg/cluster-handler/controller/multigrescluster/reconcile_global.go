@@ -158,17 +158,15 @@ func (r *MultigresClusterReconciler) getGlobalTopoRef(
 		address = string(spec.External.Endpoints[0])
 	}
 
-	rootPath := "/multigres/global"
-	if spec.External != nil && spec.External.RootPath != "" {
-		rootPath = spec.External.RootPath
-	}
-	if spec.Etcd != nil && spec.Etcd.RootPath != "" {
-		rootPath = spec.Etcd.RootPath
-	}
+	rootPath := ""
+	implementation := ""
 
-	implementation := "etcd"
-	if spec.External != nil && spec.External.Implementation != "" {
+	if spec.External != nil {
+		rootPath = spec.External.RootPath
 		implementation = spec.External.Implementation
+	} else if spec.Etcd != nil {
+		rootPath = spec.Etcd.RootPath
+		implementation = "etcd"
 	}
 
 	return multigresv1alpha1.GlobalTopoServerRef{
