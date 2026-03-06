@@ -4,12 +4,12 @@ go 1.25.2
 
 require (
 	github.com/multigres/multigres v0.0.0-20260302204305-01fb4e4aae6d
-	github.com/numtide/multigres-operator/api v0.0.0-20260305121848-7429f399a1ba
-	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260305121848-7429f399a1ba
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260305121848-7429f399a1ba
-	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260305121848-7429f399a1ba
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260305121848-7429f399a1ba
-	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260305121848-7429f399a1ba
+	github.com/numtide/multigres-operator/api v0.0.0-20260306105552-5381a0b947c6
+	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260306105552-5381a0b947c6
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260306105552-5381a0b947c6
+	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260306105552-5381a0b947c6
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260306105552-5381a0b947c6
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260306105552-5381a0b947c6
 	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/trace v1.40.0
 	k8s.io/api v0.35.0

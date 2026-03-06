@@ -106,7 +106,10 @@ func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec, defaultRootPath string) {
 }
 
 // defaultExternalTopoSpec applies hardcoded safety defaults to an external topo server spec.
-func defaultExternalTopoSpec(spec *multigresv1alpha1.ExternalTopoServerSpec, defaultRootPath string) {
+func defaultExternalTopoSpec(
+	spec *multigresv1alpha1.ExternalTopoServerSpec,
+	defaultRootPath string,
+) {
 	if spec.Implementation == "" {
 		spec.Implementation = DefaultTopoImplementation
 	}
