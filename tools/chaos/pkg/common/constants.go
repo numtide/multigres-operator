@@ -37,7 +37,7 @@ const (
 	ComponentPool         = "shard-pool"
 	ComponentMultiOrch    = "multiorch"
 	ComponentMultiGateway = "multigateway"
-	ComponentGlobalTopo   = "global-topo"
+	ComponentGlobalTopo   = "toposerver"
 )
 
 // Well-known ports for multigres components.

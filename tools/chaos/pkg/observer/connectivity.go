@@ -240,6 +240,13 @@ func (o *Observer) probeMultiGatewaySQLServices(ctx context.Context) {
 	}
 }
 
+// probeSQL connects to a PostgreSQL-compatible endpoint and runs SELECT 1.
+//
+// Uses simple query protocol because the multigateway does not yet support the
+// extended query protocol's Describe step (fails with SQLSTATE MTD06). pgx defaults
+// to extended protocol (Parse → Describe → Bind → Execute), which breaks through
+// the gateway. Simple protocol sends the query as a single 'Q' message, which the
+// gateway handles correctly.
 func (o *Observer) probeSQL(ctx context.Context, host string, port int, component, password string) {
 	if password == "" {
 		o.reporter.Report(report.Finding{
@@ -256,8 +263,20 @@ func (o *Observer) probeSQL(ctx context.Context, host string, port int, componen
 	probeCtx, cancel := context.WithTimeout(ctx, common.ConnectivityTimeout)
 	defer cancel()
 
+	connCfg, err := pgx.ParseConfig(connStr)
+	if err != nil {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "connectivity",
+			Component: component,
+			Message:   fmt.Sprintf("sql-probe: invalid connection config for %s:%d: %v", host, port, err),
+		})
+		return
+	}
+	connCfg.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
 	start := time.Now()
-	conn, err := pgx.Connect(probeCtx, connStr)
+	conn, err := pgx.ConnectConfig(probeCtx, connCfg)
 	if err != nil {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityError,

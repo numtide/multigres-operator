@@ -105,7 +105,7 @@ Probes all Multigres service endpoints for TCP/HTTP/gRPC/SQL connectivity.
 | MultiGateway PG | Service | 15432 | TCP connect | error |
 | MultiGateway liveness | Service | 15100 | `GET /live` | error |
 | MultiGateway readiness | Service | 15100 | `GET /ready` | warn/error |
-| MultiGateway SQL | Service | 15432 | `SELECT 1` via pgx | error |
+| MultiGateway SQL | Service | 15432 | `SELECT 1` via pgx (simple protocol) | error |
 | MultiOrch liveness | Service | 15300 | `GET /live` | error |
 | TopoServer health | Service | 2379 | TCP connect | error |
 | Pool pod health | Pod | 15200 | `GET /ready` | warn |
@@ -113,6 +113,10 @@ Probes all Multigres service endpoints for TCP/HTTP/gRPC/SQL connectivity.
 | Operator readiness | Pod | 8081 | `GET /readyz` | error |
 
 **Latency tracking:** All probes measure and report latency. Alerts when >500ms.
+
+> **Note:** The gateway SQL probe uses PostgreSQL simple query protocol (`QueryExecModeSimpleProtocol`)
+> instead of pgx's default extended protocol. The multigateway does not yet support the extended
+> protocol's Describe step (fails with SQLSTATE MTD06).
 
 ---
 

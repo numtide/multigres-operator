@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -49,6 +50,13 @@ type Observer struct {
 
 	// Event tracking: last event resource version seen.
 	lastEventResourceVersion string
+
+	// Known objects: populated each cycle by earlier checks for event filtering.
+	// Maps pod name → true for all currently-existing multigres-managed pods.
+	knownPodNames map[string]bool
+
+	// Event deduplication: tracks the last seen count for each event UID.
+	seenEventCounts map[types.UID]int32
 }
 
 // Config holds the configuration for creating an Observer.
@@ -86,6 +94,8 @@ func New(cfg Config) *Observer {
 		prevDrainState:         make(map[string]string),
 		generationDivergeSince: make(map[string]time.Time),
 		primaryViolationSince:  make(map[string]time.Time),
+		knownPodNames:          make(map[string]bool),
+		seenEventCounts:        make(map[types.UID]int32),
 	}
 }
 
@@ -131,6 +141,9 @@ func (o *Observer) runCycle(ctx context.Context) {
 			o.metrics.RecordCheckDuration(name, time.Since(checkStart))
 		}
 	}
+
+	// Reset known objects — populated by checkPodHealth for event filtering.
+	clear(o.knownPodNames)
 
 	track("pod-health", o.checkPodHealth)
 	track("resource-validation", o.checkResources)

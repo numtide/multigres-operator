@@ -120,7 +120,8 @@ func (o *Observer) checkCellRegistration(ctx context.Context, etcdAddr string) {
 		return
 	}
 
-	result, err := o.etcdRange(ctx, etcdAddr, "/cells/")
+	// Multigres topology keys: /multigres/global/cells/<cell-name>/Cell
+	result, err := o.etcdRange(ctx, etcdAddr, "/multigres/global/cells/")
 	if err != nil {
 		o.logger.Debug("failed to query etcd for cells", "error", err)
 		return
@@ -132,25 +133,31 @@ func (o *Observer) checkCellRegistration(ctx context.Context, etcdAddr string) {
 		if err != nil {
 			continue
 		}
+		// Key format: /multigres/global/cells/<cell-name>/Cell
 		parts := strings.Split(string(key), "/")
-		if len(parts) >= 3 {
-			registeredCells[parts[2]] = true
+		if len(parts) >= 5 {
+			registeredCells[parts[4]] = true
 		}
 	}
 
 	// Check that every Cell CRD is registered.
+	// Etcd uses the topology cell name (e.g. "zone-a") from the multigres.com/cell label,
+	// not the K8s CRD name (e.g. "m-zone-a-b2706ce8").
 	for i := range cells.Items {
 		cell := &cells.Items[i]
 		if cell.DeletionTimestamp != nil {
 			continue
 		}
-		cellName := cell.Name
+		cellName := cell.Labels[common.LabelMultigresCell]
+		if cellName == "" {
+			cellName = cell.Name
+		}
 		if !registeredCells[cellName] {
 			o.reporter.Report(report.Finding{
 				Severity:  report.SeverityError,
 				Check:     "topology",
-				Component: fmt.Sprintf("cell/%s/%s", cell.Namespace, cellName),
-				Message:   fmt.Sprintf("Cell %s exists as CRD but not registered in etcd", cellName),
+				Component: fmt.Sprintf("cell/%s/%s", cell.Namespace, cell.Name),
+				Message:   fmt.Sprintf("Cell %s (topology name: %s) exists as CRD but not registered in etcd", cell.Name, cellName),
 			})
 		}
 		delete(registeredCells, cellName)
@@ -178,7 +185,8 @@ func (o *Observer) checkPoolerRegistration(ctx context.Context, etcdAddr string)
 		return
 	}
 
-	result, err := o.etcdRange(ctx, etcdAddr, "/poolers/")
+	// Multigres topology keys: /multigres/global/poolers/<service-id>/Pooler
+	result, err := o.etcdRange(ctx, etcdAddr, "/multigres/global/poolers/")
 	if err != nil {
 		o.logger.Debug("failed to query etcd for poolers", "error", err)
 		return
@@ -190,21 +198,35 @@ func (o *Observer) checkPoolerRegistration(ctx context.Context, etcdAddr string)
 		if err != nil {
 			continue
 		}
-		// Extract pod name from key path, e.g. /poolers/cell-name/pod-name
+		// Key format: /multigres/global/poolers/<service-id>/Pooler
+		// Service ID format: multipooler-<cell>-<pod-name>
 		parts := strings.Split(string(key), "/")
-		if len(parts) >= 4 {
-			registeredPoolers[parts[3]] = true
+		if len(parts) >= 5 {
+			serviceID := parts[4]
+			registeredPoolers[serviceID] = true
 		}
 	}
 
 	// Check running pool pods are registered.
+	// Etcd service IDs use the format "multipooler-<cell>-<pod-name>",
+	// so we match by checking if any registered service ID ends with the pod name.
 	for i := range pods.Items {
 		pod := &pods.Items[i]
 		drainState := pod.Annotations[common.AnnotationDrainState]
 
+		registered := false
+		var matchedID string
+		for id := range registeredPoolers {
+			if strings.HasSuffix(id, pod.Name) {
+				registered = true
+				matchedID = id
+				break
+			}
+		}
+
 		// Pods in ready-for-deletion should NOT be registered.
 		if drainState == common.DrainStateReadyForDeletion {
-			if registeredPoolers[pod.Name] {
+			if registered {
 				o.reporter.Report(report.Finding{
 					Severity:  report.SeverityError,
 					Check:     "topology",
@@ -217,7 +239,7 @@ func (o *Observer) checkPoolerRegistration(ctx context.Context, etcdAddr string)
 
 		// Running pods without drain state should be registered.
 		if pod.Status.Phase == corev1.PodRunning && drainState == "" && pod.DeletionTimestamp == nil {
-			if !registeredPoolers[pod.Name] {
+			if !registered {
 				o.reporter.Report(report.Finding{
 					Severity:  report.SeverityWarn,
 					Check:     "topology",
@@ -227,7 +249,9 @@ func (o *Observer) checkPoolerRegistration(ctx context.Context, etcdAddr string)
 			}
 		}
 
-		delete(registeredPoolers, pod.Name)
+		if matchedID != "" {
+			delete(registeredPoolers, matchedID)
+		}
 	}
 
 	// Remaining entries are orphaned pooler registrations.

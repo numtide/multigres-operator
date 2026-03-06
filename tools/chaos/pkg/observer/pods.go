@@ -35,6 +35,7 @@ func (o *Observer) checkPodHealth(ctx context.Context) {
 		pod := &pods.Items[i]
 		key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		activePods[key] = true
+		o.knownPodNames[pod.Name] = true
 
 		o.checkPodPhase(pod, key)
 		o.checkContainerReadiness(pod, key)

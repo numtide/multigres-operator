@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/numtide/multigres-operator/tools/chaos/pkg/common"
 	"github.com/numtide/multigres-operator/tools/chaos/pkg/report"
@@ -52,13 +53,28 @@ func (o *Observer) checkEvents(ctx context.Context) {
 		o.lastEventResourceVersion = events.ResourceVersion
 	}
 
+	currentUIDs := make(map[types.UID]bool)
+
 	for i := range events.Items {
 		event := &events.Items[i]
+		currentUIDs[event.UID] = true
 		o.processEvent(event)
+	}
+
+	// Prune events that have expired from the Kubernetes API
+	for uid := range o.seenEventCounts {
+		if !currentUIDs[uid] {
+			delete(o.seenEventCounts, uid)
+		}
 	}
 }
 
 func (o *Observer) processEvent(event *corev1.Event) {
+	// Deduplicate events by only reporting when the occurrence count increases
+	if count, ok := o.seenEventCounts[event.UID]; ok && count >= event.Count {
+		return
+	}
+	o.seenEventCounts[event.UID] = event.Count
 	if event.Type == corev1.EventTypeNormal {
 		// Track normal events as info for audit trail.
 		switch event.Reason {
@@ -99,6 +115,11 @@ func (o *Observer) processEvent(event *corev1.Event) {
 	if severity, ok := kubeWarningReasons[event.Reason]; ok {
 		// Only report kube events for multigres-managed resources.
 		if !isMultigresEvent(event) {
+			return
+		}
+		// Skip events for pods that no longer exist (stale events from deleted clusters
+		// remain in the K8s API until their TTL expires, typically 1 hour).
+		if event.InvolvedObject.Kind == "Pod" && !o.knownPodNames[event.InvolvedObject.Name] {
 			return
 		}
 		o.reporter.Report(report.Finding{
