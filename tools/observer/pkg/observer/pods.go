@@ -66,6 +66,24 @@ func (o *Observer) checkPodHealth(ctx context.Context) {
 	}
 
 	o.checkPodCounts(ctx, &pods)
+
+	if o.probes != nil {
+		podData := make([]map[string]any, 0, len(pods.Items))
+		for i := range pods.Items {
+			p := &pods.Items[i]
+			podData = append(podData, map[string]any{
+				"name":      p.Name,
+				"namespace": p.Namespace,
+				"phase":     string(p.Status.Phase),
+				"ready":     isPodReady(p),
+				"component": p.Labels[common.LabelAppComponent],
+			})
+		}
+		o.probes.Set("pods", map[string]any{
+			"total": len(pods.Items),
+			"pods":  podData,
+		})
+	}
 }
 
 func (o *Observer) checkPodPhase(pod *corev1.Pod, key string) {

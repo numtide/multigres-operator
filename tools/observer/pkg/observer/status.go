@@ -18,6 +18,58 @@ func (o *Observer) checkCRDStatus(ctx context.Context) {
 	o.checkShardStatus(ctx)
 	o.checkCellStatus(ctx)
 	o.checkTopoServerStatus(ctx)
+	o.collectCRDProbeData(ctx)
+}
+
+func (o *Observer) collectCRDProbeData(ctx context.Context) {
+	if o.probes == nil {
+		return
+	}
+
+	crdData := make(map[string]any)
+
+	var clusters multigresv1alpha1.MultigresClusterList
+	if err := o.client.List(ctx, &clusters, o.listOpts()...); err == nil {
+		items := make([]map[string]any, 0, len(clusters.Items))
+		for i := range clusters.Items {
+			c := &clusters.Items[i]
+			items = append(items, map[string]any{
+				"name": c.Name, "namespace": c.Namespace,
+				"phase": string(c.Status.Phase),
+			})
+		}
+		crdData["clusters"] = items
+	}
+
+	var shards multigresv1alpha1.ShardList
+	if err := o.client.List(ctx, &shards, o.listOpts()...); err == nil {
+		items := make([]map[string]any, 0, len(shards.Items))
+		for i := range shards.Items {
+			s := &shards.Items[i]
+			items = append(items, map[string]any{
+				"name": s.Name, "namespace": s.Namespace,
+				"phase":         string(s.Status.Phase),
+				"readyReplicas": s.Status.ReadyReplicas,
+				"podRoles":      s.Status.PodRoles,
+			})
+		}
+		crdData["shards"] = items
+	}
+
+	var cells multigresv1alpha1.CellList
+	if err := o.client.List(ctx, &cells, o.listOpts()...); err == nil {
+		items := make([]map[string]any, 0, len(cells.Items))
+		for i := range cells.Items {
+			c := &cells.Items[i]
+			items = append(items, map[string]any{
+				"name": c.Name, "namespace": c.Namespace,
+				"phase": string(c.Status.Phase),
+			})
+		}
+		crdData["cells"] = items
+	}
+
+	o.probes.Set("crdStatus", crdData)
 }
 
 func (o *Observer) checkClusterStatus(ctx context.Context) {

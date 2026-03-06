@@ -2,6 +2,7 @@ package observer
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -63,6 +64,12 @@ type Observer struct {
 
 	// Event deduplication: tracks the last seen count for each event UID.
 	seenEventCounts map[types.UID]int32
+
+	// Per-cycle probe collector; replaced each cycle.
+	probes *ProbeCollector
+
+	// Latest cycle snapshot for the /api/status endpoint.
+	snap snapshot
 }
 
 // Config holds the configuration for creating an Observer.
@@ -140,9 +147,13 @@ func (o *Observer) runCycle(ctx context.Context) {
 	start := time.Now()
 	o.logger.Debug("starting observer cycle")
 
+	o.probes = newProbeCollector()
+
+	checksRun := make([]string, 0, len(allCheckNames))
 	track := func(name string, fn func(context.Context)) {
 		checkStart := time.Now()
 		fn(ctx)
+		checksRun = append(checksRun, name)
 		if o.metrics != nil {
 			o.metrics.RecordCheckDuration(name, time.Since(checkStart))
 		}
@@ -166,7 +177,7 @@ func (o *Observer) runCycle(ctx context.Context) {
 		o.metrics.RecordCycle(dur)
 	}
 
-	s, checkHealthy := o.reporter.Summary()
+	findings, s, checkHealthy := o.reporter.SummaryWithFindings()
 	s.CycleStart = start
 	s.CycleEnd = time.Now()
 
@@ -180,10 +191,37 @@ func (o *Observer) runCycle(ctx context.Context) {
 		}
 	}
 
+	o.snap.Store(&report.StatusResponse{
+		Summary:  s,
+		Healthy:  checkHealthy,
+		Findings: findings,
+		Probes:   o.probes.Data(),
+		Coverage: report.CoverageInfo{
+			SQLProbeEnabled: o.enableSQLProbe,
+			ChecksRun:       checksRun,
+			Namespace:       o.namespace,
+		},
+	})
+
 	o.logger.Info("observer cycle complete",
 		"duration", dur.Round(time.Millisecond),
 		"findings", s.TotalFindings,
 		"errors", s.Counts.Error,
 		"fatals", s.Counts.Fatal,
 	)
+}
+
+// StatusHandler returns an http.HandlerFunc that serves the latest cycle snapshot as JSON.
+func (o *Observer) StatusHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := o.snap.Load()
+		if data == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"error":"no cycle completed yet"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(data)
+	}
 }

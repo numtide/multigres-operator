@@ -145,6 +145,17 @@ func (o *Observer) probeTCP(host string, port int, check, component string) {
 		o.metrics.RecordProbeLatency(check, component, latency)
 	}
 
+	if o.probes != nil {
+		errStr := ""
+		if err != nil {
+			errStr = err.Error()
+		}
+		o.probes.RecordProbe(ProbeResult{
+			Check: check, Component: component, Target: addr,
+			OK: err == nil, Latency: latency.Round(time.Millisecond).String(), Error: errStr,
+		})
+	}
+
 	if err != nil {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityError,
@@ -180,6 +191,20 @@ func (o *Observer) probeHTTP(ctx context.Context, host string, port int, path, c
 
 	if o.metrics != nil {
 		o.metrics.RecordProbeLatency(check, component, latency)
+	}
+
+	ok := err == nil && resp != nil && resp.StatusCode == http.StatusOK
+	if o.probes != nil {
+		errStr := ""
+		if err != nil {
+			errStr = err.Error()
+		} else if resp != nil && resp.StatusCode != http.StatusOK {
+			errStr = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		}
+		o.probes.RecordProbe(ProbeResult{
+			Check: check, Component: component, Target: url,
+			OK: ok, Latency: latency.Round(time.Millisecond).String(), Error: errStr,
+		})
 	}
 
 	if err != nil {
@@ -302,6 +327,15 @@ func (o *Observer) probeSQL(ctx context.Context, host string, port int, componen
 	latency := time.Since(start)
 	if o.metrics != nil {
 		o.metrics.RecordProbeLatency("sql-probe", component, latency)
+	}
+
+	if o.probes != nil {
+		o.probes.RecordProbe(ProbeResult{
+			Check: "sql-probe", Component: component,
+			Target:  fmt.Sprintf("%s:%d", host, port),
+			OK:      true,
+			Latency: latency.Round(time.Millisecond).String(),
+		})
 	}
 
 	if latency > common.ConnectivityLatencyThreshold {

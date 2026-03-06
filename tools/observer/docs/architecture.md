@@ -119,6 +119,79 @@ At the end of each cycle, the observer emits a summary line:
 
 ---
 
+## HTTP API
+
+The observer exposes a structured HTTP API alongside Prometheus metrics on the same port (`:9090`).
+
+### `GET /api/status`
+
+Returns the latest cycle's complete diagnostic snapshot as JSON. Returns `503 Service Unavailable` if no cycle has completed yet.
+
+```json
+{
+  "summary": {
+    "cycleStart": "2026-03-06T10:00:00Z",
+    "cycleEnd": "2026-03-06T10:00:02Z",
+    "counts": { "info": 3, "warn": 1, "error": 2, "fatal": 0 },
+    "totalFindings": 6
+  },
+  "healthy": {
+    "pod-health": true,
+    "connectivity": false,
+    "replication": true
+  },
+  "findings": [
+    {
+      "ts": "2026-03-06T10:00:01Z",
+      "level": "error",
+      "check": "connectivity",
+      "component": "multigateway-svc",
+      "message": "multigateway-pg: TCP probe failed for ...",
+      "details": {}
+    }
+  ],
+  "probes": {
+    "pods": { "total": 8, "pods": [...] },
+    "connectivity": [ { "check": "...", "ok": true, "latency": "12ms" } ],
+    "replication": { "shards": [...], "sqlProbeEnabled": true },
+    "drain": { "drainingPods": [] },
+    "topology": { "clusters": [...] },
+    "crdStatus": { "clusters": [...], "shards": [...], "cells": [...] }
+  },
+  "coverage": {
+    "sqlProbeEnabled": true,
+    "checksRun": ["pod-health", "resource-validation", ...],
+    "namespace": ""
+  }
+}
+```
+
+### Data Flow
+
+Each `runCycle()` creates a fresh `ProbeCollector`. Check functions append raw probe data to the collector alongside reporting findings. At the end of the cycle, the reporter returns findings via `SummaryWithFindings()`, and the observer atomically stores a `StatusResponse` snapshot. The HTTP handler reads the latest snapshot under a `sync.RWMutex`.
+
+```
+runCycle()
+  ├── probes = newProbeCollector()
+  ├── track("pod-health", ...) → findings + probes.Set("pods", ...)
+  ├── track("connectivity", ...) → findings + probes.RecordProbe(...)
+  ├── ...
+  ├── reporter.SummaryWithFindings() → []Finding, Summary, healthy
+  └── snap.Store(&StatusResponse{...})
+
+StatusHandler()
+  └── snap.Load() → JSON response
+```
+
+### Other Endpoints
+
+| Path | Description |
+|------|-------------|
+| `GET /metrics` | Prometheus metrics |
+| `GET /healthz` | Liveness probe (always 200) |
+
+---
+
 ## Prometheus Metrics
 
 All metrics use the `multigres_observer` namespace. Exposed at `:9090/metrics`.

@@ -13,7 +13,7 @@ All flags, environment variables, thresholds, and tunable parameters for the obs
 | `--interval` | `10s` | — | Time between observer cycles |
 | `--kubeconfig` | `""` | `KUBECONFIG` | Path to kubeconfig. Empty = in-cluster config |
 | `--once` | `false` | — | Run one cycle and exit (useful for CI) |
-| `--metrics-addr` | `:9090` | — | Address for Prometheus metrics + health endpoint |
+| `--metrics-addr` | `:9090` | — | Address for Prometheus metrics, health, and `/api/status` endpoint |
 | `--log-tail-lines` | `100` | — | Lines to tail from each container per cycle |
 | `--enable-sql-probe` | `true` | — | Enable SQL probes for replication health and gateway connectivity |
 

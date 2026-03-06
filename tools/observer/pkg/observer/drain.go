@@ -148,6 +148,23 @@ func (o *Observer) checkDrainState(ctx context.Context) {
 			delete(o.prevDrainState, key)
 		}
 	}
+
+	if o.probes != nil {
+		drainPods := make([]map[string]any, 0)
+		for i := range pods.Items {
+			pod := &pods.Items[i]
+			state := pod.Annotations[common.AnnotationDrainState]
+			if state == "" {
+				continue
+			}
+			drainPods = append(drainPods, map[string]any{
+				"name":  pod.Name,
+				"state": state,
+				"shard": pod.Labels[common.LabelMultigresShard],
+			})
+		}
+		o.probes.Set("drain", map[string]any{"drainingPods": drainPods})
+	}
 }
 
 func (o *Observer) checkConcurrentDrains(ctx context.Context, drainingPerShard map[namespacedShard][]string) {

@@ -24,12 +24,36 @@ func (o *Observer) checkReplication(ctx context.Context) {
 		return
 	}
 
+	replData := make([]map[string]any, 0, len(shards.Items))
 	for i := range shards.Items {
 		shard := &shards.Items[i]
 		if shard.DeletionTimestamp != nil || shard.Status.PodRoles == nil {
 			continue
 		}
 		o.checkShardReplication(ctx, shard)
+
+		var primaryCount, replicaCount int
+		for _, role := range shard.Status.PodRoles {
+			if role == "PRIMARY" || role == "primary" {
+				primaryCount++
+			} else {
+				replicaCount++
+			}
+		}
+		replData = append(replData, map[string]any{
+			"shard":        shard.Name,
+			"namespace":    shard.Namespace,
+			"primaryCount": primaryCount,
+			"replicaCount": replicaCount,
+			"podRoles":     shard.Status.PodRoles,
+		})
+	}
+
+	if o.probes != nil {
+		o.probes.Set("replication", map[string]any{
+			"shards":          replData,
+			"sqlProbeEnabled": o.enableSQLProbe,
+		})
 	}
 }
 

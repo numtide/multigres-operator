@@ -26,13 +26,22 @@ KUBECONFIG=kubeconfig.yaml kubectl logs -f -l app.kubernetes.io/name=multigres-o
 
 Findings are structured JSON — one line per finding with severity, check name, component, and details. At the end of each 10-second cycle, a summary line reports total findings and error/fatal counts.
 
+### Diagnostic API
+
+The observer exposes a structured JSON endpoint with the complete diagnostic snapshot from the latest cycle:
+
+```bash
+KUBECONFIG=kubeconfig.yaml kubectl port-forward svc/multigres-observer -n multigres-operator 9090:9090
+curl -s http://localhost:9090/api/status | jq .
+```
+
+The response includes findings (what's wrong), raw probe data (full picture), per-check health, and coverage info. See [Architecture](docs/architecture.md) for the full JSON schema.
+
 ### Prometheus Metrics
 
 Metrics are exposed at `:9090/metrics` inside the pod, integrating with the existing observability stack:
 
 ```bash
-# Port-forward and scrape
-KUBECONFIG=kubeconfig.yaml kubectl port-forward svc/multigres-observer -n multigres-operator 9090:9090
 curl http://localhost:9090/metrics
 ```
 
@@ -101,8 +110,10 @@ tools/observer/
 ├── cmd/multigres-observer/
 │   └── main.go                    # Entrypoint, flags, metrics server
 ├── pkg/
-│   ├── observer/                  # 9 check categories
-│   │   ├── observer.go            # Main loop, cycle orchestration
+│   ├── observer/                  # 9 check categories + API
+│   │   ├── observer.go            # Main loop, cycle orchestration, StatusHandler
+│   │   ├── probes.go              # Per-cycle probe data collector
+│   │   ├── snapshot.go            # Thread-safe latest-cycle snapshot store
 │   │   ├── pods.go                # Pod health, restarts, OOM, counts
 │   │   ├── resources.go           # Resource existence, ownership, labels
 │   │   ├── status.go              # CRD phases, conditions, podRoles
@@ -113,8 +124,8 @@ tools/observer/
 │   │   ├── events.go              # Kubernetes event monitoring
 │   │   └── topology.go            # etcd topology validation
 │   ├── report/                    # Structured reporting + Prometheus
-│   │   ├── reporter.go            # JSON log emission
-│   │   ├── types.go               # Finding, Summary, Severity
+│   │   ├── reporter.go            # JSON log emission, SummaryWithFindings
+│   │   ├── types.go               # Finding, Summary, StatusResponse, CoverageInfo
 │   │   └── metrics.go             # Prometheus gauges/counters/histograms
 │   └── common/                    # Shared constants, client setup
 │       ├── client.go              # Kubernetes client factory

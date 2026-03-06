@@ -25,6 +25,7 @@ func (o *Observer) checkTopology(ctx context.Context) {
 		return
 	}
 
+	topoData := make([]map[string]any, 0, len(clusters.Items))
 	for i := range clusters.Items {
 		cluster := &clusters.Items[i]
 
@@ -35,6 +36,9 @@ func (o *Observer) checkTopology(ctx context.Context) {
 				Check:     "topology",
 				Component: "cluster/" + cluster.Name,
 				Message:   "topology validation skipped: etcd unreachable",
+			})
+			topoData = append(topoData, map[string]any{
+				"cluster": cluster.Name, "etcdReachable": false,
 			})
 			continue
 		}
@@ -50,6 +54,13 @@ func (o *Observer) checkTopology(ctx context.Context) {
 
 		o.checkCellRegistration(ctx, cluster, etcdAddr, rootPath)
 		o.checkPoolerRegistration(ctx, cluster, etcdAddr, rootPath)
+		topoData = append(topoData, map[string]any{
+			"cluster": cluster.Name, "etcdReachable": true, "rootPath": rootPath,
+		})
+	}
+
+	if o.probes != nil {
+		o.probes.Set("topology", map[string]any{"clusters": topoData})
 	}
 }
 

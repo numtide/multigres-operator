@@ -58,6 +58,16 @@ func (r *Reporter) Report(f Finding) {
 // Summary returns an aggregated summary of the current cycle's findings and resets the buffer.
 // ErrorsByCheck maps each check name to whether it had any error or fatal findings.
 func (r *Reporter) Summary() (Summary, map[string]bool) {
+	_, s, healthy := r.collectFindings()
+	return s, healthy
+}
+
+// SummaryWithFindings returns the findings slice alongside the summary, then resets the buffer.
+func (r *Reporter) SummaryWithFindings() ([]Finding, Summary, map[string]bool) {
+	return r.collectFindings()
+}
+
+func (r *Reporter) collectFindings() ([]Finding, Summary, map[string]bool) {
 	r.mu.Lock()
 	findings := r.findings
 	r.findings = nil
@@ -67,7 +77,6 @@ func (r *Reporter) Summary() (Summary, map[string]bool) {
 	checkHealthy := make(map[string]bool)
 
 	for _, f := range findings {
-		// Assume healthy until proven otherwise.
 		if _, seen := checkHealthy[f.Check]; !seen {
 			checkHealthy[f.Check] = true
 		}
@@ -85,5 +94,5 @@ func (r *Reporter) Summary() (Summary, map[string]bool) {
 			checkHealthy[f.Check] = false
 		}
 	}
-	return s, checkHealthy
+	return findings, s, checkHealthy
 }

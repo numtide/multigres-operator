@@ -1,6 +1,6 @@
 # Observer Reference
 
-The observer runs a continuous loop (default interval: 10 seconds) performing 9 categories of health checks against a Multigres cluster. Every finding is emitted as a structured JSON log line and recorded as a Prometheus metric.
+The observer runs a continuous loop (default interval: 10 seconds) performing 9 categories of health checks against a Multigres cluster. Every finding is emitted as a structured JSON log line and recorded as a Prometheus metric. A complete diagnostic snapshot is available via `GET /api/status` (see `architecture.md` for the JSON schema).
 
 The observer is **read-only** — it never modifies any resource. It runs in the `multigres-operator` namespace and watches all namespaces for Multigres CRDs by default.
 
