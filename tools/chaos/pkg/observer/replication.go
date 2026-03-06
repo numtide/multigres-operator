@@ -36,6 +36,7 @@ func (o *Observer) checkReplication(ctx context.Context) {
 func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1alpha1.Shard) {
 	comp := fmt.Sprintf("shard/%s/%s", shard.Namespace, shard.Name)
 	shardLabelValue := shard.Labels[common.LabelMultigresShard]
+	password := o.fetchShardPassword(ctx, shard)
 
 	// Classify pods by role.
 	var primaryPodNames []string
@@ -77,7 +78,7 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 		if !ok {
 			continue
 		}
-		o.probePrimaryReplication(ctx, ip, primaryName, comp, len(replicaPodNames))
+		o.probePrimaryReplication(ctx, ip, primaryName, comp, len(replicaPodNames), password)
 	}
 
 	// Check replicas: WAL receiver status, replay paused state.
@@ -86,16 +87,16 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 		if !ok {
 			continue
 		}
-		o.probeReplicaHealth(ctx, ip, replicaName, comp)
+		o.probeReplicaHealth(ctx, ip, replicaName, comp, password)
 	}
 
 	// Split-brain detection: verify pg_is_in_recovery() matches podRoles.
-	o.detectSplitBrain(ctx, podIPs, shard.Status.PodRoles, comp)
+	o.detectSplitBrain(ctx, podIPs, shard.Status.PodRoles, comp, password)
 }
 
 // probePrimaryReplication connects to a primary pod and checks replication topology.
-func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, comp string, expectedReplicas int) {
-	conn, err := o.connectPostgres(ctx, podIP)
+func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, comp string, expectedReplicas int, password string) {
+	conn, err := o.connectPostgres(ctx, podIP, password)
 	if err != nil {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityError,
@@ -209,8 +210,8 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 }
 
 // probeReplicaHealth connects to a replica pod and checks WAL receiver and replay status.
-func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp string) {
-	conn, err := o.connectPostgres(ctx, podIP)
+func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp, password string) {
+	conn, err := o.connectPostgres(ctx, podIP, password)
 	if err != nil {
 		// Replica might not accept connections during rewind/bootstrap; log but don't flag.
 		o.logger.Debug("failed to connect to replica postgres", "pod", podName, "error", err)
@@ -266,11 +267,11 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp 
 
 // detectSplitBrain verifies that pg_is_in_recovery() on each pod matches the
 // expected role from podRoles. If multiple pods report as primary, that's split-brain.
-func (o *Observer) detectSplitBrain(ctx context.Context, podIPs map[string]string, podRoles map[string]string, comp string) {
+func (o *Observer) detectSplitBrain(ctx context.Context, podIPs map[string]string, podRoles map[string]string, comp, password string) {
 	var actualPrimaries []string
 
 	for podName, ip := range podIPs {
-		conn, err := o.connectPostgres(ctx, ip)
+		conn, err := o.connectPostgres(ctx, ip, password)
 		if err != nil {
 			continue
 		}
@@ -364,8 +365,11 @@ func (o *Observer) probeWrite(ctx context.Context, conn *pgx.Conn, podName, comp
 }
 
 // connectPostgres establishes a connection to postgres on a pod IP.
-func (o *Observer) connectPostgres(ctx context.Context, podIP string) (*pgx.Conn, error) {
+func (o *Observer) connectPostgres(ctx context.Context, podIP, password string) (*pgx.Conn, error) {
 	connStr := fmt.Sprintf("host=%s port=%d user=postgres dbname=postgres connect_timeout=5 sslmode=disable", podIP, common.PortPostgres)
+	if password != "" {
+		connStr += fmt.Sprintf(" password=%s", password)
+	}
 	connCtx, cancel := context.WithTimeout(ctx, common.ConnectivityTimeout)
 	defer cancel()
 	return pgx.Connect(connCtx, connStr)

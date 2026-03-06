@@ -9,9 +9,11 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/jackc/pgx/v5"
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/tools/chaos/pkg/common"
 	"github.com/numtide/multigres-operator/tools/chaos/pkg/report"
 )
@@ -46,9 +48,12 @@ func (o *Observer) probeMultiGatewayServices(ctx context.Context) {
 		// TCP probe on PG port.
 		o.probeTCP(addr, common.PortMultiGatewayPG, "multigateway-pg", svc.Name)
 
-		// HTTP health probes.
-		o.probeHTTP(ctx, addr, common.PortMultiGatewayHTTP, "/live", "multigateway-liveness", svc.Name)
-		o.probeHTTP(ctx, addr, common.PortMultiGatewayHTTP, "/ready", "multigateway-readiness", svc.Name)
+		// HTTP health probes — only on services that expose the HTTP port.
+		// The global gateway service only exposes 15432, not 15100.
+		if serviceHasPort(svc, common.PortMultiGatewayHTTP) {
+			o.probeHTTP(ctx, addr, common.PortMultiGatewayHTTP, "/live", "multigateway-liveness", svc.Name)
+			o.probeHTTP(ctx, addr, common.PortMultiGatewayHTTP, "/ready", "multigateway-readiness", svc.Name)
+		}
 	}
 }
 
@@ -230,12 +235,23 @@ func (o *Observer) probeMultiGatewaySQLServices(ctx context.Context) {
 	for i := range svcs.Items {
 		svc := &svcs.Items[i]
 		addr := fmt.Sprintf("%s.%s.svc", svc.Name, svc.Namespace)
-		o.probeSQL(ctx, addr, common.PortMultiGatewayPG, svc.Name)
+		password := o.fetchGatewayPassword(ctx, svc)
+		o.probeSQL(ctx, addr, common.PortMultiGatewayPG, svc.Name, password)
 	}
 }
 
-func (o *Observer) probeSQL(ctx context.Context, host string, port int, component string) {
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres dbname=postgres connect_timeout=5 sslmode=disable", host, port)
+func (o *Observer) probeSQL(ctx context.Context, host string, port int, component, password string) {
+	if password == "" {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "connectivity",
+			Component: component,
+			Message:   fmt.Sprintf("sql-probe skipped for %s:%d: could not fetch postgres password from shard secret", host, port),
+		})
+		return
+	}
+
+	connStr := fmt.Sprintf("host=%s port=%d user=postgres dbname=postgres connect_timeout=5 sslmode=disable password=%s", host, port, password)
 
 	probeCtx, cancel := context.WithTimeout(ctx, common.ConnectivityTimeout)
 	defer cancel()
@@ -277,4 +293,63 @@ func (o *Observer) probeSQL(ctx context.Context, host string, port int, componen
 			Message:   fmt.Sprintf("sql-probe: high latency %s for %s:%d", latency.Round(time.Millisecond), host, port),
 		})
 	}
+}
+
+// fetchGatewayPassword looks up a postgres password for the gateway's cluster.
+// It finds a shard belonging to the same cluster and reads its password secret.
+// Tries cluster label first, then falls back to instance label (per-zone services
+// carry app.kubernetes.io/instance but not multigres.com/cluster).
+func (o *Observer) fetchGatewayPassword(ctx context.Context, svc *corev1.Service) string {
+	// Try cluster label first (global gateway services).
+	if clusterName := svc.Labels[common.LabelMultigresCluster]; clusterName != "" {
+		var shards multigresv1alpha1.ShardList
+		if err := o.client.List(ctx, &shards,
+			client.InNamespace(svc.Namespace),
+			client.MatchingLabels{common.LabelMultigresCluster: clusterName},
+		); err == nil && len(shards.Items) > 0 {
+			return o.fetchShardPassword(ctx, &shards.Items[0])
+		}
+	}
+
+	// Fall back to instance label (per-zone gateway services).
+	if instance := svc.Labels[common.LabelAppInstance]; instance != "" {
+		var shards multigresv1alpha1.ShardList
+		if err := o.client.List(ctx, &shards,
+			client.InNamespace(svc.Namespace),
+			client.MatchingLabels{common.LabelMultigresCluster: instance},
+		); err == nil && len(shards.Items) > 0 {
+			return o.fetchShardPassword(ctx, &shards.Items[0])
+		}
+	}
+
+	return ""
+}
+
+// fetchShardPassword reads the postgres superuser password from the per-shard secret.
+func (o *Observer) fetchShardPassword(ctx context.Context, shard *multigresv1alpha1.Shard) string {
+	secretName := shard.Name + "-postgres-password"
+	var secret corev1.Secret
+	if err := o.client.Get(ctx, types.NamespacedName{
+		Namespace: shard.Namespace,
+		Name:      secretName,
+	}, &secret); err != nil {
+		o.logger.Debug("failed to read postgres password secret", "secret", secretName, "error", err)
+		return ""
+	}
+
+	pw, ok := secret.Data["password"]
+	if !ok {
+		return ""
+	}
+	return string(pw)
+}
+
+// serviceHasPort returns true if the service declares the given port.
+func serviceHasPort(svc *corev1.Service, port int) bool {
+	for _, p := range svc.Spec.Ports {
+		if int(p.Port) == port {
+			return true
+		}
+	}
+	return false
 }
