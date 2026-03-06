@@ -19,26 +19,47 @@ import (
 )
 
 func (o *Observer) checkTopology(ctx context.Context) {
-	etcdAddr := o.findEtcdAddress(ctx)
-	if etcdAddr == "" {
-		o.reporter.Report(report.Finding{
-			Severity: report.SeverityWarn,
-			Check:    "topology",
-			Message:  "topology validation skipped: etcd unreachable",
-		})
+	var clusters multigresv1alpha1.MultigresClusterList
+	if err := o.client.List(ctx, &clusters, o.listOpts()...); err != nil {
+		o.logger.Error("failed to list MultigresClusters for topology checks", "error", err)
 		return
 	}
 
-	o.checkCellRegistration(ctx, etcdAddr)
-	o.checkPoolerRegistration(ctx, etcdAddr)
+	for i := range clusters.Items {
+		cluster := &clusters.Items[i]
+
+		etcdAddr := o.findEtcdAddress(ctx, cluster.Name)
+		if etcdAddr == "" {
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityWarn,
+				Check:     "topology",
+				Component: "cluster/" + cluster.Name,
+				Message:   "topology validation skipped: etcd unreachable",
+			})
+			continue
+		}
+
+		rootPath := "/multigres/global" // safe default fallback
+		if cluster.Spec.GlobalTopoServer != nil {
+			if cluster.Spec.GlobalTopoServer.Etcd != nil && cluster.Spec.GlobalTopoServer.Etcd.RootPath != "" {
+				rootPath = cluster.Spec.GlobalTopoServer.Etcd.RootPath
+			} else if cluster.Spec.GlobalTopoServer.External != nil && cluster.Spec.GlobalTopoServer.External.RootPath != "" {
+				rootPath = cluster.Spec.GlobalTopoServer.External.RootPath
+			}
+		}
+
+		o.checkCellRegistration(ctx, cluster, etcdAddr, rootPath)
+		o.checkPoolerRegistration(ctx, cluster, etcdAddr, rootPath)
+	}
 }
 
-func (o *Observer) findEtcdAddress(ctx context.Context) string {
+func (o *Observer) findEtcdAddress(ctx context.Context, clusterName string) string {
 	var svcs corev1.ServiceList
 	if err := o.client.List(ctx, &svcs,
 		o.listOpts(client.MatchingLabels{
-			common.LabelAppManagedBy: common.ManagedByMultigres,
-			common.LabelAppComponent: common.ComponentGlobalTopo,
+			common.LabelAppManagedBy:     common.ManagedByMultigres,
+			common.LabelAppComponent:     common.ComponentGlobalTopo,
+			common.LabelMultigresCluster: clusterName,
 		})...,
 	); err != nil || len(svcs.Items) == 0 {
 		return ""
@@ -114,14 +135,17 @@ func (o *Observer) etcdRange(ctx context.Context, etcdAddr, prefix string) (*etc
 	return &result, nil
 }
 
-func (o *Observer) checkCellRegistration(ctx context.Context, etcdAddr string) {
+func (o *Observer) checkCellRegistration(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, etcdAddr, rootPath string) {
 	var cells multigresv1alpha1.CellList
-	if err := o.client.List(ctx, &cells, o.listOpts()...); err != nil {
+	if err := o.client.List(ctx, &cells,
+		o.listOpts(client.MatchingLabels{common.LabelMultigresCluster: cluster.Name})...,
+	); err != nil {
 		return
 	}
 
-	// Multigres topology keys: /multigres/global/cells/<cell-name>/Cell
-	result, err := o.etcdRange(ctx, etcdAddr, "/multigres/global/cells/")
+	// Multigres topology keys: <rootPath>/cells/<cell-name>/Cell
+	prefix := strings.TrimRight(rootPath, "/") + "/cells/"
+	result, err := o.etcdRange(ctx, etcdAddr, prefix)
 	if err != nil {
 		o.logger.Debug("failed to query etcd for cells", "error", err)
 		return
@@ -133,10 +157,14 @@ func (o *Observer) checkCellRegistration(ctx context.Context, etcdAddr string) {
 		if err != nil {
 			continue
 		}
-		// Key format: /multigres/global/cells/<cell-name>/Cell
-		parts := strings.Split(string(key), "/")
-		if len(parts) >= 5 {
-			registeredCells[parts[4]] = true
+		// Key format: <prefix><cell-name>/Cell
+		keyStr := string(key)
+		if strings.HasPrefix(keyStr, prefix) {
+			suffix := strings.TrimPrefix(keyStr, prefix)
+			parts := strings.Split(suffix, "/")
+			if len(parts) >= 2 && parts[1] == "Cell" {
+				registeredCells[parts[0]] = true
+			}
 		}
 	}
 
@@ -174,19 +202,21 @@ func (o *Observer) checkCellRegistration(ctx context.Context, etcdAddr string) {
 	}
 }
 
-func (o *Observer) checkPoolerRegistration(ctx context.Context, etcdAddr string) {
+func (o *Observer) checkPoolerRegistration(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, etcdAddr, rootPath string) {
 	var pods corev1.PodList
 	if err := o.client.List(ctx, &pods,
 		o.listOpts(client.MatchingLabels{
-			common.LabelAppManagedBy: common.ManagedByMultigres,
-			common.LabelAppComponent: common.ComponentPool,
+			common.LabelAppManagedBy:     common.ManagedByMultigres,
+			common.LabelAppComponent:     common.ComponentPool,
+			common.LabelMultigresCluster: cluster.Name,
 		})...,
 	); err != nil {
 		return
 	}
 
-	// Multigres topology keys: /multigres/global/poolers/<service-id>/Pooler
-	result, err := o.etcdRange(ctx, etcdAddr, "/multigres/global/poolers/")
+	// Multigres topology keys: <rootPath>/poolers/<service-id>/Pooler
+	prefix := strings.TrimRight(rootPath, "/") + "/poolers/"
+	result, err := o.etcdRange(ctx, etcdAddr, prefix)
 	if err != nil {
 		o.logger.Debug("failed to query etcd for poolers", "error", err)
 		return
@@ -198,12 +228,16 @@ func (o *Observer) checkPoolerRegistration(ctx context.Context, etcdAddr string)
 		if err != nil {
 			continue
 		}
-		// Key format: /multigres/global/poolers/<service-id>/Pooler
+		// Key format: <prefix><service-id>/Pooler
 		// Service ID format: multipooler-<cell>-<pod-name>
-		parts := strings.Split(string(key), "/")
-		if len(parts) >= 5 {
-			serviceID := parts[4]
-			registeredPoolers[serviceID] = true
+		keyStr := string(key)
+		if strings.HasPrefix(keyStr, prefix) {
+			suffix := strings.TrimPrefix(keyStr, prefix)
+			parts := strings.Split(suffix, "/")
+			if len(parts) >= 2 && parts[1] == "Pooler" {
+				serviceID := parts[0]
+				registeredPoolers[serviceID] = true
+			}
 		}
 	}
 
