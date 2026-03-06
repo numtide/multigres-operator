@@ -39,9 +39,8 @@ IMG_PREFIX ?= ghcr.io/numtide
 IMG_REPO ?= multigres-operator
 IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
 
-# Chaos testing tool configuration
-CHAOS_IMG ?= $(IMG_PREFIX)/multigres-chaos:$(VERSION_SHORT)
-CHAOS_LEVEL ?= 1
+# Observer tool configuration
+OBSERVER_IMG ?= $(IMG_PREFIX)/multigres-observer:$(VERSION_SHORT)
 
 .PHONY: print-img
 print-img: ## Print the full operator container image reference
@@ -570,41 +569,27 @@ kind-down: ## Delete the kind cluster
 	@rm -f $(KIND_KUBECONFIG)
 	@echo "==> Cluster and kubeconfig deleted"
 
-##@ Chaos Testing
+##@ Observer
 
-.PHONY: chaos-build
-chaos-build: ## Build the chaos testing container image
-	$(CONTAINER_TOOL) build -t $(CHAOS_IMG) -f tools/chaos/Dockerfile tools/chaos/
+.PHONY: observer-build
+observer-build: ## Build the observer container image
+	$(CONTAINER_TOOL) build -t $(OBSERVER_IMG) -f tools/observer/Dockerfile tools/observer/
 
-.PHONY: kind-load-chaos
-kind-load-chaos: chaos-build ## Build and load chaos image into kind
-	$(KIND) load docker-image $(CHAOS_IMG) --name $(KIND_CLUSTER)
+.PHONY: kind-load-observer
+kind-load-observer: observer-build ## Build and load observer image into kind
+	$(KIND) load docker-image $(OBSERVER_IMG) --name $(KIND_CLUSTER)
 
 .PHONY: kind-deploy-observer
-kind-deploy-observer: kind-load-chaos ## Deploy Level 0 observer alongside the operator
-	@echo "==> Deploying chaos observer (level 0)..."
-	cd tools/chaos/deploy/base && $(KUSTOMIZE) edit set image chaos=$(CHAOS_IMG)
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/chaos/deploy/base | \
+kind-deploy-observer: kind-load-observer ## Deploy observer alongside the operator
+	@echo "==> Deploying multigres observer..."
+	cd tools/observer/deploy/base && $(KUSTOMIZE) edit set image observer=$(OBSERVER_IMG)
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/observer/deploy/base | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
-	@git checkout -- tools/chaos/deploy/base/kustomization.yaml 2>/dev/null || true
+	@git checkout -- tools/observer/deploy/base/kustomization.yaml 2>/dev/null || true
 
-.PHONY: kind-deploy-chaos
-kind-deploy-chaos: kind-load-chaos ## Deploy chaos tool at CHAOS_LEVEL (1=exercise, 2=fault, 3=adversarial)
-	@echo "==> Deploying chaos tool (level $(CHAOS_LEVEL))..."
-	cd tools/chaos/deploy/chaos && $(KUSTOMIZE) edit set image chaos=$(CHAOS_IMG)
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/chaos/deploy/chaos | \
-		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
-	@git checkout -- tools/chaos/deploy/chaos/kustomization.yaml 2>/dev/null || true
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) set env deployment/multigres-chaos \
-		-n multigres-operator CHAOS_LEVEL=$(CHAOS_LEVEL)
-	@echo "==> Chaos tool deployed at level $(CHAOS_LEVEL)"
-	@echo "Watch logs: KUBECONFIG=$(KIND_KUBECONFIG) kubectl logs -f -l app=multigres-chaos -n multigres-operator"
-
-.PHONY: kind-undeploy-chaos
-kind-undeploy-chaos: ## Remove chaos testing tool
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/chaos/deploy/chaos | \
-		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) delete --ignore-not-found -f -
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/chaos/deploy/base | \
+.PHONY: kind-undeploy-observer
+kind-undeploy-observer: ## Remove observer
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/observer/deploy/base | \
 		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) delete --ignore-not-found -f -
 
 ##@ Dependencies
