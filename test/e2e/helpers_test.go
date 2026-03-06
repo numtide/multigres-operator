@@ -11,6 +11,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -71,6 +72,113 @@ func newCRClient(t *testing.T, tc *testutil.TestCluster) client.Client {
 		t.Fatalf("new cr client: %v", err)
 	}
 	return c
+}
+
+// ciResources returns minimal resource requests suitable for CI runners.
+// This allows pods to be scheduled on resource-constrained GitHub Actions
+// runners (2 vCPU, 7GB RAM) where default requests would prevent scheduling.
+func ciResources() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("10m"),
+			corev1.ResourceMemory: resource.MustParse("32Mi"),
+		},
+	}
+}
+
+// ciContainerConfig returns a ContainerConfig with minimal resource requests.
+func ciContainerConfig() multigresv1alpha1.ContainerConfig {
+	return multigresv1alpha1.ContainerConfig{Resources: ciResources()}
+}
+
+// withCIResources applies minimal resource requests to a MultigresClusterSpec
+// so that all pods can be scheduled on resource-constrained CI runners.
+//
+// This does NOT change replica counts or the deployment plan — it only lowers
+// the resource requests, the same way a user would for a dev/test environment.
+func withCIResources(spec *multigresv1alpha1.MultigresClusterSpec) {
+	// Etcd: minimal resources
+	if spec.GlobalTopoServer == nil {
+		spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{}
+	}
+	if spec.GlobalTopoServer.Etcd == nil {
+		spec.GlobalTopoServer.Etcd = &multigresv1alpha1.EtcdSpec{}
+	}
+	spec.GlobalTopoServer.Etcd.Resources = ciResources()
+
+	// MultiAdmin: minimal resources
+	if spec.MultiAdmin == nil {
+		spec.MultiAdmin = &multigresv1alpha1.MultiAdminConfig{}
+	}
+	if spec.MultiAdmin.Spec == nil {
+		spec.MultiAdmin.Spec = &multigresv1alpha1.StatelessSpec{}
+	}
+	spec.MultiAdmin.Spec.Resources = ciResources()
+
+	// Cells: minimal gateway resources
+	for i := range spec.Cells {
+		if spec.Cells[i].Spec == nil {
+			spec.Cells[i].Spec = &multigresv1alpha1.CellInlineSpec{}
+		}
+		spec.Cells[i].Spec.MultiGateway.Resources = ciResources()
+	}
+
+	// MultiAdmin Web: minimal resources
+	if spec.MultiAdminWeb == nil {
+		spec.MultiAdminWeb = &multigresv1alpha1.MultiAdminWebConfig{}
+	}
+	if spec.MultiAdminWeb.Spec == nil {
+		spec.MultiAdminWeb.Spec = &multigresv1alpha1.StatelessSpec{}
+	}
+	spec.MultiAdminWeb.Spec.Resources = ciResources()
+
+	// Ensure at least one database exists so we can set resources on the
+	// auto-created shard components (multiorch, postgres, pooler).
+	// The operator's resolver does the same thing: if Databases is empty,
+	// it creates a default "postgres" database with a default table group
+	// and shard. We mirror that here so our resource overrides are in place
+	// BEFORE the CR is submitted.
+	if len(spec.Databases) == 0 {
+		spec.Databases = []multigresv1alpha1.DatabaseConfig{{
+			Name:    "postgres",
+			Default: true,
+		}}
+	}
+	for i := range spec.Databases {
+		if len(spec.Databases[i].TableGroups) == 0 {
+			spec.Databases[i].TableGroups = []multigresv1alpha1.TableGroupConfig{{
+				Name:    "default",
+				Default: true,
+			}}
+		}
+		for j := range spec.Databases[i].TableGroups {
+			if len(spec.Databases[i].TableGroups[j].Shards) == 0 {
+				spec.Databases[i].TableGroups[j].Shards = []multigresv1alpha1.ShardConfig{{
+					Name: "0-inf",
+					Spec: &multigresv1alpha1.ShardInlineSpec{
+						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+							"default": {Type: "readWrite"},
+						},
+					},
+				}}
+			}
+			for k := range spec.Databases[i].TableGroups[j].Shards {
+				shard := &spec.Databases[i].TableGroups[j].Shards[k]
+				if shard.Spec == nil {
+					shard.Spec = &multigresv1alpha1.ShardInlineSpec{}
+				}
+				shard.Spec.MultiOrch.Resources = ciResources()
+				if shard.Spec.Pools == nil {
+					shard.Spec.Pools = map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{}
+				}
+				for name, pool := range shard.Spec.Pools {
+					pool.Postgres = ciContainerConfig()
+					pool.Multipooler = ciContainerConfig()
+					shard.Spec.Pools[name] = pool
+				}
+			}
+		}
+	}
 }
 
 // findGatewayServiceName finds the multigateway Service with port 15432 named "postgres".

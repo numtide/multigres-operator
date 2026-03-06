@@ -6,8 +6,6 @@ import (
 	"context"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -35,25 +33,15 @@ func TestTemplatedCluster(t *testing.T) {
 				Spec: multigresv1alpha1.CoreTemplateSpec{
 					GlobalTopoServer: &multigresv1alpha1.TopoServerSpec{
 						Etcd: &multigresv1alpha1.EtcdSpec{
-							Image:    "gcr.io/etcd-development/etcd:v3.6.7",
-							Replicas: ptr.To(int32(3)),
-							Storage:  multigresv1alpha1.StorageSpec{Size: "1Gi"},
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("100m"),
-									corev1.ResourceMemory: resource.MustParse("128Mi"),
-								},
-							},
+							Image:     "gcr.io/etcd-development/etcd:v3.6.7",
+							Replicas:  ptr.To(int32(3)),
+							Storage:   multigresv1alpha1.StorageSpec{Size: "1Gi"},
+							Resources: ciResources(),
 						},
 					},
 					MultiAdmin: &multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("100m"),
-								corev1.ResourceMemory: resource.MustParse("128Mi"),
-							},
-						},
+						Replicas:  ptr.To(int32(2)),
+						Resources: ciResources(),
 					},
 				},
 			}
@@ -66,13 +54,8 @@ func TestTemplatedCluster(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "standard-cell", Namespace: ns},
 				Spec: multigresv1alpha1.CellTemplateSpec{
 					MultiGateway: &multigresv1alpha1.StatelessSpec{
-						Replicas: ptr.To(int32(2)),
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("100m"),
-								corev1.ResourceMemory: resource.MustParse("128Mi"),
-							},
-						},
+						Replicas:  ptr.To(int32(2)),
+						Resources: ciResources(),
 					},
 				},
 			}
@@ -86,12 +69,7 @@ func TestTemplatedCluster(t *testing.T) {
 				Spec: multigresv1alpha1.ShardTemplateSpec{
 					MultiOrch: &multigresv1alpha1.MultiOrchSpec{
 						StatelessSpec: multigresv1alpha1.StatelessSpec{
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("100m"),
-									corev1.ResourceMemory: resource.MustParse("128Mi"),
-								},
-							},
+							Resources: ciResources(),
 						},
 					},
 					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
@@ -99,22 +77,8 @@ func TestTemplatedCluster(t *testing.T) {
 							Type:            "readWrite",
 							ReplicasPerCell: ptr.To(int32(2)),
 							Storage:         multigresv1alpha1.StorageSpec{Size: "1Gi"},
-							Postgres: multigresv1alpha1.ContainerConfig{
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("100m"),
-										corev1.ResourceMemory: resource.MustParse("256Mi"),
-									},
-								},
-							},
-							Multipooler: multigresv1alpha1.ContainerConfig{
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("100m"),
-										corev1.ResourceMemory: resource.MustParse("128Mi"),
-									},
-								},
-							},
+							Postgres:        ciContainerConfig(),
+							Multipooler:     ciContainerConfig(),
 						},
 					},
 				},

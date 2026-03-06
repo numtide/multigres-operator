@@ -59,7 +59,7 @@ jobs:
         run: |
           OPERATOR_IMG=$(make -s print-img) \
           REPO_ROOT=$(pwd) \
-          go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=30m -parallel=1
+          go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=30m -parallel=2
         env:
           E2E_KEEP_CLUSTERS: never
 

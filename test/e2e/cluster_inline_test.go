@@ -135,6 +135,7 @@ func TestInlineCluster(t *testing.T) {
 					},
 				},
 			}
+			withCIResources(&cluster.Spec)
 			if err := c.Create(ctx, cluster); err != nil {
 				t.Fatalf("Failed to create MultigresCluster: %v", err)
 			}
