@@ -45,6 +45,7 @@ func TestResolver_ResolveCell(t *testing.T) {
 				Etcd: &multigresv1alpha1.EtcdSpec{
 					Image:     "local-etcd-default",
 					Replicas:  ptr.To(DefaultEtcdReplicas),
+					RootPath:  "/multigres/",
 					Resources: DefaultResourcesEtcd(),
 					Storage:   multigresv1alpha1.StorageSpec{Size: DefaultEtcdStorageSize},
 				},

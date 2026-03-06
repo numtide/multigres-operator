@@ -103,6 +103,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 						Etcd: &multigresv1alpha1.EtcdSpec{
 							Image:     resolver.DefaultEtcdImage,
 							Replicas:  ptr.To(int32(3)),
+							RootPath:  resolver.DefaultTopoRootPath,
 							Resources: resolver.DefaultResourcesEtcd(),
 							Storage:   multigresv1alpha1.StorageSpec{Size: "1Gi"},
 						},
@@ -362,6 +363,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 							Etcd: &multigresv1alpha1.EtcdSpec{
 								Image:    resolver.DefaultEtcdImage,
 								Replicas: ptr.To(int32(3)),
+								RootPath: resolver.DefaultTopoRootPath,
 								Storage: multigresv1alpha1.StorageSpec{
 									Size: resolver.DefaultEtcdStorageSize,
 								},

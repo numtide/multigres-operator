@@ -26,6 +26,12 @@ const (
 	// DefaultPoolName is the name used for the default pool when no pools are specified in a ShardTemplate.
 	DefaultPoolName = "default"
 
+	// DefaultTopoRootPath is the default etcd key prefix for the global topology server.
+	DefaultTopoRootPath = "/multigres/global"
+
+	// DefaultTopoImplementation is the default client implementation for external topology servers.
+	DefaultTopoImplementation = "etcd"
+
 	// DefaultSystemDatabaseName is the name of the mandatory system database.
 	DefaultSystemDatabaseName = "postgres"
 

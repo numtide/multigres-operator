@@ -84,7 +84,7 @@ func isResourcesZero(res corev1.ResourceRequirements) bool {
 // ============================================================================
 
 // defaultEtcdSpec applies hardcoded safety defaults to an inline Etcd spec.
-func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec) {
+func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec, defaultRootPath string) {
 	if spec.Image == "" {
 		spec.Image = DefaultEtcdImage
 	}
@@ -95,10 +95,23 @@ func defaultEtcdSpec(spec *multigresv1alpha1.EtcdSpec) {
 		r := DefaultEtcdReplicas
 		spec.Replicas = &r
 	}
+	if spec.RootPath == "" {
+		spec.RootPath = defaultRootPath
+	}
 	// Use isResourcesZero to ensure we respect overrides that only have Claims
 	if isResourcesZero(spec.Resources) {
 		// Safety: DefaultResourcesEtcd() returns a fresh struct, so no DeepCopy needed.
 		spec.Resources = DefaultResourcesEtcd()
+	}
+}
+
+// defaultExternalTopoSpec applies hardcoded safety defaults to an external topo server spec.
+func defaultExternalTopoSpec(spec *multigresv1alpha1.ExternalTopoServerSpec, defaultRootPath string) {
+	if spec.Implementation == "" {
+		spec.Implementation = DefaultTopoImplementation
+	}
+	if spec.RootPath == "" {
+		spec.RootPath = defaultRootPath
 	}
 }
 

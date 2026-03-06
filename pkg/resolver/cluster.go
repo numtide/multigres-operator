@@ -172,7 +172,10 @@ func (r *Resolver) ResolveGlobalTopo(
 	}
 
 	if finalSpec.Etcd != nil {
-		defaultEtcdSpec(finalSpec.Etcd)
+		defaultEtcdSpec(finalSpec.Etcd, DefaultTopoRootPath)
+	}
+	if finalSpec.External != nil {
+		defaultExternalTopoSpec(finalSpec.External, DefaultTopoRootPath)
 	}
 
 	// Merge GlobalTopoServerSpec-level PVCDeletionPolicy
