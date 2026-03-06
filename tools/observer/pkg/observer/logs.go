@@ -104,6 +104,13 @@ func (o *Observer) checkDataPlaneLogs(ctx context.Context, sinceSeconds int64) {
 	}
 }
 
+type logMatch struct {
+	count     int
+	firstLine string
+	severity  report.Severity
+	check     string
+}
+
 func (o *Observer) scanPodLogs(ctx context.Context, pod *corev1.Pod, container string, sinceSeconds int64, patterns []errorPattern) {
 	opts := &corev1.PodLogOptions{
 		SinceSeconds: &sinceSeconds,
@@ -138,6 +145,8 @@ func (o *Observer) scanPodLogs(ctx context.Context, pod *corev1.Pod, container s
 		maxLines = 100
 	}
 
+	matches := make(map[string]*logMatch)
+
 	for scanner.Scan() {
 		lineCount++
 		if lineCount > maxLines {
@@ -147,21 +156,39 @@ func (o *Observer) scanPodLogs(ctx context.Context, pod *corev1.Pod, container s
 		line := scanner.Text()
 		for _, p := range patterns {
 			if strings.Contains(strings.ToLower(line), strings.ToLower(p.substring)) {
-				o.reporter.Report(report.Finding{
-					Severity:  p.severity,
-					Check:     p.check,
-					Component: component,
-					Message:   fmt.Sprintf("Error pattern %q detected in %s/%s", p.substring, pod.Name, container),
-					Details: map[string]any{
-						"pod":       pod.Name,
-						"container": container,
-						"pattern":   p.substring,
-						"line":      truncate(line, 500),
-					},
-				})
+				if m, ok := matches[p.substring]; ok {
+					m.count++
+				} else {
+					matches[p.substring] = &logMatch{
+						count:     1,
+						firstLine: truncate(line, 500),
+						severity:  p.severity,
+						check:     p.check,
+					}
+				}
 				break
 			}
 		}
+	}
+
+	for pattern, m := range matches {
+		msg := fmt.Sprintf("Pattern %q matched %d times in %s/%s", pattern, m.count, pod.Name, container)
+		if m.count == 1 {
+			msg = fmt.Sprintf("Pattern %q matched 1 time in %s/%s", pattern, pod.Name, container)
+		}
+		o.reporter.Report(report.Finding{
+			Severity:  m.severity,
+			Check:     m.check,
+			Component: component,
+			Message:   msg,
+			Details: map[string]any{
+				"pod":        pod.Name,
+				"container":  container,
+				"pattern":    pattern,
+				"matchCount": m.count,
+				"sampleLine": m.firstLine,
+			},
+		})
 	}
 }
 

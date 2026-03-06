@@ -13,6 +13,12 @@ import (
 	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
 )
 
+var allCheckNames = []string{
+	"pod-health", "resource-validation", "crd-status", "drain-state",
+	"connectivity", "operator-logs", "dataplane-logs", "events",
+	"topology", "replication",
+}
+
 // Observer runs continuous health validation checks against a multigres cluster.
 type Observer struct {
 	client            client.Client
@@ -165,7 +171,11 @@ func (o *Observer) runCycle(ctx context.Context) {
 	s.CycleEnd = time.Now()
 
 	if o.metrics != nil {
-		for check, healthy := range checkHealthy {
+		for _, check := range allCheckNames {
+			healthy, ok := checkHealthy[check]
+			if !ok {
+				healthy = true
+			}
 			o.metrics.SetCheckHealthy(check, healthy)
 		}
 	}

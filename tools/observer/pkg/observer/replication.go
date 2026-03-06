@@ -213,8 +213,13 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp, password string) {
 	conn, err := o.connectPostgres(ctx, podIP, password)
 	if err != nil {
-		// Replica might not accept connections during rewind/bootstrap; log but don't flag.
-		o.logger.Debug("failed to connect to replica postgres", "pod", podName, "error", err)
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "replication",
+			Component: comp,
+			Message:   fmt.Sprintf("Replica %s postgres unreachable: %v", podName, err),
+			Details:   map[string]any{"pod": podName},
+		})
 		return
 	}
 	defer conn.Close(ctx)
@@ -225,7 +230,13 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp,
 	// Check WAL receiver status.
 	var walReceiverCount int
 	if err := conn.QueryRow(probeCtx, "SELECT COUNT(*) FROM pg_stat_wal_receiver").Scan(&walReceiverCount); err != nil {
-		o.logger.Debug("failed to query pg_stat_wal_receiver", "pod", podName, "error", err)
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "replication",
+			Component: comp,
+			Message:   fmt.Sprintf("Failed to query WAL receiver on replica %s: %v", podName, err),
+			Details:   map[string]any{"pod": podName},
+		})
 	} else if walReceiverCount == 0 {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityError,
@@ -253,7 +264,13 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp,
 	// Check if WAL replay is paused.
 	var isReplayPaused bool
 	if err := conn.QueryRow(probeCtx, "SELECT pg_is_wal_replay_paused()").Scan(&isReplayPaused); err != nil {
-		o.logger.Debug("failed to query pg_is_wal_replay_paused", "pod", podName, "error", err)
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "replication",
+			Component: comp,
+			Message:   fmt.Sprintf("Failed to query WAL replay status on replica %s: %v", podName, err),
+			Details:   map[string]any{"pod": podName},
+		})
 	} else if isReplayPaused {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityWarn,
