@@ -107,12 +107,21 @@ Probes all Multigres service endpoints for TCP/HTTP/gRPC/SQL connectivity.
 | MultiGateway readiness | Service | 15100 | `GET /ready` | warn/error |
 | MultiGateway SQL | Service | 15432 | `SELECT 1` via pgx (simple protocol) | error |
 | MultiOrch liveness | Service | 15300 | `GET /live` | error |
+| MultiOrch readiness | Service | 15300 | `GET /ready` | warn/error |
+| MultiOrch pooler health | Service | 15300 | `GET /debug/status` (HTML scrape) | error/fatal |
 | TopoServer health | Service | 2379 | TCP connect | error |
-| Pool pod health | Pod | 15200 | `GET /ready` | warn |
+| Pool pod liveness | Pod | 15200 | `GET /live` | error |
+| Pool pod readiness | Pod | 15200 | `GET /ready` | warn/error |
+| Pool pod gRPC health | Pod | 15270 | gRPC `Health/Check` (3s timeout) | error/warn |
 | Operator health | Pod | 8081 | `GET /healthz` | error |
 | Operator readiness | Pod | 8081 | `GET /readyz` | error |
+| Readiness cross-check | All pods | — | Compare K8s Ready vs probe results | fatal/error |
 
 **Latency tracking:** All probes measure and report latency. Alerts when >500ms.
+
+**Readiness cross-check:** After all probes complete, the observer compares each pod's Kubernetes `Ready` condition against the observer's own probe results. If Kubernetes says `Ready=True` but our probes show the component is broken, a `fatal` finding is raised. This detects "lying" readiness endpoints — components that report healthy to Kubernetes while actually being non-functional (e.g., multipooler returning `/ready=200` while its gRPC server is hanging).
+
+**MultiOrch pooler health:** Scrapes the `/debug/status` HTML page and looks for error indicators (`DeadlineExceeded`, `Unavailable`, `unhealthy`, `connection refused`). If all poolers show errors, reports `fatal`; if some do, reports `error`.
 
 > **Note:** The gateway SQL probe uses PostgreSQL simple query protocol (`QueryExecModeSimpleProtocol`)
 > instead of pgx's default extended protocol. The multigateway does not yet support the extended

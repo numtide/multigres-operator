@@ -46,6 +46,7 @@ const (
 	PortMultiGatewayGRPC = 15170
 	PortMultiGatewayPG   = 15432
 	PortMultiPoolerHTTP  = 15200
+	PortMultiPoolerGRPC  = 15270
 	PortMultiOrchHTTP    = 15300
 	PortMultiOrchGRPC    = 15370
 	PortEtcdClient       = 2379
@@ -75,6 +76,7 @@ const (
 	StaleStatusEntryGracePeriod  = 30 * time.Second
 	TerminatingResourceTimeout   = 5 * time.Minute
 	ConnectivityTimeout          = 5 * time.Second
+	GRPCHealthTimeout            = 3 * time.Second
 	ConnectivityLatencyThreshold = 500 * time.Millisecond
 	ReplicationLagWarnSecs       = 10
 	ReplicationLagErrorSecs      = 60

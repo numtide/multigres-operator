@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +17,9 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/tools/observer/pkg/common"
 	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func (o *Observer) checkConnectivity(ctx context.Context) {
@@ -28,6 +32,8 @@ func (o *Observer) checkConnectivity(ctx context.Context) {
 	if o.enableSQLProbe {
 		o.probeMultiGatewaySQLServices(ctx)
 	}
+
+	o.crossCheckReadiness(ctx)
 }
 
 func (o *Observer) probeMultiGatewayServices(ctx context.Context) {
@@ -72,6 +78,8 @@ func (o *Observer) probeMultiOrchServices(ctx context.Context) {
 		svc := &svcs.Items[i]
 		addr := fmt.Sprintf("%s.%s.svc", svc.Name, svc.Namespace)
 		o.probeHTTP(ctx, addr, common.PortMultiOrchHTTP, "/live", "multiorch-liveness", svc.Name)
+		o.probeHTTP(ctx, addr, common.PortMultiOrchHTTP, "/ready", "multiorch-readiness", svc.Name)
+		o.probeMultiOrchStatus(ctx, addr, svc.Name)
 	}
 }
 
@@ -113,6 +121,193 @@ func (o *Observer) probePoolPodHealth(ctx context.Context) {
 			continue
 		}
 		o.probeHTTP(ctx, pod.Status.PodIP, common.PortMultiPoolerHTTP, "/live", "multipooler-health", pod.Name)
+		o.probeHTTP(ctx, pod.Status.PodIP, common.PortMultiPoolerHTTP, "/ready", "multipooler-readiness", pod.Name)
+		o.probePoolPodGRPC(ctx, pod)
+	}
+}
+
+func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component string) {
+	url := fmt.Sprintf("http://%s:%d/debug/status", host, common.PortMultiOrchHTTP)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return
+	}
+
+	start := time.Now()
+	resp, err := o.httpClient.Do(req)
+	latency := time.Since(start)
+
+	if err != nil {
+		if o.probes != nil {
+			o.probes.RecordProbe(ProbeResult{
+				Check: "multiorch-pooler-health", Component: component, Target: url,
+				OK: false, Latency: latency.Round(time.Millisecond).String(), Error: err.Error(),
+			})
+		}
+		return
+	}
+	defer func() {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if o.probes != nil {
+			o.probes.RecordProbe(ProbeResult{
+				Check: "multiorch-pooler-health", Component: component, Target: url,
+				OK: false, Latency: latency.Round(time.Millisecond).String(), Error: fmt.Sprintf("read body: %v", err),
+			})
+		}
+		return
+	}
+
+	text := strings.ToLower(string(body))
+
+	errorIndicators := []string{"deadlineexceeded", "unavailable", "unhealthy", "connection refused"}
+	var rawErrors []string
+	for _, indicator := range errorIndicators {
+		if strings.Contains(text, indicator) {
+			rawErrors = append(rawErrors, indicator)
+		}
+	}
+
+	// Count pooler sections: look for lines referencing pooler endpoints.
+	// The /debug/status page lists poolers with their health status.
+	lines := strings.Split(string(body), "\n")
+	totalPoolers := 0
+	unhealthyPoolers := 0
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		// Pooler entries typically reference the pooler port or "pooler" in the status page.
+		if strings.Contains(lower, fmt.Sprintf(":%d", common.PortMultiPoolerGRPC)) ||
+			strings.Contains(lower, "multipooler") ||
+			strings.Contains(lower, "pooler") {
+			totalPoolers++
+			for _, indicator := range errorIndicators {
+				if strings.Contains(lower, indicator) {
+					unhealthyPoolers++
+					break
+				}
+			}
+		}
+	}
+
+	healthyPoolers := totalPoolers - unhealthyPoolers
+
+	if o.probes != nil {
+		errStr := ""
+		if len(rawErrors) > 0 {
+			errStr = strings.Join(rawErrors, ", ")
+		}
+		o.probes.RecordProbe(ProbeResult{
+			Check: "multiorch-pooler-health", Component: component, Target: url,
+			OK: len(rawErrors) == 0, Latency: latency.Round(time.Millisecond).String(), Error: errStr,
+		})
+	}
+
+	if totalPoolers > 0 && unhealthyPoolers == totalPoolers {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityFatal,
+			Check:     "connectivity",
+			Component: component,
+			Message:   fmt.Sprintf("multiorch-pooler-health: multiorch reports all %d poolers unreachable", totalPoolers),
+			Details: map[string]any{
+				"totalPoolers":     totalPoolers,
+				"healthyPoolers":   healthyPoolers,
+				"unhealthyPoolers": unhealthyPoolers,
+				"rawErrors":        rawErrors,
+			},
+		})
+	} else if unhealthyPoolers > 0 {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "connectivity",
+			Component: component,
+			Message:   fmt.Sprintf("multiorch-pooler-health: %d/%d poolers showing errors", unhealthyPoolers, totalPoolers),
+			Details: map[string]any{
+				"totalPoolers":     totalPoolers,
+				"healthyPoolers":   healthyPoolers,
+				"unhealthyPoolers": unhealthyPoolers,
+				"rawErrors":        rawErrors,
+			},
+		})
+	} else if len(rawErrors) > 0 {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "connectivity",
+			Component: component,
+			Message:   fmt.Sprintf("multiorch-pooler-health: /debug/status contains error indicators: %s", strings.Join(rawErrors, ", ")),
+			Details: map[string]any{
+				"rawErrors": rawErrors,
+			},
+		})
+	}
+}
+
+func (o *Observer) probePoolPodGRPC(ctx context.Context, pod *corev1.Pod) {
+	addr := net.JoinHostPort(pod.Status.PodIP, fmt.Sprintf("%d", common.PortMultiPoolerGRPC))
+
+	dialCtx, cancel := context.WithTimeout(ctx, common.GRPCHealthTimeout)
+	defer cancel()
+
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		o.recordGRPCProbeResult(pod.Name, addr, false, 0, fmt.Sprintf("dial error: %v", err))
+		return
+	}
+	defer conn.Close()
+
+	client := healthpb.NewHealthClient(conn)
+	start := time.Now()
+	resp, err := client.Check(dialCtx, &healthpb.HealthCheckRequest{})
+	latency := time.Since(start)
+
+	if err != nil {
+		o.recordGRPCProbeResult(pod.Name, addr, false, latency, err.Error())
+		return
+	}
+
+	ok := resp.Status == healthpb.HealthCheckResponse_SERVING
+	errStr := ""
+	if !ok {
+		errStr = fmt.Sprintf("status: %s", resp.Status)
+	}
+	o.recordGRPCProbeResult(pod.Name, addr, ok, latency, errStr)
+}
+
+func (o *Observer) recordGRPCProbeResult(component, addr string, ok bool, latency time.Duration, errStr string) {
+	if o.metrics != nil {
+		o.metrics.RecordProbeLatency("multipooler-grpc-health", component, latency)
+	}
+
+	if o.probes != nil {
+		o.probes.RecordProbe(ProbeResult{
+			Check: "multipooler-grpc-health", Component: component, Target: addr,
+			OK: ok, Latency: latency.Round(time.Millisecond).String(), Error: errStr,
+		})
+	}
+
+	if !ok {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "connectivity",
+			Component: component,
+			Message:   fmt.Sprintf("multipooler-grpc-health: gRPC health check failed for %s: %s", addr, errStr),
+		})
+		return
+	}
+
+	if latency > common.ConnectivityLatencyThreshold {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "connectivity",
+			Component: component,
+			Message:   fmt.Sprintf("multipooler-grpc-health: high latency %s for %s", latency.Round(time.Millisecond), addr),
+		})
 	}
 }
 
@@ -244,6 +439,142 @@ func (o *Observer) probeHTTP(ctx context.Context, host string, port int, path, c
 			Message:   fmt.Sprintf("%s: high latency %s for %s", check, latency.Round(time.Millisecond), url),
 		})
 	}
+}
+
+func (o *Observer) crossCheckReadiness(ctx context.Context) {
+	if o.probes == nil {
+		return
+	}
+
+	probeResults, _ := o.probes.Data()["connectivity"].([]ProbeResult)
+	if len(probeResults) == 0 {
+		return
+	}
+
+	// Index probe results by component+check for pool pods (probed by pod name),
+	// and by check name only for service-level probes (multiorch, multigateway).
+	type probeKey struct {
+		component string
+		check     string
+	}
+	probeByKey := make(map[probeKey]ProbeResult, len(probeResults))
+	// Collect all failing service-level probes by check name.
+	failedByCheck := make(map[string][]ProbeResult)
+	for _, pr := range probeResults {
+		probeByKey[probeKey{pr.Component, pr.Check}] = pr
+		if !pr.OK {
+			failedByCheck[pr.Check] = append(failedByCheck[pr.Check], pr)
+		}
+	}
+
+	// Get pod data from the pods check.
+	podDataRaw, _ := o.probes.Data()["pods"].(map[string]any)
+	if podDataRaw == nil {
+		return
+	}
+	podList, _ := podDataRaw["pods"].([]map[string]any)
+
+	for _, pd := range podList {
+		name, _ := pd["name"].(string)
+		ready, _ := pd["ready"].(bool)
+		component, _ := pd["component"].(string)
+
+		if !ready {
+			continue
+		}
+
+		switch component {
+		case common.ComponentPool:
+			// Pool pod probes are keyed by pod name.
+			grpcProbe, hasGRPC := probeByKey[probeKey{name, "multipooler-grpc-health"}]
+			readinessProbe, hasReadiness := probeByKey[probeKey{name, "multipooler-readiness"}]
+
+			if hasGRPC && !grpcProbe.OK {
+				o.reporter.Report(report.Finding{
+					Severity:  report.SeverityFatal,
+					Check:     "connectivity",
+					Component: name,
+					Message:   fmt.Sprintf("Pod %s reports Ready but multipooler-grpc-health probe failed: %s — Kubernetes readiness probe is not detecting the failure", name, grpcProbe.Error),
+					Details: map[string]any{
+						"kubernetesReady": true,
+						"grpcProbeOK":     false,
+						"grpcProbeError":  grpcProbe.Error,
+					},
+				})
+			}
+
+			if hasReadiness && !readinessProbe.OK {
+				livenessProbe, hasLiveness := probeByKey[probeKey{name, "multipooler-health"}]
+				if hasLiveness && livenessProbe.OK {
+					o.reporter.Report(report.Finding{
+						Severity:  report.SeverityError,
+						Check:     "connectivity",
+						Component: name,
+						Message:   fmt.Sprintf("Pod %s reports Ready but multipooler-readiness returned %s — liveness passes but readiness fails", name, readinessProbe.Error),
+						Details: map[string]any{
+							"kubernetesReady":  true,
+							"readinessProbeOK": false,
+							"readinessError":   readinessProbe.Error,
+							"livenessProbeOK":  true,
+						},
+					})
+				}
+			}
+
+		case common.ComponentMultiOrch:
+			// Multiorch probes are service-level. Check if any service-level probe failed.
+			if failed := failedByCheck["multiorch-readiness"]; len(failed) > 0 {
+				o.reporter.Report(report.Finding{
+					Severity:  report.SeverityFatal,
+					Check:     "connectivity",
+					Component: name,
+					Message:   fmt.Sprintf("Pod %s reports Ready but multiorch-readiness probe failed — Kubernetes readiness probe is not detecting the failure", name),
+					Details: map[string]any{
+						"kubernetesReady":  true,
+						"readinessProbeOK": false,
+						"failedServices":   probeComponents(failed),
+					},
+				})
+			}
+
+			if failed := failedByCheck["multiorch-pooler-health"]; len(failed) > 0 {
+				o.reporter.Report(report.Finding{
+					Severity:  report.SeverityFatal,
+					Check:     "connectivity",
+					Component: name,
+					Message:   fmt.Sprintf("Pod %s reports Ready but multiorch-pooler-health found errors — orchestrator is healthy but its poolers are not", name),
+					Details: map[string]any{
+						"kubernetesReady":     true,
+						"poolerHealthProbeOK": false,
+						"failedServices":      probeComponents(failed),
+					},
+				})
+			}
+
+		case common.ComponentMultiGateway:
+			if failed := failedByCheck["multigateway-readiness"]; len(failed) > 0 {
+				o.reporter.Report(report.Finding{
+					Severity:  report.SeverityError,
+					Check:     "connectivity",
+					Component: name,
+					Message:   fmt.Sprintf("Pod %s reports Ready but multigateway-readiness probe failed — Kubernetes readiness probe is not detecting the failure", name),
+					Details: map[string]any{
+						"kubernetesReady":  true,
+						"readinessProbeOK": false,
+						"failedServices":   probeComponents(failed),
+					},
+				})
+			}
+		}
+	}
+}
+
+func probeComponents(probes []ProbeResult) []string {
+	out := make([]string, len(probes))
+	for i, p := range probes {
+		out[i] = p.Component
+	}
+	return out
 }
 
 func (o *Observer) probeMultiGatewaySQLServices(ctx context.Context) {
