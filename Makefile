@@ -39,6 +39,9 @@ IMG_PREFIX ?= ghcr.io/numtide
 IMG_REPO ?= multigres-operator
 IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
 
+# Observer tool configuration
+OBSERVER_IMG ?= $(IMG_PREFIX)/multigres-observer:$(VERSION_SHORT)
+
 .PHONY: print-img
 print-img: ## Print the full operator container image reference
 	@echo $(IMG)
@@ -486,6 +489,7 @@ kind-deploy: kind-up manifests kustomize kind-load kind-load-images ## Deploy op
 	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
+	$(MAKE) kind-deploy-observer
 
 .PHONY: kind-deploy-certmanager
 kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-load kind-load-images ## Deploy operator to kind cluster using cert manager
@@ -499,6 +503,7 @@ kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-lo
 	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
+	$(MAKE) kind-deploy-observer
 
 .PHONY: kind-deploy-no-webhook
 kind-deploy-no-webhook: kind-up manifests kustomize kind-load kind-load-images ## Deploy controller to Kind without the webhook enabled.
@@ -510,6 +515,7 @@ kind-deploy-no-webhook: kind-up manifests kustomize kind-load kind-load-images #
 	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
 	@echo "==> Deployment complete!"
 	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
+	$(MAKE) kind-deploy-observer
 
 .PHONY: kind-deploy-observability
 kind-deploy-observability: kind-up manifests kustomize kind-load kind-load-images kind-load-observability-images ## Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana)
@@ -534,6 +540,7 @@ kind-deploy-observability: kind-up manifests kustomize kind-load kind-load-image
 		statefulset/prometheus-multigres -n multigres-operator --timeout=180s
 	@echo "==> Deployment complete!"
 	@echo "Run 'make kind-portforward' to port-forward Grafana, Prometheus, and Tempo"
+	$(MAKE) kind-deploy-observer
 
 .PHONY: kind-portforward
 kind-portforward: ## Port-forward Grafana (3000), Prometheus (9090), Tempo (3200). Re-run if connection drops.
@@ -561,6 +568,29 @@ kind-down: ## Delete the kind cluster
 	$(KIND) delete cluster --name $(KIND_CLUSTER)
 	@rm -f $(KIND_KUBECONFIG)
 	@echo "==> Cluster and kubeconfig deleted"
+
+##@ Observer
+
+.PHONY: observer-build
+observer-build: ## Build the observer container image
+	$(CONTAINER_TOOL) build -t $(OBSERVER_IMG) -f tools/observer/Dockerfile tools/observer/
+
+.PHONY: kind-load-observer
+kind-load-observer: observer-build ## Build and load observer image into kind
+	$(KIND) load docker-image $(OBSERVER_IMG) --name $(KIND_CLUSTER)
+
+.PHONY: kind-deploy-observer
+kind-deploy-observer: kind-load-observer ## Deploy observer alongside the operator
+	@echo "==> Deploying multigres observer..."
+	cd tools/observer/deploy/base && $(KUSTOMIZE) edit set image observer=$(OBSERVER_IMG)
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/observer/deploy/base | \
+		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@git checkout -- tools/observer/deploy/base/kustomization.yaml 2>/dev/null || true
+
+.PHONY: kind-undeploy-observer
+kind-undeploy-observer: ## Remove observer
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build tools/observer/deploy/base | \
+		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) delete --ignore-not-found -f -
 
 ##@ Dependencies
 
