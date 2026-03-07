@@ -42,6 +42,7 @@ These constants are defined in `pkg/common/constants.go` and control when findin
 | `StaleStatusEntryGracePeriod` | 30s | CRD status | Grace for stale podRoles entries after pod deletion |
 | `TerminatingResourceTimeout` | 5min | Resources | Stuck terminating CRDs flagged after this |
 | `ConnectivityTimeout` | 5s | Connectivity | TCP/HTTP probe timeout |
+| `GRPCHealthTimeout` | 3s | Connectivity | gRPC health check timeout |
 | `ConnectivityLatencyThreshold` | 500ms | Connectivity | Latency warning threshold |
 
 ### Restart Thresholds
@@ -72,6 +73,7 @@ The observer probes these ports on their respective services:
 | 15170 | MultiGateway gRPC | gRPC | `PortMultiGatewayGRPC` |
 | 15432 | MultiGateway PostgreSQL | PG wire | `PortMultiGatewayPG` |
 | 15200 | MultiPooler HTTP | HTTP | `PortMultiPoolerHTTP` |
+| 15270 | MultiPooler gRPC | gRPC | `PortMultiPoolerGRPC` |
 | 15300 | MultiOrch HTTP | HTTP | `PortMultiOrchHTTP` |
 | 15370 | MultiOrch gRPC | gRPC | `PortMultiOrchGRPC` |
 | 2379 | etcd (TopoServer) client | HTTP | `PortEtcdClient` |
@@ -104,7 +106,7 @@ The observer uses these labels to discover and classify Multigres resources:
 | `ComponentPool` | `shard-pool` | Pool pods (PostgreSQL + multipooler) |
 | `ComponentMultiOrch` | `multiorch` | Orchestrator |
 | `ComponentMultiGateway` | `multigateway` | Gateway |
-| `ComponentGlobalTopo` | `global-topo` | TopoServer (etcd) |
+| `ComponentGlobalTopo` | `toposerver` | TopoServer (etcd) |
 
 ---
 

@@ -1,6 +1,21 @@
 # Multigres Observer
 
-A Kubernetes-native health validation tool for the Multigres Operator. It runs inside the cluster alongside the operator and provides continuous health monitoring across 9 check categories.
+A read-only health validation tool for Multigres clusters. It runs inside the cluster alongside the operator and provides continuous monitoring across 10 check categories. Intended for development and testing — not a production monitoring solution.
+
+## Use Cases
+
+- Aggregate the health of every cluster component into a single diagnostic snapshot
+- Validate operator behavior during failovers, scale-ups, drains, and upgrades
+- Monitor cluster state during chaos experiments and fault injection
+- Detect silent data plane failures where components report healthy but are broken
+
+The observer exposes a structured `/api/status` endpoint designed for both human inspection and AI-assisted troubleshooting. An agent with the [diagnose skill](skills/diagnose_with_observer/SKILL.md) can fetch the snapshot, triage findings, and trace root causes across operator and upstream multigres code.
+
+## Why This Exists
+
+Multigres has many moving parts (gateway, orchestrator, pooler, postgres, etcd) and getting a full picture of cluster health requires checking each component individually. The observer consolidates all of these checks into a single loop and cross-references the results — for example, detecting when Kubernetes thinks a pod is Ready but the observer's own probes show it is broken.
+
+Some of these checks compensate for gaps in upstream health endpoints (e.g., multipooler returns `/ready=200` while its gRPC server hangs). Those checks may become less necessary as upstream endpoints improve. But the observer's core value is cross-cutting: correlating failures across components, independently verifying what each component self-reports, and providing a single diagnostic snapshot of the entire cluster.
 
 ## Quick Start
 
@@ -48,21 +63,22 @@ curl http://localhost:9090/metrics
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│                multigres-observer                 │
-│                                                   │
-│  ┌─────────┐  ┌──────────┐  ┌─────────────────┐ │
-│  │ Observer │→ │ Reporter │→ │ JSON stdout     │ │
-│  │ (checks)│  │          │  │ Prometheus :9090 │ │
-│  └─────────┘  └──────────┘  └─────────────────┘ │
-│       │                                           │
-│  ┌────┴────────────────────────────────────────┐ │
-│  │ Checks:                                      │ │
-│  │  pod-health · resource-validation · crd-status│ │
-│  │  drain-state · connectivity · replication     │ │
-│  │  logs · events · topology                     │ │
-│  └──────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                 multigres-observer                  │
+│                                                     │
+│  ┌──────────┐   ┌──────────┐   ┌──────────────────┐ │
+│  │ Observer │ → │ Reporter │ → │ JSON stdout      │ │
+│  │ (checks) │   │          │   │ Prometheus :9090 │ │
+│  └──────────┘   └──────────┘   └──────────────────┘ │
+│       │                                             │
+│  ┌────┴───────────────────────────────────────────┐ │
+│  │ Checks:                                        │ │
+│  │  pod-health · resource-validation · crd-status │ │
+│  │  drain-state · connectivity · replication      │ │
+│  │  operator-logs · dataplane-logs · events       │ │
+│  │  topology                                      │ │
+│  └────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
          ↕ Kubernetes API              ↕ Direct SQL
    CRDs, Pods, Events, Logs      PostgreSQL on pool pods
 ```
@@ -99,9 +115,10 @@ The observer catches issues across the full stack:
 
 | Document | Description |
 |----------|-------------|
-| [Observer Reference](docs/observer.md) | Full reference for all 9 check categories with thresholds |
+| [Observer Reference](docs/observer.md) | Full reference for all 10 check categories with thresholds |
 | [Configuration Reference](docs/configuration.md) | Flags, environment variables, thresholds, RBAC |
 | [Architecture](docs/architecture.md) | Internal design, report format, metrics, deployment model |
+| [Skills](skills/README.md) | AI agent skills for observer-assisted diagnostics |
 
 ## Project Structure
 
@@ -110,7 +127,7 @@ tools/observer/
 ├── cmd/multigres-observer/
 │   └── main.go                    # Entrypoint, flags, metrics server
 ├── pkg/
-│   ├── observer/                  # 9 check categories + API
+│   ├── observer/                  # 10 check categories + API
 │   │   ├── observer.go            # Main loop, cycle orchestration, StatusHandler
 │   │   ├── probes.go              # Per-cycle probe data collector
 │   │   ├── snapshot.go            # Thread-safe latest-cycle snapshot store
@@ -130,6 +147,8 @@ tools/observer/
 │   └── common/                    # Shared constants, client setup
 │       ├── client.go              # Kubernetes client factory
 │       └── constants.go           # Labels, ports, thresholds, states
+├── skills/                          # AI agent skills
+│   └── diagnose_with_observer/    # Diagnostic triage and root cause analysis
 ├── deploy/
 │   └── base/                      # Kustomize manifests (read-only RBAC)
 ├── Dockerfile

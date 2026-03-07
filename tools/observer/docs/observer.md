@@ -1,6 +1,6 @@
 # Observer Reference
 
-The observer runs a continuous loop (default interval: 10 seconds) performing 9 categories of health checks against a Multigres cluster. Every finding is emitted as a structured JSON log line and recorded as a Prometheus metric. A complete diagnostic snapshot is available via `GET /api/status` (see `architecture.md` for the JSON schema).
+The observer runs a continuous loop (default interval: 10 seconds) performing 10 categories of health checks against a Multigres cluster. Every finding is emitted as a structured JSON log line and recorded as a Prometheus metric. A complete diagnostic snapshot is available via `GET /api/status` (see `architecture.md` for the JSON schema).
 
 The observer is **read-only** — it never modifies any resource. It runs in the `multigres-operator` namespace and watches all namespaces for Multigres CRDs by default.
 
@@ -100,21 +100,21 @@ Monitors the drain state machine on pool pods via the `drain.multigres.com/state
 
 Probes all Multigres service endpoints for TCP/HTTP/gRPC/SQL connectivity.
 
-| Probe | Target | Port | Method | Severity |
-|-------|--------|------|--------|----------|
-| MultiGateway PG | Service | 15432 | TCP connect | error |
-| MultiGateway liveness | Service | 15100 | `GET /live` | error |
-| MultiGateway readiness | Service | 15100 | `GET /ready` | warn/error |
-| MultiGateway SQL | Service | 15432 | `SELECT 1` via pgx (simple protocol) | error |
-| MultiOrch liveness | Service | 15300 | `GET /live` | error |
-| MultiOrch readiness | Service | 15300 | `GET /ready` | warn/error |
-| MultiOrch pooler health | Service | 15300 | `GET /debug/status` (HTML scrape) | error/fatal |
-| TopoServer health | Service | 2379 | TCP connect | error |
-| Pool pod liveness | Pod | 15200 | `GET /live` | error |
-| Pool pod readiness | Pod | 15200 | `GET /ready` | warn/error |
-| Pool pod gRPC health | Pod | 15270 | gRPC `Health/Check` (3s timeout) | error/warn |
-| Operator health | Pod | 8081 | `GET /healthz` | error |
-| Operator readiness | Pod | 8081 | `GET /readyz` | error |
+| Probe (check string) | Target | Port | Method | Severity |
+|----------------------|--------|------|--------|----------|
+| `multigateway-pg` | Service | 15432 | TCP connect | error |
+| `multigateway-liveness` | Service | 15100 | `GET /live` | error |
+| `multigateway-readiness` | Service | 15100 | `GET /ready` | warn/error |
+| `sql-probe` | Service | 15432 | `SELECT 1` via pgx (simple protocol) | error |
+| `multiorch-liveness` | Service | 15300 | `GET /live` | error |
+| `multiorch-readiness` | Service | 15300 | `GET /ready` | warn/error |
+| `multiorch-pooler-health` | Service | 15300 | `GET /debug/status` (HTML scrape) | error/fatal |
+| `etcd-health` | Service | 2379 | `GET /health` | error |
+| `multipooler-health` | Pod | 15200 | `GET /live` | error |
+| `multipooler-readiness` | Pod | 15200 | `GET /ready` | warn/error |
+| `multipooler-grpc-health` | Pod | 15270 | gRPC `Health/Check` (3s timeout) | error/warn |
+| `operator-health` | Pod | 8081 | `GET /healthz` | error |
+| `operator-readiness` | Pod | 8081 | `GET /readyz` | error |
 | Readiness cross-check | All pods | — | Compare K8s Ready vs probe results | fatal/error |
 
 **Latency tracking:** All probes measure and report latency. Alerts when >500ms.
@@ -164,22 +164,45 @@ SQL-based data-plane health checks. Connects directly to PostgreSQL on pool pods
 
 ---
 
-### 7. Log Monitoring (`logs`)
+### 7. Log Monitoring (`operator-logs` / `dataplane-logs`)
 
 **File:** `observer/logs.go`
 
-Tails logs from all Multigres containers each cycle (configurable via `--log-tail-lines`, default 100).
+Tails logs from all Multigres containers each cycle (configurable via `--log-tail-lines`, default 100). Findings are emitted under two separate check names depending on the source.
 
-**Error patterns detected:**
-- `FATAL`, `panic`, `runtime error`, `goroutine` in any container
-- `OOM`, `out of memory` in postgres containers
-- `connection refused`, `connection reset` in multipooler/multigateway
-- `SIGTERM`, `SIGKILL` — unexpected termination
+**Operator log patterns** (check: `operator-logs` — scanned from the operator `manager` container):
+
+| Pattern | Severity |
+|---------|----------|
+| `error reconciling` | error |
+| `failed to` | error |
+| `stuck in Terminating` | error |
+| `topology error` | error |
+| `status error` | error |
+| `panic` | fatal |
+| `runtime error` | fatal |
+| `backup stale` | warn |
+| `pod replaced` | warn |
+| `config error` | warn |
+| `expand PVC failed` | warn |
+
+**Data plane log patterns** (check: `dataplane-logs` — scanned from multipooler, postgres, multigateway, multiorch, and toposerver containers):
+
+| Pattern | Severity |
+|---------|----------|
+| `connection refused` | error |
+| `connection reset` | error |
+| `topology registration` | error |
+| `replication error` | error |
+| `FATAL` | error |
+| `panic` | fatal |
+| `OOM` | error |
+| `out of memory` | error |
 
 **How it works:**
-- Uses `pods/log` API with `tailLines=N` each cycle
-- Tracks `lastLogCheck` to avoid re-reporting
-- Reports the raw log line with pod and container context
+- Uses `pods/log` API with `sinceSeconds` based on interval each cycle
+- Aggregates matches per pattern per container (reports count + sample line)
+- Pattern matching is case-insensitive
 
 ---
 
@@ -196,7 +219,7 @@ Watches Kubernetes events for all Warning events on Multigres resources.
 | `BackupStale` | Backup age exceeded 25h | warn |
 | `ConfigError` | Invalid configuration detected | error |
 | `ExpandPVCFailed` | PVC resize failed | error |
-| `PodReplaced` | A drained pod was replaced | info |
+| `PodReplaced` | A drained pod was replaced | warn |
 | `StatusError` | Status update failed | error |
 | `StuckTerminating` | Pod stuck terminating >60s | error |
 | `TopologyError` | etcd topology operation failed | error |
@@ -209,8 +232,8 @@ Watches Kubernetes events for all Warning events on Multigres resources.
 | `FailedMount` | Volume mount failed | error |
 | `Unhealthy` | Readiness/liveness probe failed | warn |
 | `BackOff` | Container crash loop | error |
-| `OOMKilling` | OOM kill from kernel | error |
-| `EvictionThresholdMet` | Node under pressure | error |
+| `OOMKilling` | OOM kill from kernel | fatal |
+| `EvictionThresholdMet` | Node under pressure | warn |
 
 ---
 

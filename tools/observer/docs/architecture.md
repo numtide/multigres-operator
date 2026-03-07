@@ -25,27 +25,34 @@ Environment variables override corresponding flags for Kubernetes-native configu
 
 ## Observer Cycle
 
-The observer runs a ticker loop. Each tick executes all 9 check categories sequentially, tracks each check's duration, then emits a summary.
+The observer runs a ticker loop. Each tick executes all 10 check categories sequentially, tracks each check's duration, then emits a summary.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │                     Observer Cycle                           │
-│                                                             │
+│                                                              │
 │  track("pod-health",          checkPodHealth)                │
 │  track("resource-validation", checkResources)                │
 │  track("crd-status",          checkCRDStatus)                │
 │  track("drain-state",         checkDrainState)               │
 │  track("connectivity",        checkConnectivity)             │
 │  track("logs",                checkLogs)                     │
+│    → findings emit as "operator-logs" or "dataplane-logs"    │
 │  track("events",              checkEvents)                   │
 │  track("topology",            checkTopology)                 │
-│  track("replication",         checkReplication)               │
-│                                                             │
-│  → Summary: {findings: N, errors: M, fatals: K}            │
+│  track("replication",         checkReplication)              │
+│                                                              │
+│  → Summary: {findings: N, errors: M, fatals: K}              │
 │  → Metric: multigres_observer_observer_cycle_duration_seconds│
-│  → Metric: multigres_observer_check_healthy{check=X} = 0|1 │
-└─────────────────────────────────────────────────────────────┘
+│  → Metric: multigres_observer_check_healthy{check=X} = 0|1   │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+> **Note:** The `track()` wrapper records duration under the name `"logs"`, but the
+> findings emitted by `checkLogs` use two distinct check names: `"operator-logs"`
+> (operator manager container) and `"dataplane-logs"` (multipooler, postgres,
+> multigateway, multiorch, toposerver containers). The `healthy` map and
+> `check_healthy` gauge use these two names, not `"logs"`.
 
 The `track()` wrapper measures each check's execution time and records it in `multigres_observer_check_duration_seconds{check=X}`.
 
@@ -60,18 +67,18 @@ Check function
     ↓
 reporter.Report(Finding{...})
     ↓
-┌─────────────────────────────┐
+┌──────────────────────────────┐
 │ Reporter                     │
-│  1. Set timestamp (UTC)     │
-│  2. Append to buffer        │
+│  1. Set timestamp (UTC)      │
+│  2. Append to buffer         │
 │  3. Record Prometheus metric │
 │  4. Marshal to JSON          │
-│  5. Emit via slog at        │
-│     appropriate level:      │
-│     info → logger.Info()    │
-│     warn → logger.Warn()   │
-│     error/fatal → Error()  │
-└─────────────────────────────┘
+│  5. Emit via slog at         │
+│     appropriate level:       │
+│     info → logger.Info()     │
+│     warn → logger.Warn()     │
+│     error/fatal → Error()    │
+└──────────────────────────────┘
 ```
 
 ### Finding Format
