@@ -1245,6 +1245,11 @@ func (in *ShardSpec) DeepCopyInto(out *ShardSpec) {
 		*out = new(BackupConfig)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.TopologyPruning != nil {
+		in, out := &in.TopologyPruning, &out.TopologyPruning
+		*out = new(TopologyPruningConfig)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.CellTopologyLabels != nil {
 		in, out := &in.CellTopologyLabels, &out.CellTopologyLabels
 		*out = make(map[CellName]map[string]string, len(*in))
@@ -1603,6 +1608,11 @@ func (in *TableGroupSpec) DeepCopyInto(out *TableGroupSpec) {
 			}
 			(*out)[key] = outVal
 		}
+	}
+	if in.TopologyPruning != nil {
+		in, out := &in.TopologyPruning, &out.TopologyPruning
+		*out = new(TopologyPruningConfig)
+		(*in).DeepCopyInto(*out)
 	}
 }
 

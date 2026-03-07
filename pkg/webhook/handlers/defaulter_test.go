@@ -161,6 +161,22 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 							},
 						},
 					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(true),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+							Path: resolver.DefaultBackupPath,
+							Storage: multigresv1alpha1.StorageSpec{
+								Size: resolver.DefaultBackupStorageSize,
+							},
+						},
+					},
 				}
 				if diff := cmp.Diff(want, &cluster.Spec, cmpopts.EquateEmpty()); diff != "" {
 					t.Errorf("Cluster mismatch (-want +got):\n%s", diff)
@@ -438,9 +454,25 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 								}},
 							},
 						},
+						TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+							Enabled: ptr.To(true),
+						},
+						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+						},
+						Backup: &multigresv1alpha1.BackupConfig{
+							Type: multigresv1alpha1.BackupTypeFilesystem,
+							Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+								Path: resolver.DefaultBackupPath,
+								Storage: multigresv1alpha1.StorageSpec{
+									Size: resolver.DefaultBackupStorageSize,
+								},
+							},
+						},
 					},
 				}
-				if diff := cmp.Diff(want, cluster, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(want, cluster, cmpopts.EquateEmpty()); diff != "" {
 					t.Errorf("Cluster mismatch (-want +got):\n%s", diff)
 				}
 			},

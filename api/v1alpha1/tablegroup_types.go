@@ -82,6 +82,11 @@ type TableGroupSpec struct {
 	// Propagated from the cluster's cell configs.
 	// +optional
 	CellTopologyLabels map[CellName]map[string]string `json:"cellTopologyLabels,omitempty"`
+
+	// TopologyPruning controls whether stale topology entries are pruned.
+	// Inherited from MultigresCluster.
+	// +optional
+	TopologyPruning *TopologyPruningConfig `json:"topologyPruning,omitempty"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,

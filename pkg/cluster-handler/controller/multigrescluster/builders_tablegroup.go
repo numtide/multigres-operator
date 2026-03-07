@@ -62,6 +62,7 @@ func BuildTableGroup(
 			),
 			Observability:      cluster.Spec.Observability,
 			CellTopologyLabels: buildCellTopologyLabels(cluster),
+			TopologyPruning:    cluster.Spec.TopologyPruning,
 		},
 	}
 

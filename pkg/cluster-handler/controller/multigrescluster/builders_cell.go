@@ -46,7 +46,7 @@ func BuildCell(
 			TopoServer:       localTopoSpec,
 			TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 				RegisterCell: true,
-				PrunePoolers: true,
+				PrunePoolers: isPruningEnabled(cluster),
 			},
 			Observability: cluster.Spec.Observability,
 		},

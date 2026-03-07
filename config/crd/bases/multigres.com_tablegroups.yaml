@@ -2761,6 +2761,18 @@ spec:
                 maxLength: 25
                 minLength: 1
                 type: string
+              topologyPruning:
+                description: |-
+                  TopologyPruning controls whether stale topology entries are pruned.
+                  Inherited from MultigresCluster.
+                properties:
+                  enabled:
+                    description: |-
+                      Enabled controls whether the operator prunes stale topology entries.
+                      When false, the operator still registers entries but never removes them.
+                      Default: true (nil or empty means enabled).
+                    type: boolean
+                type: object
             required:
             - databaseName
             - globalTopoServer
