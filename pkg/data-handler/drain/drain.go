@@ -156,8 +156,9 @@ func ExecuteDrainStateMachine(
 					return true, nil
 				} else {
 					req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
-						Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
-						StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
+						Operation:    multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
+						StandbyIds:   []*clustermetadatapb.ID{myPooler.Id},
+						ReloadConfig: true,
 					}
 					_, rpcErr := rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 					if rpcErr != nil {
@@ -203,8 +204,9 @@ func ExecuteDrainStateMachine(
 					return true, nil
 				} else {
 					req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
-						Operation:  multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
-						StandbyIds: []*clustermetadatapb.ID{myPooler.Id},
+						Operation:    multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
+						StandbyIds:   []*clustermetadatapb.ID{myPooler.Id},
+						ReloadConfig: true,
 					}
 					_, rpcErr := rpcClient.UpdateSynchronousStandbyList(ctx, primary, req)
 					if rpcErr != nil {
