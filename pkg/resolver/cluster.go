@@ -6,6 +6,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
@@ -37,6 +38,31 @@ func (r *Resolver) PopulateClusterDefaults(
 	}
 	if cluster.Spec.Images.ImagePullPolicy == "" {
 		cluster.Spec.Images.ImagePullPolicy = DefaultImagePullPolicy
+	}
+
+	if cluster.Spec.TopologyPruning == nil {
+		cluster.Spec.TopologyPruning = &multigresv1alpha1.TopologyPruningConfig{
+			Enabled: ptr.To(true),
+		}
+	}
+
+	if cluster.Spec.PVCDeletionPolicy == nil {
+		cluster.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
+			WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+			WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+		}
+	}
+
+	if cluster.Spec.Backup == nil {
+		cluster.Spec.Backup = &multigresv1alpha1.BackupConfig{
+			Type: multigresv1alpha1.BackupTypeFilesystem,
+			Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+				Path: DefaultBackupPath,
+				Storage: multigresv1alpha1.StorageSpec{
+					Size: DefaultBackupStorageSize,
+				},
+			},
+		}
 	}
 
 	// 2. Smart Defaulting: System Catalog

@@ -57,6 +57,20 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  "",
 						ShardTemplate: "",
 					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(true),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+							Path:    DefaultBackupPath,
+							Storage: multigresv1alpha1.StorageSpec{Size: DefaultBackupStorageSize},
+						},
+					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
 							Name:    DefaultSystemDatabaseName,
@@ -100,6 +114,20 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CoreTemplate:  "",
 						CellTemplate:  "",
 						ShardTemplate: "",
+					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(true),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+							Path:    DefaultBackupPath,
+							Storage: multigresv1alpha1.StorageSpec{Size: DefaultBackupStorageSize},
+						},
 					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
@@ -152,6 +180,20 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CoreTemplate:  "",
 						CellTemplate:  "",
 						ShardTemplate: "",
+					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(true),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+							Path:    DefaultBackupPath,
+							Storage: multigresv1alpha1.StorageSpec{Size: DefaultBackupStorageSize},
+						},
 					},
 					Cells: []multigresv1alpha1.CellConfig{
 						{Name: "zone-a"},
@@ -218,6 +260,20 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  "",
 						ShardTemplate: "",
 					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(true),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+							Path:    DefaultBackupPath,
+							Storage: multigresv1alpha1.StorageSpec{Size: DefaultBackupStorageSize},
+						},
+					},
 					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-a"}},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
@@ -278,6 +334,20 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  "",
 						ShardTemplate: "",
 					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(true),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeFilesystem,
+						Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+							Path:    DefaultBackupPath,
+							Storage: multigresv1alpha1.StorageSpec{Size: DefaultBackupStorageSize},
+						},
+					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
 							Name: "custom-db",
@@ -312,6 +382,20 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CellTemplate:  "custom-cell",
 						ShardTemplate: "custom-shard",
 					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(false),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeS3,
+						S3: &multigresv1alpha1.S3BackupConfig{
+							Bucket: "my-bucket",
+							Region: "us-east-1",
+						},
+					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{
 							Name: "custom-db",
@@ -343,6 +427,20 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						CoreTemplate:  "custom-core",
 						CellTemplate:  "custom-cell",
 						ShardTemplate: "custom-shard",
+					},
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(false),
+					},
+					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
+						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
+						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
+					},
+					Backup: &multigresv1alpha1.BackupConfig{
+						Type: multigresv1alpha1.BackupTypeS3,
+						S3: &multigresv1alpha1.S3BackupConfig{
+							Bucket: "my-bucket",
+							Region: "us-east-1",
+						},
 					},
 					Databases: []multigresv1alpha1.DatabaseConfig{
 						{

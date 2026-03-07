@@ -207,13 +207,19 @@ func (r *ShardReconciler) getTopoStore(shard *multigresv1alpha1.Shard) (topoclie
 }
 
 // reconcilePoolerPrune lists active pods for the shard and prunes topology
-// entries for poolers that no longer have a running pod.
+// entries for poolers that no longer have a running pod. Pruning is skipped
+// when the parent cluster has disabled topology pruning (propagated via
+// the Cell's TopologyReconciliation.PrunePoolers field).
 func (r *ShardReconciler) reconcilePoolerPrune(
 	ctx context.Context,
 	store topoclient.Store,
 	shard *multigresv1alpha1.Shard,
 ) {
 	logger := log.FromContext(ctx)
+
+	if !isPoolerPruningEnabled(shard) {
+		return
+	}
 
 	lbls := map[string]string{
 		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
@@ -245,4 +251,14 @@ func (r *ShardReconciler) reconcilePoolerPrune(
 		r.Recorder.Eventf(shard, "Normal", "PoolersPruned",
 			"Pruned %d stale pooler(s) from topology", pruned)
 	}
+}
+
+// isPoolerPruningEnabled returns true when topology pruning is enabled for
+// the shard. The setting is inherited from MultigresCluster via the
+// TableGroup builder. Defaults to true when unset.
+func isPoolerPruningEnabled(shard *multigresv1alpha1.Shard) bool {
+	if shard.Spec.TopologyPruning == nil || shard.Spec.TopologyPruning.Enabled == nil {
+		return true
+	}
+	return *shard.Spec.TopologyPruning.Enabled
 }

@@ -157,6 +157,11 @@ type ShardSpec struct {
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
 
+	// TopologyPruning controls whether stale topology entries are pruned.
+	// Inherited from MultigresCluster.
+	// +optional
+	TopologyPruning *TopologyPruningConfig `json:"topologyPruning,omitempty"`
+
 	// CellTopologyLabels maps cell names to their topology nodeSelector labels.
 	// Each entry is a map like {"topology.kubernetes.io/zone": "us-east-1a"}.
 	// Propagated from the cluster's cell configs so the shard controller

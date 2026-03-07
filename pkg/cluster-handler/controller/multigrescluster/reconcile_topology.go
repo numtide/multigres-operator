@@ -94,7 +94,7 @@ func (r *MultigresClusterReconciler) reconcileTopology(
 	}
 
 	// Prune stale topology entries unless disabled.
-	if r.isPruningEnabled(cluster) {
+	if isPruningEnabled(cluster) {
 		specDBNames := make([]string, 0, len(cluster.Spec.Databases))
 		for _, db := range cluster.Spec.Databases {
 			specDBNames = append(specDBNames, string(db.Name))
@@ -136,9 +136,9 @@ func (r *MultigresClusterReconciler) openTopoStore(
 
 // isPruningEnabled returns true if topology pruning is enabled for the cluster.
 // Pruning is enabled by default (nil or empty config means enabled).
-func (r *MultigresClusterReconciler) isPruningEnabled(
-	cluster *multigresv1alpha1.MultigresCluster,
-) bool {
+// This is a package-level function so it can be shared by reconcileTopology
+// and BuildCell (which propagates the flag to the Cell's PrunePoolers field).
+func isPruningEnabled(cluster *multigresv1alpha1.MultigresCluster) bool {
 	if cluster.Spec.TopologyPruning == nil ||
 		cluster.Spec.TopologyPruning.Enabled == nil {
 		return true
