@@ -31,6 +31,18 @@ func resolvePodRole(shard *multigresv1alpha1.Shard, podName string) string {
 	return ""
 }
 
+// clearDrainAnnotations removes all drain annotations from a pod via merge patch,
+// cancelling a drain that is no longer needed (e.g. scale-down reversed).
+func clearDrainAnnotations(ctx context.Context, k8sClient client.Client, pod *corev1.Pod) error {
+	patch := client.MergeFrom(pod.DeepCopy())
+	delete(pod.Annotations, metadata.AnnotationDrainState)
+	delete(pod.Annotations, metadata.AnnotationDrainRequestedAt)
+	if err := k8sClient.Patch(ctx, pod, patch); err != nil {
+		return fmt.Errorf("failed to clear drain annotations for pod %s: %w", pod.Name, err)
+	}
+	return nil
+}
+
 // initiateDrain sets the drain-requested annotation on a pod via merge patch,
 // starting the drain state machine: the reconciler removes the pod from the
 // sync standby list, unregisters it from etcd, then marks it ready-for-deletion.

@@ -4411,6 +4411,118 @@ func TestUpdatePoolsStatus_TerminatingPodExcluded(t *testing.T) {
 	}
 }
 
+func TestIsDrainStale(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard-stale",
+			Namespace: "default",
+			Labels: map[string]string{
+				metadata.LabelMultigresCluster: "test-cluster",
+			},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"main": {
+					Cells:           []multigresv1alpha1.CellName{"z1"},
+					ReplicasPerCell: ptr.To(int32(5)),
+				},
+			},
+		},
+	}
+
+	r := &ShardReconciler{Scheme: scheme}
+
+	// Build a pod with matching spec-hash for index 4
+	matchingPod := func(index int, drainState string) *corev1.Pod {
+		desired, err := BuildPoolPod(shard, "main", "z1", shard.Spec.Pools["main"], index, scheme)
+		if err != nil {
+			t.Fatalf("BuildPoolPod failed: %v", err)
+		}
+		hash := ComputeSpecHash(desired)
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      BuildPoolPodName(shard, "main", "z1", index),
+				Namespace: "default",
+				Labels:    buildPoolLabelsWithCell(shard, "main", "z1"),
+				Annotations: map[string]string{
+					metadata.AnnotationSpecHash:        hash,
+					metadata.AnnotationDrainState:      drainState,
+					metadata.AnnotationDrainRequestedAt: "2026-03-08T18:00:00Z",
+				},
+			},
+		}
+	}
+
+	t.Run("CancelsStaleScaleDownDrain", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		if !r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain to be stale (pod within replicas, spec matches)")
+		}
+	})
+
+	t.Run("DoesNotCancelDrainingState", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateDraining)
+		if r.isDrainStale(shard, pod, metadata.DrainStateDraining) {
+			t.Error("expected drain NOT to be stale in Draining state (standby removal already sent)")
+		}
+	})
+
+	t.Run("DoesNotCancelExtraPodDrain", func(t *testing.T) {
+		// Reduce replicas so pod-4 (index 4) is extra
+		smallShard := shard.DeepCopy()
+		smallShard.Spec.Pools["main"] = multigresv1alpha1.PoolSpec{
+			Cells:           []multigresv1alpha1.CellName{"z1"},
+			ReplicasPerCell: ptr.To(int32(4)),
+		}
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		if r.isDrainStale(smallShard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (pod is extra)")
+		}
+	})
+
+	t.Run("DoesNotCancelAcknowledgedDrain", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateAcknowledged)
+		if r.isDrainStale(shard, pod, metadata.DrainStateAcknowledged) {
+			t.Error("expected drain NOT to be stale (past point of no return)")
+		}
+	})
+
+	t.Run("DoesNotCancelDrainedPodDrain", func(t *testing.T) {
+		shardWithDrained := shard.DeepCopy()
+		pod := matchingPod(0, metadata.DrainStateRequested)
+		shardWithDrained.Status.PodRoles = map[string]string{
+			pod.Name: "DRAINED",
+		}
+		if r.isDrainStale(shardWithDrained, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (pod role is DRAINED)")
+		}
+	})
+
+	t.Run("DoesNotCancelDrainOnDeletingPod", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		now := metav1.Now()
+		pod.DeletionTimestamp = &now
+		if r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (pod is being deleted)")
+		}
+	})
+
+	t.Run("DoesNotCancelWhenSpecDrifted", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		pod.Annotations[metadata.AnnotationSpecHash] = "wrong-hash"
+		if r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (spec-hash mismatch)")
+		}
+	})
+}
+
 func TestUpdatePoolsStatus_DrainAnnotationExcludedFromReady(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)

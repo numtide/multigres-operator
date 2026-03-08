@@ -182,20 +182,86 @@ func (r *ShardReconciler) reconcileDrainState(
 	requeue := false
 	for i := range podList.Items {
 		pod := &podList.Items[i]
-		if pod.Annotations[metadata.AnnotationDrainState] != "" {
-			shouldRequeue, derr := drain.ExecuteDrainStateMachine(
-				ctx, r.Client, r.RPCClient, r.Recorder, store, shard, pod,
-			)
-			if derr != nil {
-				logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
+		state := pod.Annotations[metadata.AnnotationDrainState]
+		if state == "" {
+			continue
+		}
+
+		if r.isDrainStale(shard, pod, state) {
+			logger.Info("Cancelling stale drain: pod is within desired replicas and spec matches",
+				"pod", pod.Name, "state", state)
+			if err := clearDrainAnnotations(ctx, r.Client, pod); err != nil {
+				logger.Error(err, "Failed to clear drain annotations", "pod", pod.Name)
 			}
-			if shouldRequeue {
-				requeue = true
-			}
+			r.Recorder.Eventf(shard, "Normal", "DrainCancelled",
+				"Cancelled stale drain on pod %s (now within desired state)", pod.Name)
+			continue
+		}
+
+		shouldRequeue, derr := drain.ExecuteDrainStateMachine(
+			ctx, r.Client, r.RPCClient, r.Recorder, store, shard, pod,
+		)
+		if derr != nil {
+			logger.Error(derr, "Failed to execute drain state machine", "pod", pod.Name)
+		}
+		if shouldRequeue {
+			requeue = true
 		}
 	}
 
 	return requeue, nil
+}
+
+// isDrainStale returns true when a pod's drain is no longer needed because the
+// desired state has changed (e.g. scale-down reversed or rolling-update reverted).
+// Only early drain states (Requested/Draining) are cancellable — once Acknowledged,
+// etcd unregistration may have started and the drain must complete.
+func (r *ShardReconciler) isDrainStale(
+	shard *multigresv1alpha1.Shard,
+	pod *corev1.Pod,
+	state string,
+) bool {
+	// Only cancel Requested — nothing has happened yet at this point.
+	// Draining means the standby removal RPC already succeeded and the pod
+	// has been removed from the sync standby list; cancelling there would
+	// leave an orphaned replica unless multiorch re-registers it.
+	if state != metadata.DrainStateRequested {
+		return false
+	}
+
+	// Pods being deleted need the drain to cleanly unregister from etcd.
+	if !pod.DeletionTimestamp.IsZero() {
+		return false
+	}
+
+	// DRAINED pods need replacement regardless of replica count or spec match.
+	if resolvePodRole(shard, pod.Name) == "DRAINED" {
+		return false
+	}
+
+	poolName := pod.Labels[metadata.LabelMultigresPool]
+	cellName := pod.Labels[metadata.LabelMultigresCell]
+	if poolName == "" || cellName == "" {
+		return false
+	}
+
+	poolSpec, ok := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]
+	if !ok {
+		return false
+	}
+
+	replicas := DefaultPoolReplicas
+	if poolSpec.ReplicasPerCell != nil {
+		replicas = *poolSpec.ReplicasPerCell
+	}
+
+	index := resolvePodIndex(pod.Name)
+	if index < 0 || index >= int(replicas) {
+		return false // Pod is still an extra pod for scale-down
+	}
+
+	// Pod is within replica range — check if its spec still matches desired.
+	return !podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, index, r.Scheme)
 }
 
 // getTopoStore returns a topology store, using the custom factory if set, otherwise the default.
