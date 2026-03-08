@@ -92,11 +92,20 @@ func (o *Observer) checkDataPlaneLogs(ctx context.Context, sinceSeconds int64) {
 		comp := pod.Labels[common.LabelAppComponent]
 		switch comp {
 		case common.ComponentPool:
+			if o.isPodInGracePeriod(pod.Name) {
+				continue
+			}
 			o.scanPodLogs(ctx, pod, "multipooler", sinceSeconds, dataPlaneErrorPatterns)
 			o.scanPodLogs(ctx, pod, "postgres", sinceSeconds, dataPlaneErrorPatterns)
 		case common.ComponentMultiGateway:
+			if o.hasAnyPodInGracePeriod() {
+				continue
+			}
 			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns)
 		case common.ComponentMultiOrch:
+			if o.hasAnyPodInGracePeriod() {
+				continue
+			}
 			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns)
 		case common.ComponentGlobalTopo:
 			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns)
@@ -177,7 +186,7 @@ func (o *Observer) scanPodLogs(ctx context.Context, pod *corev1.Pod, container s
 			msg = fmt.Sprintf("Pattern %q matched 1 time in %s/%s", pattern, pod.Name, container)
 		}
 		o.reporter.Report(report.Finding{
-			Severity:  m.severity,
+			Severity:  o.effectiveSeverity(pod.Name, m.severity),
 			Check:     m.check,
 			Component: component,
 			Message:   msg,

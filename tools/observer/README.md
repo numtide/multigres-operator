@@ -1,6 +1,6 @@
 # Multigres Observer
 
-A read-only health validation tool for Multigres clusters. It runs inside the cluster alongside the operator and provides continuous monitoring across 10 check categories. Intended for development and testing — not a production monitoring solution.
+A read-only health validation tool for Multigres clusters. It runs inside the cluster alongside the operator and provides continuous monitoring across 10 check categories. The observer's core purpose is catching issues that are **invisible to both `kubectl` and the operator itself** — silent data-plane failures, replication anomalies, and state mismatches that no single component can detect on its own.
 
 ## Use Cases
 
@@ -13,9 +13,14 @@ The observer exposes a structured `/api/status` endpoint designed for both human
 
 ## Why This Exists
 
-Multigres has many moving parts (gateway, orchestrator, pooler, postgres, etcd) and getting a full picture of cluster health requires checking each component individually. The observer consolidates all of these checks into a single loop and cross-references the results — for example, detecting when Kubernetes thinks a pod is Ready but the observer's own probes show it is broken.
+Multigres has many moving parts (gateway, orchestrator, pooler, postgres, etcd) and getting a full picture of cluster health requires checking each component individually. The observer consolidates all of these checks into a single loop and cross-references the results — for example, detecting when Kubernetes thinks a pod is Ready but the observer's own probes show it is broken, or when the operator reports Healthy but replication is actually degraded.
 
-Some of these checks compensate for gaps in upstream health endpoints (e.g., multipooler returns `/ready=200` while its gRPC server hangs). Those checks may become less necessary as upstream endpoints improve. But the observer's core value is cross-cutting: correlating failures across components, independently verifying what each component self-reports, and providing a single diagnostic snapshot of the entire cluster.
+Neither `kubectl` nor the operator can reliably surface these issues:
+
+- **`kubectl`** only shows pod-level status (Running, Ready, CrashLoopBackOff) — it cannot probe SQL replication, detect async standbys, or verify that gRPC health endpoints are actually serving.
+- **The operator** focuses on driving the desired state and reporting its own phase. It trusts component health endpoints at face value. When those endpoints lie (e.g., multipooler returning `/ready=200` while its gRPC server hangs), the operator cannot detect the failure.
+
+The observer independently verifies what each component self-reports. It is the tool of last resort for finding bugs that hide in the gaps between `kubectl`, the operator, and upstream multigres.
 
 ## Quick Start
 
@@ -110,6 +115,20 @@ The observer catches issues across the full stack:
 - Probe latency exceeding thresholds
 - etcd topology drift vs CRD state
 - Kubernetes Warning events (FailedScheduling, OOM, Unhealthy)
+
+## Startup Grace Period
+
+Newly created pool pods go through a brief startup phase where they are not yet serving (Postgres is starting, WAL receiver hasn't connected, standby is initially async). The observer suppresses transient noise from these pods to avoid cluttering findings with expected startup behavior:
+
+| Pod age | Ready? | Behavior |
+|---------|--------|----------|
+| < 60s | any | **Suppressed** — all findings for this pod are skipped |
+| ≥ 60s | no | **Downgraded** — `error`/`fatal` findings become `warn` |
+| ≥ 60s | yes | **Full severity** — this is the high-value signal |
+
+The grace period only applies to pool pods (`component=shard-pool`). Operator, multiorch, multigateway, and toposerver findings are always reported at full severity.
+
+When a pod that Kubernetes marks as Ready is showing errors, that is exactly the kind of issue the observer exists to catch — what `kubectl` and the operator cannot see.
 
 ## Documentation
 

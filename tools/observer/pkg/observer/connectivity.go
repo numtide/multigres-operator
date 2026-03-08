@@ -120,6 +120,9 @@ func (o *Observer) probePoolPodHealth(ctx context.Context) {
 		if pod.Status.PodIP == "" {
 			continue
 		}
+		if o.isPodInGracePeriod(pod.Name) {
+			continue
+		}
 		o.probeHTTP(ctx, pod.Status.PodIP, common.PortMultiPoolerHTTP, "/live", "multipooler-health", pod.Name)
 		o.probeHTTP(ctx, pod.Status.PodIP, common.PortMultiPoolerHTTP, "/ready", "multipooler-readiness", pod.Name)
 		o.probePoolPodGRPC(ctx, pod)
@@ -480,6 +483,9 @@ func (o *Observer) crossCheckReadiness(ctx context.Context) {
 		component, _ := pd["component"].(string)
 
 		if !ready {
+			continue
+		}
+		if o.isPodInGracePeriod(name) {
 			continue
 		}
 

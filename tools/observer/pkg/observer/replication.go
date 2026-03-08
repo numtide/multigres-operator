@@ -92,6 +92,9 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 	for i := range pods.Items {
 		p := &pods.Items[i]
 		if p.Status.PodIP != "" && p.Status.Phase == corev1.PodRunning && p.DeletionTimestamp == nil {
+			if o.isPodInGracePeriod(p.Name) {
+				continue
+			}
 			podIPs[p.Name] = p.Status.PodIP
 		}
 	}
@@ -181,7 +184,7 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 
 	if len(standbys) == 0 && expectedReplicas > 0 {
 		o.reporter.Report(report.Finding{
-			Severity:  report.SeverityError,
+			Severity:  o.effectiveSeverity(podName, report.SeverityError),
 			Check:     "replication",
 			Component: comp,
 			Message:   fmt.Sprintf("Primary %s has 0 replication connections but %d replicas expected", podName, expectedReplicas),
@@ -263,7 +266,7 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp,
 		})
 	} else if walReceiverCount == 0 {
 		o.reporter.Report(report.Finding{
-			Severity:  report.SeverityError,
+			Severity:  o.effectiveSeverity(podName, report.SeverityError),
 			Check:     "replication",
 			Component: comp,
 			Message:   fmt.Sprintf("Replica %s has no WAL receiver running (not connected to primary)", podName),
