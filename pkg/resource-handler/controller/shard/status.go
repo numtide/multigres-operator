@@ -16,6 +16,7 @@ import (
 	"github.com/numtide/multigres-operator/pkg/monitoring"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/name"
+	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
 // updateStatus updates the Shard status based on observed state.
@@ -27,13 +28,14 @@ func (r *ShardReconciler) updateStatus(
 	cellsSet := make(map[multigresv1alpha1.CellName]bool)
 
 	// Update pools status
-	totalPods, readyPods, err := r.updatePoolsStatus(ctx, shard, cellsSet)
+	totalPods, readyPods, poolDegraded, err := r.updatePoolsStatus(ctx, shard, cellsSet)
 	if err != nil {
 		return err
 	}
 
 	// Update MultiOrch status
-	if err := r.updateMultiOrchStatus(ctx, shard, cellsSet); err != nil {
+	orchDegraded, err := r.updateMultiOrchStatus(ctx, shard, cellsSet)
+	if err != nil {
 		return err
 	}
 
@@ -44,11 +46,20 @@ func (r *ShardReconciler) updateStatus(
 	shard.Status.PoolsReady = (totalPods > 0 && totalPods == readyPods)
 	shard.Status.ReadyReplicas = readyPods
 
-	// Update Phase
-	if shard.Status.PoolsReady && shard.Status.OrchReady {
+	// Update Phase — Degraded takes priority over Healthy so crash-looping
+	// pods are always surfaced even when the old replica is still serving.
+	switch {
+	case poolDegraded || orchDegraded:
+		shard.Status.Phase = multigresv1alpha1.PhaseDegraded
+		if poolDegraded {
+			shard.Status.Message = "One or more pool pods are crash-looping"
+		} else {
+			shard.Status.Message = "One or more MultiOrch pods are crash-looping"
+		}
+	case shard.Status.PoolsReady && shard.Status.OrchReady:
 		shard.Status.Phase = multigresv1alpha1.PhaseHealthy
 		shard.Status.Message = "Ready"
-	} else {
+	default:
 		shard.Status.Phase = multigresv1alpha1.PhaseProgressing
 		shard.Status.Message = fmt.Sprintf(
 			"PoolsReady: %v, OrchReady: %v",
@@ -104,13 +115,15 @@ func (r *ShardReconciler) updateStatus(
 }
 
 // updatePoolsStatus aggregates status from all pool pods.
-// Returns total desired pods, ready pods, and tracks cells in the cellsSet.
+// Returns total desired pods, ready pods, whether any pod is degraded (crash-looping),
+// and tracks cells in the cellsSet.
 func (r *ShardReconciler) updatePoolsStatus(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	cellsSet map[multigresv1alpha1.CellName]bool,
-) (int32, int32, error) {
+) (int32, int32, bool, error) {
 	var totalPods, readyPods int32
+	var poolDegraded bool
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 
 	for poolName, poolSpec := range shard.Spec.Pools {
@@ -131,7 +144,7 @@ func (r *ShardReconciler) updatePoolsStatus(
 				client.InNamespace(shard.Namespace),
 				client.MatchingLabels(selector),
 			); err != nil {
-				return 0, 0, fmt.Errorf("failed to list pods for status: %w", err)
+				return 0, 0, false, fmt.Errorf("failed to list pods for status: %w", err)
 			}
 
 			var cellReady int32
@@ -143,16 +156,24 @@ func (r *ShardReconciler) updatePoolsStatus(
 					continue
 				}
 
+				// Draining pods are transitioning connections away — not considered ready.
+				// They still count toward the desired total (spec-driven), so readyPods < totalPods
+				// naturally sets PoolsReady=false → Phase=Progressing while drain is in flight.
+				if pod.Annotations[metadata.AnnotationDrainState] != "" {
+					continue
+				}
+
+				// Detect crash-looping pods so the phase can escalate to Degraded.
+				if status.IsCrashLooping(pod) {
+					poolDegraded = true
+				}
+
 				// Check if pod is ready
-				isReady := false
 				for _, cond := range pod.Status.Conditions {
 					if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-						isReady = true
+						cellReady++
 						break
 					}
-				}
-				if isReady {
-					cellReady++
 				}
 			}
 
@@ -185,20 +206,21 @@ func (r *ShardReconciler) updatePoolsStatus(
 		)
 	}
 
-	return totalPods, readyPods, nil
+	return totalPods, readyPods, poolDegraded, nil
 }
 
 // updateMultiOrchStatus checks MultiOrch Deployments and sets OrchReady status.
+// Returns whether any MultiOrch pod is crash-looping (degraded).
 // Also tracks cells in the cellsSet.
 func (r *ShardReconciler) updateMultiOrchStatus(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 	cellsSet map[multigresv1alpha1.CellName]bool,
-) error {
-	multiOrchCells, err := getMultiOrchCells(shard)
-	if err != nil {
+) (orchDegraded bool, err error) {
+	multiOrchCells, cellsErr := getMultiOrchCells(shard)
+	if cellsErr != nil {
 		shard.Status.OrchReady = false
-		return nil
+		return false, nil
 	}
 
 	orchReady := true
@@ -209,17 +231,16 @@ func (r *ShardReconciler) updateMultiOrchStatus(
 		// Check MultiOrch Deployment status (deployments use long names)
 		deployName := buildMultiOrchNameWithCell(shard, cellName, name.DefaultConstraints)
 		deploy := &appsv1.Deployment{}
-		err := r.Get(
+		if getErr := r.Get(
 			ctx,
 			client.ObjectKey{Namespace: shard.Namespace, Name: deployName},
 			deploy,
-		)
-		if err != nil {
-			if errors.IsNotFound(err) {
+		); getErr != nil {
+			if errors.IsNotFound(getErr) {
 				orchReady = false
 				break
 			}
-			return fmt.Errorf("failed to get MultiOrch Deployment for status: %w", err)
+			return false, fmt.Errorf("failed to get MultiOrch Deployment for status: %w", getErr)
 		}
 
 		// Check if deployment is ready
@@ -227,12 +248,26 @@ func (r *ShardReconciler) updateMultiOrchStatus(
 			deploy.Status.ObservedGeneration != deploy.Generation ||
 			deploy.Status.ReadyReplicas != *deploy.Spec.Replicas {
 			orchReady = false
-			break
+		}
+
+		// Check if any MultiOrch pods are crash-looping
+		orchSelector := metadata.GetSelectorLabels(
+			buildMultiOrchLabelsWithCell(shard, cellName),
+		)
+		podList := &corev1.PodList{}
+		if listErr := r.List(ctx, podList,
+			client.InNamespace(shard.Namespace),
+			client.MatchingLabels(orchSelector),
+		); listErr != nil {
+			return false, fmt.Errorf("failed to list MultiOrch pods for status: %w", listErr)
+		}
+		if status.AnyCrashLooping(podList.Items) {
+			orchDegraded = true
 		}
 	}
 
 	shard.Status.OrchReady = orchReady
-	return nil
+	return orchDegraded, nil
 }
 
 // cellSetToSlice converts a cell set (map) to a slice.

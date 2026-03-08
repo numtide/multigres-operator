@@ -21,7 +21,15 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/status"
+)
+
+const (
+	// statusRecheckDelay is the interval for periodic re-reconciliation when the
+	// Cell is not Healthy. This allows detection of pod-level issues like
+	// CrashLoopBackOff that don't trigger Deployment watch events.
+	statusRecheckDelay = 30 * time.Second
 )
 
 // CellReconciler reconciles a Cell object.
@@ -117,6 +125,10 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(cell, "Normal", "Synced", "Successfully reconciled Cell")
+
+	if cell.Status.Phase != multigresv1alpha1.PhaseHealthy {
+		return ctrl.Result{RequeueAfter: statusRecheckDelay}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -217,20 +229,30 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 		mgDeploy.Status.ReadyReplicas,
 	)
 
-	// Update Phase
-	cell.Status.Phase = status.ComputePhase(mgDeploy.Status.ReadyReplicas, mgDeploy.Status.Replicas)
-	if mgDeploy.Status.ObservedGeneration != mgDeploy.Generation {
-		cell.Status.Phase = multigresv1alpha1.PhaseProgressing
-		cell.Status.Message = "Gateway Deployment is progressing"
-	} else if cell.Status.Phase != multigresv1alpha1.PhaseHealthy {
-		cell.Status.Message = fmt.Sprintf(
-			"Gateway: %d/%d replicas ready",
-			mgDeploy.Status.ReadyReplicas,
-			mgDeploy.Status.Replicas,
-		)
-	} else {
-		cell.Status.Message = "Ready"
+	// List gateway pods for crash-loop detection
+	mgLabels := metadata.BuildStandardLabels(
+		cell.Labels[metadata.LabelMultigresCluster], MultiGatewayComponentName,
+	)
+	metadata.AddCellLabel(mgLabels, cell.Spec.Name)
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList,
+		client.InNamespace(cell.Namespace),
+		client.MatchingLabels(metadata.GetSelectorLabels(mgLabels)),
+	); err != nil {
+		return fmt.Errorf("failed to list gateway pods for status: %w", err)
 	}
+
+	// Update Phase
+	result := status.ComputeWorkloadPhase(status.WorkloadPhaseInput{
+		Ready:              mgDeploy.Status.ReadyReplicas,
+		Total:              mgDeploy.Status.Replicas,
+		GenerationCurrent:  mgDeploy.Generation,
+		GenerationObserved: mgDeploy.Status.ObservedGeneration,
+		Pods:               podList.Items,
+		ComponentName:      "Gateway",
+	})
+	cell.Status.Phase = result.Phase
+	cell.Status.Message = result.Message
 
 	cell.Status.ObservedGeneration = cell.Generation
 

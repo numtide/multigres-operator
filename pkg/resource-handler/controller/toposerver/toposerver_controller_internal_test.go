@@ -19,6 +19,7 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 // TestReconcileStatefulSet_InvalidScheme tests the error path when BuildStatefulSet fails.
@@ -266,4 +267,69 @@ func TestSetupWithManager(t *testing.T) {
 			t.Errorf("SetupWithManager() with opts error = %v", err)
 		}
 	})
+}
+
+func TestUpdateStatus_DegradedOnCrashLoop(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	toposerver := &multigresv1alpha1.TopoServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-topo",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+	}
+
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       toposerver.Name,
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec:   appsv1.StatefulSetSpec{Replicas: ptr.To(int32(1))},
+		Status: appsv1.StatefulSetStatus{Replicas: 1, ReadyReplicas: 0, ObservedGeneration: 1},
+	}
+
+	tsLabels := metadata.BuildStandardLabels("test-cluster", ComponentName)
+	tsLabels = metadata.MergeLabels(tsLabels, toposerver.GetObjectMeta().GetLabels())
+
+	crashPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      toposerver.Name + "-0",
+			Namespace: "default",
+			Labels:    metadata.GetSelectorLabels(tsLabels),
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "etcd",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+					},
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(toposerver, sts, crashPod).
+		WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
+		Build()
+
+	reconciler := &TopoServerReconciler{
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	if err := reconciler.updateStatus(context.Background(), toposerver); err != nil {
+		t.Fatalf("updateStatus() unexpected error: %v", err)
+	}
+	if toposerver.Status.Phase != multigresv1alpha1.PhaseDegraded {
+		t.Errorf("expected PhaseDegraded, got %q", toposerver.Status.Phase)
+	}
 }

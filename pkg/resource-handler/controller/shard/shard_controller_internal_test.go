@@ -4193,7 +4193,7 @@ func TestUpdatePoolsStatus_PoolEmptyEvent(t *testing.T) {
 	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: recorder}
 
 	cellsSet := make(map[multigresv1alpha1.CellName]bool)
-	totalPods, readyPods, err := r.updatePoolsStatus(t.Context(), shard, cellsSet)
+	totalPods, readyPods, _, err := r.updatePoolsStatus(t.Context(), shard, cellsSet)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -4397,7 +4397,7 @@ func TestUpdatePoolsStatus_TerminatingPodExcluded(t *testing.T) {
 	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: recorder}
 
 	cellsSet := make(map[multigresv1alpha1.CellName]bool)
-	totalPods, readyPods, err := r.updatePoolsStatus(t.Context(), shard, cellsSet)
+	totalPods, readyPods, _, err := r.updatePoolsStatus(t.Context(), shard, cellsSet)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -4408,6 +4408,456 @@ func TestUpdatePoolsStatus_TerminatingPodExcluded(t *testing.T) {
 	}
 	if totalPods != 1 {
 		t.Errorf("expected 1 total pod (desired replicas), got %d", totalPods)
+	}
+}
+
+func TestIsDrainStale(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard-stale",
+			Namespace: "default",
+			Labels: map[string]string{
+				metadata.LabelMultigresCluster: "test-cluster",
+			},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"main": {
+					Cells:           []multigresv1alpha1.CellName{"z1"},
+					ReplicasPerCell: ptr.To(int32(5)),
+				},
+			},
+		},
+	}
+
+	r := &ShardReconciler{Scheme: scheme}
+
+	// Build a pod with matching spec-hash for index 4
+	matchingPod := func(index int, drainState string) *corev1.Pod {
+		desired, err := BuildPoolPod(shard, "main", "z1", shard.Spec.Pools["main"], index, scheme)
+		if err != nil {
+			t.Fatalf("BuildPoolPod failed: %v", err)
+		}
+		hash := ComputeSpecHash(desired)
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      BuildPoolPodName(shard, "main", "z1", index),
+				Namespace: "default",
+				Labels:    buildPoolLabelsWithCell(shard, "main", "z1"),
+				Annotations: map[string]string{
+					metadata.AnnotationSpecHash:        hash,
+					metadata.AnnotationDrainState:      drainState,
+					metadata.AnnotationDrainRequestedAt: "2026-03-08T18:00:00Z",
+				},
+			},
+		}
+	}
+
+	t.Run("CancelsStaleScaleDownDrain", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		if !r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain to be stale (pod within replicas, spec matches)")
+		}
+	})
+
+	t.Run("DoesNotCancelDrainingState", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateDraining)
+		if r.isDrainStale(shard, pod, metadata.DrainStateDraining) {
+			t.Error("expected drain NOT to be stale in Draining state (standby removal already sent)")
+		}
+	})
+
+	t.Run("DoesNotCancelExtraPodDrain", func(t *testing.T) {
+		// Reduce replicas so pod-4 (index 4) is extra
+		smallShard := shard.DeepCopy()
+		smallShard.Spec.Pools["main"] = multigresv1alpha1.PoolSpec{
+			Cells:           []multigresv1alpha1.CellName{"z1"},
+			ReplicasPerCell: ptr.To(int32(4)),
+		}
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		if r.isDrainStale(smallShard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (pod is extra)")
+		}
+	})
+
+	t.Run("DoesNotCancelAcknowledgedDrain", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateAcknowledged)
+		if r.isDrainStale(shard, pod, metadata.DrainStateAcknowledged) {
+			t.Error("expected drain NOT to be stale (past point of no return)")
+		}
+	})
+
+	t.Run("DoesNotCancelDrainedPodDrain", func(t *testing.T) {
+		shardWithDrained := shard.DeepCopy()
+		pod := matchingPod(0, metadata.DrainStateRequested)
+		shardWithDrained.Status.PodRoles = map[string]string{
+			pod.Name: "DRAINED",
+		}
+		if r.isDrainStale(shardWithDrained, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (pod role is DRAINED)")
+		}
+	})
+
+	t.Run("DoesNotCancelDrainOnDeletingPod", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		now := metav1.Now()
+		pod.DeletionTimestamp = &now
+		if r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (pod is being deleted)")
+		}
+	})
+
+	t.Run("DoesNotCancelWhenSpecDrifted", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		pod.Annotations[metadata.AnnotationSpecHash] = "wrong-hash"
+		if r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (spec-hash mismatch)")
+		}
+	})
+}
+
+func TestUpdatePoolsStatus_DrainAnnotationExcludedFromReady(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard-drain",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {
+					Cells:           []multigresv1alpha1.CellName{"zone1"},
+					ReplicasPerCell: ptr.To(int32(1)),
+				},
+			},
+			MultiOrch: multigresv1alpha1.MultiOrchSpec{
+				Cells: []multigresv1alpha1.CellName{"zone1"},
+			},
+		},
+	}
+
+	labels := buildPoolLabelsWithCell(shard, "primary", "zone1")
+	podName := BuildPoolPodName(shard, "primary", "zone1", 0)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: "default",
+			Labels:    labels,
+			Annotations: map[string]string{
+				metadata.AnnotationDrainState: "DrainStateDraining",
+			},
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod).Build()
+	recorder := record.NewFakeRecorder(10)
+	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: recorder}
+
+	cellsSet := make(map[multigresv1alpha1.CellName]bool)
+	totalPods, readyPods, _, err := r.updatePoolsStatus(t.Context(), shard, cellsSet)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if readyPods != 0 {
+		t.Errorf("expected 0 ready pods (draining pod excluded), got %d", readyPods)
+	}
+	if totalPods != 1 {
+		t.Errorf("expected 1 total pod (desired replicas), got %d", totalPods)
+	}
+}
+
+func TestUpdatePoolsStatus_DegradedOnCrashLoop(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard-crash",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {
+					Cells:           []multigresv1alpha1.CellName{"zone1"},
+					ReplicasPerCell: ptr.To(int32(1)),
+				},
+			},
+			MultiOrch: multigresv1alpha1.MultiOrchSpec{
+				Cells: []multigresv1alpha1.CellName{"zone1"},
+			},
+		},
+	}
+
+	labels := buildPoolLabelsWithCell(shard, "primary", "zone1")
+	podName := BuildPoolPodName(shard, "primary", "zone1", 0)
+
+	t.Run("CrashLoopBackOff", func(t *testing.T) {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: "default",
+				Labels:    labels,
+			},
+			Status: corev1.PodStatus{
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name: "postgres",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason: "CrashLoopBackOff",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		moDeployName := buildMultiOrchNameWithCell(shard, "zone1", name.DefaultConstraints)
+		moDeploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       moDeployName,
+				Namespace:  "default",
+				Generation: 1,
+			},
+			Spec:   appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
+			Status: appsv1.DeploymentStatus{ReadyReplicas: 1, ObservedGeneration: 1},
+		}
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod, moDeploy).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.updateStatus(t.Context(), shard); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if shard.Status.Phase != multigresv1alpha1.PhaseDegraded {
+			t.Errorf("expected PhaseDegraded for CrashLoopBackOff pod, got %q", shard.Status.Phase)
+		}
+	})
+
+	t.Run("OOMKilled", func(t *testing.T) {
+		s := shard.DeepCopy()
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName + "-oom",
+				Namespace: "default",
+				Labels:    labels,
+			},
+			Status: corev1.PodStatus{
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name: "postgres",
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{
+								Reason: "OOMKilled",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		moDeployName := buildMultiOrchNameWithCell(shard, "zone1", name.DefaultConstraints)
+		moDeploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       moDeployName,
+				Namespace:  "default",
+				Generation: 1,
+			},
+			Spec:   appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
+			Status: appsv1.DeploymentStatus{ReadyReplicas: 1, ObservedGeneration: 1},
+		}
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(s, pod, moDeploy).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.updateStatus(t.Context(), s); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.Status.Phase != multigresv1alpha1.PhaseDegraded {
+			t.Errorf("expected PhaseDegraded for OOMKilled pod, got %q", s.Status.Phase)
+		}
+	})
+
+	t.Run("RunningPodNotDegraded", func(t *testing.T) {
+		s := shard.DeepCopy()
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName + "-running",
+				Namespace: "default",
+				Labels:    labels,
+			},
+			Status: corev1.PodStatus{
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name: "postgres",
+						// RestartCount is non-zero but pod is currently Running — not degraded
+						RestartCount: 3,
+						State: corev1.ContainerState{
+							Running: &corev1.ContainerStateRunning{},
+						},
+					},
+				},
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionFalse},
+				},
+			},
+		}
+
+		moDeployName := buildMultiOrchNameWithCell(shard, "zone1", name.DefaultConstraints)
+		moDeploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       moDeployName,
+				Namespace:  "default",
+				Generation: 1,
+			},
+			Spec:   appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
+			Status: appsv1.DeploymentStatus{ReadyReplicas: 1, ObservedGeneration: 1},
+		}
+
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(s, pod, moDeploy).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.updateStatus(t.Context(), s); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.Status.Phase == multigresv1alpha1.PhaseDegraded {
+			t.Errorf("expected Progressing (not Degraded) for running pod with prior restarts, got %q", s.Status.Phase)
+		}
+	})
+}
+
+func TestUpdateStatus_DegradedOnMultiOrchCrashLoop(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard-orch-crash",
+			Namespace: "default",
+			Labels:    map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"primary": {
+					Cells:           []multigresv1alpha1.CellName{"zone1"},
+					ReplicasPerCell: ptr.To(int32(1)),
+				},
+			},
+			MultiOrch: multigresv1alpha1.MultiOrchSpec{
+				Cells: []multigresv1alpha1.CellName{"zone1"},
+			},
+		},
+	}
+
+	// Pool pod is healthy
+	poolLabels := buildPoolLabelsWithCell(shard, "primary", "zone1")
+	poolPodName := BuildPoolPodName(shard, "primary", "zone1", 0)
+	poolPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      poolPodName,
+			Namespace: "default",
+			Labels:    poolLabels,
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			ContainerStatuses: []corev1.ContainerStatus{
+				{State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+
+	// MultiOrch deployment exists but pod is crash-looping
+	moDeployName := buildMultiOrchNameWithCell(shard, "zone1", name.DefaultConstraints)
+	moDeploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       moDeployName,
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec:   appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
+		Status: appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 0, ObservedGeneration: 1},
+	}
+
+	moLabels := buildMultiOrchLabelsWithCell(shard, "zone1")
+	moPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      moDeployName + "-abc",
+			Namespace: "default",
+			Labels:    metadata.GetSelectorLabels(moLabels),
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "multiorch",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+					},
+				},
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shard, poolPod, moDeploy, moPod).
+		WithStatusSubresource(&multigresv1alpha1.Shard{}).
+		Build()
+	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+	if err := r.updateStatus(t.Context(), shard); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if shard.Status.Phase != multigresv1alpha1.PhaseDegraded {
+		t.Errorf("expected PhaseDegraded for crash-looping MultiOrch, got %q", shard.Status.Phase)
+	}
+	if shard.Status.Message != "One or more MultiOrch pods are crash-looping" {
+		t.Errorf("expected MultiOrch-specific degraded message, got %q", shard.Status.Message)
 	}
 }
 
