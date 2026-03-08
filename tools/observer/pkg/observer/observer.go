@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/numtide/multigres-operator/tools/observer/pkg/common"
 	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
 )
 
@@ -18,6 +19,12 @@ var allCheckNames = []string{
 	"pod-health", "resource-validation", "crd-status", "drain-state",
 	"connectivity", "operator-logs", "dataplane-logs", "events",
 	"topology", "replication",
+}
+
+// podInfo tracks per-pod metadata used by the startup grace period logic.
+type podInfo struct {
+	createdAt time.Time
+	ready     bool
 }
 
 // Observer runs continuous health validation checks against a multigres cluster.
@@ -57,6 +64,10 @@ type Observer struct {
 
 	// Event tracking: last event resource version seen.
 	lastEventResourceVersion string
+
+	// Pool pod startup info: populated each cycle by checkPodHealth.
+	// Used by downstream checks to suppress transient findings from newly created pods.
+	podStartup map[string]podInfo
 
 	// Known objects: populated each cycle by earlier checks for event filtering.
 	// Maps pod name → true for all currently-existing multigres-managed pods.
@@ -107,6 +118,7 @@ func New(cfg Config) *Observer {
 		prevDrainState:         make(map[string]string),
 		generationDivergeSince: make(map[string]time.Time),
 		primaryViolationSince:  make(map[string]time.Time),
+		podStartup:             make(map[string]podInfo),
 		knownPodNames:          make(map[string]bool),
 		seenEventCounts:        make(map[types.UID]int32),
 	}
@@ -120,6 +132,48 @@ func (o *Observer) listOpts(extraOpts ...client.ListOption) []client.ListOption 
 		opts = append(opts, client.InNamespace(o.namespace))
 	}
 	return append(opts, extraOpts...)
+}
+
+// isPodInGracePeriod returns true if a pool pod was created less than
+// PodStartupGracePeriod ago. Findings for such pods are suppressed entirely
+// because startup errors (connection refused, no WAL receiver, async standby)
+// are expected and resolve once the pod finishes joining.
+func (o *Observer) isPodInGracePeriod(podName string) bool {
+	info, ok := o.podStartup[podName]
+	if !ok {
+		return false
+	}
+	return time.Since(info.createdAt) < common.PodStartupGracePeriod
+}
+
+// effectiveSeverity downgrades error/fatal findings to warn for pool pods that
+// are past the grace period but still not Ready. Pods that Kubernetes marks as
+// Ready are reported at full severity — those are the high-value findings that
+// reveal issues invisible to kubectl and the operator.
+func (o *Observer) effectiveSeverity(podName string, sev report.Severity) report.Severity {
+	info, ok := o.podStartup[podName]
+	if !ok {
+		return sev
+	}
+	if info.ready {
+		return sev
+	}
+	if sev == report.SeverityError || sev == report.SeverityFatal {
+		return report.SeverityWarn
+	}
+	return sev
+}
+
+// hasAnyPodInGracePeriod returns true if any pool pod is younger than the
+// startup grace period. Used to downgrade findings from non-pool components
+// (e.g., multiorch logging "connection refused" because a pool pod is still starting).
+func (o *Observer) hasAnyPodInGracePeriod() bool {
+	for _, info := range o.podStartup {
+		if time.Since(info.createdAt) < common.PodStartupGracePeriod {
+			return true
+		}
+	}
+	return false
 }
 
 // Run starts the observer loop, running all checks every interval until ctx is cancelled.
@@ -161,6 +215,7 @@ func (o *Observer) runCycle(ctx context.Context) {
 
 	// Reset known objects — populated by checkPodHealth for event filtering.
 	clear(o.knownPodNames)
+	clear(o.podStartup)
 
 	track("pod-health", o.checkPodHealth)
 	track("resource-validation", o.checkResources)

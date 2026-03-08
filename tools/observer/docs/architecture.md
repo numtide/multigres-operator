@@ -280,10 +280,15 @@ The observer maintains several tracking maps that persist across cycles but rese
 | `prevDrainState` | `ns/pod` | Detect backward state transitions |
 | `generationDivergeSince` | `kind/ns/name` | Track how long generation hasn't caught up |
 | `primaryViolationSince` | `pool-cell` | Grace period before flagging wrong primary count |
+| `podStartup` | `pod-name` | Pool pod creation time + readiness for startup grace period |
 | `lastLogCheck` | single timestamp | Avoid re-tailing already-checked logs |
 | `lastEventResourceVersion` | single string | Only process new events each cycle |
 
 This state is purely observational — losing it on restart is safe. The observer re-converges within 1-2 cycles.
+
+### Startup Grace Period
+
+The `podStartup` map is populated each cycle by `checkPodHealth` for pool pods and consumed by downstream checks (`connectivity`, `replication`, `logs`). Pods younger than 60 seconds have all findings suppressed; pods older than 60 seconds but not yet Ready have `error`/`fatal` findings downgraded to `warn`. See the [README](../README.md#startup-grace-period) for the full rationale.
 
 ---
 

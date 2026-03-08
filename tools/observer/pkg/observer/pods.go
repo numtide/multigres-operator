@@ -37,6 +37,13 @@ func (o *Observer) checkPodHealth(ctx context.Context) {
 		activePods[key] = true
 		o.knownPodNames[pod.Name] = true
 
+		if pod.Labels[common.LabelAppComponent] == common.ComponentPool {
+			o.podStartup[pod.Name] = podInfo{
+				createdAt: pod.CreationTimestamp.Time,
+				ready:     isPodReady(pod),
+			}
+		}
+
 		o.checkPodPhase(pod, key)
 		o.checkContainerReadiness(pod, key)
 		o.checkRestarts(pod)
@@ -304,8 +311,12 @@ func (o *Observer) checkPodCounts(ctx context.Context, pods *corev1.PodList) {
 			for _, cellName := range poolSpec.Cells {
 				actual := countPodsForPoolCell(pods, shardLabelValue, string(poolName), string(cellName))
 				if int32(actual) != expectedPerCell {
+					sev := report.SeverityError
+					if o.hasAnyPodInGracePeriod() {
+						sev = report.SeverityWarn
+					}
 					o.reporter.Report(report.Finding{
-						Severity:  report.SeverityError,
+						Severity:  sev,
 						Check:     "pod-health",
 						Component: fmt.Sprintf("shard/%s/%s", shard.Namespace, shard.Name),
 						Message:   fmt.Sprintf("Pool %s cell %s: expected %d pods, found %d", poolName, cellName, expectedPerCell, actual),
