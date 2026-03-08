@@ -1522,7 +1522,7 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		}
 
 		cellsSet := make(map[multigresv1alpha1.CellName]bool)
-		totalPods, readyPods, err := r.updatePoolsStatus(
+		totalPods, readyPods, _, err := r.updatePoolsStatus(
 			context.Background(), shard, cellsSet,
 		)
 		if err != nil {

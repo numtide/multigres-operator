@@ -1,7 +1,7 @@
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
-  name: inline
+  name: i
   namespace: default
 spec:
   pvcDeletionPolicy:
@@ -81,7 +81,7 @@ spec:
                     type: "readWrite"
                     cells:
                       - "z1"
-                    replicasPerCell: 3
+                    replicasPerCell: 5
                     storage:
                       # class: "standard"
                       size: "100Gi"

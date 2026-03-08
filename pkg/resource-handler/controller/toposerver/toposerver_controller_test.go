@@ -50,6 +50,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 				Spec: multigresv1alpha1.TopoServerSpec{},
 			},
 			existingObjects: []client.Object{},
+			wantRequeue:     true,
 			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
 				// Verify all three resources were created
 				sts := &appsv1.StatefulSet{}
@@ -98,6 +99,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
+			wantRequeue: true,
 			existingObjects: []client.Object{
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{

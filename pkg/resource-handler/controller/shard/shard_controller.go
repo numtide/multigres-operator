@@ -91,6 +91,22 @@ func (r *ShardReconciler) Reconcile(
 		return r.handlePendingDeletion(ctx, shard)
 	}
 
+	// Update status early so observedGeneration and pod-health phase are
+	// always current. Later steps (especially reconcileDataPlane) may block
+	// on the topo connection for an extended period; placing updateStatus
+	// here guarantees the status subresource is written every reconcile.
+	{
+		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.UpdateStatus")
+		if err := r.updateStatus(ctx, shard); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to update status")
+			r.Recorder.Eventf(shard, "Warning", "StatusError", "Failed to update status: %v", err)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
+	}
+
 	// Reconcile pg_hba ConfigMap first (required by all pools before starting)
 	if err := r.reconcilePgHbaConfigMap(ctx, shard); err != nil {
 		monitoring.RecordSpanError(span, err)
@@ -251,22 +267,14 @@ func (r *ShardReconciler) Reconcile(
 	}
 
 	// Data-plane phases: open a single topo connection shared across all phases.
-	result, err := r.reconcileDataPlane(ctx, shard)
+	// Use a deadline so a hanging topo dial cannot block the reconcile
+	// goroutine indefinitely, which would prevent future reconciles for
+	// this shard and leave observedGeneration stale.
+	dataPlaneCtx, dataPlaneCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer dataPlaneCancel()
+	result, err := r.reconcileDataPlane(dataPlaneCtx, shard)
 	if err != nil || result.RequeueAfter > 0 {
 		return result, err
-	}
-
-	// Update status
-	{
-		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.UpdateStatus")
-		if err := r.updateStatus(ctx, shard); err != nil {
-			monitoring.RecordSpanError(childSpan, err)
-			childSpan.End()
-			logger.Error(err, "Failed to update status")
-			r.Recorder.Eventf(shard, "Warning", "StatusError", "Failed to update status: %v", err)
-			return ctrl.Result{}, err
-		}
-		childSpan.End()
 	}
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())

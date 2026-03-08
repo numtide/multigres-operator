@@ -88,6 +88,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				},
 			},
 			existingObjects: []client.Object{},
+			wantRequeue:     true,
 			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
 				hashedName := buildHashedName(
 					cell.Labels["multigres.com/cluster"],
@@ -306,6 +307,7 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
+			wantRequeue: true,
 			existingObjects: []client.Object{
 				&appsv1.Deployment{
 					ObjectMeta: metav1.ObjectMeta{
@@ -544,8 +546,13 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				return
 			}
 
-			// NOTE: Check for requeue delay when we need to support such setup.
-			_ = result
+			if (result.RequeueAfter != 0) != tc.wantRequeue {
+				t.Errorf(
+					"Reconcile() requeue = %v, want requeue = %v",
+					result.RequeueAfter,
+					tc.wantRequeue,
+				)
+			}
 
 			// Run custom assertions if provided
 			if tc.assertFunc != nil {

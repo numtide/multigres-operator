@@ -117,6 +117,30 @@ func (r *MultigresClusterReconciler) updateStatus(
 		}
 	}
 
+	topoServers := &multigresv1alpha1.TopoServerList{}
+	if err := r.List(
+		ctx,
+		topoServers,
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{"multigres.com/cluster": cluster.Name},
+	); err != nil {
+		return fmt.Errorf("failed to list toposervers for status: %w", err)
+	}
+
+	for _, ts := range topoServers.Items {
+		switch {
+		case ts.Status.ObservedGeneration != ts.Generation:
+			allHealthy = false
+		case ts.Status.Phase == multigresv1alpha1.PhaseDegraded:
+			anyDegraded = true
+			allHealthy = false
+		case ts.Status.Phase == multigresv1alpha1.PhaseHealthy:
+			// ok
+		default:
+			allHealthy = false
+		}
+	}
+
 	switch {
 	case anyDegraded:
 		cluster.Status.Phase = multigresv1alpha1.PhaseDegraded

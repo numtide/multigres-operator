@@ -21,7 +21,15 @@ import (
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/status"
+)
+
+const (
+	// statusRecheckDelay is the interval for periodic re-reconciliation when the
+	// TopoServer is not Healthy. This allows detection of pod-level issues like
+	// CrashLoopBackOff that don't trigger StatefulSet watch events.
+	statusRecheckDelay = 30 * time.Second
 )
 
 // TopoServerReconciler reconciles a TopoServer object.
@@ -145,6 +153,10 @@ func (r *TopoServerReconciler) Reconcile(
 
 	logger.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(toposerver, "Normal", "Synced", "Successfully reconciled TopoServer")
+
+	if toposerver.Status.Phase != multigresv1alpha1.PhaseHealthy {
+		return ctrl.Result{RequeueAfter: statusRecheckDelay}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -274,26 +286,36 @@ func (r *TopoServerReconciler) updateStatus(
 	// Update conditions
 	r.setConditions(toposerver, sts)
 
-	// Update Phase
-	toposerver.Status.Phase = status.ComputePhase(sts.Status.ReadyReplicas, sts.Status.Replicas)
 	monitoring.SetTopoServerReplicas(
 		toposerver.Name,
 		toposerver.Namespace,
 		sts.Status.Replicas,
 		sts.Status.ReadyReplicas,
 	)
-	if sts.Status.ObservedGeneration != sts.Generation {
-		toposerver.Status.Phase = multigresv1alpha1.PhaseProgressing
-		toposerver.Status.Message = "StatefulSet is progressing"
-	} else if toposerver.Status.Phase != multigresv1alpha1.PhaseHealthy {
-		toposerver.Status.Message = fmt.Sprintf(
-			"%d/%d replicas ready",
-			sts.Status.ReadyReplicas,
-			sts.Status.Replicas,
-		)
-	} else {
-		toposerver.Status.Message = "Ready"
+
+	// List pods for crash-loop detection
+	clusterName := toposerver.Labels[metadata.LabelMultigresCluster]
+	tsLabels := metadata.BuildStandardLabels(clusterName, ComponentName)
+	tsLabels = metadata.MergeLabels(tsLabels, toposerver.GetObjectMeta().GetLabels())
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList,
+		client.InNamespace(toposerver.Namespace),
+		client.MatchingLabels(metadata.GetSelectorLabels(tsLabels)),
+	); err != nil {
+		return fmt.Errorf("failed to list toposerver pods for status: %w", err)
 	}
+
+	// Update Phase
+	result := status.ComputeWorkloadPhase(status.WorkloadPhaseInput{
+		Ready:              sts.Status.ReadyReplicas,
+		Total:              sts.Status.Replicas,
+		GenerationCurrent:  sts.Generation,
+		GenerationObserved: sts.Status.ObservedGeneration,
+		Pods:               podList.Items,
+		ComponentName:      "StatefulSet",
+	})
+	toposerver.Status.Phase = result.Phase
+	toposerver.Status.Message = result.Message
 
 	toposerver.Status.ObservedGeneration = toposerver.Generation
 
