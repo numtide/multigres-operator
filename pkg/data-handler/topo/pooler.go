@@ -22,11 +22,14 @@ type PoolerStatusResult struct {
 }
 
 // GetPoolerStatus queries the topology for all poolers belonging to a shard
-// and returns a map of hostname to role string.
+// and returns a map of pod name to role string. managedPodNames is the set of
+// Kubernetes pod names currently managed by the shard controller; topology
+// entries are matched to pods via PodMatchesPooler (FQDN-aware).
 func GetPoolerStatus(
 	ctx context.Context,
 	store topoclient.Store,
 	shard *multigresv1alpha1.Shard,
+	managedPodNames []string,
 ) *PoolerStatusResult {
 	result := &PoolerStatusResult{
 		Roles:        make(map[string]string),
@@ -46,19 +49,29 @@ func GetPoolerStatus(
 				case clustermetadatapb.PoolerType_DRAINED:
 					roleName = "DRAINED"
 				}
-				hostname := p.GetHostname()
-				if p.Id != nil && p.Id.Name != "" {
-					hostname = p.Id.Name
-				} else if hostname == "" {
-					hostname = fmt.Sprintf("unknown-pooler-%v", p.Id)
+				// Match the topology entry to an actual managed pod.
+				podName := matchPoolerToPod(p, managedPodNames)
+				if podName == "" {
+					continue // Orphaned entry; pruning handles cleanup.
 				}
-				result.Roles[hostname] = roleName
+				result.Roles[podName] = roleName
 			}
 		} else {
 			result.QuerySuccess = false
 		}
 	}
 	return result
+}
+
+// matchPoolerToPod finds the managed pod name that matches a topology pooler
+// entry, using the FQDN-aware PodMatchesPooler comparison.
+func matchPoolerToPod(p *topoclient.MultiPoolerInfo, podNames []string) string {
+	for _, name := range podNames {
+		if PodMatchesPooler(name, p) {
+			return name
+		}
+	}
+	return ""
 }
 
 // FindPrimaryPooler discovers the PRIMARY multipooler from the given cells

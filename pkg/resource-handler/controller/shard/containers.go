@@ -8,7 +8,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/util/name"
+	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 const (
@@ -195,6 +195,16 @@ func buildPgctldContainer(
 	}
 }
 
+// BuildPoolServiceID generates a short, deterministic service ID for a
+// multipooler from its pod name. The pod name is already guaranteed unique
+// (via JoinWithConstraints), so hashing it produces a collision-free short ID.
+//
+// Format: p-{fnv32a_hex} (e.g. "p-a1b2c3d4", always 10 chars).
+// The "p" prefix follows the multigres component naming convention (p=pooler).
+func BuildPoolServiceID(podName string) string {
+	return "p-" + nameutil.Hash([]string{podName})
+}
+
 // buildMultiPoolerSidecar creates the multipooler sidecar container spec.
 // Implemented as native sidecar (init container with restartPolicy: Always) because
 // multipooler must restart with postgres to maintain connection pool consistency.
@@ -203,6 +213,7 @@ func buildMultiPoolerSidecar(
 	pool multigresv1alpha1.PoolSpec,
 	poolName string,
 	cellName string,
+	serviceID string,
 ) corev1.Container {
 	image := multigresv1alpha1.DefaultMultiPoolerImage
 	if shard.Spec.Images.MultiPooler != "" {
@@ -226,7 +237,7 @@ func buildMultiPoolerSidecar(
 		"--database=" + string(shard.Spec.DatabaseName),
 		"--table-group=" + string(shard.Spec.TableGroupName),
 		"--shard=" + string(shard.Spec.ShardName),
-		"--service-id=$(POD_NAME)", // Use pod name as unique service ID
+		"--service-id=" + serviceID,
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
 		"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)", // Resolved from env var below
@@ -283,14 +294,6 @@ func buildMultiPoolerSidecar(
 	}
 
 	env := []corev1.EnvVar{
-		{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
 		connpoolAdminPasswordEnvVar(shard.Name),
 	}
 	env = append(env, s3EnvVars(shard.Spec.Backup)...)
@@ -418,8 +421,8 @@ func buildSharedBackupVolume(shard *multigresv1alpha1.Shard, cellName string) co
 	if shard.Spec.Backup != nil &&
 		shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeFilesystem {
 		clusterName := shard.Labels["multigres.com/cluster"]
-		claimName := name.JoinWithConstraints(
-			name.ServiceConstraints,
+		claimName := nameutil.JoinWithConstraints(
+			nameutil.ServiceConstraints,
 			"backup-data",
 			clusterName,
 			string(shard.Spec.DatabaseName),

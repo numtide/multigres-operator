@@ -1,6 +1,7 @@
 package shard
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -15,10 +16,11 @@ import (
 
 func TestBuildMultiPoolerSidecar(t *testing.T) {
 	tests := map[string]struct {
-		shard    *multigresv1alpha1.Shard
-		poolSpec multigresv1alpha1.PoolSpec
-		cellName string
-		want     corev1.Container
+		shard     *multigresv1alpha1.Shard
+		poolSpec  multigresv1alpha1.PoolSpec
+		cellName  string
+		serviceID string
+		want      corev1.Container
 	}{
 		"default multipooler image with no resources": {
 			shard: &multigresv1alpha1.Shard{
@@ -37,7 +39,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			poolSpec: multigresv1alpha1.PoolSpec{
 				Cells: []multigresv1alpha1.CellName{"zone1"},
 			},
-			cellName: "zone1",
+			cellName:  "zone1",
+			serviceID: "p-test-id",
 			want: corev1.Container{
 				Name:  "multipooler",
 				Image: multigresv1alpha1.DefaultMultiPoolerImage,
@@ -54,7 +57,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--database=testdb",
 					"--table-group=default",
 					"--shard=0",
-					"--service-id=$(POD_NAME)",
+					"--service-id=p-test-id",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
 					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
@@ -96,14 +99,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					PeriodSeconds: 5,
 				},
 				Env: []corev1.EnvVar{
-					{
-						Name: "POD_NAME",
-						ValueFrom: &corev1.EnvVarSource{
-							FieldRef: &corev1.ObjectFieldSelector{
-								FieldPath: "metadata.name",
-							},
-						},
-					},
 					connpoolAdminPasswordEnvVar("test-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
@@ -142,7 +137,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 			poolSpec: multigresv1alpha1.PoolSpec{
 				Cells: []multigresv1alpha1.CellName{"zone2"},
 			},
-			cellName: "zone2",
+			cellName:  "zone2",
+			serviceID: "p-custom-id",
 			want: corev1.Container{
 				Name:  "multipooler",
 				Image: "custom/multipooler:v1.0.0",
@@ -159,7 +155,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--database=proddb",
 					"--table-group=orders",
 					"--shard=1",
-					"--service-id=$(POD_NAME)",
+					"--service-id=p-custom-id",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
 					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
@@ -201,14 +197,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					PeriodSeconds: 5,
 				},
 				Env: []corev1.EnvVar{
-					{
-						Name: "POD_NAME",
-						ValueFrom: &corev1.EnvVarSource{
-							FieldRef: &corev1.ObjectFieldSelector{
-								FieldPath: "metadata.name",
-							},
-						},
-					},
 					connpoolAdminPasswordEnvVar("custom-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
@@ -256,7 +244,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					},
 				},
 			},
-			cellName: "zone1",
+			cellName:  "zone1",
+			serviceID: "p-resource-id",
 			want: corev1.Container{
 				Name:  "multipooler",
 				Image: multigresv1alpha1.DefaultMultiPoolerImage,
@@ -273,7 +262,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--database=mydb",
 					"--table-group=default",
 					"--shard=0",
-					"--service-id=$(POD_NAME)",
+					"--service-id=p-resource-id",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
 					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
@@ -324,14 +313,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					PeriodSeconds: 5,
 				},
 				Env: []corev1.EnvVar{
-					{
-						Name: "POD_NAME",
-						ValueFrom: &corev1.EnvVarSource{
-							FieldRef: &corev1.ObjectFieldSelector{
-								FieldPath: "metadata.name",
-							},
-						},
-					},
 					connpoolAdminPasswordEnvVar("resource-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
@@ -354,7 +335,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildMultiPoolerSidecar(tc.shard, tc.poolSpec, "primary", tc.cellName)
+			got := buildMultiPoolerSidecar(tc.shard, tc.poolSpec, "primary", tc.cellName, tc.serviceID)
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildMultiPoolerSidecar() mismatch (-want +got):\n%s", diff)
@@ -714,7 +695,7 @@ func assertContainsFlag(t *testing.T, args []string, want string) {
 }
 
 func TestBuildMultiPoolerSidecar_WithObservability(t *testing.T) {
-	c := buildMultiPoolerSidecar(otelShard(), multigresv1alpha1.PoolSpec{}, "primary", "zone1")
+	c := buildMultiPoolerSidecar(otelShard(), multigresv1alpha1.PoolSpec{}, "primary", "zone1", "p-otel1234")
 	assertContainsOTELEnvVar(t, c.Env, "buildMultiPoolerSidecar")
 }
 
@@ -991,7 +972,7 @@ func TestMultiPoolerSidecar_PgBackRestCertArgs(t *testing.T) {
 			Type: multigresv1alpha1.BackupTypeS3,
 			S3:   &multigresv1alpha1.S3BackupConfig{Bucket: "b", Region: "r"},
 		}
-		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1")
+		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1", "p-backup123")
 		assertContainsFlag(t, c.Args, "--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt")
 		assertContainsFlag(t, c.Args, "--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key")
 		assertContainsFlag(t, c.Args, "--pgbackrest-ca-file=/certs/pgbackrest/ca.crt")
@@ -1000,7 +981,7 @@ func TestMultiPoolerSidecar_PgBackRestCertArgs(t *testing.T) {
 
 	t.Run("no cert args when no backup", func(t *testing.T) {
 		shard := baseShard.DeepCopy()
-		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1")
+		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1", "p-noback123")
 		assertNotContainsFlag(t, c.Args, "--pgbackrest-cert-file")
 		assertNotContainsFlag(t, c.Args, "--pgbackrest-key-file")
 		assertNotContainsFlag(t, c.Args, "--pgbackrest-ca-file")
@@ -1045,6 +1026,43 @@ func TestBuildPoolVolumes_CertVolumePresence(t *testing.T) {
 		for _, v := range volumes {
 			if v.Name == PgBackRestCertVolumeName {
 				t.Error("cert volume should not be present when no backup configured")
+			}
+		}
+	})
+}
+
+func TestBuildPoolServiceID(t *testing.T) {
+	t.Run("deterministic", func(t *testing.T) {
+		podName := "minimal-postgres-default-0-inf-pool-default-zone-a-a3a0d77b-1"
+		id1 := BuildPoolServiceID(podName)
+		id2 := BuildPoolServiceID(podName)
+		if id1 != id2 {
+			t.Errorf("non-deterministic: %q != %q", id1, id2)
+		}
+	})
+
+	t.Run("format", func(t *testing.T) {
+		id := BuildPoolServiceID("some-pod-name")
+		pattern := regexp.MustCompile(`^p-[0-9a-f]{8}$`)
+		if !pattern.MatchString(id) {
+			t.Errorf("BuildPoolServiceID(%q) = %q, want format p-[0-9a-f]{8}", "some-pod-name", id)
+		}
+	})
+
+	t.Run("different inputs produce different outputs", func(t *testing.T) {
+		id1 := BuildPoolServiceID("pod-a")
+		id2 := BuildPoolServiceID("pod-b")
+		if id1 == id2 {
+			t.Errorf("collision: BuildPoolServiceID(%q) == BuildPoolServiceID(%q) == %q",
+				"pod-a", "pod-b", id1)
+		}
+	})
+
+	t.Run("length is always 10", func(t *testing.T) {
+		for _, name := range []string{"a", "short", "a-very-long-pod-name-that-goes-on-and-on"} {
+			id := BuildPoolServiceID(name)
+			if len(id) != 10 {
+				t.Errorf("BuildPoolServiceID(%q) = %q (len %d), want len 10", name, id, len(id))
 			}
 		}
 	})

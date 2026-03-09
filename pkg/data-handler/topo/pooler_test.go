@@ -507,7 +507,7 @@ func TestGetPoolerStatus(t *testing.T) {
 			},
 		}
 
-		result := topo.GetPoolerStatus(ctx, store, shard)
+		result := topo.GetPoolerStatus(ctx, store, shard, []string{"primary", "replica", "drained"})
 		if !result.QuerySuccess {
 			t.Error("expected QuerySuccess=true")
 		}
@@ -536,7 +536,7 @@ func TestGetPoolerStatus(t *testing.T) {
 			},
 		}
 
-		result := topo.GetPoolerStatus(context.Background(), store, shard)
+		result := topo.GetPoolerStatus(context.Background(), store, shard, nil)
 		if result.QuerySuccess {
 			t.Error("expected QuerySuccess=false when store errors")
 		}
@@ -567,7 +567,7 @@ func TestGetPoolerStatus(t *testing.T) {
 			},
 		}
 
-		result := topo.GetPoolerStatus(ctx, store, shard)
+		result := topo.GetPoolerStatus(ctx, store, shard, []string{"my-pod-0"})
 		if !result.QuerySuccess {
 			t.Error("expected QuerySuccess=true")
 		}

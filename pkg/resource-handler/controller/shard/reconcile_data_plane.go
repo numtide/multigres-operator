@@ -114,33 +114,56 @@ func (r *ShardReconciler) reconcileDataPlane(
 }
 
 // reconcilePodRoles queries the topology for pooler status and updates
-// shard.Status.PodRoles.
+// shard.Status.PodRoles. Pod names are resolved by matching topology entries
+// to actual managed Kubernetes pods via PodMatchesPooler.
 func (r *ShardReconciler) reconcilePodRoles(
 	ctx context.Context,
 	store topoclient.Store,
 	shard *multigresv1alpha1.Shard,
 ) {
 	logger := log.FromContext(ctx)
+
+	// List managed pods for this shard (same pattern as reconcilePoolerPrune).
+	lbls := map[string]string{
+		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
+		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
+		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
+		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
+	}
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(lbls),
+	); err != nil {
+		logger.Error(err, "Failed to list pods for role reconciliation")
+		return
+	}
+
+	podNames := make([]string, len(podList.Items))
+	for i := range podList.Items {
+		podNames[i] = podList.Items[i].Name
+	}
+
 	statusBase := shard.DeepCopy()
-	poolerStatus := topo.GetPoolerStatus(ctx, store, shard)
+	poolerStatus := topo.GetPoolerStatus(ctx, store, shard, podNames)
 
 	if shard.Status.PodRoles == nil {
 		shard.Status.PodRoles = make(map[string]string)
 	}
 	rolesChanged := false
 
-	for hostname, role := range poolerStatus.Roles {
-		if shard.Status.PodRoles[hostname] != role {
-			shard.Status.PodRoles[hostname] = role
+	for podName, role := range poolerStatus.Roles {
+		if shard.Status.PodRoles[podName] != role {
+			shard.Status.PodRoles[podName] = role
 			rolesChanged = true
 		}
 	}
 
 	// Prune entries for poolers that no longer exist in the topology.
 	if poolerStatus.QuerySuccess {
-		for hostname := range shard.Status.PodRoles {
-			if _, exists := poolerStatus.Roles[hostname]; !exists {
-				delete(shard.Status.PodRoles, hostname)
+		for podName := range shard.Status.PodRoles {
+			if _, exists := poolerStatus.Roles[podName]; !exists {
+				delete(shard.Status.PodRoles, podName)
 				rolesChanged = true
 			}
 		}

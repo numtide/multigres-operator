@@ -1,7 +1,7 @@
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
-  name: m
+  name: minimal
   namespace: default
 spec:
   pvcDeletionPolicy:
