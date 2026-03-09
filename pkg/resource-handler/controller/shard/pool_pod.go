@@ -72,6 +72,8 @@ func BuildPoolPod(
 		},
 	}}, volumes...)
 
+	serviceID := BuildPoolServiceID(podName)
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
@@ -87,7 +89,7 @@ func BuildPoolPod(
 			},
 			TerminationGracePeriodSeconds: ptr.To(defaultTerminationGracePeriod),
 			InitContainers: []corev1.Container{
-				buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName),
+				buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName, serviceID),
 			},
 			Containers: []corev1.Container{
 				buildPgctldContainer(shard, poolSpec),

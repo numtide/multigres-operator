@@ -262,7 +262,7 @@ func (o *Observer) checkPoolerRegistration(
 			continue
 		}
 		// Key format: <prefix><service-id>/Pooler
-		// Service ID format: multipooler-<cell>-<pod-name>
+		// Service ID format: multipooler-<cell>-p-<hash>
 		keyStr := string(key)
 		if strings.HasPrefix(keyStr, prefix) {
 			suffix := strings.TrimPrefix(keyStr, prefix)
@@ -274,22 +274,34 @@ func (o *Observer) checkPoolerRegistration(
 		}
 	}
 
-	// Check running pool pods are registered.
-	// Etcd service IDs use the format "multipooler-<cell>-<pod-name>",
-	// so we match by checking if any registered service ID ends with the pod name.
+	// Build a map of service ID → pod for each pool pod.
+	// The service ID is extracted from the multipooler container's --service-id flag.
+	podByServiceID := make(map[string]*corev1.Pod, len(pods.Items))
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		drainState := pod.Annotations[common.AnnotationDrainState]
+		if sid := extractServiceID(pod); sid != "" {
+			podByServiceID[sid] = pod
+		}
+	}
 
-		registered := false
-		var matchedID string
-		for id := range registeredPoolers {
-			if strings.HasSuffix(id, pod.Name) {
-				registered = true
-				matchedID = id
+	// Match registered pooler service IDs to pods.
+	// Etcd keys contain the full service ID (e.g. "multipooler-z1-p-a1b2c3d4");
+	// pods carry the short service ID (e.g. "p-a1b2c3d4") in --service-id.
+	matchedPods := make(map[string]bool, len(pods.Items))
+	for etcdID := range registeredPoolers {
+		for sid, pod := range podByServiceID {
+			if strings.Contains(etcdID, sid) {
+				matchedPods[pod.Name] = true
+				delete(registeredPoolers, etcdID)
 				break
 			}
 		}
+	}
+
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		drainState := pod.Annotations[common.AnnotationDrainState]
+		registered := matchedPods[pod.Name]
 
 		// Pods in ready-for-deletion should NOT be registered.
 		if drainState == common.DrainStateReadyForDeletion {
@@ -312,16 +324,12 @@ func (o *Observer) checkPoolerRegistration(
 			pod.DeletionTimestamp == nil {
 			if !registered {
 				o.reporter.Report(report.Finding{
-					Severity:  report.SeverityWarn,
+					Severity:  report.SeverityError,
 					Check:     "topology",
 					Component: componentForPod(pod),
 					Message:   fmt.Sprintf("Running pool pod %s not registered in etcd", pod.Name),
 				})
 			}
-		}
-
-		if matchedID != "" {
-			delete(registeredPoolers, matchedID)
 		}
 	}
 
@@ -334,4 +342,23 @@ func (o *Observer) checkPoolerRegistration(
 			Message:   fmt.Sprintf("Pooler %s registered in etcd but no corresponding pod", name),
 		})
 	}
+}
+
+// extractServiceID reads the --service-id flag value from a pod's multipooler
+// container args. Returns empty string if not found.
+func extractServiceID(pod *corev1.Pod) string {
+	const prefix = "--service-id="
+	for _, cs := range [][]corev1.Container{pod.Spec.InitContainers, pod.Spec.Containers} {
+		for i := range cs {
+			if cs[i].Name != "multipooler" {
+				continue
+			}
+			for _, arg := range cs[i].Args {
+				if strings.HasPrefix(arg, prefix) {
+					return strings.TrimPrefix(arg, prefix)
+				}
+			}
+		}
+	}
+	return ""
 }
