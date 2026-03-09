@@ -4452,8 +4452,8 @@ func TestIsDrainStale(t *testing.T) {
 				Namespace: "default",
 				Labels:    buildPoolLabelsWithCell(shard, "main", "z1"),
 				Annotations: map[string]string{
-					metadata.AnnotationSpecHash:        hash,
-					metadata.AnnotationDrainState:      drainState,
+					metadata.AnnotationSpecHash:         hash,
+					metadata.AnnotationDrainState:       drainState,
 					metadata.AnnotationDrainRequestedAt: "2026-03-08T18:00:00Z",
 				},
 			},
@@ -4470,7 +4470,9 @@ func TestIsDrainStale(t *testing.T) {
 	t.Run("DoesNotCancelDrainingState", func(t *testing.T) {
 		pod := matchingPod(4, metadata.DrainStateDraining)
 		if r.isDrainStale(shard, pod, metadata.DrainStateDraining) {
-			t.Error("expected drain NOT to be stale in Draining state (standby removal already sent)")
+			t.Error(
+				"expected drain NOT to be stale in Draining state (standby removal already sent)",
+			)
 		}
 	})
 
@@ -4760,7 +4762,10 @@ func TestUpdatePoolsStatus_DegradedOnCrashLoop(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.Status.Phase == multigresv1alpha1.PhaseDegraded {
-			t.Errorf("expected Progressing (not Degraded) for running pod with prior restarts, got %q", s.Status.Phase)
+			t.Errorf(
+				"expected Progressing (not Degraded) for running pod with prior restarts, got %q",
+				s.Status.Phase,
+			)
 		}
 	})
 }

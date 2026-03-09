@@ -57,8 +57,22 @@ func (o *Observer) probeMultiGatewayServices(ctx context.Context) {
 		// HTTP health probes — only on services that expose the HTTP port.
 		// The global gateway service only exposes 15432, not 15100.
 		if serviceHasPort(svc, common.PortMultiGatewayHTTP) {
-			o.probeHTTP(ctx, addr, common.PortMultiGatewayHTTP, "/live", "multigateway-liveness", svc.Name)
-			o.probeHTTP(ctx, addr, common.PortMultiGatewayHTTP, "/ready", "multigateway-readiness", svc.Name)
+			o.probeHTTP(
+				ctx,
+				addr,
+				common.PortMultiGatewayHTTP,
+				"/live",
+				"multigateway-liveness",
+				svc.Name,
+			)
+			o.probeHTTP(
+				ctx,
+				addr,
+				common.PortMultiGatewayHTTP,
+				"/ready",
+				"multigateway-readiness",
+				svc.Name,
+			)
 		}
 	}
 }
@@ -123,8 +137,22 @@ func (o *Observer) probePoolPodHealth(ctx context.Context) {
 		if o.isPodInGracePeriod(pod.Name) {
 			continue
 		}
-		o.probeHTTP(ctx, pod.Status.PodIP, common.PortMultiPoolerHTTP, "/live", "multipooler-health", pod.Name)
-		o.probeHTTP(ctx, pod.Status.PodIP, common.PortMultiPoolerHTTP, "/ready", "multipooler-readiness", pod.Name)
+		o.probeHTTP(
+			ctx,
+			pod.Status.PodIP,
+			common.PortMultiPoolerHTTP,
+			"/live",
+			"multipooler-health",
+			pod.Name,
+		)
+		o.probeHTTP(
+			ctx,
+			pod.Status.PodIP,
+			common.PortMultiPoolerHTTP,
+			"/ready",
+			"multipooler-readiness",
+			pod.Name,
+		)
 		o.probePoolPodGRPC(ctx, pod)
 	}
 }
@@ -151,16 +179,20 @@ func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component str
 		return
 	}
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		if o.probes != nil {
 			o.probes.RecordProbe(ProbeResult{
-				Check: "multiorch-pooler-health", Component: component, Target: url,
-				OK: false, Latency: latency.Round(time.Millisecond).String(), Error: fmt.Sprintf("read body: %v", err),
+				Check:     "multiorch-pooler-health",
+				Component: component,
+				Target:    url,
+				OK:        false,
+				Latency:   latency.Round(time.Millisecond).String(),
+				Error:     fmt.Sprintf("read body: %v", err),
 			})
 		}
 		return
@@ -168,7 +200,12 @@ func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component str
 
 	text := strings.ToLower(string(body))
 
-	errorIndicators := []string{"deadlineexceeded", "unavailable", "unhealthy", "connection refused"}
+	errorIndicators := []string{
+		"deadlineexceeded",
+		"unavailable",
+		"unhealthy",
+		"connection refused",
+	}
 	var rawErrors []string
 	for _, indicator := range errorIndicators {
 		if strings.Contains(text, indicator) {
@@ -205,8 +242,14 @@ func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component str
 			errStr = strings.Join(rawErrors, ", ")
 		}
 		o.probes.RecordProbe(ProbeResult{
-			Check: "multiorch-pooler-health", Component: component, Target: url,
-			OK: len(rawErrors) == 0, Latency: latency.Round(time.Millisecond).String(), Error: errStr,
+			Check:     "multiorch-pooler-health",
+			Component: component,
+			Target:    url,
+			OK: len(
+				rawErrors,
+			) == 0,
+			Latency: latency.Round(time.Millisecond).String(),
+			Error:   errStr,
 		})
 	}
 
@@ -215,7 +258,10 @@ func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component str
 			Severity:  report.SeverityFatal,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("multiorch-pooler-health: multiorch reports all %d poolers unreachable", totalPoolers),
+			Message: fmt.Sprintf(
+				"multiorch-pooler-health: multiorch reports all %d poolers unreachable",
+				totalPoolers,
+			),
 			Details: map[string]any{
 				"totalPoolers":     totalPoolers,
 				"healthyPoolers":   healthyPoolers,
@@ -228,7 +274,11 @@ func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component str
 			Severity:  report.SeverityError,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("multiorch-pooler-health: %d/%d poolers showing errors", unhealthyPoolers, totalPoolers),
+			Message: fmt.Sprintf(
+				"multiorch-pooler-health: %d/%d poolers showing errors",
+				unhealthyPoolers,
+				totalPoolers,
+			),
 			Details: map[string]any{
 				"totalPoolers":     totalPoolers,
 				"healthyPoolers":   healthyPoolers,
@@ -241,7 +291,10 @@ func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component str
 			Severity:  report.SeverityError,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("multiorch-pooler-health: /debug/status contains error indicators: %s", strings.Join(rawErrors, ", ")),
+			Message: fmt.Sprintf(
+				"multiorch-pooler-health: /debug/status contains error indicators: %s",
+				strings.Join(rawErrors, ", "),
+			),
 			Details: map[string]any{
 				"rawErrors": rawErrors,
 			},
@@ -262,7 +315,7 @@ func (o *Observer) probePoolPodGRPC(ctx context.Context, pod *corev1.Pod) {
 		o.recordGRPCProbeResult(pod.Name, addr, false, 0, fmt.Sprintf("dial error: %v", err))
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	client := healthpb.NewHealthClient(conn)
 	start := time.Now()
@@ -282,7 +335,12 @@ func (o *Observer) probePoolPodGRPC(ctx context.Context, pod *corev1.Pod) {
 	o.recordGRPCProbeResult(pod.Name, addr, ok, latency, errStr)
 }
 
-func (o *Observer) recordGRPCProbeResult(component, addr string, ok bool, latency time.Duration, errStr string) {
+func (o *Observer) recordGRPCProbeResult(
+	component, addr string,
+	ok bool,
+	latency time.Duration,
+	errStr string,
+) {
 	if o.metrics != nil {
 		o.metrics.RecordProbeLatency("multipooler-grpc-health", component, latency)
 	}
@@ -299,7 +357,11 @@ func (o *Observer) recordGRPCProbeResult(component, addr string, ok bool, latenc
 			Severity:  report.SeverityError,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("multipooler-grpc-health: gRPC health check failed for %s: %s", addr, errStr),
+			Message: fmt.Sprintf(
+				"multipooler-grpc-health: gRPC health check failed for %s: %s",
+				addr,
+				errStr,
+			),
 		})
 		return
 	}
@@ -309,7 +371,11 @@ func (o *Observer) recordGRPCProbeResult(component, addr string, ok bool, latenc
 			Severity:  report.SeverityWarn,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("multipooler-grpc-health: high latency %s for %s", latency.Round(time.Millisecond), addr),
+			Message: fmt.Sprintf(
+				"multipooler-grpc-health: high latency %s for %s",
+				latency.Round(time.Millisecond),
+				addr,
+			),
 		})
 	}
 }
@@ -328,8 +394,22 @@ func (o *Observer) probeOperatorHealth(ctx context.Context) {
 		if pod.Status.PodIP == "" {
 			continue
 		}
-		o.probeHTTP(ctx, pod.Status.PodIP, common.PortOperatorHealth, "/healthz", "operator-health", pod.Name)
-		o.probeHTTP(ctx, pod.Status.PodIP, common.PortOperatorHealth, "/readyz", "operator-readiness", pod.Name)
+		o.probeHTTP(
+			ctx,
+			pod.Status.PodIP,
+			common.PortOperatorHealth,
+			"/healthz",
+			"operator-health",
+			pod.Name,
+		)
+		o.probeHTTP(
+			ctx,
+			pod.Status.PodIP,
+			common.PortOperatorHealth,
+			"/readyz",
+			"operator-readiness",
+			pod.Name,
+		)
 	}
 }
 
@@ -363,19 +443,29 @@ func (o *Observer) probeTCP(host string, port int, check, component string) {
 		})
 		return
 	}
-	conn.Close()
+	_ = conn.Close()
 
 	if latency > common.ConnectivityLatencyThreshold {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityWarn,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("%s: high latency %s connecting to %s", check, latency.Round(time.Millisecond), addr),
+			Message: fmt.Sprintf(
+				"%s: high latency %s connecting to %s",
+				check,
+				latency.Round(time.Millisecond),
+				addr,
+			),
 		})
 	}
 }
 
-func (o *Observer) probeHTTP(ctx context.Context, host string, port int, path, check, component string) {
+func (o *Observer) probeHTTP(
+	ctx context.Context,
+	host string,
+	port int,
+	path, check, component string,
+) {
 	url := fmt.Sprintf("http://%s:%d%s", host, port, path)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -415,8 +505,8 @@ func (o *Observer) probeHTTP(ctx context.Context, host string, port int, path, c
 		return
 	}
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
@@ -439,7 +529,12 @@ func (o *Observer) probeHTTP(ctx context.Context, host string, port int, path, c
 			Severity:  report.SeverityWarn,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("%s: high latency %s for %s", check, latency.Round(time.Millisecond), url),
+			Message: fmt.Sprintf(
+				"%s: high latency %s for %s",
+				check,
+				latency.Round(time.Millisecond),
+				url,
+			),
 		})
 	}
 }
@@ -500,7 +595,11 @@ func (o *Observer) crossCheckReadiness(ctx context.Context) {
 					Severity:  report.SeverityFatal,
 					Check:     "connectivity",
 					Component: name,
-					Message:   fmt.Sprintf("Pod %s reports Ready but multipooler-grpc-health probe failed: %s — Kubernetes readiness probe is not detecting the failure", name, grpcProbe.Error),
+					Message: fmt.Sprintf(
+						"Pod %s reports Ready but multipooler-grpc-health probe failed: %s — Kubernetes readiness probe is not detecting the failure",
+						name,
+						grpcProbe.Error,
+					),
 					Details: map[string]any{
 						"kubernetesReady": true,
 						"grpcProbeOK":     false,
@@ -516,7 +615,11 @@ func (o *Observer) crossCheckReadiness(ctx context.Context) {
 						Severity:  report.SeverityError,
 						Check:     "connectivity",
 						Component: name,
-						Message:   fmt.Sprintf("Pod %s reports Ready but multipooler-readiness returned %s — liveness passes but readiness fails", name, readinessProbe.Error),
+						Message: fmt.Sprintf(
+							"Pod %s reports Ready but multipooler-readiness returned %s — liveness passes but readiness fails",
+							name,
+							readinessProbe.Error,
+						),
 						Details: map[string]any{
 							"kubernetesReady":  true,
 							"readinessProbeOK": false,
@@ -534,7 +637,10 @@ func (o *Observer) crossCheckReadiness(ctx context.Context) {
 					Severity:  report.SeverityFatal,
 					Check:     "connectivity",
 					Component: name,
-					Message:   fmt.Sprintf("Pod %s reports Ready but multiorch-readiness probe failed — Kubernetes readiness probe is not detecting the failure", name),
+					Message: fmt.Sprintf(
+						"Pod %s reports Ready but multiorch-readiness probe failed — Kubernetes readiness probe is not detecting the failure",
+						name,
+					),
 					Details: map[string]any{
 						"kubernetesReady":  true,
 						"readinessProbeOK": false,
@@ -548,7 +654,10 @@ func (o *Observer) crossCheckReadiness(ctx context.Context) {
 					Severity:  report.SeverityFatal,
 					Check:     "connectivity",
 					Component: name,
-					Message:   fmt.Sprintf("Pod %s reports Ready but multiorch-pooler-health found errors — orchestrator is healthy but its poolers are not", name),
+					Message: fmt.Sprintf(
+						"Pod %s reports Ready but multiorch-pooler-health found errors — orchestrator is healthy but its poolers are not",
+						name,
+					),
 					Details: map[string]any{
 						"kubernetesReady":     true,
 						"poolerHealthProbeOK": false,
@@ -563,7 +672,10 @@ func (o *Observer) crossCheckReadiness(ctx context.Context) {
 					Severity:  report.SeverityError,
 					Check:     "connectivity",
 					Component: name,
-					Message:   fmt.Sprintf("Pod %s reports Ready but multigateway-readiness probe failed — Kubernetes readiness probe is not detecting the failure", name),
+					Message: fmt.Sprintf(
+						"Pod %s reports Ready but multigateway-readiness probe failed — Kubernetes readiness probe is not detecting the failure",
+						name,
+					),
 					Details: map[string]any{
 						"kubernetesReady":  true,
 						"readinessProbeOK": false,
@@ -609,18 +721,32 @@ func (o *Observer) probeMultiGatewaySQLServices(ctx context.Context) {
 // to extended protocol (Parse → Describe → Bind → Execute), which breaks through
 // the gateway. Simple protocol sends the query as a single 'Q' message, which the
 // gateway handles correctly.
-func (o *Observer) probeSQL(ctx context.Context, host string, port int, component, password string) {
+func (o *Observer) probeSQL(
+	ctx context.Context,
+	host string,
+	port int,
+	component, password string,
+) {
 	if password == "" {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityError,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("sql-probe skipped for %s:%d: could not fetch postgres password from shard secret", host, port),
+			Message: fmt.Sprintf(
+				"sql-probe skipped for %s:%d: could not fetch postgres password from shard secret",
+				host,
+				port,
+			),
 		})
 		return
 	}
 
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres dbname=postgres connect_timeout=5 sslmode=disable password=%s", host, port, password)
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres connect_timeout=5 sslmode=disable password=%s",
+		host,
+		port,
+		password,
+	)
 
 	probeCtx, cancel := context.WithTimeout(ctx, common.ConnectivityTimeout)
 	defer cancel()
@@ -631,7 +757,12 @@ func (o *Observer) probeSQL(ctx context.Context, host string, port int, componen
 			Severity:  report.SeverityError,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("sql-probe: invalid connection config for %s:%d: %v", host, port, err),
+			Message: fmt.Sprintf(
+				"sql-probe: invalid connection config for %s:%d: %v",
+				host,
+				port,
+				err,
+			),
 		})
 		return
 	}
@@ -648,7 +779,7 @@ func (o *Observer) probeSQL(ctx context.Context, host string, port int, componen
 		})
 		return
 	}
-	defer conn.Close(probeCtx)
+	defer func() { _ = conn.Close(probeCtx) }()
 
 	var result int
 	if err := conn.QueryRow(probeCtx, "SELECT 1").Scan(&result); err != nil {
@@ -680,7 +811,12 @@ func (o *Observer) probeSQL(ctx context.Context, host string, port int, componen
 			Severity:  report.SeverityWarn,
 			Check:     "connectivity",
 			Component: component,
-			Message:   fmt.Sprintf("sql-probe: high latency %s for %s:%d", latency.Round(time.Millisecond), host, port),
+			Message: fmt.Sprintf(
+				"sql-probe: high latency %s for %s:%d",
+				latency.Round(time.Millisecond),
+				host,
+				port,
+			),
 		})
 	}
 }
@@ -723,7 +859,13 @@ func (o *Observer) fetchShardPassword(ctx context.Context, shard *multigresv1alp
 		Namespace: shard.Namespace,
 		Name:      secretName,
 	}, &secret); err != nil {
-		o.logger.Debug("failed to read postgres password secret", "secret", secretName, "error", err)
+		o.logger.Debug(
+			"failed to read postgres password secret",
+			"secret",
+			secretName,
+			"error",
+			err,
+		)
 		return ""
 	}
 

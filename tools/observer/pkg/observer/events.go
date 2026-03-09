@@ -84,7 +84,12 @@ func (o *Observer) processEvent(event *corev1.Event) {
 				Severity:  report.SeverityInfo,
 				Check:     "events",
 				Component: eventComponent(event),
-				Message:   fmt.Sprintf("[%s] %s: %s", event.Reason, event.InvolvedObject.Name, event.Message),
+				Message: fmt.Sprintf(
+					"[%s] %s: %s",
+					event.Reason,
+					event.InvolvedObject.Name,
+					event.Message,
+				),
 			})
 		}
 		return
@@ -100,7 +105,12 @@ func (o *Observer) processEvent(event *corev1.Event) {
 			Severity:  severity,
 			Check:     "events",
 			Component: eventComponent(event),
-			Message:   fmt.Sprintf("[%s] %s: %s", event.Reason, event.InvolvedObject.Name, event.Message),
+			Message: fmt.Sprintf(
+				"[%s] %s: %s",
+				event.Reason,
+				event.InvolvedObject.Name,
+				event.Message,
+			),
 			Details: map[string]any{
 				"reason": event.Reason,
 				"object": event.InvolvedObject.Name,
@@ -126,7 +136,12 @@ func (o *Observer) processEvent(event *corev1.Event) {
 			Severity:  severity,
 			Check:     "events",
 			Component: eventComponent(event),
-			Message:   fmt.Sprintf("[%s] %s: %s", event.Reason, event.InvolvedObject.Name, event.Message),
+			Message: fmt.Sprintf(
+				"[%s] %s: %s",
+				event.Reason,
+				event.InvolvedObject.Name,
+				event.Message,
+			),
 			Details: map[string]any{
 				"reason": event.Reason,
 				"object": event.InvolvedObject.Name,

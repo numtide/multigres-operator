@@ -45,9 +45,11 @@ func (o *Observer) checkTopology(ctx context.Context) {
 
 		rootPath := "/multigres/global" // safe default fallback
 		if cluster.Spec.GlobalTopoServer != nil {
-			if cluster.Spec.GlobalTopoServer.Etcd != nil && cluster.Spec.GlobalTopoServer.Etcd.RootPath != "" {
+			if cluster.Spec.GlobalTopoServer.Etcd != nil &&
+				cluster.Spec.GlobalTopoServer.Etcd.RootPath != "" {
 				rootPath = cluster.Spec.GlobalTopoServer.Etcd.RootPath
-			} else if cluster.Spec.GlobalTopoServer.External != nil && cluster.Spec.GlobalTopoServer.External.RootPath != "" {
+			} else if cluster.Spec.GlobalTopoServer.External != nil &&
+				cluster.Spec.GlobalTopoServer.External.RootPath != "" {
 				rootPath = cluster.Spec.GlobalTopoServer.External.RootPath
 			}
 		}
@@ -86,8 +88,8 @@ func (o *Observer) findEtcdAddress(ctx context.Context, clusterName string) stri
 		return ""
 	}
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
@@ -106,7 +108,10 @@ type etcdRangeResponse struct {
 }
 
 // etcdRange queries etcd via the v3 gRPC-gateway REST API for keys with the given prefix.
-func (o *Observer) etcdRange(ctx context.Context, etcdAddr, prefix string) (*etcdRangeResponse, error) {
+func (o *Observer) etcdRange(
+	ctx context.Context,
+	etcdAddr, prefix string,
+) (*etcdRangeResponse, error) {
 	keyBytes := []byte(prefix)
 	rangeEnd := make([]byte, len(keyBytes))
 	copy(rangeEnd, keyBytes)
@@ -120,7 +125,12 @@ func (o *Observer) etcdRange(ctx context.Context, etcdAddr, prefix string) (*etc
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, etcdAddr+"/v3/kv/range", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		etcdAddr+"/v3/kv/range",
+		bytes.NewReader(body),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +141,8 @@ func (o *Observer) etcdRange(ctx context.Context, etcdAddr, prefix string) (*etc
 		return nil, fmt.Errorf("etcd range request failed: %w", err)
 	}
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
@@ -146,7 +156,11 @@ func (o *Observer) etcdRange(ctx context.Context, etcdAddr, prefix string) (*etc
 	return &result, nil
 }
 
-func (o *Observer) checkCellRegistration(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, etcdAddr, rootPath string) {
+func (o *Observer) checkCellRegistration(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+	etcdAddr, rootPath string,
+) {
 	var cells multigresv1alpha1.CellList
 	if err := o.client.List(ctx, &cells,
 		o.listOpts(client.MatchingLabels{common.LabelMultigresCluster: cluster.Name})...,
@@ -196,7 +210,11 @@ func (o *Observer) checkCellRegistration(ctx context.Context, cluster *multigres
 				Severity:  report.SeverityError,
 				Check:     "topology",
 				Component: fmt.Sprintf("cell/%s/%s", cell.Namespace, cell.Name),
-				Message:   fmt.Sprintf("Cell %s (topology name: %s) exists as CRD but not registered in etcd", cell.Name, cellName),
+				Message: fmt.Sprintf(
+					"Cell %s (topology name: %s) exists as CRD but not registered in etcd",
+					cell.Name,
+					cellName,
+				),
 			})
 		}
 		delete(registeredCells, cellName)
@@ -213,7 +231,11 @@ func (o *Observer) checkCellRegistration(ctx context.Context, cluster *multigres
 	}
 }
 
-func (o *Observer) checkPoolerRegistration(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster, etcdAddr, rootPath string) {
+func (o *Observer) checkPoolerRegistration(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+	etcdAddr, rootPath string,
+) {
 	var pods corev1.PodList
 	if err := o.client.List(ctx, &pods,
 		o.listOpts(client.MatchingLabels{
@@ -276,14 +298,18 @@ func (o *Observer) checkPoolerRegistration(ctx context.Context, cluster *multigr
 					Severity:  report.SeverityError,
 					Check:     "topology",
 					Component: componentForPod(pod),
-					Message:   fmt.Sprintf("Pod %s is in ready-for-deletion but still registered in etcd", pod.Name),
+					Message: fmt.Sprintf(
+						"Pod %s is in ready-for-deletion but still registered in etcd",
+						pod.Name,
+					),
 				})
 			}
 			continue
 		}
 
 		// Running pods without drain state should be registered.
-		if pod.Status.Phase == corev1.PodRunning && drainState == "" && pod.DeletionTimestamp == nil {
+		if pod.Status.Phase == corev1.PodRunning && drainState == "" &&
+			pod.DeletionTimestamp == nil {
 			if !registered {
 				o.reporter.Report(report.Finding{
 					Severity:  report.SeverityWarn,

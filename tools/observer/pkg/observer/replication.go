@@ -91,7 +91,8 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 	podIPs := make(map[string]string, len(pods.Items))
 	for i := range pods.Items {
 		p := &pods.Items[i]
-		if p.Status.PodIP != "" && p.Status.Phase == corev1.PodRunning && p.DeletionTimestamp == nil {
+		if p.Status.PodIP != "" && p.Status.Phase == corev1.PodRunning &&
+			p.DeletionTimestamp == nil {
 			if o.isPodInGracePeriod(p.Name) {
 				continue
 			}
@@ -122,7 +123,12 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 }
 
 // probePrimaryReplication connects to a primary pod and checks replication topology.
-func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, comp string, expectedReplicas int, password string) {
+func (o *Observer) probePrimaryReplication(
+	ctx context.Context,
+	podIP, podName, comp string,
+	expectedReplicas int,
+	password string,
+) {
 	conn, err := o.connectPostgres(ctx, podIP, password)
 	if err != nil {
 		o.reporter.Report(report.Finding{
@@ -133,14 +139,15 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 		})
 		return
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	probeCtx, cancel := context.WithTimeout(ctx, common.ConnectivityTimeout)
 	defer cancel()
 
 	// Check if synchronous replication is configured.
 	var syncStandbyNames string
-	if err := conn.QueryRow(probeCtx, "SHOW synchronous_standby_names").Scan(&syncStandbyNames); err != nil {
+	if err := conn.QueryRow(probeCtx, "SHOW synchronous_standby_names").
+		Scan(&syncStandbyNames); err != nil {
 		o.logger.Debug("failed to query synchronous_standby_names", "pod", podName, "error", err)
 		return
 	}
@@ -176,7 +183,14 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 	var standbys []standbyInfo
 	for rows.Next() {
 		var s standbyInfo
-		if err := rows.Scan(&s.appName, &s.syncState, &s.syncPriority, &s.replayLagSecs, &s.writeLagSecs, &s.lagBytes); err != nil {
+		if err := rows.Scan(
+			&s.appName,
+			&s.syncState,
+			&s.syncPriority,
+			&s.replayLagSecs,
+			&s.writeLagSecs,
+			&s.lagBytes,
+		); err != nil {
 			continue
 		}
 		standbys = append(standbys, s)
@@ -187,8 +201,12 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 			Severity:  o.effectiveSeverity(podName, report.SeverityError),
 			Check:     "replication",
 			Component: comp,
-			Message:   fmt.Sprintf("Primary %s has 0 replication connections but %d replicas expected", podName, expectedReplicas),
-			Details:   map[string]any{"pod": podName, "expectedReplicas": expectedReplicas},
+			Message: fmt.Sprintf(
+				"Primary %s has 0 replication connections but %d replicas expected",
+				podName,
+				expectedReplicas,
+			),
+			Details: map[string]any{"pod": podName, "expectedReplicas": expectedReplicas},
 		})
 		return
 	}
@@ -200,8 +218,16 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 				Severity:  report.SeverityFatal,
 				Check:     "replication",
 				Component: comp,
-				Message:   fmt.Sprintf("Standby application_name is exactly %d chars (likely truncated by PostgreSQL NAMEDATALEN): %q", common.PGNameDataLen, s.appName),
-				Details:   map[string]any{"pod": podName, "applicationName": s.appName, "nameLength": len(s.appName)},
+				Message: fmt.Sprintf(
+					"Standby application_name is exactly %d chars (likely truncated by PostgreSQL NAMEDATALEN): %q",
+					common.PGNameDataLen,
+					s.appName,
+				),
+				Details: map[string]any{
+					"pod":             podName,
+					"applicationName": s.appName,
+					"nameLength":      len(s.appName),
+				},
 			})
 		}
 
@@ -211,8 +237,17 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 				Severity:  report.SeverityFatal,
 				Check:     "replication",
 				Component: comp,
-				Message:   fmt.Sprintf("Standby %q is async but synchronous replication is configured (%s) — writes will block", s.appName, syncStandbyNames),
-				Details:   map[string]any{"pod": podName, "applicationName": s.appName, "syncState": s.syncState, "synchronousStandbyNames": syncStandbyNames},
+				Message: fmt.Sprintf(
+					"Standby %q is async but synchronous replication is configured (%s) — writes will block",
+					s.appName,
+					syncStandbyNames,
+				),
+				Details: map[string]any{
+					"pod":                     podName,
+					"applicationName":         s.appName,
+					"syncState":               s.syncState,
+					"synchronousStandbyNames": syncStandbyNames,
+				},
 			})
 		}
 
@@ -226,8 +261,19 @@ func (o *Observer) probePrimaryReplication(ctx context.Context, podIP, podName, 
 				Severity:  sev,
 				Check:     "replication",
 				Component: comp,
-				Message:   fmt.Sprintf("Standby %q has %ds replay lag (%d bytes behind)", s.appName, s.replayLagSecs, s.lagBytes),
-				Details:   map[string]any{"pod": podName, "applicationName": s.appName, "replayLagSecs": s.replayLagSecs, "writeLagSecs": s.writeLagSecs, "lagBytes": s.lagBytes},
+				Message: fmt.Sprintf(
+					"Standby %q has %ds replay lag (%d bytes behind)",
+					s.appName,
+					s.replayLagSecs,
+					s.lagBytes,
+				),
+				Details: map[string]any{
+					"pod":             podName,
+					"applicationName": s.appName,
+					"replayLagSecs":   s.replayLagSecs,
+					"writeLagSecs":    s.writeLagSecs,
+					"lagBytes":        s.lagBytes,
+				},
 			})
 		}
 	}
@@ -249,14 +295,15 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp,
 		})
 		return
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	probeCtx, cancel := context.WithTimeout(ctx, common.ConnectivityTimeout)
 	defer cancel()
 
 	// Check WAL receiver status.
 	var walReceiverCount int
-	if err := conn.QueryRow(probeCtx, "SELECT COUNT(*) FROM pg_stat_wal_receiver").Scan(&walReceiverCount); err != nil {
+	if err := conn.QueryRow(probeCtx, "SELECT COUNT(*) FROM pg_stat_wal_receiver").
+		Scan(&walReceiverCount); err != nil {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityWarn,
 			Check:     "replication",
@@ -269,20 +316,28 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp,
 			Severity:  o.effectiveSeverity(podName, report.SeverityError),
 			Check:     "replication",
 			Component: comp,
-			Message:   fmt.Sprintf("Replica %s has no WAL receiver running (not connected to primary)", podName),
-			Details:   map[string]any{"pod": podName},
+			Message: fmt.Sprintf(
+				"Replica %s has no WAL receiver running (not connected to primary)",
+				podName,
+			),
+			Details: map[string]any{"pod": podName},
 		})
 	} else {
 		// Check if the WAL receiver is actually streaming.
 		var walStatus string
-		if err := conn.QueryRow(probeCtx, "SELECT status FROM pg_stat_wal_receiver LIMIT 1").Scan(&walStatus); err == nil {
+		if err := conn.QueryRow(probeCtx, "SELECT status FROM pg_stat_wal_receiver LIMIT 1").
+			Scan(&walStatus); err == nil {
 			if walStatus != "streaming" {
 				o.reporter.Report(report.Finding{
 					Severity:  report.SeverityWarn,
 					Check:     "replication",
 					Component: comp,
-					Message:   fmt.Sprintf("Replica %s WAL receiver status is %q (expected streaming)", podName, walStatus),
-					Details:   map[string]any{"pod": podName, "walReceiverStatus": walStatus},
+					Message: fmt.Sprintf(
+						"Replica %s WAL receiver status is %q (expected streaming)",
+						podName,
+						walStatus,
+					),
+					Details: map[string]any{"pod": podName, "walReceiverStatus": walStatus},
 				})
 			}
 		}
@@ -290,13 +345,18 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp,
 
 	// Check if WAL replay is paused.
 	var isReplayPaused bool
-	if err := conn.QueryRow(probeCtx, "SELECT pg_is_wal_replay_paused()").Scan(&isReplayPaused); err != nil {
+	if err := conn.QueryRow(probeCtx, "SELECT pg_is_wal_replay_paused()").
+		Scan(&isReplayPaused); err != nil {
 		o.reporter.Report(report.Finding{
 			Severity:  report.SeverityWarn,
 			Check:     "replication",
 			Component: comp,
-			Message:   fmt.Sprintf("Failed to query WAL replay status on replica %s: %v", podName, err),
-			Details:   map[string]any{"pod": podName},
+			Message: fmt.Sprintf(
+				"Failed to query WAL replay status on replica %s: %v",
+				podName,
+				err,
+			),
+			Details: map[string]any{"pod": podName},
 		})
 	} else if isReplayPaused {
 		o.reporter.Report(report.Finding{
@@ -311,7 +371,12 @@ func (o *Observer) probeReplicaHealth(ctx context.Context, podIP, podName, comp,
 
 // detectSplitBrain verifies that pg_is_in_recovery() on each pod matches the
 // expected role from podRoles. If multiple pods report as primary, that's split-brain.
-func (o *Observer) detectSplitBrain(ctx context.Context, podIPs map[string]string, podRoles map[string]string, comp, password string) {
+func (o *Observer) detectSplitBrain(
+	ctx context.Context,
+	podIPs map[string]string,
+	podRoles map[string]string,
+	comp, password string,
+) {
 	var actualPrimaries []string
 
 	for podName, ip := range podIPs {
@@ -324,7 +389,7 @@ func (o *Observer) detectSplitBrain(ctx context.Context, podIPs map[string]strin
 		var inRecovery bool
 		err = conn.QueryRow(probeCtx, "SELECT pg_is_in_recovery()").Scan(&inRecovery)
 		cancel()
-		conn.Close(ctx)
+		_ = conn.Close(ctx)
 
 		if err != nil {
 			continue
@@ -346,16 +411,32 @@ func (o *Observer) detectSplitBrain(ctx context.Context, podIPs map[string]strin
 				Severity:  report.SeverityError,
 				Check:     "replication",
 				Component: comp,
-				Message:   fmt.Sprintf("Pod %s reports as primary (pg_is_in_recovery()=false) but podRoles says %s", podName, expectedRole),
-				Details:   map[string]any{"pod": podName, "expectedRole": expectedRole, "actualPrimary": true},
+				Message: fmt.Sprintf(
+					"Pod %s reports as primary (pg_is_in_recovery()=false) but podRoles says %s",
+					podName,
+					expectedRole,
+				),
+				Details: map[string]any{
+					"pod":           podName,
+					"expectedRole":  expectedRole,
+					"actualPrimary": true,
+				},
 			})
 		} else if inRecovery && isPrimaryRole {
 			o.reporter.Report(report.Finding{
 				Severity:  report.SeverityError,
 				Check:     "replication",
 				Component: comp,
-				Message:   fmt.Sprintf("Pod %s reports as replica (pg_is_in_recovery()=true) but podRoles says %s", podName, expectedRole),
-				Details:   map[string]any{"pod": podName, "expectedRole": expectedRole, "actualPrimary": false},
+				Message: fmt.Sprintf(
+					"Pod %s reports as replica (pg_is_in_recovery()=true) but podRoles says %s",
+					podName,
+					expectedRole,
+				),
+				Details: map[string]any{
+					"pod":           podName,
+					"expectedRole":  expectedRole,
+					"actualPrimary": false,
+				},
 			})
 		}
 	}
@@ -365,8 +446,15 @@ func (o *Observer) detectSplitBrain(ctx context.Context, podIPs map[string]strin
 			Severity:  report.SeverityFatal,
 			Check:     "replication",
 			Component: comp,
-			Message:   fmt.Sprintf("SPLIT-BRAIN: %d pods report as primary: %v", len(actualPrimaries), actualPrimaries),
-			Details:   map[string]any{"primaryPods": actualPrimaries, "count": len(actualPrimaries)},
+			Message: fmt.Sprintf(
+				"SPLIT-BRAIN: %d pods report as primary: %v",
+				len(actualPrimaries),
+				actualPrimaries,
+			),
+			Details: map[string]any{
+				"primaryPods": actualPrimaries,
+				"count":       len(actualPrimaries),
+			},
 		})
 	}
 }
@@ -397,8 +485,12 @@ func (o *Observer) probeWrite(ctx context.Context, conn *pgx.Conn, podName, comp
 			Severity:  report.SeverityFatal,
 			Check:     "replication",
 			Component: comp,
-			Message:   fmt.Sprintf("Write probe: writes appear blocked on primary %s: %v", podName, err),
-			Details:   map[string]any{"pod": podName, "error": err.Error()},
+			Message: fmt.Sprintf(
+				"Write probe: writes appear blocked on primary %s: %v",
+				podName,
+				err,
+			),
+			Details: map[string]any{"pod": podName, "error": err.Error()},
 		})
 		return
 	}
@@ -410,7 +502,11 @@ func (o *Observer) probeWrite(ctx context.Context, conn *pgx.Conn, podName, comp
 
 // connectPostgres establishes a connection to postgres on a pod IP.
 func (o *Observer) connectPostgres(ctx context.Context, podIP, password string) (*pgx.Conn, error) {
-	connStr := fmt.Sprintf("host=%s port=%d user=postgres dbname=postgres connect_timeout=5 sslmode=disable", podIP, common.PortPostgres)
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres connect_timeout=5 sslmode=disable",
+		podIP,
+		common.PortPostgres,
+	)
 	if password != "" {
 		connStr += fmt.Sprintf(" password=%s", password)
 	}

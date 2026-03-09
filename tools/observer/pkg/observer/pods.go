@@ -97,12 +97,12 @@ func (o *Observer) checkPodPhase(pod *corev1.Pod, key string) {
 	now := time.Now()
 	phase := pod.Status.Phase
 
-	switch {
-	case phase == corev1.PodRunning || phase == corev1.PodSucceeded:
+	switch phase {
+	case corev1.PodRunning, corev1.PodSucceeded:
 		delete(o.podPhaseSince, key)
 		return
 
-	case phase == corev1.PodPending:
+	case corev1.PodPending:
 		since, tracked := o.podPhaseSince[key]
 		if !tracked {
 			o.podPhaseSince[key] = now
@@ -113,7 +113,11 @@ func (o *Observer) checkPodPhase(pod *corev1.Pod, key string) {
 				Severity:  report.SeverityError,
 				Check:     "pod-health",
 				Component: componentForPod(pod),
-				Message:   fmt.Sprintf("Pod %s stuck in Pending for %s", pod.Name, now.Sub(since).Round(time.Second)),
+				Message: fmt.Sprintf(
+					"Pod %s stuck in Pending for %s",
+					pod.Name,
+					now.Sub(since).Round(time.Second),
+				),
 				Details: map[string]any{
 					"pod":   pod.Name,
 					"phase": string(phase),
@@ -126,12 +130,18 @@ func (o *Observer) checkPodPhase(pod *corev1.Pod, key string) {
 		for _, cs := range pod.Status.ContainerStatuses {
 			if cs.State.Waiting != nil {
 				reason := cs.State.Waiting.Reason
-				if reason == "CrashLoopBackOff" || reason == "ImagePullBackOff" || reason == "ErrImagePull" {
+				if reason == "CrashLoopBackOff" || reason == "ImagePullBackOff" ||
+					reason == "ErrImagePull" {
 					o.reporter.Report(report.Finding{
 						Severity:  report.SeverityError,
 						Check:     "pod-health",
 						Component: componentForPod(pod),
-						Message:   fmt.Sprintf("Pod %s container %s in %s", pod.Name, cs.Name, reason),
+						Message: fmt.Sprintf(
+							"Pod %s container %s in %s",
+							pod.Name,
+							cs.Name,
+							reason,
+						),
 						Details: map[string]any{
 							"pod":       pod.Name,
 							"container": cs.Name,
@@ -165,7 +175,12 @@ func (o *Observer) checkContainerReadiness(pod *corev1.Pod, key string) {
 				Severity:  report.SeverityWarn,
 				Check:     "pod-health",
 				Component: componentForPod(pod),
-				Message:   fmt.Sprintf("Container %s in pod %s not ready for %s", cs.Name, pod.Name, now.Sub(since).Round(time.Second)),
+				Message: fmt.Sprintf(
+					"Container %s in pod %s not ready for %s",
+					cs.Name,
+					pod.Name,
+					now.Sub(since).Round(time.Second),
+				),
 				Details: map[string]any{
 					"pod":       pod.Name,
 					"container": cs.Name,
@@ -212,8 +227,13 @@ func (o *Observer) checkRestarts(pod *corev1.Pod) {
 				Severity:  severity,
 				Check:     "pod-health",
 				Component: componentForPod(pod),
-				Message:   fmt.Sprintf("Container %s in pod %s restarted (count: %d)", cs.Name, pod.Name, cs.RestartCount),
-				Details:   details,
+				Message: fmt.Sprintf(
+					"Container %s in pod %s restarted (count: %d)",
+					cs.Name,
+					pod.Name,
+					cs.RestartCount,
+				),
+				Details: details,
 			})
 		}
 	}
@@ -237,7 +257,11 @@ func (o *Observer) checkTerminating(pod *corev1.Pod, key string) {
 	if now.Sub(since) > common.TerminatingTimeout {
 		drainState := pod.Annotations[common.AnnotationDrainState]
 		severity := report.SeverityError
-		msg := fmt.Sprintf("Pod %s stuck Terminating for %s", pod.Name, now.Sub(since).Round(time.Second))
+		msg := fmt.Sprintf(
+			"Pod %s stuck Terminating for %s",
+			pod.Name,
+			now.Sub(since).Round(time.Second),
+		)
 		if drainState != "" {
 			msg += fmt.Sprintf(" (drain state: %s)", drainState)
 		}
@@ -276,7 +300,11 @@ func (o *Observer) checkOperatorPod(ctx context.Context) {
 				Severity:  report.SeverityError,
 				Check:     "pod-health",
 				Component: "operator",
-				Message:   fmt.Sprintf("Operator pod %s is %s, expected Running", pod.Name, pod.Status.Phase),
+				Message: fmt.Sprintf(
+					"Operator pod %s is %s, expected Running",
+					pod.Name,
+					pod.Status.Phase,
+				),
 			})
 		}
 	}
@@ -309,8 +337,13 @@ func (o *Observer) checkPodCounts(ctx context.Context, pods *corev1.PodList) {
 			}
 
 			for _, cellName := range poolSpec.Cells {
-				actual := countPodsForPoolCell(pods, shardLabelValue, string(poolName), string(cellName))
-				if int32(actual) != expectedPerCell {
+				actual := countPodsForPoolCell(
+					pods,
+					shardLabelValue,
+					string(poolName),
+					string(cellName),
+				)
+				if actual != int(expectedPerCell) {
 					sev := report.SeverityError
 					if o.hasAnyPodInGracePeriod() {
 						sev = report.SeverityWarn
@@ -319,7 +352,13 @@ func (o *Observer) checkPodCounts(ctx context.Context, pods *corev1.PodList) {
 						Severity:  sev,
 						Check:     "pod-health",
 						Component: fmt.Sprintf("shard/%s/%s", shard.Namespace, shard.Name),
-						Message:   fmt.Sprintf("Pool %s cell %s: expected %d pods, found %d", poolName, cellName, expectedPerCell, actual),
+						Message: fmt.Sprintf(
+							"Pool %s cell %s: expected %d pods, found %d",
+							poolName,
+							cellName,
+							expectedPerCell,
+							actual,
+						),
 						Details: map[string]any{
 							"shard":    shard.Name,
 							"pool":     string(poolName),

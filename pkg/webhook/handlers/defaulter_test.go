@@ -472,7 +472,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 						},
 					},
 				}
-			if diff := cmp.Diff(want, cluster, cmpopts.EquateEmpty()); diff != "" {
+				if diff := cmp.Diff(want, cluster, cmpopts.EquateEmpty()); diff != "" {
 					t.Errorf("Cluster mismatch (-want +got):\n%s", diff)
 				}
 			},

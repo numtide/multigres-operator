@@ -4,7 +4,7 @@ go 1.25.2
 
 require (
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/numtide/multigres-operator/api v0.0.0-20260305121848-7429f399a1ba
+	github.com/numtide/multigres-operator/api v0.0.0-20260309145643-ac5033e58e45
 	github.com/prometheus/client_golang v1.22.0
 	google.golang.org/grpc v1.79.2
 	k8s.io/api v0.35.0

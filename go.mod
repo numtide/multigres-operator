@@ -4,15 +4,15 @@ go 1.25.2
 
 require (
 	github.com/multigres/multigres v0.0.0-20260302204305-01fb4e4aae6d
-	github.com/numtide/multigres-operator/api v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/cert v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260306105552-5381a0b947c6
-	github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260306105552-5381a0b947c6
+	github.com/numtide/multigres-operator/api v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/cert v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/cluster-handler v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/monitoring v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/resolver v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/resource-handler v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/testutil v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/util v0.0.0-20260309145643-ac5033e58e45
+	github.com/numtide/multigres-operator/pkg/webhook v0.0.0-20260309145643-ac5033e58e45
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
@@ -72,7 +72,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
-	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260306105552-5381a0b947c6 // indirect
+	github.com/numtide/multigres-operator/pkg/data-handler v0.0.0-20260309145643-ac5033e58e45 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect

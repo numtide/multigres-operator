@@ -37,11 +37,11 @@ type Summary struct {
 
 // StatusResponse is the JSON body returned by the /api/status endpoint.
 type StatusResponse struct {
-	Summary  Summary        `json:"summary"`
+	Summary  Summary         `json:"summary"`
 	Healthy  map[string]bool `json:"healthy"`
-	Findings []Finding      `json:"findings"`
-	Probes   map[string]any `json:"probes"`
-	Coverage CoverageInfo   `json:"coverage"`
+	Findings []Finding       `json:"findings"`
+	Probes   map[string]any  `json:"probes"`
+	Coverage CoverageInfo    `json:"coverage"`
 }
 
 // CoverageInfo describes what the observer was able to check this cycle.
