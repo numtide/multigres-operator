@@ -72,7 +72,7 @@ const (
 	DrainAcknowledgedTimeout     = 30 * time.Second
 	PhaseDegradedTimeout         = 5 * time.Minute
 	GenerationDivergeTimeout     = 60 * time.Second
-	PrimaryGracePeriod           = 30 * time.Second
+	PrimaryGracePeriod           = 60 * time.Second
 	StaleStatusEntryGracePeriod  = 30 * time.Second
 	TerminatingResourceTimeout   = 5 * time.Minute
 	ConnectivityTimeout          = 5 * time.Second

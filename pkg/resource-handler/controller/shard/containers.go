@@ -522,11 +522,11 @@ func buildPgBackRestCertVolume(shard *multigresv1alpha1.Shard) *corev1.Volume {
 	}
 }
 
-// pgPasswordEnvVar returns a PGPASSWORD env var sourced from the per-shard postgres password Secret.
-// pgctld reads this during initdb to set the superuser password.
+// pgPasswordEnvVar returns a POSTGRES_PASSWORD env var sourced from the per-shard postgres password Secret.
+// pgctld reads this during initdb to set the superuser password in pg_authid.
 func pgPasswordEnvVar(shardName string) corev1.EnvVar {
 	return corev1.EnvVar{
-		Name: "PGPASSWORD",
+		Name: "POSTGRES_PASSWORD",
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
