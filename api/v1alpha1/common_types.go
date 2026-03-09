@@ -97,7 +97,7 @@ type PVCDeletionPolicy struct {
 	// +kubebuilder:default=Retain
 	WhenDeleted PVCRetentionPolicyType `json:"whenDeleted,omitempty"`
 
-	// WhenScaled controls PVC deletion when StatefulSets are scaled down.
+	// WhenScaled controls PVC deletion when replicas are scaled down.
 	// - Retain (default): PVCs from scaled-down pods are kept
 	// - Delete: PVCs are automatically deleted when pods are removed
 	// +optional

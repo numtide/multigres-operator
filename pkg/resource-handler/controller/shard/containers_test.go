@@ -335,7 +335,13 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := buildMultiPoolerSidecar(tc.shard, tc.poolSpec, "primary", tc.cellName, tc.serviceID)
+			got := buildMultiPoolerSidecar(
+				tc.shard,
+				tc.poolSpec,
+				"primary",
+				tc.cellName,
+				tc.serviceID,
+			)
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildMultiPoolerSidecar() mismatch (-want +got):\n%s", diff)
@@ -695,7 +701,13 @@ func assertContainsFlag(t *testing.T, args []string, want string) {
 }
 
 func TestBuildMultiPoolerSidecar_WithObservability(t *testing.T) {
-	c := buildMultiPoolerSidecar(otelShard(), multigresv1alpha1.PoolSpec{}, "primary", "zone1", "p-otel1234")
+	c := buildMultiPoolerSidecar(
+		otelShard(),
+		multigresv1alpha1.PoolSpec{},
+		"primary",
+		"zone1",
+		"p-otel1234",
+	)
 	assertContainsOTELEnvVar(t, c.Env, "buildMultiPoolerSidecar")
 }
 
@@ -972,7 +984,13 @@ func TestMultiPoolerSidecar_PgBackRestCertArgs(t *testing.T) {
 			Type: multigresv1alpha1.BackupTypeS3,
 			S3:   &multigresv1alpha1.S3BackupConfig{Bucket: "b", Region: "r"},
 		}
-		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1", "p-backup123")
+		c := buildMultiPoolerSidecar(
+			shard,
+			multigresv1alpha1.PoolSpec{},
+			"primary",
+			"zone1",
+			"p-backup123",
+		)
 		assertContainsFlag(t, c.Args, "--pgbackrest-cert-file=/certs/pgbackrest/pgbackrest.crt")
 		assertContainsFlag(t, c.Args, "--pgbackrest-key-file=/certs/pgbackrest/pgbackrest.key")
 		assertContainsFlag(t, c.Args, "--pgbackrest-ca-file=/certs/pgbackrest/ca.crt")
@@ -981,7 +999,13 @@ func TestMultiPoolerSidecar_PgBackRestCertArgs(t *testing.T) {
 
 	t.Run("no cert args when no backup", func(t *testing.T) {
 		shard := baseShard.DeepCopy()
-		c := buildMultiPoolerSidecar(shard, multigresv1alpha1.PoolSpec{}, "primary", "zone1", "p-noback123")
+		c := buildMultiPoolerSidecar(
+			shard,
+			multigresv1alpha1.PoolSpec{},
+			"primary",
+			"zone1",
+			"p-noback123",
+		)
 		assertNotContainsFlag(t, c.Args, "--pgbackrest-cert-file")
 		assertNotContainsFlag(t, c.Args, "--pgbackrest-key-file")
 		assertNotContainsFlag(t, c.Args, "--pgbackrest-ca-file")
