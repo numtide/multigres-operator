@@ -273,10 +273,10 @@ func (o *Observer) StatusHandler() http.HandlerFunc {
 		if data == nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte(`{"error":"no cycle completed yet"}`))
+			_, _ = w.Write([]byte(`{"error":"no cycle completed yet"}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(data)
+		_ = json.NewEncoder(w).Encode(data)
 	}
 }

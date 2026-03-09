@@ -60,14 +60,22 @@ func TestIsCrashLooping(t *testing.T) {
 		{
 			name: "CrashLoopBackOff",
 			pod: corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
-				{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}},
+				{
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+					},
+				},
 			}}},
 			want: true,
 		},
 		{
 			name: "OOMKilled",
 			pod: corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
-				{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "OOMKilled"}}},
+				{
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "OOMKilled"},
+					},
+				},
 			}}},
 			want: true,
 		},
@@ -81,14 +89,22 @@ func TestIsCrashLooping(t *testing.T) {
 		{
 			name: "ImagePullBackOff",
 			pod: corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
-				{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}}},
+				{
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"},
+					},
+				},
 			}}},
 			want: true,
 		},
 		{
 			name: "ErrImagePull",
 			pod: corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
-				{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ErrImagePull"}}},
+				{
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "ErrImagePull"},
+					},
+				},
 			}}},
 			want: false,
 		},
@@ -103,7 +119,9 @@ func TestIsCrashLooping(t *testing.T) {
 				{
 					Ready:        false,
 					RestartCount: 5,
-					State:        corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}},
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"},
+					},
 				},
 			}}},
 			want: true,
@@ -124,7 +142,9 @@ func TestIsCrashLooping(t *testing.T) {
 			pod: corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
 				{
 					RestartCount: 2,
-					State:        corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}},
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"},
+					},
 				},
 			}}},
 			want: false,
@@ -142,7 +162,11 @@ func TestIsCrashLooping(t *testing.T) {
 func TestAnyCrashLooping(t *testing.T) {
 	crashPod := corev1.Pod{
 		Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
-			{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}},
+			{
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+				},
+			},
 		}},
 	}
 	healthyPod := corev1.Pod{
@@ -154,7 +178,11 @@ func TestAnyCrashLooping(t *testing.T) {
 	terminatingCrashPod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{DeletionTimestamp: &now},
 		Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
-			{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}},
+			{
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+				},
+			},
 		}},
 	}
 
@@ -167,7 +195,11 @@ func TestAnyCrashLooping(t *testing.T) {
 		{name: "AllHealthy", pods: []corev1.Pod{healthyPod, healthyPod}, want: false},
 		{name: "OneCrashing", pods: []corev1.Pod{healthyPod, crashPod}, want: true},
 		{name: "TerminatingCrashSkipped", pods: []corev1.Pod{terminatingCrashPod}, want: false},
-		{name: "TerminatingPlusLiveCrash", pods: []corev1.Pod{terminatingCrashPod, crashPod}, want: true},
+		{
+			name: "TerminatingPlusLiveCrash",
+			pods: []corev1.Pod{terminatingCrashPod, crashPod},
+			want: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -181,7 +213,11 @@ func TestAnyCrashLooping(t *testing.T) {
 func TestComputeWorkloadPhase(t *testing.T) {
 	crashPod := corev1.Pod{
 		Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
-			{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}},
+			{
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+				},
+			},
 		}},
 	}
 	healthyPod := corev1.Pod{

@@ -156,7 +156,12 @@ func (o *Observer) checkPhase(component string, phase multigresv1alpha1.Phase, d
 				Severity:  report.SeverityError,
 				Check:     "crd-status",
 				Component: component,
-				Message:   fmt.Sprintf("%s in %s phase for %s", component, phase, now.Sub(since).Round(time.Second)),
+				Message: fmt.Sprintf(
+					"%s in %s phase for %s",
+					component,
+					phase,
+					now.Sub(since).Round(time.Second),
+				),
 				Details: map[string]any{
 					"phase":    string(phase),
 					"duration": now.Sub(since).String(),
@@ -188,7 +193,13 @@ func (o *Observer) checkGenerationStaleness(component string, generation, observ
 			Severity:  report.SeverityError,
 			Check:     "crd-status",
 			Component: component,
-			Message:   fmt.Sprintf("%s observedGeneration (%d) behind metadata.generation (%d) for %s", component, observed, generation, now.Sub(since).Round(time.Second)),
+			Message: fmt.Sprintf(
+				"%s observedGeneration (%d) behind metadata.generation (%d) for %s",
+				component,
+				observed,
+				generation,
+				now.Sub(since).Round(time.Second),
+			),
 			Details: map[string]any{
 				"observedGeneration": observed,
 				"generation":         generation,
@@ -232,8 +243,14 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 							Severity:  report.SeverityWarn,
 							Check:     "crd-status",
 							Component: comp,
-							Message:   fmt.Sprintf("Stale podRoles entry for non-existent pod %s", podName),
-							Details:   map[string]any{"pod": podName, "role": shard.Status.PodRoles[podName]},
+							Message: fmt.Sprintf(
+								"Stale podRoles entry for non-existent pod %s",
+								podName,
+							),
+							Details: map[string]any{
+								"pod":  podName,
+								"role": shard.Status.PodRoles[podName],
+							},
 						})
 					}
 				}
@@ -266,7 +283,12 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 	for poolName, poolSpec := range shard.Spec.Pools {
 		for _, cellName := range poolSpec.Cells {
 			violationKey := fmt.Sprintf("%s/%s-%s", comp, poolName, cellName)
-			primaryCount := countPrimariesForPoolCell(shard.Status.PodRoles, podLabels, string(poolName), string(cellName))
+			primaryCount := countPrimariesForPoolCell(
+				shard.Status.PodRoles,
+				podLabels,
+				string(poolName),
+				string(cellName),
+			)
 
 			if primaryCount != 1 {
 				since, tracked := o.primaryViolationSince[violationKey]
@@ -279,7 +301,12 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 						Severity:  report.SeverityError,
 						Check:     "crd-status",
 						Component: comp,
-						Message:   fmt.Sprintf("Pool %s cell %s has %d primaries (expected 1)", poolName, cellName, primaryCount),
+						Message: fmt.Sprintf(
+							"Pool %s cell %s has %d primaries (expected 1)",
+							poolName,
+							cellName,
+							primaryCount,
+						),
 						Details: map[string]any{
 							"pool":         string(poolName),
 							"cell":         string(cellName),
@@ -302,7 +329,11 @@ type podPoolCell struct {
 
 // countPrimariesForPoolCell counts pods with a "primary" role that belong to
 // the specified pool and cell, using pod labels for accurate filtering.
-func countPrimariesForPoolCell(podRoles map[string]string, podLabels map[string]podPoolCell, poolName, cellName string) int {
+func countPrimariesForPoolCell(
+	podRoles map[string]string,
+	podLabels map[string]podPoolCell,
+	poolName, cellName string,
+) int {
 	count := 0
 	for podName, role := range podRoles {
 		if role != "primary" && role != "PRIMARY" {
@@ -351,7 +382,11 @@ func (o *Observer) checkShardReadiness(ctx context.Context, shard *multigresv1al
 			Severity:  report.SeverityWarn,
 			Check:     "crd-status",
 			Component: comp,
-			Message:   fmt.Sprintf("status.readyReplicas (%d) != actual ready pods (%d)", shard.Status.ReadyReplicas, actualReady),
+			Message: fmt.Sprintf(
+				"status.readyReplicas (%d) != actual ready pods (%d)",
+				shard.Status.ReadyReplicas,
+				actualReady,
+			),
 		})
 	}
 }
@@ -407,7 +442,10 @@ func (o *Observer) checkShardConditions(shard *multigresv1alpha1.Shard, comp str
 					Severity:  report.SeverityWarn,
 					Check:     "crd-status",
 					Component: comp,
-					Message:   fmt.Sprintf("Shard %s has ReadyForDeletion=True but is not being deleted", shard.Name),
+					Message: fmt.Sprintf(
+						"Shard %s has ReadyForDeletion=True but is not being deleted",
+						shard.Name,
+					),
 				})
 			}
 		case "BackupHealthy":
@@ -420,8 +458,13 @@ func (o *Observer) checkShardConditions(shard *multigresv1alpha1.Shard, comp str
 					Severity:  sev,
 					Check:     "crd-status",
 					Component: comp,
-					Message:   fmt.Sprintf("Shard %s backup unhealthy (%s): %s", shard.Name, cond.Reason, cond.Message),
-					Details:   map[string]any{"reason": cond.Reason},
+					Message: fmt.Sprintf(
+						"Shard %s backup unhealthy (%s): %s",
+						shard.Name,
+						cond.Reason,
+						cond.Message,
+					),
+					Details: map[string]any{"reason": cond.Reason},
 				})
 			}
 		}

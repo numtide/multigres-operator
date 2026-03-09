@@ -120,7 +120,13 @@ type logMatch struct {
 	check     string
 }
 
-func (o *Observer) scanPodLogs(ctx context.Context, pod *corev1.Pod, container string, sinceSeconds int64, patterns []errorPattern) {
+func (o *Observer) scanPodLogs(
+	ctx context.Context,
+	pod *corev1.Pod,
+	container string,
+	sinceSeconds int64,
+	patterns []errorPattern,
+) {
 	opts := &corev1.PodLogOptions{
 		SinceSeconds: &sinceSeconds,
 	}
@@ -133,11 +139,19 @@ func (o *Observer) scanPodLogs(ctx context.Context, pod *corev1.Pod, container s
 	if err != nil {
 		// Don't report log access errors for pods that may be initializing.
 		if pod.Status.Phase == corev1.PodRunning {
-			o.logger.Debug("failed to stream logs", "pod", pod.Name, "container", container, "error", err)
+			o.logger.Debug(
+				"failed to stream logs",
+				"pod",
+				pod.Name,
+				"container",
+				container,
+				"error",
+				err,
+			)
 		}
 		return
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	component := componentForPod(pod)
 	if container != "" {
@@ -181,7 +195,13 @@ func (o *Observer) scanPodLogs(ctx context.Context, pod *corev1.Pod, container s
 	}
 
 	for pattern, m := range matches {
-		msg := fmt.Sprintf("Pattern %q matched %d times in %s/%s", pattern, m.count, pod.Name, container)
+		msg := fmt.Sprintf(
+			"Pattern %q matched %d times in %s/%s",
+			pattern,
+			m.count,
+			pod.Name,
+			container,
+		)
 		if m.count == 1 {
 			msg = fmt.Sprintf("Pattern %q matched 1 time in %s/%s", pattern, pod.Name, container)
 		}

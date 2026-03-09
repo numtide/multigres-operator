@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"flag"
 	"syscall"
 	"time"
 
@@ -36,14 +36,39 @@ func main() {
 		enableSQLProbe    bool
 	)
 
-	flag.StringVar(&namespace, "namespace", envString("NAMESPACE", ""), "Namespace to observe for multigres workloads (empty = all namespaces)")
-	flag.StringVar(&operatorNamespace, "operator-namespace", envString("OPERATOR_NAMESPACE", "multigres-operator"), "Namespace where the multigres operator is running")
+	flag.StringVar(
+		&namespace,
+		"namespace",
+		envString("NAMESPACE", ""),
+		"Namespace to observe for multigres workloads (empty = all namespaces)",
+	)
+	flag.StringVar(
+		&operatorNamespace,
+		"operator-namespace",
+		envString("OPERATOR_NAMESPACE", "multigres-operator"),
+		"Namespace where the multigres operator is running",
+	)
 	flag.DurationVar(&interval, "interval", common.DefaultInterval, "Check interval")
-	flag.StringVar(&kubeconfig, "kubeconfig", os.Getenv("KUBECONFIG"), "Path to kubeconfig (optional, uses in-cluster config by default)")
+	flag.StringVar(
+		&kubeconfig,
+		"kubeconfig",
+		os.Getenv("KUBECONFIG"),
+		"Path to kubeconfig (optional, uses in-cluster config by default)",
+	)
 	flag.BoolVar(&once, "once", false, "Run one observer cycle and exit (useful for CI)")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":9090", "Address for Prometheus metrics endpoint")
-	flag.IntVar(&logTailLines, "log-tail-lines", 100, "Number of log lines to tail per component per cycle")
-	flag.BoolVar(&enableSQLProbe, "enable-sql-probe", true, "Enable SQL probes for replication health and connectivity checks")
+	flag.IntVar(
+		&logTailLines,
+		"log-tail-lines",
+		100,
+		"Number of log lines to tail per component per cycle",
+	)
+	flag.BoolVar(
+		&enableSQLProbe,
+		"enable-sql-probe",
+		true,
+		"Enable SQL probes for replication health and connectivity checks",
+	)
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -113,7 +138,7 @@ func main() {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
-	srv.Shutdown(shutdownCtx)
+	_ = srv.Shutdown(shutdownCtx)
 }
 
 func envString(key, fallback string) string {

@@ -43,7 +43,10 @@ func (o *Observer) checkOwnerReferences(ctx context.Context) {
 	}
 }
 
-func (o *Observer) checkCellOwnership(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) {
+func (o *Observer) checkCellOwnership(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) {
 	var cells multigresv1alpha1.CellList
 	if err := o.client.List(ctx, &cells,
 		o.listOpts(client.MatchingLabels{common.LabelMultigresCluster: cluster.Name})...,
@@ -58,7 +61,11 @@ func (o *Observer) checkCellOwnership(ctx context.Context, cluster *multigresv1a
 				Severity:  report.SeverityFatal,
 				Check:     "resource-validation",
 				Component: fmt.Sprintf("cell/%s/%s", cell.Namespace, cell.Name),
-				Message:   fmt.Sprintf("Cell %s missing ownerReference to cluster %s", cell.Name, cluster.Name),
+				Message: fmt.Sprintf(
+					"Cell %s missing ownerReference to cluster %s",
+					cell.Name,
+					cluster.Name,
+				),
 			})
 		}
 
@@ -113,7 +120,10 @@ func (o *Observer) checkMultiGatewayResources(ctx context.Context, cell *multigr
 	}
 }
 
-func (o *Observer) checkTableGroupOwnership(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) {
+func (o *Observer) checkTableGroupOwnership(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) {
 	var tgs multigresv1alpha1.TableGroupList
 	if err := o.client.List(ctx, &tgs,
 		o.listOpts(client.MatchingLabels{common.LabelMultigresCluster: cluster.Name})...,
@@ -128,7 +138,11 @@ func (o *Observer) checkTableGroupOwnership(ctx context.Context, cluster *multig
 				Severity:  report.SeverityFatal,
 				Check:     "resource-validation",
 				Component: fmt.Sprintf("tablegroup/%s/%s", tg.Namespace, tg.Name),
-				Message:   fmt.Sprintf("TableGroup %s missing ownerReference to cluster %s", tg.Name, cluster.Name),
+				Message: fmt.Sprintf(
+					"TableGroup %s missing ownerReference to cluster %s",
+					tg.Name,
+					cluster.Name,
+				),
 			})
 		}
 
@@ -151,13 +165,20 @@ func (o *Observer) checkShardOwnership(ctx context.Context, tg *multigresv1alpha
 				Severity:  report.SeverityFatal,
 				Check:     "resource-validation",
 				Component: fmt.Sprintf("shard/%s/%s", shard.Namespace, shard.Name),
-				Message:   fmt.Sprintf("Shard %s missing ownerReference to tablegroup %s", shard.Name, tg.Name),
+				Message: fmt.Sprintf(
+					"Shard %s missing ownerReference to tablegroup %s",
+					shard.Name,
+					tg.Name,
+				),
 			})
 		}
 	}
 }
 
-func (o *Observer) checkTopoServerOwnership(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) {
+func (o *Observer) checkTopoServerOwnership(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) {
 	var topos multigresv1alpha1.TopoServerList
 	if err := o.client.List(ctx, &topos,
 		o.listOpts(client.MatchingLabels{common.LabelMultigresCluster: cluster.Name})...,
@@ -172,7 +193,11 @@ func (o *Observer) checkTopoServerOwnership(ctx context.Context, cluster *multig
 				Severity:  report.SeverityFatal,
 				Check:     "resource-validation",
 				Component: fmt.Sprintf("toposerver/%s/%s", ts.Namespace, ts.Name),
-				Message:   fmt.Sprintf("TopoServer %s missing ownerReference to cluster %s", ts.Name, cluster.Name),
+				Message: fmt.Sprintf(
+					"TopoServer %s missing ownerReference to cluster %s",
+					ts.Name,
+					cluster.Name,
+				),
 			})
 		}
 	}
@@ -249,7 +274,13 @@ func (o *Observer) checkFinalizersAndDeletion(ctx context.Context) {
 					Severity:  report.SeverityError,
 					Check:     "resource-validation",
 					Component: fmt.Sprintf("%s/%s/%s", kind, obj.Namespace, obj.Name),
-					Message:   fmt.Sprintf("%s %s stuck in Terminating for %s with finalizers: %v", kind, obj.Name, age.Round(time.Second), obj.Finalizers),
+					Message: fmt.Sprintf(
+						"%s %s stuck in Terminating for %s with finalizers: %v",
+						kind,
+						obj.Name,
+						age.Round(time.Second),
+						obj.Finalizers,
+					),
 				})
 			}
 		}

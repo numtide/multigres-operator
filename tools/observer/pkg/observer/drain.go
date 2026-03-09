@@ -80,7 +80,12 @@ func (o *Observer) checkDrainState(ctx context.Context) {
 					Severity:  report.SeverityFatal,
 					Check:     "drain-state",
 					Component: componentForPod(pod),
-					Message:   fmt.Sprintf("Pod %s drain state went backward: %s → %s", pod.Name, prev, state),
+					Message: fmt.Sprintf(
+						"Pod %s drain state went backward: %s → %s",
+						pod.Name,
+						prev,
+						state,
+					),
 					Details: map[string]any{
 						"pod":       pod.Name,
 						"prevState": prev,
@@ -119,7 +124,13 @@ func (o *Observer) checkDrainState(ctx context.Context) {
 				Severity:  report.SeverityError,
 				Check:     "drain-state",
 				Component: componentForPod(pod),
-				Message:   fmt.Sprintf("Pod %s stuck in drain state %q for %s (timeout: %s)", pod.Name, state, now.Sub(since).Round(time.Second), timeout),
+				Message: fmt.Sprintf(
+					"Pod %s stuck in drain state %q for %s (timeout: %s)",
+					pod.Name,
+					state,
+					now.Sub(since).Round(time.Second),
+					timeout,
+				),
 				Details: map[string]any{
 					"pod":     pod.Name,
 					"state":   state,
@@ -167,7 +178,10 @@ func (o *Observer) checkDrainState(ctx context.Context) {
 	}
 }
 
-func (o *Observer) checkConcurrentDrains(ctx context.Context, drainingPerShard map[namespacedShard][]string) {
+func (o *Observer) checkConcurrentDrains(
+	ctx context.Context,
+	drainingPerShard map[namespacedShard][]string,
+) {
 	for sk, drainingPods := range drainingPerShard {
 		if len(drainingPods) <= 1 {
 			continue
@@ -177,7 +191,8 @@ func (o *Observer) checkConcurrentDrains(ctx context.Context, drainingPerShard m
 		var shard multigresv1alpha1.Shard
 		objKey := client.ObjectKey{Namespace: sk.ns, Name: sk.name}
 		if err := o.client.Get(ctx, objKey, &shard); err == nil {
-			if shard.DeletionTimestamp != nil || shard.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "true" {
+			if shard.DeletionTimestamp != nil ||
+				shard.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "true" {
 				continue
 			}
 		}
@@ -186,7 +201,12 @@ func (o *Observer) checkConcurrentDrains(ctx context.Context, drainingPerShard m
 			Severity:  report.SeverityError,
 			Check:     "drain-state",
 			Component: fmt.Sprintf("shard/%s/%s", sk.ns, sk.name),
-			Message:   fmt.Sprintf("Shard %s has %d pods draining concurrently: %v", sk.name, len(drainingPods), drainingPods),
+			Message: fmt.Sprintf(
+				"Shard %s has %d pods draining concurrently: %v",
+				sk.name,
+				len(drainingPods),
+				drainingPods,
+			),
 			Details: map[string]any{
 				"shard":        sk.name,
 				"drainingPods": drainingPods,
