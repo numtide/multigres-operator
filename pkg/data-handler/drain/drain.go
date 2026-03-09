@@ -154,6 +154,13 @@ func ExecuteDrainStateMachine(
 						pod.Name,
 					)
 					return true, nil
+				} else if IsPrimaryNotReady(ctx, k8sClient, shard, primary) {
+					logger.Info(
+						"Primary pod is not ready, delaying standby removal",
+						"pod",
+						pod.Name,
+					)
+					return true, nil
 				} else {
 					req := &multipoolermanagerdatapb.UpdateSynchronousStandbyListRequest{
 						Operation:    multipoolermanagerdatapb.StandbyUpdateOperation_STANDBY_UPDATE_OPERATION_REMOVE,
@@ -198,6 +205,13 @@ func ExecuteDrainStateMachine(
 				} else if IsPrimaryDraining(ctx, k8sClient, shard, primary) {
 					logger.Info(
 						"Primary pod is being drained, delaying standby removal verification",
+						"pod",
+						pod.Name,
+					)
+					return true, nil
+				} else if IsPrimaryNotReady(ctx, k8sClient, shard, primary) {
+					logger.Info(
+						"Primary pod is not ready, delaying standby removal verification",
 						"pod",
 						pod.Name,
 					)
@@ -305,4 +319,34 @@ func IsPrimaryDraining(
 	}
 	state := primaryPod.Annotations[metadata.AnnotationDrainState]
 	return state != "" && state != metadata.DrainStateReadyForDeletion
+}
+
+// IsPrimaryNotReady checks if the primary pooler's corresponding Kubernetes pod
+// has containers that are not passing readiness probes. This prevents sending
+// RPCs to a pod whose multipooler cannot reach its local postgres.
+func IsPrimaryNotReady(
+	ctx context.Context,
+	k8sClient client.Client,
+	shard *multigresv1alpha1.Shard,
+	primary *clustermetadatapb.MultiPooler,
+) bool {
+	if primary == nil || primary.Id == nil {
+		return true
+	}
+	primaryPod := &corev1.Pod{}
+	key := client.ObjectKey{Namespace: shard.Namespace, Name: primary.Id.Name}
+	if err := k8sClient.Get(ctx, key, primaryPod); err != nil {
+		if errors.IsNotFound(err) {
+			return true
+		}
+		log.FromContext(ctx).
+			Error(err, "Transient error checking primary pod readiness", "pod", key.Name)
+		return true
+	}
+	for _, cond := range primaryPod.Status.Conditions {
+		if cond.Type == corev1.ContainersReady {
+			return cond.Status != corev1.ConditionTrue
+		}
+	}
+	return false
 }
