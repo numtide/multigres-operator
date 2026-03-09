@@ -45,7 +45,7 @@ Validates the existence, ownership, and consistency of all Multigres-managed Kub
 | MultiGateway Service | Missing MultiGateway services per cell | error |
 | MultiOrch Deployment | Missing MultiOrch deployments per shard per cell | error |
 | MultiOrch Service | Missing MultiOrch services per shard per cell | error |
-| Pool StatefulSets | Missing StatefulSets per pool per cell | error |
+| Pool pods | Missing pods per pool per cell | error |
 | Pool headless Services | Missing headless services per pool per cell | error |
 | Orphan detection | Resources with multigres labels but no ownerReference | warn |
 | Stuck terminating | Multigres resources stuck in `Terminating` for >5min | error |

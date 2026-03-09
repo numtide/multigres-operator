@@ -4,6 +4,49 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.4.2] — 2026-03-09
+
+**Previous release:** v0.4.1 (2026-03-05)
+
+Introduces the Multigres Observer — a standalone cluster health monitoring tool — along with degraded phase detection across all controllers, drain state machine hardening, topology pruning propagation, and materialized webhook defaults.
+
+**34 commits, 95 files changed, ~8,300 insertions.**
+
+### Features
+
+- **Multigres Observer tool:** New standalone tool (`tools/observer/`) for continuous cluster health monitoring with 10 check categories (pod health, resource validation, CRD status, drain state, connectivity, replication, log monitoring, events, topology validation, and operator logs). Includes Prometheus metrics, structured JSON logging, `/api/status` endpoint, startup grace period, Dockerfile, and Kustomize deploy manifests. New Makefile targets: `kind-build-observer`, `kind-load-observer`, `kind-deploy-observer`, `kind-undeploy-observer`.
+- **Degraded phase detection:** All controllers (Cell, TopoServer, Shard) now detect crash-looping pods (`CrashLoopBackOff`, `OOMKilled`, `ImagePullBackOff`, or terminated with ≥3 restarts) and report `PhaseDegraded` instead of `PhaseProgressing`. MultigresCluster aggregates `PhaseDegraded` from child Cells, TableGroups, and TopoServers.
+- **Periodic status re-reconciliation:** Cell and TopoServer controllers requeue after 30s when not `Healthy`, enabling detection of pod-level issues (e.g., CrashLoopBackOff) that don't trigger watch events.
+- **Materialized cluster defaults:** Webhook defaulter now materializes `TopologyPruning`, `PVCDeletionPolicy`, `Backup`, etcd `RootPath`, and external topo `Implementation` into the persisted spec, solving the "invisible defaults" problem for these fields.
+- **Stale drain cancellation:** Drains in `Requested` state are automatically cancelled when the desired state changes (e.g., scale-down reversed), preventing stuck `Progressing` phases.
+- **Topology pruning propagation:** `TopologyPruning` config propagated from MultigresCluster → TableGroup → Shard via the builder chain and new `TopologyPruning` fields on `ShardSpec` and `TableGroupSpec`. CRD schemas updated accordingly.
+- **TopoServer status aggregation:** MultigresCluster status now includes TopoServer phase in its health aggregation alongside Cells and TableGroups.
+
+### Bug Fixes
+
+- **Drain: check primary pod readiness before RPCs.** New `IsPrimaryNotReady` guard in `DrainStateDraining` and `DrainStateAcknowledged` prevents sending RPCs to a primary whose containers are not ready. Drains are delayed and requeued instead.
+- **Drain: reload PostgreSQL config after sync standby removal.** `ReloadConfig: true` added to `UpdateSynchronousStandbyList` requests so PostgreSQL reloads `synchronous_standby_names` immediately.
+- **PodRoles keying fix.** `GetPoolerStatus` now keys by actual Kubernetes pod name (via `PodMatchesPooler` FQDN-aware matching) instead of topology hostname, preventing stale entries from orphaned topology data.
+- **Multipooler service ID shortening.** Shorten `--service-id` value to prevent `application_name` overflow at the 63-character `NAMEDATALEN` limit, which was causing synchronous replication matching failures.
+- **pgctld `POSTGRES_PASSWORD` env var.** Switch from `PGPASSWORD` to `POSTGRES_PASSWORD` for the pgctld container.
+- **Topology defaults fix.** `getGlobalTopoRef` properly branches on `External` vs `Etcd` instead of unconditionally defaulting `rootPath` and `implementation`.
+- **Draining pods excluded from ready counts.** Pods with drain annotations are no longer counted as ready in shard status, preventing inflated readiness metrics.
+- **Configurable topology pruning.** `reconcilePoolerPrune` now respects the `TopologyPruning.Enabled` flag and skips pruning when disabled.
+
+### Dependencies
+
+- Upgrade multigres container images from `sha-4f39f4a` to `sha-8bfe693` (pgctld, multigres core, multiadmin-web, multiorch, multipooler, multigateway).
+- Internal Go module dependencies updated across all modules.
+
+### Documentation
+
+- New `docs/development/phase-lifecycle.md` explaining phase computation across all resources.
+- Updated `pod-management-architecture.md` drain state machine and status aggregation sections.
+- Fixed stale StatefulSet references in `operator-capability-levels.md` and observer docs.
+- Updated `CONTRIBUTING.md` with observer Makefile targets and project structure.
+
+---
+
 ## [v0.4.1] — 2026-03-05
 
 **Previous release:** v0.4.0 (2026-03-03)

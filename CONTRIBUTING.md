@@ -47,6 +47,9 @@ make kind-down
 | `make kind-deploy-certmanager` | Deploy operator to Kind, installing `cert-manager` for certificate handling. |
 | `make kind-deploy-no-webhook` | Deploy operator to Kind with the webhook fully disabled. |
 | `make kind-deploy-observability` | Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana). |
+| `make kind-load-observer` | Build and load observer image into Kind. |
+| `make kind-deploy-observer` | Deploy observer alongside the operator (builds and loads automatically). |
+| `make kind-undeploy-observer` | Remove observer from Kind. |
 | `make kind-portforward` | Port-forward Grafana (3000), Prometheus (9090), Tempo (3200) to localhost. Re-run if connection drops. |
 
 See the [demo/](demo/) folder for guided walkthroughs of cert-manager and observability deployments.
@@ -80,6 +83,8 @@ pkg/
   monitoring/       # Metrics, tracing, log-trace correlation
   util/             # Shared utilities (naming, status, PVC helpers)
   testutil/         # Shared test infrastructure (envtest, Kind helpers)
+tools/
+  observer/         # Standalone cluster health monitoring tool
 ```
 
 ## Making Changes

@@ -16,6 +16,7 @@ Internal documentation for contributors and operators. For user-facing documenta
 | Document | Description |
 |:---|:---|
 | [Controller Patterns](controller-patterns.md) | Performance tuning (QPS, workers), event filtering (GenerationChangedPredicate), SSA idempotency |
+| [Phase Lifecycle](phase-lifecycle.md) | Phase values, computation per resource, crash-loop detection, periodic re-reconciliation |
 | [Caching Strategy](caching-strategy.md) | Informer filtering, secret access patterns (Option A/B/C), IRSA |
 | [Certificate Management](certificate-management.md) | `pkg/cert` module, webhook TLS, pgBackRest TLS, consumer extensibility |
 | [Naming Strategy](naming-strategy.md) | Hierarchical names, hash collision prevention, character constraints |

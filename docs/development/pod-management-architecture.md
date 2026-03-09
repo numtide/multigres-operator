@@ -158,12 +158,29 @@ The drain state machine coordinates pod removal within the shard controller. The
                     │  state=requested                 │
                     │  + drain-requested-at timestamp  │
                     │  (set by resource-handler)       │
+                    │                                  │
+                    │  ⚠ Cancellable: if the desired   │
+                    │  state reverts (e.g., scale-down │
+                    │  reversed), the drain is cleared │
+                    └──────────────┬───────────────────┘
+                                   │
+                    ┌──────────────▼───────────────────┐
+                    │  IsPrimaryNotReady guard         │
+                    │  If the primary pod's containers │
+                    │  are not ready, delay and        │
+                    │  requeue (do not send RPCs)      │
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
                     │  state=draining                  │
                     │  Remove pod from synchronous     │
                     │  standby list on the primary     │
+                    │  (with ReloadConfig: true)       │
+                    └──────────────┬───────────────────┘
+                                   │
+                    ┌──────────────▼───────────────────┐
+                    │  IsPrimaryNotReady guard         │
+                    │  (same check as above)           │
                     └──────────────┬───────────────────┘
                                    │
                     ┌──────────────▼───────────────────┐
@@ -199,6 +216,9 @@ When choosing which pod to remove during scale-down:
 - Scale-down and rolling-update operations do not run concurrently — if a drain is in progress, rolling updates are deferred.
 - If the topology store is temporarily unreachable, the drain annotation sits untouched and the shard controller retries on the next reconcile.
 - **Health gate**: Scale-down drains are deferred when any non-draining pod is not Ready, preventing removal of pods from an already degraded pool.
+- **Primary readiness guard**: The `IsPrimaryNotReady` check prevents sending `UpdateSynchronousStandbyList` RPCs to a primary whose containers are not ready. This avoids failed gRPC calls that could leave the drain in an inconsistent state.
+- **Config reload on standby removal**: `UpdateSynchronousStandbyList` requests include `ReloadConfig: true`, ensuring PostgreSQL reloads `synchronous_standby_names` immediately after the standby is removed.
+- **Stale drain cancellation**: If the desired state reverts while a drain is in the `requested` state (e.g., user reverses a scale-down), the drain annotations are cleared and the pod is kept. Once a drain enters the `draining` state, it cannot be cancelled because the RPC has already been sent.
 
 ### Shard/Cluster Deletion (No Drain)
 
@@ -319,14 +339,14 @@ The `updatePoolsStatus` function directly lists pods by label selector and aggre
 | `shard.Status.PoolsReady` | `true` when `readyPods == totalPods > 0` |
 | `shard.Status.ReadyReplicas` | Count of pods with `PodReady=True` condition |
 | `shard.Status.OrchReady` | MultiOrch deployment readiness |
-| `shard.Status.Phase` | `Healthy` when both pools and orch are ready; `Progressing` otherwise |
+| `shard.Status.Phase` | `Degraded` if any pod is crash-looping; `Healthy` when both pools and orch are ready; `Progressing` otherwise. See [Phase Lifecycle](phase-lifecycle.md). |
 | `shard.Status.Cells` | Observed cells from pod labels |
 | `shard.Status.PodRoles` | Pod → role mapping (populated by the shard controller from etcd) |
 | `shard.Status.LastBackupTime` | Timestamp of last completed backup (from `GetBackups` RPC) |
 | `shard.Status.LastBackupType` | Type of last backup (full/diff/incr) |
 | `shard.Status.Conditions` | `Available`, `BackupHealthy`, `DatabaseRegistered`, `RollingUpdate` |
 
-Terminating pods (with a non-zero `DeletionTimestamp`) are excluded from counts.
+Terminating pods (with a non-zero `DeletionTimestamp`) and draining pods (with drain annotations) are excluded from ready counts.
 
 Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmpty` warning event is emitted when a cell has zero ready replicas but the desired count is > 0. Backup age is emitted via `monitoring.SetLastBackupAge()`.
 
