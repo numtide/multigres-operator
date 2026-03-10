@@ -201,7 +201,7 @@ type CellConfig struct {
 	// Zone indicates the physical availability zone.
 	// +optional
 	Zone Zone `json:"zone,omitempty"`
-	// Region indicates the physical region (mutually exclusive with zone typically, but allowed here).
+	// Region indicates the physical region (mutually exclusive with zone via CEL validation).
 	// +optional
 	Region Region `json:"region,omitempty"`
 

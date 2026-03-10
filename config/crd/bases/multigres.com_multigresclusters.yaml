@@ -1211,7 +1211,7 @@ spec:
                       type: object
                     region:
                       description: Region indicates the physical region (mutually
-                        exclusive with zone typically, but allowed here).
+                        exclusive with zone via CEL validation).
                       maxLength: 63
                       minLength: 1
                       type: string

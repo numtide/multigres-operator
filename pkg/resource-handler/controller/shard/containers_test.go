@@ -359,6 +359,9 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 		"default multiorch container": {
 			shard: &multigresv1alpha1.Shard{
 				Spec: multigresv1alpha1.ShardSpec{
+					DatabaseName:   "testdb",
+					TableGroupName: "default",
+					ShardName:      "0",
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
@@ -377,7 +380,7 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 					"--topo-global-server-addresses=global-topo:2379",
 					"--topo-global-root=/multigres/global",
 					"--cell=zone1",
-					"--watch-targets=postgres",
+					"--watch-targets=testdb/default/0",
 					"--cluster-metadata-refresh-interval=500ms",
 					"--pooler-health-check-interval=500ms",
 					"--recovery-cycle-interval=500ms",

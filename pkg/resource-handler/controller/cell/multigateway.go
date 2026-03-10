@@ -238,6 +238,7 @@ func BuildMultiGatewayService(
 
 // buildCellNodeSelector returns a nodeSelector map for the cell's topology.
 // Returns nil if the cell has no zone or region, which means no scheduling constraint.
+// Zone and region are mutually exclusive (enforced by CEL validation on CellSpec).
 func buildCellNodeSelector(cell *multigresv1alpha1.Cell) map[string]string {
 	switch {
 	case cell.Spec.Zone != "":
