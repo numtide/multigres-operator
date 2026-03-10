@@ -109,7 +109,7 @@ tools/
 
 | Command | Scope |
 |:---|:---|
-| `make test` | Unit tests across all modules |
+| `make test` | Unit tests |
 | `make test-integration` | Integration tests using envtest |
 | `make test-e2e` | End-to-end tests using Kind clusters |
 | `make lint` | Linting via golangci-lint |
