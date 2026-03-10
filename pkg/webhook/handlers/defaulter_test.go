@@ -485,9 +485,13 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 
 			var res *resolver.Resolver
 			if !tc.nilResolver {
+				objs := make([]client.Object, len(tc.existingObjects))
+				for i, obj := range tc.existingObjects {
+					objs[i] = obj.DeepCopyObject().(client.Object)
+				}
 				var c client.Client = fake.NewClientBuilder().
 					WithScheme(scheme).
-					WithObjects(tc.existingObjects...).
+					WithObjects(objs...).
 					Build()
 
 				if tc.failureConfig != nil {

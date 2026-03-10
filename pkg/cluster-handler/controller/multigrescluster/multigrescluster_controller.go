@@ -210,9 +210,13 @@ func (r *MultigresClusterReconciler) Reconcile(
 		}
 	}
 
+	var pendingCells, pendingDBs bool
+
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.ReconcileCells")
-		if err := r.reconcileCells(ctx, cluster, res); err != nil {
+		var err error
+		pendingCells, err = r.reconcileCells(ctx, cluster, res)
+		if err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
 			l.Error(err, "Failed to reconcile cells")
@@ -230,7 +234,9 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "MultigresCluster.ReconcileDatabases")
-		if err := r.reconcileDatabases(ctx, cluster, res); err != nil {
+		var err error
+		pendingDBs, err = r.reconcileDatabases(ctx, cluster, res)
+		if err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
 			l.Error(err, "Failed to reconcile databases")
@@ -272,6 +278,12 @@ func (r *MultigresClusterReconciler) Reconcile(
 		len(cluster.Status.Cells),
 		totalShards,
 	)
+
+	if pendingCells || pendingDBs {
+		l.V(1).Info("Pending graceful deletions, requeueing",
+			"duration", time.Since(start).String())
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 
 	l.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(cluster, "Normal", "Synced", "Successfully reconciled MultigresCluster")

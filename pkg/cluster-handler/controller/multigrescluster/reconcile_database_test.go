@@ -202,7 +202,7 @@ func TestReconcile_Databases(t *testing.T) {
 			wantErrMsg: "failed to apply tablegroup",
 		},
 
-		"Error: Prune TableGroup Failed": {
+		"Error: Set PendingDeletion on Orphan TableGroup Failed": {
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.TableGroup{
@@ -214,9 +214,9 @@ func TestReconcile_Databases(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(clusterName+"-orphan-tg", errSimulated),
+				OnPatch: testutil.FailOnObjectName(clusterName+"-orphan-tg", errSimulated),
 			},
-			wantErrMsg: "failed to delete orphaned tablegroup",
+			wantErrMsg: "failed to set PendingDeletion on tablegroup",
 		},
 		"Create: Long Names (Truncation Check)": {
 			preReconcileUpdate: func(t testing.TB, c *multigresv1alpha1.MultigresCluster) {
@@ -327,7 +327,7 @@ func TestReconcileDatabases_BuildError_SchemeMismatch(t *testing.T) {
 	cluster.Spec.TemplateDefaults.ShardTemplate = "default-shard"
 
 	// Execution
-	err := r.reconcileDatabases(t.Context(), cluster, res)
+	_, err := r.reconcileDatabases(t.Context(), cluster, res)
 
 	// User Verification
 	if err == nil {
@@ -383,7 +383,7 @@ func TestReconcileDatabases_Direct_Error_GlobalTopoRef(t *testing.T) {
 
 	// Execute reconcileDatabases DIRECTLY
 	// This is key: we skip reconcileGlobalComponents, so the cache is empty.
-	err := reconciler.reconcileDatabases(t.Context(), cluster, res)
+	_, err := reconciler.reconcileDatabases(t.Context(), cluster, res)
 
 	// Verify
 	if err == nil {

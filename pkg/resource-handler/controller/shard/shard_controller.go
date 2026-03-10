@@ -468,14 +468,16 @@ func (r *ShardReconciler) reconcilePVCOwnerRefs(
 		}
 
 		if wantOwnerRef && !hasOwnerRef {
+			patch := client.MergeFrom(pvc.DeepCopy())
 			if err := ctrl.SetControllerReference(shard, pvc, r.Scheme); err != nil {
 				return fmt.Errorf("failed to add ownerRef to PVC %s: %w", pvc.Name, err)
 			}
-			if err := r.Update(ctx, pvc); err != nil {
-				return fmt.Errorf("failed to update PVC %s ownerRef: %w", pvc.Name, err)
+			if err := r.Patch(ctx, pvc, patch); err != nil {
+				return fmt.Errorf("failed to patch PVC %s ownerRef: %w", pvc.Name, err)
 			}
 			logger.Info("Added ownerRef to PVC for Delete policy", "pvc", pvc.Name)
 		} else if !wantOwnerRef && hasOwnerRef {
+			patch := client.MergeFrom(pvc.DeepCopy())
 			filtered := make([]metav1.OwnerReference, 0, len(pvc.OwnerReferences))
 			for _, ref := range pvc.OwnerReferences {
 				if ref.UID != shardUID {
@@ -483,8 +485,8 @@ func (r *ShardReconciler) reconcilePVCOwnerRefs(
 				}
 			}
 			pvc.OwnerReferences = filtered
-			if err := r.Update(ctx, pvc); err != nil {
-				return fmt.Errorf("failed to remove ownerRef from PVC %s: %w", pvc.Name, err)
+			if err := r.Patch(ctx, pvc, patch); err != nil {
+				return fmt.Errorf("failed to patch PVC %s ownerRef: %w", pvc.Name, err)
 			}
 			logger.Info("Removed ownerRef from PVC for Retain policy", "pvc", pvc.Name)
 		}
