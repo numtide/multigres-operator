@@ -139,6 +139,45 @@ func TestTopoServerReconciliation(t *testing.T) {
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "data", MountPath: "/var/lib/etcd"},
 										},
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/readyz",
+													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/livez",
+													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/readyz",
+													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
+										},
 									},
 								},
 							},
@@ -274,6 +313,45 @@ func TestTopoServerReconciliation(t *testing.T) {
 										},
 										VolumeMounts: []corev1.VolumeMount{
 											{Name: "data", MountPath: "/var/lib/etcd"},
+										},
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/readyz",
+													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
+										LivenessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/livez",
+													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
+										},
+										ReadinessProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/readyz",
+													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 									},
 								},
