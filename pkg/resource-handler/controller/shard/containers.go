@@ -128,6 +128,7 @@ func buildPgctldContainer(
 		"--log-level=info",
 		"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
 		"--pg-hba-template=" + PgHbaTemplatePath,
+		"--http-port=15400",
 	}
 
 	if shard.Spec.Backup != nil {
@@ -192,6 +193,24 @@ func buildPgctldContainer(
 			RunAsNonRoot: ptr.To(true),
 		},
 		VolumeMounts: volumeMounts,
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/live",
+					Port: intstr.FromInt32(DefaultPgctldHTTPPort),
+				},
+			},
+			PeriodSeconds: 10,
+		},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/live",
+					Port: intstr.FromInt32(DefaultPgctldHTTPPort),
+				},
+			},
+			PeriodSeconds: 5,
+		},
 	}
 }
 
@@ -266,7 +285,7 @@ func buildMultiPoolerSidecar(
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/ready",
+					Path: "/live",
 					Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 				},
 			},
@@ -285,7 +304,7 @@ func buildMultiPoolerSidecar(
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/ready",
+					Path: "/live",
 					Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 				},
 			},

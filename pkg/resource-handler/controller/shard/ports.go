@@ -15,6 +15,9 @@ const (
 	// DefaultPostgresPort is the default port for PostgreSQL protocol traffic.
 	DefaultPostgresPort int32 = 5432
 
+	// DefaultPgctldHTTPPort is the default port for pgctld HTTP traffic.
+	DefaultPgctldHTTPPort int32 = 15400
+
 	// DefaultMultiOrchHTTPPort is the default port for MultiOrch HTTP traffic.
 	DefaultMultiOrchHTTPPort int32 = 15300
 
