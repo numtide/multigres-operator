@@ -129,3 +129,36 @@ func TestNewStoreFromCell_InvalidImplementation(t *testing.T) {
 		t.Error("NewStoreFromCell() should error with invalid implementation")
 	}
 }
+
+func TestNewStoreFromRef(t *testing.T) {
+	t.Parallel()
+
+	ref := multigresv1alpha1.GlobalTopoServerRef{
+		Address:  "localhost:2379",
+		RootPath: "/test",
+	}
+
+	store, err := topo.NewStoreFromRef(ref)
+	if err != nil {
+		t.Fatalf("NewStoreFromRef() unexpected error: %v", err)
+	}
+	if store != nil {
+		_ = store.Close()
+	}
+}
+
+func TestNewStoreFromRef_InvalidImplementation(t *testing.T) {
+	ref := multigresv1alpha1.GlobalTopoServerRef{
+		Address:        "localhost:2379",
+		RootPath:       "/test",
+		Implementation: "invalid-implementation-that-does-not-exist",
+	}
+
+	store, err := topo.NewStoreFromRef(ref)
+	if err == nil {
+		if store != nil {
+			_ = store.Close()
+		}
+		t.Error("NewStoreFromRef() should error with invalid implementation")
+	}
+}
