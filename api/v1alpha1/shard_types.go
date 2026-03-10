@@ -161,6 +161,11 @@ type ShardSpec struct {
 	// +optional
 	TopologyPruning *TopologyPruningConfig `json:"topologyPruning,omitempty"`
 
+	// DurabilityPolicy is the resolved durability policy for this shard's database.
+	// Inherited from MultigresCluster → Database.
+	// +optional
+	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
+
 	// CellTopologyLabels maps cell names to their topology nodeSelector labels.
 	// Each entry is a map like {"topology.kubernetes.io/zone": "us-east-1a"}.
 	// Propagated from the cluster's cell configs so the shard controller

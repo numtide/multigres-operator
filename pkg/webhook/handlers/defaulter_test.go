@@ -164,6 +164,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(true),
 					},
+					DurabilityPolicy: "ANY_2",
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -457,6 +458,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 						TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 							Enabled: ptr.To(true),
 						},
+						DurabilityPolicy: "ANY_2",
 						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,

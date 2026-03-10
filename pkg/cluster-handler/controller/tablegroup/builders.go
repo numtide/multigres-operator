@@ -57,6 +57,7 @@ func BuildShard(
 			Observability:      tg.Spec.Observability,
 			Backup:             shardSpec.Backup,
 			TopologyPruning:    tg.Spec.TopologyPruning,
+			DurabilityPolicy:   tg.Spec.DurabilityPolicy,
 			CellTopologyLabels: tg.Spec.CellTopologyLabels,
 		},
 	}

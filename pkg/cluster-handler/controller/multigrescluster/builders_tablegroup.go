@@ -63,6 +63,10 @@ func BuildTableGroup(
 			Observability:      cluster.Spec.Observability,
 			CellTopologyLabels: buildCellTopologyLabels(cluster),
 			TopologyPruning:    cluster.Spec.TopologyPruning,
+			DurabilityPolicy: mergeDurabilityPolicy(
+				dbCfg.DurabilityPolicy,
+				cluster.Spec.DurabilityPolicy,
+			),
 		},
 	}
 
@@ -71,6 +75,14 @@ func BuildTableGroup(
 	}
 
 	return tgCR, nil
+}
+
+// mergeDurabilityPolicy returns the child value if set, otherwise falls back to the parent.
+func mergeDurabilityPolicy(child, parent string) string {
+	if child != "" {
+		return child
+	}
+	return parent
 }
 
 // buildCellTopologyLabels builds a map of cell name → nodeSelector labels from the cluster's cells.

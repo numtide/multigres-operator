@@ -89,6 +89,29 @@ func TestBuildShard(t *testing.T) {
 		}
 	})
 
+	t.Run("DurabilityPolicy propagates from TableGroup to Shard", func(t *testing.T) {
+		tgWithPolicy := tg.DeepCopy()
+		tgWithPolicy.Spec.DurabilityPolicy = "MULTI_CELL_ANY_2"
+
+		got, err := BuildShard(tgWithPolicy, shardSpec, scheme)
+		if err != nil {
+			t.Fatalf("BuildShard() error = %v", err)
+		}
+		if got.Spec.DurabilityPolicy != "MULTI_CELL_ANY_2" {
+			t.Errorf("Spec.DurabilityPolicy = %v, want MULTI_CELL_ANY_2", got.Spec.DurabilityPolicy)
+		}
+	})
+
+	t.Run("DurabilityPolicy empty when not set on TableGroup", func(t *testing.T) {
+		got, err := BuildShard(tg, shardSpec, scheme)
+		if err != nil {
+			t.Fatalf("BuildShard() error = %v", err)
+		}
+		if got.Spec.DurabilityPolicy != "" {
+			t.Errorf("Spec.DurabilityPolicy = %v, want empty", got.Spec.DurabilityPolicy)
+		}
+	})
+
 	t.Run("ControllerRefError", func(t *testing.T) {
 		emptyScheme := runtime.NewScheme()
 		// Intentionally missing scheme registrations to force SetControllerReference failure

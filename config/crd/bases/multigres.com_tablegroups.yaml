@@ -176,6 +176,11 @@ spec:
                 description: IsDefault indicates if this is the default/unsharded
                   group for the database.
                 type: boolean
+              durabilityPolicy:
+                description: |-
+                  DurabilityPolicy is the resolved durability policy for this database.
+                  Inherited from MultigresCluster → Database.
+                type: string
               globalTopoServer:
                 description: GlobalTopoServer is a reference to the global topology
                   server.

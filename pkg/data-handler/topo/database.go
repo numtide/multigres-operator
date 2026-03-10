@@ -42,6 +42,7 @@ func RegisterDatabase(
 				func(existing *clustermetadatapb.Database) error {
 					existing.BackupLocation = dbMetadata.BackupLocation
 					existing.Cells = dbMetadata.Cells
+					existing.DurabilityPolicy = dbMetadata.DurabilityPolicy
 					return nil
 				},
 			); err != nil {
@@ -148,12 +149,10 @@ func GetBackupLocation(shard *multigresv1alpha1.Shard) *clustermetadatapb.Backup
 }
 
 // GetDurabilityPolicy extracts the durability policy from the shard config.
-// TODO: This should come from a field in the Shard spec once available.
+// Falls back to "ANY_2" if not set (the default materialized by the webhook resolver).
 func GetDurabilityPolicy(shard *multigresv1alpha1.Shard) string {
-	// NOTE: multiorch currently only supports ANY_2 or MULTI_CELL_ANY_2 durability policies.
-	// Single-node policies like NONE are not yet supported by multiorch.
-	// See: https://github.com/multigres/multigres/issues/XXX
-	// For now, always use ANY_2 even for single-replica setups.
-	_ = shard
+	if shard.Spec.DurabilityPolicy != "" {
+		return shard.Spec.DurabilityPolicy
+	}
 	return "ANY_2"
 }
