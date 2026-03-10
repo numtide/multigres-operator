@@ -18,6 +18,7 @@ package status
 
 import (
 	"fmt"
+	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -45,19 +46,21 @@ const crashLoopRestartThreshold int32 = 3
 //   - in CrashLoopBackOff, OOMKilled, or ImagePullBackOff waiting state, OR
 //   - terminated with repeated restarts (catches the gap between backoff
 //     restarts when the container is in Completed/Error state).
+//
+// Both regular containers and init containers (native sidecars) are checked.
 func IsCrashLooping(pod *corev1.Pod) bool {
-	for _, cs := range pod.Status.ContainerStatuses {
-		if cs.State.Waiting != nil {
-			switch cs.State.Waiting.Reason {
-			case "CrashLoopBackOff", "OOMKilled", "ImagePullBackOff":
-				return true
-			}
-		}
-		if cs.State.Terminated != nil && cs.RestartCount >= crashLoopRestartThreshold {
+	return slices.ContainsFunc(pod.Status.ContainerStatuses, isContainerCrashLooping) ||
+		slices.ContainsFunc(pod.Status.InitContainerStatuses, isContainerCrashLooping)
+}
+
+func isContainerCrashLooping(cs corev1.ContainerStatus) bool {
+	if cs.State.Waiting != nil {
+		switch cs.State.Waiting.Reason {
+		case "CrashLoopBackOff", "OOMKilled", "ImagePullBackOff":
 			return true
 		}
 	}
-	return false
+	return cs.State.Terminated != nil && cs.RestartCount >= crashLoopRestartThreshold
 }
 
 // AnyCrashLooping returns true if any non-terminating pod in the slice

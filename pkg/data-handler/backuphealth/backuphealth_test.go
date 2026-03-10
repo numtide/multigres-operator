@@ -250,3 +250,31 @@ func TestParseBackupTime_InvalidFormat(t *testing.T) {
 		t.Errorf("expected zero time for invalid format, got %v", got)
 	}
 }
+
+func TestEvaluateBackups_MalformedBackupID(t *testing.T) {
+	t.Parallel()
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+	}
+
+	backups := []*multipoolermanagerdata.BackupMetadata{
+		{
+			BackupId: "not-a-timestamp",
+			Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+	}
+
+	result := backuphealth.EvaluateBackups(shard, backups)
+	if result.Healthy {
+		t.Error("expected unhealthy for malformed backup ID")
+	}
+	if result.LastBackupTime != nil {
+		t.Errorf("expected nil LastBackupTime, got %v", result.LastBackupTime)
+	}
+}

@@ -112,10 +112,6 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 	{
 		hasInline := cluster.Spec.GlobalTopoServer != nil &&
 			cluster.Spec.GlobalTopoServer.TemplateRef != ""
-			// We also check if the user provided inline CONFIG (External or Etcd spec).
-			// If they provided config but no template, we might still want to merge defaults?
-			// User rule: "When NOT using templates, materialize whatever defaults".
-			// "Using templates" means Inline OR Global OR Implicit exists.
 
 		isUsingTemplate := hasInline || hasGlobalCore || hasImplicitCore
 
