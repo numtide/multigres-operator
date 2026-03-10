@@ -65,11 +65,7 @@ KIND_KUBECONFIG ?= $(shell pwd)/kubeconfig.yaml
 # Upstream images used by MultigresCluster data plane components.
 # Pre-pulled to local Docker cache and loaded into kind to avoid slow pulls
 # inside the cluster on every kind-deploy cycle.
-MULTIGRES_IMAGES ?= \
-	ghcr.io/multigres/multigres:main \
-	ghcr.io/multigres/pgctld:main \
-	ghcr.io/multigres/multiadmin-web:main \
-	gcr.io/etcd-development/etcd:v3.6.7
+MULTIGRES_IMAGES ?= $(shell sed -n 's/.*= "\(.*\)"$$/\1/p' api/v1alpha1/image_defaults.go | sort -u)
 
 # Observability stack images, pre-loaded only for kind-deploy-observability.
 OBSERVABILITY_IMAGES ?= \

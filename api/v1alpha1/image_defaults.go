@@ -1,5 +1,7 @@
 package v1alpha1
 
+// NOTE: The Makefile extracts image references from this file (lines matching
+// = "...") to pre-load them into the kind cluster.
 const (
 	// DefaultPostgresImage is the default container image for PostgreSQL instances.
 	// Uses the pgctld image which bundles PostgreSQL, pgctld, and pgbackrest.

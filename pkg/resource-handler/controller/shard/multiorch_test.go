@@ -37,6 +37,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					ShardName:      "0",
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
@@ -105,6 +106,9 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+										ShardName:      "0",
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
@@ -129,6 +133,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "proddb",
 					TableGroupName: "prod-tg",
+					ShardName:      "0",
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
@@ -200,6 +205,9 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "proddb",
+										TableGroupName: "prod-tg",
+										ShardName:      "0",
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
@@ -224,6 +232,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					ShardName:      "0",
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
@@ -295,6 +304,9 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+										ShardName:      "0",
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
@@ -319,6 +331,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					ShardName:      "0",
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
@@ -417,6 +430,9 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+										ShardName:      "0",
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
@@ -453,6 +469,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					ShardName:      "0",
 					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
@@ -529,6 +546,9 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 							Containers: []corev1.Container{
 								buildMultiOrchContainer(&multigresv1alpha1.Shard{
 									Spec: multigresv1alpha1.ShardSpec{
+										DatabaseName:   "testdb",
+										TableGroupName: "default",
+										ShardName:      "0",
 										GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
 											Address:        "global-topo:2379",
 											RootPath:       "/multigres/global",
@@ -551,6 +571,7 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					ShardName:      "0",
 				},
 			},
 			cellName: "zone-a",
@@ -610,6 +631,7 @@ func TestBuildMultiOrchService(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					ShardName:      "0",
 				},
 			},
 			cellName: "zone-a",
@@ -678,6 +700,7 @@ func TestBuildMultiOrchService(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "proddb",
 					TableGroupName: "prod-tg",
+					ShardName:      "0",
 				},
 			},
 			cellName: "zone2",
@@ -744,6 +767,7 @@ func TestBuildMultiOrchService(t *testing.T) {
 				Spec: multigresv1alpha1.ShardSpec{
 					DatabaseName:   "testdb",
 					TableGroupName: "default",
+					ShardName:      "0",
 				},
 			},
 			cellName: "zone-a",
