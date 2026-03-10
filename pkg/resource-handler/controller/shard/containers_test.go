@@ -73,7 +73,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/ready",
+							Path: "/live",
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
@@ -92,7 +92,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/ready",
+							Path: "/live",
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
@@ -171,7 +171,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/ready",
+							Path: "/live",
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
@@ -190,7 +190,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/ready",
+							Path: "/live",
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
@@ -287,7 +287,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/ready",
+							Path: "/live",
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
@@ -306,7 +306,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/ready",
+							Path: "/live",
 							Port: intstr.FromInt32(DefaultMultiPoolerHTTPPort),
 						},
 					},
@@ -457,6 +457,13 @@ func TestBuildPgctldContainer(t *testing.T) {
 		}
 		if c.Command[0] != "/usr/local/bin/pgctld" {
 			t.Errorf("Command = %v, want /usr/local/bin/pgctld", c.Command)
+		}
+		assertContainsFlag(t, c.Args, "--http-port=15400")
+		if c.LivenessProbe == nil || c.LivenessProbe.HTTPGet.Path != "/live" {
+			t.Errorf("expected LivenessProbe to hit /live, got %v", c.LivenessProbe)
+		}
+		if c.ReadinessProbe == nil || c.ReadinessProbe.HTTPGet.Path != "/live" {
+			t.Errorf("expected ReadinessProbe to hit /live, got %v", c.ReadinessProbe)
 		}
 	})
 
