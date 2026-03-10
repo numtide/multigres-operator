@@ -21,14 +21,6 @@ permissions:
 
 jobs:
   test-go:
-    strategy:
-      matrix:
-        module:
-          - "."
-          - "./api"
-          - "./pkg/cluster-handler"
-          - "./pkg/data-handler"
-          - "./pkg/resource-handler"
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -37,12 +29,10 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version-file: ${{ matrix.module }}/go.mod
+          go-version-file: go.mod
 
       - name: Run tests
-        run: |-
-          cd ${{ matrix.module}}
-          go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+        run: go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
 
 
   build-scan-push-container:
