@@ -27,8 +27,7 @@ import (
 //
 // TODO: Move these RBAC markers to the controller implementation
 // (pkg/resource-handler/controller/toposerver/toposerver_controller.go)
-// to follow kubebuilder conventions. They are temporarily placed here because
-// controller-gen cannot process files in go.work modules.
+// and add that path to controller-gen in the Makefile.
 //
 // +kubebuilder:rbac:groups=multigres.com,resources=toposervers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=toposervers/status,verbs=get;update;patch

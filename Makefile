@@ -1,33 +1,6 @@
 ###----------------------------------------
 ##   Variables
 #------------------------------------------
-# Multi-module paths
-# Each module must be tagged with its directory path prefix for Go module resolution
-# Example tags: v0.1.0 (root), api/v0.1.0, pkg/cluster-handler/v0.1.0, etc.
-#
-# Auto-discovered modules: finds all directories with go.mod files
-# Can be overridden: MODULES="./api ./pkg/resource-handler" make test
-#                or: MODULES="$(shell make changed-modules)" make test
-MODULES ?= $(shell find . -name go.mod -exec dirname {} \; | sort)
-
-# Detect changed modules compared to origin/main
-# Usage: make test MODULES="$(shell make changed-modules)"
-.PHONY: changed-modules
-changed-modules:
-	@changed_files=$$(if git rev-parse --verify origin/main >/dev/null 2>&1; then \
-		git diff --name-only origin/main...HEAD 2>/dev/null; \
-	else \
-		git diff --name-only HEAD 2>/dev/null; \
-	fi); \
-	modules=$$(find . -name go.mod -exec dirname {} \;); \
-	for mod in $$modules; do \
-		modpath=$${mod#./}; \
-		if [ "$$mod" = "." ]; then \
-			echo "$$changed_files" | grep -qE '^[^/]+\.(go|mod|sum)$$|^(cmd|internal)/' && echo "$$mod"; \
-		elif echo "$$changed_files" | grep -q "^$$modpath/"; then \
-			echo "$$mod"; \
-		fi; \
-	done 2>/dev/null | sort -u | tr '\n' ' '
 
 # Version from git tags (for root module - operator binary)
 # Root module uses tags like v0.1.0 (without prefix)
@@ -174,32 +147,20 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 # $(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 .PHONY: fmt
-fmt: ## Run go fmt against code in all modules
-	@for mod in $(MODULES); do \
-		echo "==> Formatting $$mod..."; \
-		(cd $$mod && GOWORK=off go fmt ./...) || exit 1; \
-	done
+fmt: ## Run go fmt against code
+	go fmt ./...
 
 .PHONY: vet
-vet: ## Run go vet against code in all modules
-	@for mod in $(MODULES); do \
-		echo "==> Vetting $$mod..."; \
-		(cd $$mod && GOWORK=off go vet ./...) || exit 1; \
-	done
+vet: ## Run go vet against code
+	go vet ./...
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter across all modules
-	@for mod in $(MODULES); do \
-		echo "==> Linting $$mod..."; \
-		(cd $$mod && GOWORK=off $(GOLANGCI_LINT) run) || exit 1; \
-	done
+lint: golangci-lint ## Run golangci-lint linter
+	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
-	@for mod in $(MODULES); do \
-		echo "==> Fixing lint issues in $$mod..."; \
-		(cd $$mod && GOWORK=off $(GOLANGCI_LINT) run --fix) || exit 1; \
-	done
+	$(GOLANGCI_LINT) run --fix
 
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
@@ -244,31 +205,8 @@ verify-warn: manifests generate ## Verify generated files are up to date (non-bl
 	fi
 
 .PHONY: pre-commit
-pre-commit: modules-tidy fmt vet lint test ## Run full pre-commit checks (tidy, fmt, vet, lint, test)
+pre-commit: fmt vet lint test ## Run full pre-commit checks (fmt, vet, lint, test)
 	@echo "==> Pre-commit checks passed!"
-
-##@ Multi-Module Operations
-
-.PHONY: modules-tidy
-modules-tidy: ## Run go mod tidy on all modules
-	@for mod in $(MODULES); do \
-		echo "==> Tidying $$mod..."; \
-		(cd $$mod && GOWORK=off go mod tidy) || exit 1; \
-	done
-
-.PHONY: modules-download
-modules-download: ## Download dependencies for all modules
-	@for mod in $(MODULES); do \
-		echo "==> Downloading dependencies for $$mod..."; \
-		(cd $$mod && GOWORK=off go mod download) || exit 1; \
-	done
-
-.PHONY: modules-verify
-modules-verify: ## Verify dependencies for all modules
-	@for mod in $(MODULES); do \
-		echo "==> Verifying $$mod..."; \
-		(cd $$mod && GOWORK=off go mod verify) || exit 1; \
-	done
 
 
 ##@ Build
@@ -326,59 +264,30 @@ build-installer: manifests generate kustomize ## Generate consolidated install Y
 ##@ Test
 
 .PHONY: test
-test: manifests generate fmt vet ## Run tests for all modules (no integration testing)
-	@echo "==> Running tests across all modules"
-	@for mod in $(MODULES); do \
-		echo "==> Testing $$mod..."; \
-		(cd $$mod && \
-			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-			GOWORK=off go test $$(go list ./... | grep -v /e2e) -coverprofile=cover.out) || exit 1; \
-	done
+test: manifests generate fmt vet ## Run tests (no integration testing)
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+		go test -p 1 $$(go list ./... | grep -v /e2e) -coverprofile=cover.out
 
 .PHONY: test-integration
-test-integration: manifests generate fmt vet setup-envtest ## Run integration tests for all modules
-	@echo "==> Running integration tests across all modules"
-	@for mod in $(MODULES); do \
-		echo "==> Integration testing $$mod..."; \
-		(cd $$mod && \
-			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-			GOWORK=off go test -tags=integration,verbose $$(go list ./... | grep -v /e2e) -coverprofile=cover.out) || exit 1; \
-	done
+test-integration: manifests generate fmt vet setup-envtest ## Run integration tests
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+		go test -p 1 -tags=integration,verbose $$(go list ./... | grep -v /e2e) -coverprofile=cover.out
 
 .PHONY: test-coverage
 test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage report with HTML
 	@mkdir -p coverage
-	@echo "==> Generating coverage across all modules"
-	@project_root=$$(pwd); \
-	for mod in $(MODULES); do \
-		modname=$$(basename $$mod); \
-		[ "$$modname" = "." ] && modname="root"; \
-		echo "==> Coverage for $$mod..."; \
-		(cd $$mod && \
-			KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-			GOWORK=off go test -tags=integration,verbose ./... -coverprofile=$$project_root/coverage/$$modname.out -covermode=atomic && \
-			GOWORK=off go tool cover -html=$$project_root/coverage/$$modname.out -o=$$project_root/coverage/$$modname.html) || exit 1; \
-		echo "Generated: coverage/$$modname.html"; \
-	done
-	@echo "==> Merging coverage files..."
-	@echo "mode: atomic" > coverage/combined.out
-	@for out in coverage/*.out; do \
-		if [ "$$out" != "coverage/combined.out" ]; then \
-			tail -n +2 $$out >> coverage/combined.out; \
-		fi \
-	done
-	@echo "==> Generating combined HTML report..."
-	@if [ -f go.work ]; then \
-		go tool cover -html=coverage/combined.out -o=coverage/combined.html 2>/dev/null && echo "Generated: coverage/combined.html" || echo "Note: Combined HTML requires go.work (skipping, but combined.out is available)"; \
-	else \
-		echo "Note: Combined HTML requires go.work for multi-module coverage (skipping, but combined.out is available)"; \
-	fi
+	@echo "==> Generating coverage..."
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+		go test -p 1 -tags=integration,verbose ./... -coverprofile=coverage/combined.out -covermode=atomic
+	@echo "==> Generating HTML report..."
+	@go tool cover -html=coverage/combined.out -o=coverage/combined.html
+	@echo "Generated: coverage/combined.html"
 	@echo "==> Calculating total coverage..."
-	@go tool cover -func=coverage/combined.out 2>/dev/null | tail -1 || echo "Total coverage: see individual module reports"
+	@go tool cover -func=coverage/combined.out | tail -1
 	@echo ""
 	@echo "Coverage reports in coverage/"
-	@echo "  - Individual: coverage/<module>.html"
-	@echo "  - Combined data: coverage/combined.out (for CI/codecov)"
+	@echo "  - Data: coverage/combined.out (for CI/codecov)"
+	@echo "  - HTML: coverage/combined.html"
 
 ##@ Test End-to-End
 # Each e2e test creates its own ephemeral Kind cluster via e2e-framework.

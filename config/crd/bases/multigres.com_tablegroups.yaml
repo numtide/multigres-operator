@@ -371,7 +371,7 @@ spec:
                   whenScaled:
                     default: Retain
                     description: |-
-                      WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                      WhenScaled controls PVC deletion when replicas are scaled down.
                       - Retain (default): PVCs from scaled-down pods are kept
                       - Delete: PVCs are automatically deleted when pods are removed
                     enum:
@@ -2622,7 +2622,7 @@ spec:
                               whenScaled:
                                 default: Retain
                                 description: |-
-                                  WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                                  WhenScaled controls PVC deletion when replicas are scaled down.
                                   - Retain (default): PVCs from scaled-down pods are kept
                                   - Delete: PVCs are automatically deleted when pods are removed
                                 enum:
@@ -2738,7 +2738,7 @@ spec:
                         whenScaled:
                           default: Retain
                           description: |-
-                            WhenScaled controls PVC deletion when StatefulSets are scaled down.
+                            WhenScaled controls PVC deletion when replicas are scaled down.
                             - Retain (default): PVCs from scaled-down pods are kept
                             - Delete: PVCs are automatically deleted when pods are removed
                           enum:

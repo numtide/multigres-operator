@@ -9,8 +9,6 @@ result-*
 dist/
 
 # Go
-go.work
-go.work.sum
 cover.out
 *cover.out
 cover.html
