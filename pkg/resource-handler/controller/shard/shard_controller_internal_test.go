@@ -5030,3 +5030,99 @@ func TestPVCNeedsFilesystemResize(t *testing.T) {
 		}
 	})
 }
+
+func TestResolvePodRole(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		podRoles map[string]string
+		podName  string
+		want     string
+	}{
+		"nil roles": {
+			podRoles: nil,
+			podName:  "pod-0",
+			want:     "",
+		},
+		"exact match": {
+			podRoles: map[string]string{"pod-0": "PRIMARY"},
+			podName:  "pod-0",
+			want:     "PRIMARY",
+		},
+		"FQDN prefix match": {
+			podRoles: map[string]string{"pod-0.svc.cluster.local": "REPLICA"},
+			podName:  "pod-0",
+			want:     "REPLICA",
+		},
+		"no match": {
+			podRoles: map[string]string{"pod-1": "PRIMARY"},
+			podName:  "pod-0",
+			want:     "",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			shard := &multigresv1alpha1.Shard{
+				Status: multigresv1alpha1.ShardStatus{
+					PodRoles: tc.podRoles,
+				},
+			}
+			if got := resolvePodRole(shard, tc.podName); got != tc.want {
+				t.Errorf("resolvePodRole() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsPoolerPruningEnabled(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		shard *multigresv1alpha1.Shard
+		want  bool
+	}{
+		"nil TopologyPruning defaults to true": {
+			shard: &multigresv1alpha1.Shard{},
+			want:  true,
+		},
+		"nil Enabled defaults to true": {
+			shard: &multigresv1alpha1.Shard{
+				Spec: multigresv1alpha1.ShardSpec{
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{},
+				},
+			},
+			want: true,
+		},
+		"explicitly enabled": {
+			shard: &multigresv1alpha1.Shard{
+				Spec: multigresv1alpha1.ShardSpec{
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(true),
+					},
+				},
+			},
+			want: true,
+		},
+		"explicitly disabled": {
+			shard: &multigresv1alpha1.Shard{
+				Spec: multigresv1alpha1.ShardSpec{
+					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
+						Enabled: ptr.To(false),
+					},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := isPoolerPruningEnabled(tc.shard); got != tc.want {
+				t.Errorf("isPoolerPruningEnabled() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
