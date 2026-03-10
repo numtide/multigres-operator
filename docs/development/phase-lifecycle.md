@@ -68,7 +68,7 @@ The `pkg/util/status` package provides two functions for detecting crash-looping
 
 ### `IsCrashLooping(pod)`
 
-Returns `true` if any container in the pod matches one of:
+Returns `true` if any container (regular or init) in the pod matches one of:
 
 | Condition | Container State |
 |:---|:---|
@@ -78,6 +78,8 @@ Returns `true` if any container in the pod matches one of:
 | Repeated termination | `Terminated` with `RestartCount ≥ 3` |
 
 The restart threshold (3) catches the gap between backoff restarts when the container is briefly in `Completed`/`Error` state before Kubernetes starts the next attempt.
+
+**Note:** Both `ContainerStatuses` and `InitContainerStatuses` are checked. This is necessary because native sidecars (init containers with `restartPolicy: Always`, such as multipooler) report their status under `InitContainerStatuses`, not `ContainerStatuses`.
 
 ### `AnyCrashLooping(pods)`
 

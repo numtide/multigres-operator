@@ -228,6 +228,16 @@ This is safe for full cluster deletion because the topo server is also being des
 
 The drain state machine remains fully functional for **rolling updates** and **scale-down**, where the cluster is alive and the shard controller is actively reconciling.
 
+### Graceful Orphan Deletion (TableGroups and Cells)
+
+When a database or cell is removed from the `MultigresCluster` spec, the resulting orphan resource is **not** deleted immediately. Instead, the MultigresCluster controller follows a 3-step `PendingDeletion` flow that routes through the drain state machine to prevent data loss:
+
+1. **Annotate**: The orphan resource receives a `multigres.com/pending-deletion` annotation.
+2. **Wait for ReadyForDeletion**: The child controller detects the annotation and takes appropriate cleanup action:
+   - **TableGroup**: Propagates `PendingDeletion` to all child Shards and waits for all to reach `ReadyForDeletion` (i.e., all pods drained).
+   - **Cell**: Sets `ReadyForDeletion` immediately since gateways are stateless.
+3. **Delete**: Once the `ReadyForDeletion` condition is true, the MultigresCluster controller deletes the resource.
+
 #### Topology Cleanup Timeout
 
 During deletion, both Cell and Shard controllers use a `TopologyRegistered` / `DatabaseRegistered` status condition to determine whether topology cleanup is needed. This prevents two failure modes:

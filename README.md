@@ -228,7 +228,7 @@ The operator **automatically detects** the certificate management strategy on st
 
 ## Pool Replication & Quorum
 
-Multigres uses the `ANY_2` durability policy by default, which requires every write to be acknowledged by at least 2 nodes (the primary + 1 synchronous standby). This has implications for how many replicas you should run per cell in `readWrite` pools.
+Multigres uses a configurable **durability policy** to control synchronous replication quorum. The default policy is `ANY_2`, which requires every write to be acknowledged by at least 2 nodes (the primary + 1 synchronous standby). For multi-AZ clusters, `MULTI_CELL_ANY_2` enforces cross-zone quorum. This has implications for how many replicas you should run per cell in `readWrite` pools.
 
 | Replicas per Cell | Configuration | Rolling Upgrade Behavior |
 | :--- | :--- | :--- |
@@ -239,6 +239,8 @@ Multigres uses the `ANY_2` durability policy by default, which requires every wr
 The operator enforces a **hard minimum of 1** replica per cell (the CRD rejects `replicasPerCell: 0`). For `readWrite` pools with fewer than 3 replicas, the webhook returns an **admission warning** (not a rejection) explaining the quorum limitation.
 
 `readOnly` pools are not subject to this warning since they don't participate in write quorum.
+
+📖 **Full documentation:** [Durability Policy](docs/durability-policy.md)
 
 ---
 
@@ -261,6 +263,7 @@ Please be aware of the following constraints in the current version:
 | Resource | Description |
 | :--- | :--- |
 | [Operator Capability Levels](docs/operator-capability-levels.md) | Maturity assessment against the [Operator Framework capability model](https://operatorframework.io/operator-capabilities/) |
+| [Durability Policy](docs/durability-policy.md) | Configurable replication quorum: `ANY_2` (default) and `MULTI_CELL_ANY_2` for cross-AZ durability |
 | [Storage Management](docs/storage.md) | PVC deletion policies (Retain/Delete) and volume expansion |
 | [Configuration Reference](docs/configuration.md) | Operator flags, environment variables, and logging |
 | [Demos](demo/) | Guided walkthroughs (webhook, cert-manager, observability) |

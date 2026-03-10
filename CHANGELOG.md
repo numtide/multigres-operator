@@ -4,6 +4,54 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.5.0] — 2026-03-10
+
+**Previous release:** v0.4.2 (2026-03-09)
+
+Adds configurable durability policy, graceful deletion for orphan TableGroups and Cells, and consolidates the repository from 11 Go modules into one. Fixes native sidecar crash detection, multiorch cross-shard watch leakage, and health probe endpoints for multipooler and pgctld.
+
+**17 commits, 90 files changed, ~1,551 insertions.**
+
+### Features
+
+- **Configurable durability policy:** New `DurabilityPolicy` field on `MultigresClusterSpec` (cluster-wide default) and `DatabaseConfig` (per-database override), propagated through TableGroup → Shard → topology registration. Webhook materializes `"ANY_2"` as default. Enables future cross-AZ replication quorum (`MULTI_CELL_ANY_2`) and user-defined policies.
+- **Graceful orphan TableGroup/Cell deletion:** Orphan pruning now follows a 3-step `PendingDeletion` flow (annotate → wait for `ReadyForDeletion` → delete) instead of immediate deletion, routing through the drain state machine to prevent data loss during database or cell removal.
+- **TopoServer cleanup on external mode switch:** Switching from embedded to external topo mode now deletes the orphaned TopoServer resource in `reconcile_global.go`.
+
+### Bug Fixes
+
+- **Native sidecar crash detection:** `IsCrashLooping` now checks `InitContainerStatuses` in addition to `ContainerStatuses`, correctly surfacing crash-looping native sidecars (e.g., multipooler) as `PhaseDegraded`.
+- **Multiorch cross-shard watch leakage:** `--watch-targets` was hardcoded to the database level, causing each multiorch to discover multipoolers across all shards. Now builds a fully qualified target from database/tablegroup/shard fields.
+- **Multipooler health probes:** Startup and readiness probes now use `/live` instead of `/ready`, matching upstream endpoint changes (multigres commit `309da86`).
+- **pgctld health probes:** Liveness and readiness probes added using the `/live` endpoint on port 15400, with `--http-port=15400` flag wired into the container args.
+- **Malformed backup ID ages:** `EvaluateBackups` now guards against zero-time from `ParseBackupTime`, preventing ~56-year ages in Prometheus metrics and misleading `BackupStale` conditions.
+- **PVC ownerRef update conflicts:** Replaced `r.Update()` with `client.MergeFrom` patch for PVC ownerRef changes, reducing conflict errors during concurrent reconciliation.
+- **Hardcoded label string:** Replaced hardcoded `"multigres.com/cluster"` string with `metadata.LabelMultigresCluster` constant.
+
+### Dependencies
+
+- Upgrade multigres container images from `sha-8bfe693` to `sha-d6c1048` (pgctld, multigres core, multiorch, multipooler, multigateway).
+- Intermediate builder image updated in Dockerfile and CI workflow.
+
+### Refactoring
+
+- **Single Go module consolidation:** Merged 11 Go modules (root + 10 sub-modules under `api/` and `pkg/`) into a single `go.mod`, eliminating ~3,500 lines of duplicated dependency management. Removed `go.work` workspace, simplified Makefile and CI workflows. No external consumers of the sub-modules exist.
+- **Webhook test fixture isolation:** Replaced shared test fixtures with `DeepCopy` to prevent cross-test data races.
+- **Comment and label fixes:** Fixed copy-paste comment typo in `labels.go`, removed stale `hasInline` comments from `defaulter.go`, added CEL exclusion comment to `buildCellNodeSelector`.
+
+### Testing
+
+- **Test coverage increase:** New tests for `topology.go`, `store_test.go`, `conditions_test.go`, `phase_test.go`, `shard_controller_internal_test.go`, `multiorch_test.go`, `database_test.go`, and `builders_test.go`.
+
+### Documentation
+
+- New `docs/durability-policy.md` explaining configurable replication quorum.
+- Updated API design doc with `DurabilityPolicy` field specification.
+- Updated admission controller doc with durability policy defaulting.
+- Updated `cell-topology.md` with durability policy propagation path.
+
+---
+
 ## [v0.4.2] — 2026-03-09
 
 **Previous release:** v0.4.1 (2026-03-05)

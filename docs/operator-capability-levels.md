@@ -12,7 +12,7 @@ framework.
 |:------|:-----|:-------|:-----------|
 | I | [Basic Install](#level-1-basic-install) | **Full** | 10 CRDs, mutating/validating webhooks (17 CEL rules), template resolution, hierarchical defaults, TLS management, status reporting |
 | II | [Seamless Upgrades](#level-2-seamless-upgrades) | **Full** | Spec-hash rolling updates, drain state machine, primary-last ordering, SHA-pinned images, upgrade metrics and alerts |
-| III | [Full Lifecycle](#level-3-full-lifecycle) | **Full** | pgBackRest backups (S3 + filesystem), backup health monitoring, 4-state drain machine, safe scale up/down, PDBs, deletion ordering finalizers, PVC lifecycle policies |
+| III | [Full Lifecycle](#level-3-full-lifecycle) | **Full** | pgBackRest backups (S3 + filesystem), backup health monitoring, 4-state drain machine, safe scale up/down, PDBs, graceful deletion ordering, PVC lifecycle policies |
 | IV | [Deep Insights](#level-4-deep-insights) | **Full** | 12 Prometheus metrics, 10 alerts with runbooks, 3 Grafana dashboards, OpenTelemetry distributed tracing, structured JSON logging with log-trace correlation |
 | V | [Auto Pilot](#level-5-auto-pilot) | **Partial** | Auto-healing (operator + upstream Multigres), cert auto-rotation, connection pool auto-tuning (upstream Multigres). Not yet: auto-scaling, PG parameter tuning, anomaly detection |
 
@@ -261,12 +261,12 @@ evictions during node maintenance.
 
 ### Deletion ordering
 
-- **TopoServer finalizer**: `multigres.com/topo-deletion-ordering` prevents
-  the topology server from being garbage collected before all shards and cells
-  finish their drains
 - **Shard pending deletion**: `PendingDeletion` annotation triggers graceful
   drain of all pods; the TableGroup controller waits for `ReadyForDeletion`
   condition
+- **Orphan TableGroup/Cell deletion**: Orphaned TableGroups and Cells removed
+  from the spec follow the same `PendingDeletion` → `ReadyForDeletion` flow,
+  routing through the drain state machine to prevent data loss
 - **Owner references**: All child resources use controller owner references for
   Kubernetes garbage collection cascade
 
