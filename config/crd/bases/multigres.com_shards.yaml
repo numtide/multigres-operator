@@ -176,6 +176,11 @@ spec:
                 maxLength: 30
                 minLength: 1
                 type: string
+              durabilityPolicy:
+                description: |-
+                  DurabilityPolicy is the resolved durability policy for this shard's database.
+                  Inherited from MultigresCluster → Database.
+                type: string
               globalTopoServer:
                 description: GlobalTopoServer is a reference to the global topology
                   server.

@@ -118,7 +118,7 @@ const (
 	// all the relevant resources using the CellTemplate.
 	LabelMultigresCellTemplate = "multigres.com/cell-template"
 
-	// LabelMultigresShardTemplate identifies which cell template was used for
+	// LabelMultigresShardTemplate identifies which shard template was used for
 	// the given resource. This is needed for the operator to efficiently find
 	// all the relevant resources using the ShardTemplate.
 	LabelMultigresShardTemplate = "multigres.com/shard-template"

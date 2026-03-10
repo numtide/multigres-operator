@@ -105,6 +105,19 @@ type MultigresClusterSpec struct {
 	// Default: enabled (nil means pruning is on).
 	// +optional
 	TopologyPruning *TopologyPruningConfig `json:"topologyPruning,omitempty"`
+
+	// DurabilityPolicy sets the default durability policy for all databases in the cluster.
+	// This value is written to the topology and determines how multiorch enforces
+	// synchronous replication acknowledgment during failover.
+	//
+	// Currently supported values (upstream multiorch):
+	//   - "ANY_2": any 2 nodes must acknowledge writes (single-cell quorum)
+	//   - "MULTI_CELL_ANY_2": any 2 nodes from different cells must acknowledge (cross-AZ quorum)
+	//
+	// Additional user-defined policies may be supported in future upstream releases.
+	// Defaults to "ANY_2" if not set.
+	// +optional
+	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
 }
 
 // ============================================================================
@@ -261,6 +274,11 @@ type DatabaseConfig struct {
 	// Backup overrides the global backup configuration for this specific database.
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
+
+	// DurabilityPolicy overrides the cluster-level durability policy for this database.
+	// See MultigresClusterSpec.DurabilityPolicy for supported values.
+	// +optional
+	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
 }
 
 // TableGroupConfig defines a table group within a database.

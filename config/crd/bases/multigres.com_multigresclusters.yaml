@@ -2576,6 +2576,11 @@ spec:
                       description: Default indicates if this is the system default
                         database.
                       type: boolean
+                    durabilityPolicy:
+                      description: |-
+                        DurabilityPolicy overrides the cluster-level durability policy for this database.
+                        See MultigresClusterSpec.DurabilityPolicy for supported values.
+                      type: string
                     name:
                       description: Name is the logical name of the database.
                       maxLength: 30
@@ -7639,6 +7644,19 @@ spec:
                 - message: 'in v1alpha1, only the single system database named ''postgres''
                     (marked default: true) is supported'
                   rule: self.all(db, db.name == 'postgres' && db.default == true)
+              durabilityPolicy:
+                description: |-
+                  DurabilityPolicy sets the default durability policy for all databases in the cluster.
+                  This value is written to the topology and determines how multiorch enforces
+                  synchronous replication acknowledgment during failover.
+
+                  Currently supported values (upstream multiorch):
+                    - "ANY_2": any 2 nodes must acknowledge writes (single-cell quorum)
+                    - "MULTI_CELL_ANY_2": any 2 nodes from different cells must acknowledge (cross-AZ quorum)
+
+                  Additional user-defined policies may be supported in future upstream releases.
+                  Defaults to "ANY_2" if not set.
+                type: string
               globalTopoServer:
                 description: GlobalTopoServer defines the cluster-wide global topology
                   server.

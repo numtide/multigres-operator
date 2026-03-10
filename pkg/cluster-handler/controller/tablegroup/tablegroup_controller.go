@@ -62,6 +62,12 @@ func (r *TableGroupReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("failed to get TableGroup: %w", err)
 	}
 
+	// If this TableGroup is pending deletion (from MultigresCluster pruning),
+	// propagate PendingDeletion to all child Shards and wait.
+	if tg.Annotations[multigresv1alpha1.AnnotationPendingDeletion] != "" {
+		return r.handlePendingDeletion(ctx, tg)
+	}
+
 	// Reconcile Loop: Create/Update/Prune Shards
 	// If being deleted, let Kubernetes GC handle cleanup
 	if !tg.DeletionTimestamp.IsZero() {
@@ -322,6 +328,86 @@ func (r *TableGroupReconciler) Reconcile(
 
 	l.V(1).Info("reconcile complete", "duration", time.Since(start).String())
 	r.Recorder.Event(tg, "Normal", "Synced", "Successfully reconciled TableGroup")
+	return ctrl.Result{}, nil
+}
+
+// handlePendingDeletion propagates PendingDeletion to all child Shards
+// and sets ReadyForDeletion on this TableGroup when all children are ready.
+func (r *TableGroupReconciler) handlePendingDeletion(
+	ctx context.Context,
+	tg *multigresv1alpha1.TableGroup,
+) (ctrl.Result, error) {
+	l := log.FromContext(ctx)
+
+	shards := &multigresv1alpha1.ShardList{}
+	if err := r.List(ctx, shards, client.InNamespace(tg.Namespace), client.MatchingLabels{
+		"multigres.com/cluster":    tg.Labels["multigres.com/cluster"],
+		"multigres.com/database":   string(tg.Spec.DatabaseName),
+		"multigres.com/tablegroup": string(tg.Spec.TableGroupName),
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list shards for pending deletion: %w", err)
+	}
+
+	allReady := true
+	for i := range shards.Items {
+		s := &shards.Items[i]
+
+		if s.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "" {
+			patch := client.MergeFrom(s.DeepCopy())
+			if s.Annotations == nil {
+				s.Annotations = make(map[string]string)
+			}
+			s.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = metav1.Now().
+				UTC().Format(time.RFC3339)
+			if err := r.Patch(ctx, s, patch); err != nil {
+				return ctrl.Result{}, fmt.Errorf(
+					"failed to set PendingDeletion on shard '%s': %w", s.Name, err)
+			}
+			r.Recorder.Eventf(tg, "Normal", "PendingDeletion",
+				"Marked Shard %s for graceful deletion (parent pending)", s.Name)
+			allReady = false
+			continue
+		}
+
+		if !meta.IsStatusConditionTrue(
+			s.Status.Conditions,
+			multigresv1alpha1.ConditionReadyForDeletion,
+		) {
+			allReady = false
+		}
+	}
+
+	if !allReady {
+		l.V(1).Info("Waiting for child Shards to be ready for deletion")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	meta.SetStatusCondition(&tg.Status.Conditions, metav1.Condition{
+		Type:               multigresv1alpha1.ConditionReadyForDeletion,
+		Status:             metav1.ConditionTrue,
+		Reason:             "AllShardsReady",
+		Message:            "All child Shards are ready for deletion",
+		ObservedGeneration: tg.Generation,
+	})
+
+	patchObj := &multigresv1alpha1.TableGroup{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+			Kind:       "TableGroup",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tg.Name,
+			Namespace: tg.Namespace,
+		},
+		Status: tg.Status,
+	}
+	if err := r.Status().Patch(ctx, patchObj, client.Apply,
+		client.FieldOwner("multigres-operator"), client.ForceOwnership); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to set ReadyForDeletion on TableGroup: %w", err)
+	}
+
+	r.Recorder.Eventf(tg, "Normal", "ReadyForDeletion",
+		"TableGroup %s marked ready for deletion", tg.Name)
 	return ctrl.Result{}, nil
 }
 

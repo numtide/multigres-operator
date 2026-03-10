@@ -6,10 +6,12 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
 
 // Builder function variables to allow mocking in tests
@@ -55,7 +57,23 @@ func (r *MultigresClusterReconciler) reconcileGlobalTopoServer(
 	}
 
 	// If desired is nil, it means we don't need a managed TopoServer (e.g. external).
+	// Clean up any existing managed TopoServer that may be left over from a mode switch.
 	if desired == nil {
+		existing := &multigresv1alpha1.TopoServerList{}
+		if err := r.List(ctx, existing,
+			client.InNamespace(cluster.Namespace),
+			client.MatchingLabels{metadata.LabelMultigresCluster: cluster.Name},
+		); err != nil {
+			return fmt.Errorf("failed to list existing topo servers: %w", err)
+		}
+		for i := range existing.Items {
+			if err := r.Delete(ctx, &existing.Items[i]); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete stale topo server %s: %w",
+					existing.Items[i].Name, err)
+			}
+			r.Recorder.Eventf(cluster, "Normal", "Deleted",
+				"Deleted stale TopoServer %s (switched to external)", existing.Items[i].Name)
+		}
 		return nil
 	}
 

@@ -164,6 +164,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(true),
 					},
+					DurabilityPolicy: "ANY_2",
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -457,6 +458,7 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 						TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 							Enabled: ptr.To(true),
 						},
+						DurabilityPolicy: "ANY_2",
 						PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 							WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 							WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -485,9 +487,13 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 
 			var res *resolver.Resolver
 			if !tc.nilResolver {
+				objs := make([]client.Object, len(tc.existingObjects))
+				for i, obj := range tc.existingObjects {
+					objs[i] = obj.DeepCopyObject().(client.Object)
+				}
 				var c client.Client = fake.NewClientBuilder().
 					WithScheme(scheme).
-					WithObjects(tc.existingObjects...).
+					WithObjects(objs...).
 					Build()
 
 				if tc.failureConfig != nil {

@@ -394,7 +394,7 @@ func (r *Resolver) ValidateClusterLogic(
 								warnings = append(warnings, fmt.Sprintf(
 									"Shard '%s' uses filesystem backups with ReadWriteOnce (RWO) storage but pool '%s' has %d replicas per cell. "+
 										"This configuration may fail if pods are scheduled on different nodes. "+
-										"Consider using ReadWriteMany (RWX) or ensuring node affinity.",
+										"Consider using ReadWriteMany (RWX), ensuring node affinity, or using S3 backups.",
 									shard.Name,
 									poolName,
 									replicas,

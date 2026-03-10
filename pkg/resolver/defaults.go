@@ -53,6 +53,11 @@ const (
 	// DefaultBackupStorageSize is the default PVC size for backup storage.
 	DefaultBackupStorageSize = "10Gi"
 
+	// DefaultDurabilityPolicy is the default durability policy for databases.
+	// Upstream multiorch currently supports: ANY_2, MULTI_CELL_ANY_2.
+	// More user-defined policies will be added in the future.
+	DefaultDurabilityPolicy = "ANY_2"
+
 	// Image defaults re-exported from the canonical source in api/v1alpha1.
 	DefaultPostgresImage      = multigresv1alpha1.DefaultPostgresImage
 	DefaultEtcdImage          = multigresv1alpha1.DefaultEtcdImage

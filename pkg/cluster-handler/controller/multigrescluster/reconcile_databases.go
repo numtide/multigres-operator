@@ -3,8 +3,11 @@ package multigrescluster
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
@@ -15,7 +18,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 	res *resolver.Resolver,
-) error {
+) (bool, error) {
 	existingTGs := &multigresv1alpha1.TableGroupList{}
 	if err := r.List(
 		ctx,
@@ -23,12 +26,12 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 		client.InNamespace(cluster.Namespace),
 		client.MatchingLabels{"multigres.com/cluster": cluster.Name},
 	); err != nil {
-		return fmt.Errorf("failed to list existing tablegroups: %w", err)
+		return false, fmt.Errorf("failed to list existing tablegroups: %w", err)
 	}
 
 	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, res)
 	if err != nil {
-		return fmt.Errorf("failed to get global topo ref: %w", err)
+		return false, fmt.Errorf("failed to get global topo ref: %w", err)
 	}
 
 	activeTGNames := make(map[string]bool)
@@ -76,7 +79,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 						shard.Name,
 						err,
 					)
-					return fmt.Errorf(
+					return false, fmt.Errorf(
 						"failed to resolve shard '%s': %w",
 						shard.Name,
 						err,
@@ -103,7 +106,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				r.Scheme,
 			)
 			if err != nil {
-				return fmt.Errorf("failed to build tablegroup '%s': %w", tgNameFull, err)
+				return false, fmt.Errorf("failed to build tablegroup '%s': %w", tgNameFull, err)
 			}
 			activeTGNames[desired.Name] = true
 
@@ -116,27 +119,59 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 				client.ForceOwnership,
 				client.FieldOwner("multigres-operator"),
 			); err != nil {
-				return fmt.Errorf("failed to apply tablegroup '%s': %w", tgNameFull, err)
+				return false, fmt.Errorf("failed to apply tablegroup '%s': %w", tgNameFull, err)
 			}
 			r.Recorder.Eventf(cluster, "Normal", "Applied", "Applied TableGroup %s", desired.Name)
 		}
 	}
 
-	for _, item := range existingTGs.Items {
-		if !activeTGNames[item.Name] {
-			if err := r.Delete(ctx, &item); err != nil && !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to delete orphaned tablegroup '%s': %w", item.Name, err)
-			} else if err == nil {
-				r.Recorder.Eventf(
-					cluster,
-					"Normal",
-					"Deleted",
-					"Deleted orphaned TableGroup %s",
-					item.Name,
-				)
+	var pendingDeletion bool
+
+	for i := range existingTGs.Items {
+		item := &existingTGs.Items[i]
+		if activeTGNames[item.Name] {
+			continue
+		}
+
+		// Step 1: Set PendingDeletion annotation if not already set.
+		if item.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "" {
+			patch := client.MergeFrom(item.DeepCopy())
+			if item.Annotations == nil {
+				item.Annotations = make(map[string]string)
 			}
+			item.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = metav1.Now().
+				UTC().Format(time.RFC3339)
+			if err := r.Patch(ctx, item, patch); err != nil {
+				return false, fmt.Errorf("failed to set PendingDeletion on tablegroup '%s': %w",
+					item.Name, err)
+			}
+			r.Recorder.Eventf(cluster, "Normal", "PendingDeletion",
+				"Marked TableGroup %s for graceful deletion", item.Name)
+			pendingDeletion = true
+			continue
+		}
+
+		// Step 2: Wait for ReadyForDeletion condition.
+		if !meta.IsStatusConditionTrue(
+			item.Status.Conditions,
+			multigresv1alpha1.ConditionReadyForDeletion,
+		) {
+			pendingDeletion = true
+			continue
+		}
+
+		// Step 3: Drain complete — safe to delete.
+		if err := r.Delete(ctx, item); err != nil && !errors.IsNotFound(err) {
+			return false, fmt.Errorf(
+				"failed to delete orphaned tablegroup '%s': %w",
+				item.Name,
+				err,
+			)
+		} else if err == nil {
+			r.Recorder.Eventf(cluster, "Normal", "Deleted",
+				"Deleted orphaned TableGroup %s", item.Name)
 		}
 	}
 
-	return nil
+	return pendingDeletion, nil
 }

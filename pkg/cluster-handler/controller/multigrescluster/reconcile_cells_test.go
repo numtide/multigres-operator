@@ -37,7 +37,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 			Recorder: record.NewFakeRecorder(10),
 		}
 
-		err := r.reconcileCells(
+		_, err := r.reconcileCells(
 			context.Background(),
 			cluster,
 			resolver.NewResolver(c, "default"),
@@ -70,7 +70,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 			Recorder: record.NewFakeRecorder(10),
 		}
 
-		err := r.reconcileCells(
+		_, err := r.reconcileCells(
 			context.Background(),
 			cluster,
 			resolver.NewResolver(c, "default"),
@@ -96,7 +96,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 			Scheme:   scheme,
 			Recorder: record.NewFakeRecorder(10),
 		}
-		err := r.reconcileCells(
+		_, err := r.reconcileCells(
 			context.Background(),
 			cluster,
 			resolver.NewResolver(c, "default"),
@@ -130,7 +130,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 			Scheme:   scheme,
 			Recorder: record.NewFakeRecorder(10),
 		}
-		err := r.reconcileCells(
+		_, err := r.reconcileCells(
 			context.Background(),
 			cluster,
 			resolver.NewResolver(c, "default"),
@@ -140,10 +140,10 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		}
 	})
 
-	t.Run("Error: Delete Orphaned Cell Failed", func(t *testing.T) {
+	t.Run("Error: Set PendingDeletion on Orphaned Cell Failed", func(t *testing.T) {
 		cluster := &multigresv1alpha1.MultigresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-			// No cells in spec -> existing cell should be deleted
+			// No cells in spec -> existing cell should get PendingDeletion
 			Spec: multigresv1alpha1.MultigresClusterSpec{
 				GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
 					Etcd: &multigresv1alpha1.EtcdSpec{Image: "etcd"},
@@ -160,8 +160,8 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 		}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
-			Delete: func(ctx context.Context, cli client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-				return errors.New("delete error")
+			Patch: func(ctx context.Context, cli client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				return errors.New("patch error")
 			},
 		}).WithObjects(cluster, existingCell).Build()
 
@@ -170,16 +170,14 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 			Scheme:   scheme,
 			Recorder: record.NewFakeRecorder(10),
 		}
-		err := r.reconcileCells(
+		_, err := r.reconcileCells(
 			context.Background(),
 			cluster,
 			resolver.NewResolver(c, "default"),
 		)
-		// Note: The loop might continue or return error immediately depending on implementation.
-		// Current implementation returns error immediately on delete failure.
 		if err == nil ||
-			err.Error() != "failed to delete orphaned cell 'test-zone-orphan': delete error" {
-			t.Errorf("Expected 'delete error', got %v", err)
+			err.Error() != "failed to set PendingDeletion on cell 'test-zone-orphan': patch error" {
+			t.Errorf("Expected PendingDeletion patch error, got %v", err)
 		}
 	})
 
@@ -204,7 +202,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 			Recorder: record.NewFakeRecorder(10),
 		}
 
-		err := r.reconcileCells(
+		_, err := r.reconcileCells(
 			context.Background(),
 			cluster,
 			resolver.NewResolver(c, "default"),
@@ -218,7 +216,7 @@ func TestReconcileCells_ErrorPaths(t *testing.T) {
 func TestReconcileCells_HappyPath(t *testing.T) {
 	scheme := setupScheme()
 
-	t.Run("Happy Path: Create and Prune Cells", func(t *testing.T) {
+	t.Run("Happy Path: Create Cells and Mark Orphan PendingDeletion", func(t *testing.T) {
 		cluster := &multigresv1alpha1.MultigresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 			Spec: multigresv1alpha1.MultigresClusterSpec{
@@ -230,7 +228,7 @@ func TestReconcileCells_HappyPath(t *testing.T) {
 				},
 			},
 		}
-		// Existing cell that should be pruned
+		// Existing cell that should be marked for pending deletion
 		orphan := &multigresv1alpha1.Cell{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-zone-old",
@@ -247,7 +245,7 @@ func TestReconcileCells_HappyPath(t *testing.T) {
 			Recorder: record.NewFakeRecorder(10),
 		}
 
-		err := r.reconcileCells(
+		pending, err := r.reconcileCells(
 			context.Background(),
 			cluster,
 			resolver.NewResolver(c, "default"),
@@ -255,28 +253,28 @@ func TestReconcileCells_HappyPath(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Expected happy path success, got %v", err)
 		}
+		if !pending {
+			t.Error("Expected pending=true for orphan cell pending deletion")
+		}
 
-		// Verify "zone-new" created
-		// Name is hashed but we can list by label
+		// Verify "zone-new" created and orphan has PendingDeletion annotation
 		cells := &multigresv1alpha1.CellList{}
 		if err := c.List(context.Background(), cells); err != nil {
 			t.Fatal(err)
 		}
 		foundNew := false
-		foundOld := false
 		for _, cell := range cells.Items {
 			if cell.Spec.Name == "zone-new" {
 				foundNew = true
 			}
 			if cell.Spec.Name == "zone-old" {
-				foundOld = true
+				if cell.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "" {
+					t.Error("Expected orphan cell 'zone-old' to have PendingDeletion annotation")
+				}
 			}
 		}
 		if !foundNew {
 			t.Error("Expected new cell 'zone-new' to be created")
-		}
-		if foundOld {
-			t.Error("Expected old cell 'zone-old' to be deleted")
 		}
 	})
 }

@@ -86,6 +86,11 @@ type TableGroupSpec struct {
 	// Inherited from MultigresCluster.
 	// +optional
 	TopologyPruning *TopologyPruningConfig `json:"topologyPruning,omitempty"`
+
+	// DurabilityPolicy is the resolved durability policy for this database.
+	// Inherited from MultigresCluster → Database.
+	// +optional
+	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,

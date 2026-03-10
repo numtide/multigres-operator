@@ -67,6 +67,41 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// If this Cell is pending deletion (from MultigresCluster pruning),
+	// set ReadyForDeletion immediately since Cells are stateless gateways.
+	if cell.Annotations[multigresv1alpha1.AnnotationPendingDeletion] != "" {
+		if !meta.IsStatusConditionTrue(
+			cell.Status.Conditions,
+			multigresv1alpha1.ConditionReadyForDeletion,
+		) {
+			meta.SetStatusCondition(&cell.Status.Conditions, metav1.Condition{
+				Type:               multigresv1alpha1.ConditionReadyForDeletion,
+				Status:             metav1.ConditionTrue,
+				Reason:             "StatelessComponent",
+				Message:            "Cell is stateless; ready for deletion",
+				ObservedGeneration: cell.Generation,
+			})
+			patchObj := &multigresv1alpha1.Cell{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: multigresv1alpha1.GroupVersion.String(),
+					Kind:       "Cell",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cell.Name,
+					Namespace: cell.Namespace,
+				},
+				Status: cell.Status,
+			}
+			if err := r.Status().Patch(ctx, patchObj, client.Apply,
+				client.FieldOwner("multigres-operator"), client.ForceOwnership); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to set ReadyForDeletion on Cell: %w", err)
+			}
+			r.Recorder.Eventf(cell, "Normal", "ReadyForDeletion",
+				"Cell %s marked ready for deletion", cell.Name)
+		}
+		return ctrl.Result{}, nil
+	}
+
 	// If being deleted, let Kubernetes GC handle cleanup
 	if !cell.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil

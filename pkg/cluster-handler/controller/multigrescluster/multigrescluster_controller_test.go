@@ -423,7 +423,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 			expectedEvents: []string{"Warning FailedApply Failed to reconcile databases"},
 			wantErrMsg:     "failed to apply tablegroup",
 		},
-		"Error: Delete Orphan TableGroup Failed": {
+		"Error: Set PendingDeletion on Orphan TableGroup Failed": {
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.TableGroup{
@@ -440,7 +440,7 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 				},
 			},
 			failureConfig: &testutil.FailureConfig{
-				OnDelete: testutil.FailOnObjectName(
+				OnPatch: testutil.FailOnObjectName(
 					name.JoinWithConstraints(
 						name.DefaultConstraints,
 						clusterName,
@@ -450,11 +450,10 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					errSimulated,
 				),
 			},
-			// Note: This failure happens inside reconcileDatabases -> pruneTableGroups
 			expectedEvents: []string{"Warning FailedApply Failed to reconcile databases"},
-			wantErrMsg:     "failed to delete orphaned tablegroup",
+			wantErrMsg:     "failed to set PendingDeletion on tablegroup",
 		},
-		"Success: Prune Orphan TableGroup": {
+		"Success: Mark Orphan TableGroup PendingDeletion": {
 			existingObjects: []client.Object{
 				coreTpl, cellTpl, shardTpl,
 				&multigresv1alpha1.TableGroup{
@@ -465,10 +464,8 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					},
 				},
 			},
-			// VERIFY EVENT: Ensure the event is emitted on success
 			expectedEvents: []string{
-				"Normal Deleted Deleted orphaned TableGroup",
-				"Normal Synced Successfully reconciled MultigresCluster",
+				"Normal PendingDeletion Marked TableGroup",
 			},
 			validate: func(t testing.TB, c client.Client) {
 				tg := &multigresv1alpha1.TableGroup{}
@@ -477,8 +474,11 @@ func TestMultigresClusterReconciler_Lifecycle(t *testing.T) {
 					types.NamespacedName{Name: clusterName + "-orphan-tg", Namespace: namespace},
 					tg,
 				)
-				if !apierrors.IsNotFound(err) {
-					t.Error("Orphan TableGroup was not deleted")
+				if err != nil {
+					t.Fatalf("Expected orphan TG to still exist with PendingDeletion, got: %v", err)
+				}
+				if tg.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "" {
+					t.Error("Expected orphan TableGroup to have PendingDeletion annotation")
 				}
 			},
 		},

@@ -789,10 +789,14 @@ func TestTemplateValidator(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			objs := make([]client.Object, len(tc.existing))
+			for i, obj := range tc.existing {
+				objs[i] = obj.DeepCopyObject().(client.Object)
+			}
 			var fakeClient client.Client
 			fakeClient = fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(tc.existing...).
+				WithObjects(objs...).
 				Build()
 			if tc.failureConfig != nil {
 				fakeClient = testutil.NewFakeClientWithFailures(fakeClient, tc.failureConfig)

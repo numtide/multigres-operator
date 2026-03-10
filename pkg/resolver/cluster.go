@@ -46,6 +46,10 @@ func (r *Resolver) PopulateClusterDefaults(
 		}
 	}
 
+	if cluster.Spec.DurabilityPolicy == "" {
+		cluster.Spec.DurabilityPolicy = DefaultDurabilityPolicy
+	}
+
 	if cluster.Spec.PVCDeletionPolicy == nil {
 		cluster.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
 			WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,

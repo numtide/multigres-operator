@@ -26,13 +26,22 @@ func RegisterDatabaseFromSpec(
 	dbConfig multigresv1alpha1.DatabaseConfig,
 	allCellNames []string,
 	backup *multigresv1alpha1.BackupConfig,
+	clusterDurabilityPolicy string,
 ) error {
 	logger := log.FromContext(ctx)
 	dbName := string(dbConfig.Name)
 
+	durabilityPolicy := string(dbConfig.DurabilityPolicy)
+	if durabilityPolicy == "" {
+		durabilityPolicy = clusterDurabilityPolicy
+	}
+	if durabilityPolicy == "" {
+		durabilityPolicy = "ANY_2"
+	}
+
 	dbMetadata := &clustermetadatapb.Database{
 		Name:             dbName,
-		DurabilityPolicy: "ANY_2",
+		DurabilityPolicy: durabilityPolicy,
 		Cells:            allCellNames,
 	}
 
@@ -72,6 +81,7 @@ func RegisterDatabaseFromSpec(
 				func(existing *clustermetadatapb.Database) error {
 					existing.BackupLocation = dbMetadata.BackupLocation
 					existing.Cells = dbMetadata.Cells
+					existing.DurabilityPolicy = dbMetadata.DurabilityPolicy
 					return nil
 				},
 			); err != nil {

@@ -60,6 +60,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(true),
 					},
+					DurabilityPolicy: DefaultDurabilityPolicy,
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -118,6 +119,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(true),
 					},
+					DurabilityPolicy: DefaultDurabilityPolicy,
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -184,6 +186,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(true),
 					},
+					DurabilityPolicy: DefaultDurabilityPolicy,
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -263,6 +266,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(true),
 					},
+					DurabilityPolicy: DefaultDurabilityPolicy,
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -337,6 +341,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(true),
 					},
+					DurabilityPolicy: DefaultDurabilityPolicy,
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -385,6 +390,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(false),
 					},
+					DurabilityPolicy: "MULTI_CELL_ANY_2",
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
@@ -431,6 +437,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(false),
 					},
+					DurabilityPolicy: "MULTI_CELL_ANY_2",
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,

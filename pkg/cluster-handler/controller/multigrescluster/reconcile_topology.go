@@ -84,6 +84,7 @@ func (r *MultigresClusterReconciler) reconcileTopology(
 		dbBackup := multigresv1alpha1.MergeBackupConfig(dbConfig.Backup, cluster.Spec.Backup)
 		if err := topo.RegisterDatabaseFromSpec(
 			topoCtx, store, r.Recorder, cluster, dbConfig, allCellNames, dbBackup,
+			cluster.Spec.DurabilityPolicy,
 		); err != nil {
 			if topo.IsTopoUnavailable(err) {
 				return r.handleTopoUnavailable(cluster, logger)
