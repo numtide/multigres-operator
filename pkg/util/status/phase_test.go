@@ -149,6 +149,42 @@ func TestIsCrashLooping(t *testing.T) {
 			}}},
 			want: false,
 		},
+		{
+			name: "InitContainer_CrashLoopBackOff",
+			pod: corev1.Pod{
+				Status: corev1.PodStatus{InitContainerStatuses: []corev1.ContainerStatus{
+					{
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+						},
+					},
+				}},
+			},
+			want: true,
+		},
+		{
+			name: "InitContainer_TerminatedHighRestarts",
+			pod: corev1.Pod{
+				Status: corev1.PodStatus{InitContainerStatuses: []corev1.ContainerStatus{
+					{
+						RestartCount: 5,
+						State: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{Reason: "Error"},
+						},
+					},
+				}},
+			},
+			want: true,
+		},
+		{
+			name: "InitContainer_Running_NotFlagged",
+			pod: corev1.Pod{
+				Status: corev1.PodStatus{InitContainerStatuses: []corev1.ContainerStatus{
+					{State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+				}},
+			},
+			want: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

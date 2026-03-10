@@ -17,6 +17,7 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/data-handler/topo"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/numtide/multigres-operator/pkg/util/metadata"
 	"github.com/numtide/multigres-operator/pkg/util/status"
 )
 
@@ -110,11 +111,18 @@ func EvaluateBackups(
 		}
 	}
 
-	now := time.Now()
 	backupTime := ParseBackupTime(latest.BackupId)
+	if backupTime.IsZero() {
+		return &Result{
+			Healthy: false,
+			Message: fmt.Sprintf("Failed to parse backup timestamp from ID %q", latest.BackupId),
+		}
+	}
+
+	now := time.Now()
 	age := now.Sub(backupTime)
 
-	clusterName := shard.Labels["multigres.com/cluster"]
+	clusterName := shard.Labels[metadata.LabelMultigresCluster]
 	monitoring.SetLastBackupAge(clusterName, shard.Name, shard.Namespace, age)
 
 	result := &Result{
