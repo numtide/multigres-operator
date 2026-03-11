@@ -171,6 +171,11 @@ func (r *Resolver) ResolveGlobalTopo(
 		spec = cluster.Spec.GlobalTopoServer
 	}
 
+	// Apply global CoreTemplate default (Level 2 in the 4-level override chain)
+	if templateName == "" {
+		templateName = cluster.Spec.TemplateDefaults.CoreTemplate
+	}
+
 	coreTemplate, err := r.ResolveCoreTemplate(ctx, templateName)
 	if err != nil {
 		return nil, err
@@ -229,6 +234,11 @@ func (r *Resolver) ResolveMultiAdmin(
 		spec = cluster.Spec.MultiAdmin
 	}
 
+	// Apply global CoreTemplate default (Level 2 in the 4-level override chain)
+	if templateName == "" {
+		templateName = cluster.Spec.TemplateDefaults.CoreTemplate
+	}
+
 	coreTemplate, err := r.ResolveCoreTemplate(ctx, templateName)
 	if err != nil {
 		return nil, err
@@ -260,6 +270,11 @@ func (r *Resolver) ResolveMultiAdminWeb(
 	if cluster.Spec.MultiAdminWeb != nil {
 		templateName = cluster.Spec.MultiAdminWeb.TemplateRef
 		spec = cluster.Spec.MultiAdminWeb
+	}
+
+	// Apply global CoreTemplate default (Level 2 in the 4-level override chain)
+	if templateName == "" {
+		templateName = cluster.Spec.TemplateDefaults.CoreTemplate
 	}
 
 	coreTemplate, err := r.ResolveCoreTemplate(ctx, templateName)

@@ -258,6 +258,11 @@ func (r *Resolver) ValidateClusterLogic(
 		for _, tg := range db.TableGroups {
 			tgBackup := multigresv1alpha1.MergeBackupConfig(tg.Backup, dbBackup)
 			for _, shard := range tg.Shards {
+				// Propagate global ShardTemplate default for accurate validation
+				if shard.ShardTemplate == "" && cluster.Spec.TemplateDefaults.ShardTemplate != "" {
+					shard.ShardTemplate = cluster.Spec.TemplateDefaults.ShardTemplate
+				}
+
 				// ------------------------------------------------------------------
 				// 1. Orphan Override Check
 				// ------------------------------------------------------------------

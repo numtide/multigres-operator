@@ -460,12 +460,18 @@ kind-portforward: ## Port-forward Grafana (3000), Prometheus (9090), Tempo (3200
 
 
 .PHONY: kind-redeploy
-kind-redeploy: container ## Rebuild image, reload to kind, and restart pods
+kind-redeploy: container manifests kustomize ## Rebuild image, reload to kind, and redeploy
 	@echo "==> Clearing cached image from kind node..."
 	docker exec $(KIND_CLUSTER)-control-plane crictl rmi $(IMG) 2>/dev/null || true
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER)
-	@echo "==> Restarting operator pods..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) rollout restart deployment -n multigres-operator
+	@echo "==> Installing CRDs..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Deploying operator..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side --force-conflicts -f -
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
+	@echo "==> Redeploy complete!"
+	$(MAKE) kind-deploy-observer
 
 .PHONY: kind-down
 kind-down: ## Delete the kind cluster

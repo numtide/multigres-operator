@@ -909,6 +909,38 @@ func TestResolver_ResolveMultiAdmin(t *testing.T) {
 				Resources: DefaultResourcesAdmin(),
 			},
 		},
+		"TemplateDefaults.CoreTemplate propagates to MultiAdmin": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate: "default",
+					},
+					// MultiAdmin is nil — no inline spec or templateRef
+				},
+			},
+			objects: []client.Object{coreTpl},
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(DefaultAdminReplicas),
+				Resources: DefaultResourcesAdmin(),
+			},
+		},
+		"TemplateDefaults.CoreTemplate with inline override": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate: "default",
+					},
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(7))},
+					},
+				},
+			},
+			objects: []client.Object{coreTpl},
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(7)),
+				Resources: DefaultResourcesAdmin(),
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -1052,6 +1084,37 @@ func TestResolver_ResolveMultiAdminWeb(t *testing.T) {
 				},
 			},
 			wantErr: true,
+		},
+		"TemplateDefaults.CoreTemplate propagates to MultiAdminWeb": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate: "default",
+					},
+				},
+			},
+			objects: []client.Object{coreTpl},
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(3)), // From CoreTemplate fixture
+				Resources: DefaultResourcesAdminWeb(),
+			},
+		},
+		"TemplateDefaults.CoreTemplate with inline override": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						CoreTemplate: "default",
+					},
+					MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(7))},
+					},
+				},
+			},
+			objects: []client.Object{coreTpl},
+			want: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(7)), // Inline wins over template
+				Resources: DefaultResourcesAdminWeb(),
+			},
 		},
 	}
 

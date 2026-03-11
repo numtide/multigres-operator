@@ -723,6 +723,36 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 				"cell 'cell-b': no nodes currently match topology.kubernetes.io/zone=us-east-1a",
 			},
 		},
+		"TemplateDefaults.ShardTemplate propagates to validation": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+						ShardTemplate: "prod-shard",
+					},
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0",
+								// No ShardTemplate set — relies on TemplateDefaults
+								Overrides: &multigresv1alpha1.ShardOverrides{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"default": {
+											ReplicasPerCell: ptr.To(int32(4)),
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			// No warnings expected: "default" pool exists in prod-shard template,
+			// and replicasPerCell=4 is above quorum threshold.
+		},
 		"Node list error skips topology validation silently": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
