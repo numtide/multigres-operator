@@ -80,7 +80,7 @@ const (
 	ConnectivityLatencyThreshold = 500 * time.Millisecond
 	ReplicationLagWarnSecs       = 10
 	ReplicationLagErrorSecs      = 60
-	PodStartupGracePeriod        = 60 * time.Second
+	PodStartupGracePeriod        = 2 * time.Minute
 )
 
 // Operator event reasons to monitor.

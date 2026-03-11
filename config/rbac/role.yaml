@@ -33,6 +33,7 @@ rules:
   - nodes
   verbs:
   - list
+  - watch
 - apiGroups:
   - admissionregistration.k8s.io
   resourceNames:

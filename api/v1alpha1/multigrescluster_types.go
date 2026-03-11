@@ -40,7 +40,7 @@ import (
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,resourceNames=multigres-operator-mutating-webhook-configuration,verbs=get;update;patch
 // +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,resourceNames=multigres-operator-validating-webhook-configuration,verbs=get;update;patch
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=list;watch
-// +kubebuilder:rbac:groups="",resources=nodes,verbs=list
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=list;watch
 
 // ============================================================================
 // MultigresClusterSpec Spec (User-editable API)
