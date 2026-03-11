@@ -105,7 +105,10 @@ type EtcdSpec struct {
 	Image ImageRef `json:"image,omitempty"`
 
 	// Replicas is the desired number of etcd members.
+	// Immutable after cluster creation — etcd does not support dynamic member addition
+	// with static bootstrap. Must be an odd number for proper quorum fault tolerance.
 	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:XValidation:rule="self % 2 == 1",message="etcd replicas must be an odd number (1, 3, 5); even numbers provide no additional fault tolerance over the next lower odd number"
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 

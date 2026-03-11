@@ -84,10 +84,18 @@ spec:
                         type: string
                     type: object
                   replicas:
-                    description: Replicas is the desired number of etcd members.
+                    description: |-
+                      Replicas is the desired number of etcd members.
+                      Immutable after cluster creation — etcd does not support dynamic member addition
+                      with static bootstrap. Must be an odd number for proper quorum fault tolerance.
                     format: int32
                     minimum: 1
                     type: integer
+                    x-kubernetes-validations:
+                    - message: etcd replicas must be an odd number (1, 3, 5); even
+                        numbers provide no additional fault tolerance over the next
+                        lower odd number
+                      rule: self % 2 == 1
                   resources:
                     description: Resources defines the compute resource requirements.
                     properties:
