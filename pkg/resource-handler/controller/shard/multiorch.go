@@ -64,6 +64,13 @@ func BuildMultiOrchDeployment(
 		},
 	}
 
+	if otelVol, _ := multigresv1alpha1.BuildOTELSamplingVolume(
+		shard.Spec.Observability,
+	); otelVol != nil {
+		deployment.Spec.Template.Spec.Volumes = append(
+			deployment.Spec.Template.Spec.Volumes, *otelVol)
+	}
+
 	if err := ctrl.SetControllerReference(shard, deployment, scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}
