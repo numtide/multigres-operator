@@ -3,6 +3,7 @@ package observer
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -71,7 +72,7 @@ func (o *Observer) checkOperatorLogs(ctx context.Context, sinceSeconds int64) {
 
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		o.scanPodLogs(ctx, pod, "manager", sinceSeconds, operatorErrorPatterns)
+		o.scanPodLogs(ctx, pod, "manager", sinceSeconds, operatorErrorPatterns, false)
 	}
 }
 
@@ -95,20 +96,20 @@ func (o *Observer) checkDataPlaneLogs(ctx context.Context, sinceSeconds int64) {
 			if o.isPodInGracePeriod(pod.Name) {
 				continue
 			}
-			o.scanPodLogs(ctx, pod, "multipooler", sinceSeconds, dataPlaneErrorPatterns)
-			o.scanPodLogs(ctx, pod, "postgres", sinceSeconds, dataPlaneErrorPatterns)
+			o.scanPodLogs(ctx, pod, "multipooler", sinceSeconds, dataPlaneErrorPatterns, false)
+			o.scanPodLogs(ctx, pod, "postgres", sinceSeconds, dataPlaneErrorPatterns, false)
 		case common.ComponentMultiGateway:
 			if o.hasAnyPodInGracePeriod() {
 				continue
 			}
-			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns)
+			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns, true)
 		case common.ComponentMultiOrch:
 			if o.hasAnyPodInGracePeriod() {
 				continue
 			}
-			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns)
+			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns, false)
 		case common.ComponentGlobalTopo:
-			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns)
+			o.scanPodLogs(ctx, pod, "", sinceSeconds, dataPlaneErrorPatterns, false)
 		}
 	}
 }
@@ -120,12 +121,27 @@ type logMatch struct {
 	check     string
 }
 
+// isProbeNoise returns true if a JSON log entry is caused by TCP health check
+// probes (observer, Kubernetes, load balancers) connecting to a PostgreSQL-
+// compatible port without completing the startup handshake.
+func isProbeNoise(msg, errMsg string) bool {
+	if !strings.HasSuffix(errMsg, "EOF") {
+		return false
+	}
+	switch msg {
+	case "startup failed", "error handling message":
+		return true
+	}
+	return false
+}
+
 func (o *Observer) scanPodLogs(
 	ctx context.Context,
 	pod *corev1.Pod,
 	container string,
 	sinceSeconds int64,
 	patterns []errorPattern,
+	filterProbeNoise bool,
 ) {
 	opts := &corev1.PodLogOptions{
 		SinceSeconds: &sinceSeconds,
@@ -177,6 +193,68 @@ func (o *Observer) scanPodLogs(
 		}
 
 		line := scanner.Text()
+		trimmedLine := strings.TrimSpace(line)
+
+		// 1. Try to parse as JSON log
+		if strings.HasPrefix(trimmedLine, "{") {
+			var jLog struct {
+				Level       string `json:"level"`
+				Message     string `json:"msg"`
+				Error       string `json:"error"`
+				ProblemCode string `json:"problem_code"`
+			}
+			if err := json.Unmarshal([]byte(trimmedLine), &jLog); err == nil {
+				lvl := strings.ToLower(jLog.Level)
+				if lvl == "error" || lvl == "fatal" {
+					if filterProbeNoise && isProbeNoise(jLog.Message, jLog.Error) {
+						continue
+					}
+					sev := report.SeverityError
+					if lvl == "fatal" {
+						sev = report.SeverityFatal
+					}
+
+					// Elevate known critical cluster-breaking errors that hide behind JSON ERROR levels
+					if strings.Contains(line, "ShardNeedsBootstrap") || strings.Contains(strings.ToLower(line), "quorum") {
+						sev = report.SeverityFatal
+					}
+
+					key := jLog.Message
+					if jLog.ProblemCode != "" {
+						key += ": " + jLog.ProblemCode
+					}
+					if key == "" {
+						key = jLog.Error
+					}
+					if key == "" {
+						key = "generic json error"
+					}
+
+					checkName := "dataplane-logs"
+					if len(patterns) > 0 {
+						checkName = patterns[0].check
+					}
+
+					if m, ok := matches[key]; ok {
+						m.count++
+						if sev == report.SeverityFatal && m.severity != report.SeverityFatal {
+							m.severity = report.SeverityFatal
+							m.firstLine = truncate(line, 500)
+						}
+					} else {
+						matches[key] = &logMatch{
+							count:     1,
+							firstLine: truncate(line, 500),
+							severity:  sev,
+							check:     checkName,
+						}
+					}
+				}
+				continue
+			}
+		}
+
+		// 2. Fallback to raw substring matching for non-JSON lines
 		for _, p := range patterns {
 			if strings.Contains(strings.ToLower(line), strings.ToLower(p.substring)) {
 				if m, ok := matches[p.substring]; ok {

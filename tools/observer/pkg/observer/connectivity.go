@@ -158,6 +158,10 @@ func (o *Observer) probePoolPodHealth(ctx context.Context) {
 }
 
 func (o *Observer) probeMultiOrchStatus(ctx context.Context, host, component string) {
+	if o.hasAnyPodInGracePeriod() {
+		return
+	}
+
 	url := fmt.Sprintf("http://%s:%d/debug/status", host, common.PortMultiOrchHTTP)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -696,6 +700,10 @@ func probeComponents(probes []ProbeResult) []string {
 }
 
 func (o *Observer) probeMultiGatewaySQLServices(ctx context.Context) {
+	if o.hasAnyPodInGracePeriod() {
+		return
+	}
+
 	var svcs corev1.ServiceList
 	if err := o.client.List(ctx, &svcs,
 		o.listOpts(client.MatchingLabels{
