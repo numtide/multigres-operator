@@ -131,8 +131,6 @@ jobs:
             if (!isNaN(newCov)) {
                 if (threshold > newCov) {
                     overallStatus = `❌ FAIL: Coverage (${newCov}%) < Threshold (${threshold}%)`;
-                } else if (prevCov > newCov) {
-                    overallStatus = `❌ FAIL: Coverage decreased (${prevCov}% -> ${newCov}%)`;
                 } else {
                     overallStatus = "✅ PASS";
                 }
@@ -188,8 +186,7 @@ jobs:
               body: comment
             })
 
-      # Exit with non-zero value if the test coverage has decreased or not
-      # reached the threshold.
+      # Exit with non-zero value if the test coverage has not reached the threshold.
       - name: Check coverage status
         run: |
           echo "Coverage Threshold:     ${{ inputs.COVERAGE_THRESHOLD }}%"
@@ -202,23 +199,7 @@ jobs:
             exit 1
           fi
 
-          PREV_VAL="${{ env.PREV_COVERAGE }}"
-
-          # If PREV_VAL is empty or "Unknown", treat it as 0 for safety
-          if [[ "$PREV_VAL" == "Unknown" ]] || [[ -z "$PREV_VAL" ]]; then
-             PREV_VAL="0"
-          fi
-
-          if (( $(echo "$PREV_VAL > 0" | bc -l) )); then
-              if (( $(echo "$PREV_VAL > ${{ env.NEW_COVERAGE }}" | bc -l) )); then
-                  echo "❌ ERROR: The new coverage is worse than the previous coverage ($PREV_VAL% vs ${{ env.NEW_COVERAGE }}%)."
-                  exit 1
-              fi
-          fi
-
-          echo "✅ PASS: The new coverage meets the threshold and has not regressed."
-
-          echo "The new coverage is greater or equal to the previous coverage, and passes the threshold."
+          echo "✅ PASS: Coverage (${{ env.NEW_COVERAGE }}%) meets the threshold (${{ inputs.COVERAGE_THRESHOLD }}%)."
 
       # If triggered from non-PR setup, copy the new coverage as the new cached data.
       - name: Copy coverage information for cache

@@ -33,4 +33,4 @@ jobs:
       pull-requests: write
     uses: ./.github/workflows/_reusable-test-coverage.yaml
     with:
-      COVERAGE_THRESHOLD: 0 # Because there is no test, setting threshold to 0
+      COVERAGE_THRESHOLD: 70
