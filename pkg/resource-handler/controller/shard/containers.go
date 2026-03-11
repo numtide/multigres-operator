@@ -179,6 +179,11 @@ func buildPgctldContainer(
 			ReadOnly:  true,
 		})
 	}
+	if _, otelMount := multigresv1alpha1.BuildOTELSamplingVolume(
+		shard.Spec.Observability,
+	); otelMount != nil {
+		volumeMounts = append(volumeMounts, *otelMount)
+	}
 
 	return corev1.Container{
 		Name:      "postgres",
@@ -342,6 +347,11 @@ func buildMultiPoolerSidecar(
 			ReadOnly:  true,
 		})
 	}
+	if _, otelMount := multigresv1alpha1.BuildOTELSamplingVolume(
+		shard.Spec.Observability,
+	); otelMount != nil {
+		c.VolumeMounts = append(c.VolumeMounts, *otelMount)
+	}
 	return c
 }
 
@@ -409,6 +419,11 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 	if envVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(envVars) > 0 {
 		c.Env = append(c.Env, envVars...)
 	}
+	if _, otelMount := multigresv1alpha1.BuildOTELSamplingVolume(
+		shard.Spec.Observability,
+	); otelMount != nil {
+		c.VolumeMounts = append(c.VolumeMounts, *otelMount)
+	}
 	return c
 }
 
@@ -422,6 +437,11 @@ func buildPoolVolumes(shard *multigresv1alpha1.Shard, cellName string) []corev1.
 	}
 	if certVol := buildPgBackRestCertVolume(shard); certVol != nil {
 		volumes = append(volumes, *certVol)
+	}
+	if otelVol, _ := multigresv1alpha1.BuildOTELSamplingVolume(
+		shard.Spec.Observability,
+	); otelVol != nil {
+		volumes = append(volumes, *otelVol)
 	}
 	return volumes
 }

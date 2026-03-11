@@ -172,6 +172,14 @@ func BuildMultiAdminDeployment(
 		},
 	}
 
+	if otelVol, otelMount := multigresv1alpha1.BuildOTELSamplingVolume(
+		cluster.Spec.Observability,
+	); otelVol != nil {
+		podSpec := &deploy.Spec.Template.Spec
+		podSpec.Volumes = append(podSpec.Volumes, *otelVol)
+		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, *otelMount)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, deploy, scheme); err != nil {
 		return nil, err
 	}

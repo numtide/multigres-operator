@@ -18,8 +18,17 @@ package v1alpha1
 
 import (
 	"os"
+	"path/filepath"
 
 	corev1 "k8s.io/api/core/v1"
+)
+
+const (
+	// OTELSamplingVolumeName is the volume name for the sampling config ConfigMap.
+	OTELSamplingVolumeName = "otel-sampling-config"
+
+	// OTELSamplingMountPath is where the sampling config ConfigMap is mounted.
+	OTELSamplingMountPath = "/etc/otel"
 )
 
 // BuildOTELEnvVars converts an ObservabilityConfig into a slice of
@@ -85,7 +94,43 @@ func BuildOTELEnvVars(cfg *ObservabilityConfig) []corev1.EnvVar {
 	)
 	appendIfSet("OTEL_TRACES_SAMPLER", sampler, "OTEL_TRACES_SAMPLER")
 
+	if cfg != nil && cfg.SamplingConfigRef != nil {
+		key := cfg.SamplingConfigRef.Key
+		if key == "" {
+			key = "sampling-config.yaml"
+		}
+		vars = append(vars, corev1.EnvVar{
+			Name:  "OTEL_TRACES_SAMPLER_CONFIG",
+			Value: filepath.Join(OTELSamplingMountPath, key),
+		})
+	}
+
 	return vars
+}
+
+// BuildOTELSamplingVolume returns a Volume and VolumeMount for the sampling
+// config ConfigMap. Returns nils if cfg is nil or SamplingConfigRef is not set.
+func BuildOTELSamplingVolume(cfg *ObservabilityConfig) (*corev1.Volume, *corev1.VolumeMount) {
+	if cfg == nil || cfg.SamplingConfigRef == nil {
+		return nil, nil
+	}
+
+	vol := &corev1.Volume{
+		Name: OTELSamplingVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: cfg.SamplingConfigRef.Name,
+				},
+			},
+		},
+	}
+	mount := &corev1.VolumeMount{
+		Name:      OTELSamplingVolumeName,
+		MountPath: OTELSamplingMountPath,
+		ReadOnly:  true,
+	}
+	return vol, mount
 }
 
 // envOrCRD returns the CRD field value if non-empty, otherwise falls back

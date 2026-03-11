@@ -174,6 +174,14 @@ func BuildMultiGatewayDeployment(
 		},
 	}
 
+	if otelVol, otelMount := multigresv1alpha1.BuildOTELSamplingVolume(
+		cell.Spec.Observability,
+	); otelVol != nil {
+		podSpec := &deployment.Spec.Template.Spec
+		podSpec.Volumes = append(podSpec.Volumes, *otelVol)
+		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, *otelMount)
+	}
+
 	if err := ctrl.SetControllerReference(cell, deployment, scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference: %w", err)
 	}

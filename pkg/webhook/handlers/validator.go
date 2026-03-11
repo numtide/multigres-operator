@@ -54,7 +54,12 @@ func (v *MultigresClusterValidator) ValidateUpdate(
 	}
 	shrinkWarnings, shrinkErr := validateNoStorageShrink(oldObj, newObj)
 	warnings = append(warnings, shrinkWarnings...)
-	return warnings, shrinkErr
+	if shrinkErr != nil {
+		return warnings, shrinkErr
+	}
+	etcdWarnings, etcdErr := validateEtcdReplicasImmutable(oldObj, newObj)
+	warnings = append(warnings, etcdWarnings...)
+	return warnings, etcdErr
 }
 
 func (v *MultigresClusterValidator) ValidateDelete(
@@ -202,6 +207,58 @@ func collectPoolStorageSizes(cluster *multigresv1alpha1.MultigresCluster) map[st
 		}
 	}
 	return sizes
+}
+
+// validateEtcdReplicasImmutable rejects changes to etcd replica count after
+// cluster creation. etcd uses static bootstrap (ETCD_INITIAL_CLUSTER_STATE=new)
+// which is a one-time operation — scaling requires etcdctl member management
+// that the operator does not implement.
+func validateEtcdReplicasImmutable(
+	oldObj, newObj runtime.Object,
+) (admission.Warnings, error) {
+	oldCluster, ok := oldObj.(*multigresv1alpha1.MultigresCluster)
+	if !ok {
+		return nil, nil
+	}
+	newCluster, ok := newObj.(*multigresv1alpha1.MultigresCluster)
+	if !ok {
+		return nil, nil
+	}
+
+	oldReplicas := effectiveEtcdReplicas(oldCluster)
+	newReplicas := effectiveEtcdReplicas(newCluster)
+
+	// Both 0 means both use external topo — no managed etcd to validate.
+	// One 0 and one non-0 means switching between managed/external, which is
+	// a separate concern (and would fail for other reasons).
+	if oldReplicas == 0 || newReplicas == 0 {
+		return nil, nil
+	}
+
+	if oldReplicas != newReplicas {
+		return nil, fmt.Errorf(
+			"topology server (etcd) replicas cannot be changed after cluster creation (%d → %d); "+
+				"etcd uses static bootstrap which does not support dynamic member addition",
+			oldReplicas,
+			newReplicas,
+		)
+	}
+
+	return nil, nil
+}
+
+// effectiveEtcdReplicas returns the etcd replica count for a cluster,
+// resolving nil/absent fields to the default. Returns 0 for external topo.
+func effectiveEtcdReplicas(cluster *multigresv1alpha1.MultigresCluster) int32 {
+	if cluster.Spec.GlobalTopoServer != nil && cluster.Spec.GlobalTopoServer.External != nil {
+		return 0
+	}
+	if cluster.Spec.GlobalTopoServer != nil &&
+		cluster.Spec.GlobalTopoServer.Etcd != nil &&
+		cluster.Spec.GlobalTopoServer.Etcd.Replicas != nil {
+		return *cluster.Spec.GlobalTopoServer.Etcd.Replicas
+	}
+	return resolver.DefaultEtcdReplicas
 }
 
 // ============================================================================

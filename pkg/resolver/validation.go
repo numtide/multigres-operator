@@ -252,6 +252,17 @@ func (r *Resolver) ValidateClusterLogic(
 	topologyWarnings := r.validateCellTopology(ctx, cluster.Spec.Cells)
 	warnings = append(warnings, topologyWarnings...)
 
+	// ------------------------------------------------------------------
+	// 0b. Etcd Replicas Warning
+	// ------------------------------------------------------------------
+	if etcdReplicas := getEffectiveEtcdReplicas(cluster); etcdReplicas == 1 {
+		warnings = append(warnings, fmt.Sprintf(
+			"etcd has 1 replica — no fault tolerance. "+
+				"3 replicas is recommended for production (tolerates 1 failure). "+
+				"Note: topology server replicas cannot be changed after cluster creation",
+		))
+	}
+
 	// Iterate through every Shard and "Simulate" Resolution
 	for _, db := range cluster.Spec.Databases {
 		dbBackup := multigresv1alpha1.MergeBackupConfig(db.Backup, cluster.Spec.Backup)
@@ -491,6 +502,21 @@ func (r *Resolver) hasDefaultStorageClass(ctx context.Context) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// getEffectiveEtcdReplicas returns the etcd replica count for a cluster,
+// resolving nil fields to the default (3). Returns 0 if the cluster uses
+// an external topology server (no managed etcd).
+func getEffectiveEtcdReplicas(cluster *multigresv1alpha1.MultigresCluster) int32 {
+	if cluster.Spec.GlobalTopoServer != nil && cluster.Spec.GlobalTopoServer.External != nil {
+		return 0
+	}
+	if cluster.Spec.GlobalTopoServer != nil &&
+		cluster.Spec.GlobalTopoServer.Etcd != nil &&
+		cluster.Spec.GlobalTopoServer.Etcd.Replicas != nil {
+		return *cluster.Spec.GlobalTopoServer.Etcd.Replicas
+	}
+	return DefaultEtcdReplicas
 }
 
 // validateCellTopology checks if nodes exist in the cluster matching each cell's
