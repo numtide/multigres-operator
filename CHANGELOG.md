@@ -4,6 +4,37 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.5.1] — 2026-03-11
+
+**Previous release:** v0.5.0 (2026-03-10)
+
+Hardens cluster reliability with etcd health probes, etcd replica immutability validation, full TemplateDefaults override-chain propagation, and OTEL sampling config support across all data-plane components. Also fixes observer false positives from probe-induced log noise and bumps multigres images to sha-8278fad.
+
+**9 commits, 28 files changed, ~649 insertions.**
+
+### Bug Fixes
+
+- **Etcd health probes:** The etcd StatefulSet had no health probes, so Kubernetes could not detect or recover from unhealthy members. Added startup probe on `/readyz` (30 failure threshold for bootstrap/WAL replay), liveness probe on `/livez`, and readiness probe on `/readyz` — all via HTTP GET on the etcd client port (2379).
+- **TemplateDefaults propagation:** The 4-level override chain (Component > Cluster Default Template > Namespace Default > Hardcoded) was broken for CoreTemplate and CellTemplate. `ResolveGlobalTopo`, `ResolveMultiAdmin`, and `ResolveMultiAdminWeb` now fall back to `TemplateDefaults.CoreTemplate`. CellTemplate default is propagated before `ResolveCell`. The webhook validator now resolves `TemplateDefaults.ShardTemplate` for accurate orphan pool checks.
+- **Etcd replica immutability:** CEL rule rejects even replica counts. Webhook warns on `replicas=1` (single-node etcd is not HA) and rejects replica changes on Update to prevent cluster ID mismatch from static bootstrap re-initialization.
+- **OTEL sampling config propagation:** `SamplingConfigRef` was accepted by the API but never wired through. Now sets `OTEL_TRACES_SAMPLER_CONFIG` env var and mounts the ConfigMap volume into pool pods, multigateway, multiadmin, and multiorch containers. Fixes `CrashLoopBackOff` when using `multigres_custom` sampler.
+- **Multiorch sampling volume:** The multiorch container had an `otel-sampling-config` VolumeMount but the corresponding Volume was never added to the Deployment pod spec. Volume is now conditionally attached when `SamplingConfigRef` is configured.
+- **Observer probe noise:** TCP health probes to the gateway PG port caused EOF log entries at ERROR level, which the observer then reported as findings. New `isProbeNoise()` filter suppresses these false positives. Grace period bumped from 60s to 2min with multiorch and gateway probes skipped during grace.
+- **Observer JSON log parsing:** Log severity is now extracted from JSON `level` fields. Severity is elevated for `ShardNeedsBootstrap` and quorum errors.
+- **Observer RBAC:** Added `watch` verb for nodes (controller-runtime cached client requires watch, not just list).
+
+### Dependencies
+
+- Upgrade multigres container images from `sha-d6c1048` to `sha-8278fad` (includes fix for admin conn action lock starvation).
+
+### Testing
+
+- **Etcd probe tests:** Unit tests for probe configuration and integration tests verifying probe fields on the generated StatefulSet.
+- **Resolver tests:** Test cases for TemplateDefaults propagation across MultiAdmin, MultiAdminWeb, GlobalTopo, and the webhook validator.
+- **Etcd validation tests:** Test cases for `getEffectiveEtcdReplicas` helper in resolver validation.
+
+---
+
 ## [v0.5.0] — 2026-03-10
 
 **Previous release:** v0.4.2 (2026-03-09)
