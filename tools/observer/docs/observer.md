@@ -170,6 +170,20 @@ SQL-based data-plane health checks. Connects directly to PostgreSQL on pool pods
 
 Tails logs from all Multigres containers each cycle (configurable via `--log-tail-lines`, default 100). Findings are emitted under two separate check names depending on the source.
 
+**Two-pass log parsing:**
+
+1. **JSON-aware parsing (primary):** If a log line starts with `{`, it is parsed as JSON. The `level` field determines severity — `error` and `fatal` levels produce findings. The `msg` field (or `error`/`problem_code` fields) is used as the finding key for deduplication. This correctly identifies error-level entries in structured logs from multigres components without relying on substring matching.
+
+2. **Raw substring matching (fallback):** Non-JSON lines fall through to the existing pattern table below.
+
+**Severity elevation:** JSON log entries containing `ShardNeedsBootstrap` or `quorum` (case-insensitive) are elevated to `fatal` severity, regardless of their original `level` field. These indicate cluster-breaking conditions that hide behind generic `ERROR` levels.
+
+**Probe noise filtering:** Multigateway containers have probe noise filtering enabled. The observer's TCP probes to the gateway PG port cause the gateway to log `"startup failed"` and `"error handling message"` entries with EOF errors at ERROR level. The `isProbeNoise()` filter suppresses these to prevent false positives.
+
+**Component-level grace period skipping:**
+- Pool pod logs are skipped entirely during the per-pod startup grace period
+- Multiorch and multigateway logs are skipped when *any* pod is in its grace period, since these components log errors about pool pods that haven't finished starting
+
 **Operator log patterns** (check: `operator-logs` — scanned from the operator `manager` container):
 
 | Pattern | Severity |
@@ -201,8 +215,9 @@ Tails logs from all Multigres containers each cycle (configurable via `--log-tai
 
 **How it works:**
 - Uses `pods/log` API with `sinceSeconds` based on interval each cycle
+- JSON lines: parsed for `level`, `msg`, `error`, `problem_code` fields; only `error`/`fatal` levels produce findings
+- Non-JSON lines: case-insensitive substring matching against the pattern tables above
 - Aggregates matches per pattern per container (reports count + sample line)
-- Pattern matching is case-insensitive
 
 ---
 

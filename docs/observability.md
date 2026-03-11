@@ -115,6 +115,8 @@ The endpoint must speak **OTLP** (HTTP or gRPC) — this can be an OpenTelemetry
 
 **Additional OTel configuration:** The operator respects all standard [OTel environment variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/) including `OTEL_TRACES_SAMPLER`, `OTEL_EXPORTER_OTLP_INSECURE`, and `OTEL_SERVICE_NAME`.
 
+**Custom sampler configuration:** When `spec.observability.samplingConfigRef` references a ConfigMap, the operator propagates `OTEL_TRACES_SAMPLER_CONFIG` to all data-plane containers (pool pods, multigateway, multiadmin, multiorch) and mounts the ConfigMap as a volume. This is required when using custom samplers like `multigres_custom` that read configuration from a file. Without `samplingConfigRef`, the sampler defaults to the standard OTel environment variable behavior.
+
 ## Structured Logging
 
 The operator uses structured JSON logging (`zap` via controller-runtime). When tracing is enabled, every log line within a traced operation automatically includes `trace_id` and `span_id` fields, enabling **log-trace correlation** — click a log line in Grafana Loki to jump directly to the associated trace.

@@ -191,8 +191,8 @@ Key features:
 The operator ships with built-in support for **metrics**, **alerting**, **distributed tracing**, and **structured logging**.
 
 - **Metrics** — Prometheus endpoint with 8 operator-specific metrics + controller-runtime framework metrics
-- **Alerts** — 7 pre-configured PrometheusRule alerts with dedicated runbooks ([view runbooks](docs/monitoring/runbooks/))
-- **Grafana Dashboards** — Operator health dashboard + per-cluster topology dashboard
+- **Alerts** — 10 pre-configured PrometheusRule alerts with dedicated runbooks ([view runbooks](docs/monitoring/runbooks/))
+- **Grafana Dashboards** — Operator dashboard, per-cluster topology dashboard, and data-plane operations dashboard
 - **Distributed Tracing** — OpenTelemetry OTLP support, disabled by default, zero overhead when off
 - **Structured Logging** — JSON logging with automatic `trace_id`/`span_id` injection for log-trace correlation
 

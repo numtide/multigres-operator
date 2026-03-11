@@ -38,12 +38,13 @@ These constants are defined in `pkg/common/constants.go` and control when findin
 | `DrainAcknowledgedTimeout` | 30s | Drain state | `acknowledged` state stuck timeout |
 | `PhaseDegradedTimeout` | 5min | CRD status | Degraded/Unknown phase flagged after this |
 | `GenerationDivergeTimeout` | 60s | CRD status | Generation mismatch flagged after this |
-| `PrimaryGracePeriod` | 30s | CRD status | Grace period before flagging wrong primary count |
+| `PrimaryGracePeriod` | 60s | CRD status | Grace period before flagging wrong primary count |
 | `StaleStatusEntryGracePeriod` | 30s | CRD status | Grace for stale podRoles entries after pod deletion |
 | `TerminatingResourceTimeout` | 5min | Resources | Stuck terminating CRDs flagged after this |
 | `ConnectivityTimeout` | 5s | Connectivity | TCP/HTTP probe timeout |
 | `GRPCHealthTimeout` | 3s | Connectivity | gRPC health check timeout |
 | `ConnectivityLatencyThreshold` | 500ms | Connectivity | Latency warning threshold |
+| `PodStartupGracePeriod` | 2min | All checks | Suppress findings for newly started pool pods |
 
 ### Restart Thresholds
 

@@ -251,7 +251,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods", "pods/log", "services", "persistentvolumeclaims",
-                "events", "configmaps", "secrets"]
+                "events", "configmaps", "secrets", "nodes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets"]
@@ -288,7 +288,7 @@ This state is purely observational — losing it on restart is safe. The observe
 
 ### Startup Grace Period
 
-The `podStartup` map is populated each cycle by `checkPodHealth` for pool pods and consumed by downstream checks (`connectivity`, `replication`, `logs`). Pods younger than 60 seconds have all findings suppressed; pods older than 60 seconds but not yet Ready have `error`/`fatal` findings downgraded to `warn`. See the [README](../README.md#startup-grace-period) for the full rationale.
+The `podStartup` map is populated each cycle by `checkPodHealth` for pool pods and consumed by downstream checks (`connectivity`, `replication`, `logs`). Pods younger than 2 minutes have all findings suppressed; pods older than 2 minutes but not yet Ready have `error`/`fatal` findings downgraded to `warn`. See the [README](../README.md#startup-grace-period) for the full rationale.
 
 ---
 
