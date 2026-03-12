@@ -41,6 +41,7 @@ Pick a fixture from `fixtures/` (see **Fixture Selection** below).
    ```bash
    KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl apply -f fixtures/<fixture>/prerequisites.yaml
    ```
+   **Wait for prerequisite pods to be Running** before proceeding (e.g., `external-etcd-mixed` deploys a standalone etcd that must be ready before the cluster can connect to it).
 
 2. Deploy the cluster:
    ```bash
@@ -516,16 +517,21 @@ When the user says "run tests" or "exercise the cluster" without specifying, def
 | `minimal-delete` | Yes | N/A (no templates) | PVC deletion paths |
 | `templated-full` | Yes (needs prereqs) | Full TVP (all 3 template types) | Template resolution, pure template propagation |
 | `overrides-complex` | Yes (needs prereqs) | Override precedence TVP | Override merging, template+override interaction |
-| `external-etcd-mixed` | Yes (needs prereqs) | N/A | External topology server, mixed-mode cells |
+| `external-etcd-mixed` | Yes (needs prereqs) | N/A | External topology server — no TopoServer StatefulSet created |
 | `s3-backup` | Partial (needs real S3 bucket) | N/A | Backup configuration with S3 |
 | `multi-cell-quorum` | Yes (resource heavy) | N/A | Multi-cell, quorum |
 | `observability-custom` | Yes (needs prereqs) | N/A | Custom observability config |
+
+**Prerequisites are self-contained.** Every fixture with "needs prereqs" includes a `prerequisites.yaml` that deploys everything required into the kind cluster — no external infrastructure needed. The only exception is `s3-backup` which requires a real S3 bucket and credentials.
+
+For `external-etcd-mixed` specifically, the prerequisites deploy a standalone etcd Deployment + Service. The cluster then references this etcd via `globalTopoServer.external.endpoints`. The operator skips creating a TopoServer StatefulSet entirely. Always deploy prerequisites **before** the cluster and wait for pods to be Running.
 
 **Recommended order for bug-finding:**
 1. `minimal-retain` — simplest, fastest feedback, validates core logic
 2. `minimal-delete` — tests PVC deletion paths (historically buggy)
 3. `templated-full` — tests template resolution (complex, high bug surface)
 4. `overrides-complex` — tests override merging (known edge cases)
+5. `external-etcd-mixed` — tests external topology server path
 
 ## Negative Tests
 

@@ -176,6 +176,7 @@ spec:
                       description: Name is the logical name of the cell.
                       maxLength: 30
                       minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                     overrides:
                       description: Overrides are applied on top of the template.
@@ -2592,6 +2593,7 @@ spec:
                       description: Name is the logical name of the database.
                       maxLength: 30
                       minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                     tablegroups:
                       description: TableGroups is a list of table groups.
@@ -2720,6 +2722,7 @@ spec:
                             description: Name is the logical name of the table group.
                             maxLength: 25
                             minLength: 1
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
                           pvcDeletionPolicy:
                             description: |-
@@ -2872,6 +2875,7 @@ spec:
                                     (e.g., "0", "1").
                                   maxLength: 25
                                   minLength: 1
+                                  pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                                   type: string
                                   x-kubernetes-validations:
                                   - message: shardName must be strictly equal to '0-inf'
@@ -3865,6 +3869,7 @@ spec:
                                           items:
                                             maxLength: 30
                                             minLength: 1
+                                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                                             type: string
                                           maxItems: 50
                                           type: array
@@ -4963,6 +4968,7 @@ spec:
                                             items:
                                               maxLength: 30
                                               minLength: 1
+                                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                                               type: string
                                             maxItems: 10
                                             minItems: 1
@@ -6221,6 +6227,7 @@ spec:
                                           items:
                                             maxLength: 30
                                             minLength: 1
+                                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                                             type: string
                                           maxItems: 50
                                           type: array
@@ -7319,6 +7326,7 @@ spec:
                                             items:
                                               maxLength: 30
                                               minLength: 1
+                                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                                               type: string
                                             maxItems: 10
                                             minItems: 1

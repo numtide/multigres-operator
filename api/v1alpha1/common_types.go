@@ -212,22 +212,27 @@ type PgBackRestTLSConfig struct {
 
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=30
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type DatabaseName string
 
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=25
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type TableGroupName string
 
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=25
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type ShardName string
 
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=25
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type PoolName string
 
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=30
+// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type CellName string
 
 // +kubebuilder:validation:MinLength=1
