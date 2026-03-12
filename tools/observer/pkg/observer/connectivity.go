@@ -2,6 +2,7 @@ package observer
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -28,6 +29,7 @@ func (o *Observer) checkConnectivity(ctx context.Context) {
 	o.probeTopoServerServices(ctx)
 	o.probePoolPodHealth(ctx)
 	o.probeOperatorHealth(ctx)
+	o.probeOperatorMetrics(ctx)
 
 	if o.enableSQLProbe {
 		o.probeMultiGatewaySQLServices(ctx)
@@ -882,6 +884,86 @@ func (o *Observer) fetchShardPassword(ctx context.Context, shard *multigresv1alp
 		return ""
 	}
 	return string(pw)
+}
+
+// probeOperatorMetrics checks that the operator's /metrics endpoint is reachable
+// and contains expected metric names. The operator serves metrics over HTTPS on
+// port 8443, so we use a TLS-skipping client for cluster-internal probing.
+func (o *Observer) probeOperatorMetrics(ctx context.Context) {
+	var pods corev1.PodList
+	if err := o.client.List(ctx, &pods,
+		client.InNamespace(o.operatorNamespace),
+		client.MatchingLabels{"control-plane": "controller-manager"},
+	); err != nil {
+		return
+	}
+
+	tlsClient := &http.Client{
+		Timeout:   common.MetricsProbeTimeout,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec
+	}
+
+	expectedMetrics := []string{
+		"multigres_operator_cluster_info",
+		"multigres_operator_webhook_request_total",
+	}
+
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if pod.Status.PodIP == "" || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		url := fmt.Sprintf("https://%s:%d/metrics", pod.Status.PodIP, common.PortOperatorMetrics)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			continue
+		}
+
+		resp, err := tlsClient.Do(req)
+		if err != nil {
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityWarn,
+				Check:     "connectivity",
+				Component: pod.Name,
+				Message: fmt.Sprintf(
+					"operator-metrics: /metrics endpoint unreachable on %s: %v",
+					pod.Name, err,
+				),
+			})
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityWarn,
+				Check:     "connectivity",
+				Component: pod.Name,
+				Message: fmt.Sprintf(
+					"operator-metrics: /metrics returned HTTP %d on %s",
+					resp.StatusCode, pod.Name,
+				),
+			})
+			continue
+		}
+
+		bodyStr := string(body)
+		for _, metric := range expectedMetrics {
+			if !strings.Contains(bodyStr, metric) {
+				o.reporter.Report(report.Finding{
+					Severity:  report.SeverityWarn,
+					Check:     "connectivity",
+					Component: pod.Name,
+					Message: fmt.Sprintf(
+						"operator-metrics: expected metric %q not found in /metrics output on %s",
+						metric, pod.Name,
+					),
+				})
+			}
+		}
+	}
 }
 
 // serviceHasPort returns true if the service declares the given port.

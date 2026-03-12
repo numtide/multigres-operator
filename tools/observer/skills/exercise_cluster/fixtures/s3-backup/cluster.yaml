@@ -1,0 +1,38 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: s3-backup
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  backup:
+    type: s3
+    s3:
+      bucket: "my-dumb-bucket"
+      region: "us-east-1"
+      credentialsSecret: "my-s3-creds"
+  cells:
+    - name: "us-east-1"
+      spec:
+        multigateway:
+          replicas: 1
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              spec:
+                multiorch:
+                  replicas: 1
+                pools:
+                  main-rw:
+                    type: readWrite
+                    cells: ["us-east-1"]
+                    replicasPerCell: 4
+                    storage:
+                      size: "5Gi"

@@ -45,7 +45,11 @@ These constants are defined in `pkg/common/constants.go` and control when findin
 | `ConnectivityTimeout` | 5s | Connectivity | TCP/HTTP probe timeout |
 | `GRPCHealthTimeout` | 3s | Connectivity | gRPC health check timeout |
 | `ConnectivityLatencyThreshold` | 500ms | Connectivity | Latency warning threshold |
+| `MetricsProbeTimeout` | 5s | Connectivity | Operator metrics endpoint probe timeout |
 | `PodStartupGracePeriod` | 2min | All checks | Suppress findings for newly started pool pods |
+| `PhaseProgressingTimeout` | 10min | CRD status | Stuck-in-Progressing detection threshold |
+| `BackupStalenessWarnAge` | 25h | CRD status | Backup age above this emits a warning |
+| `BackupStalenessErrorAge` | 49h | CRD status | Backup age above this emits an error |
 
 ### Restart Thresholds
 
@@ -82,6 +86,7 @@ The observer probes these ports on their respective services:
 | 2380 | etcd (TopoServer) peer | HTTP | `PortEtcdPeer` |
 | 5432 | PostgreSQL (pool pods) | PG wire | `PortPostgres` |
 | 8081 | Operator health | HTTP | `PortOperatorHealth` |
+| 8443 | Operator metrics | HTTPS | `PortOperatorMetrics` |
 
 ---
 

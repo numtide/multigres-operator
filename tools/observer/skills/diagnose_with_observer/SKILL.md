@@ -5,7 +5,9 @@ description: Use the multigres observer to diagnose cluster health issues. Fetch
 
 # Diagnose with Observer Skill
 
-**Goal:** Fetch a complete diagnostic snapshot from the observer's `/api/status` endpoint, triage findings, investigate root causes in both operator and upstream multigres code, and produce an actionable bug report.
+**Goal:** Fetch a complete diagnostic snapshot from the observer's API, triage findings, investigate root causes in both operator and upstream multigres code, and produce an actionable bug report.
+
+> **For systematic bug hunting** (deploying fixtures, running mutations, validating health), use the `exercise_cluster` skill instead. This skill is for **reactive investigation** — when something is already broken and you need to find out why.
 
 ## 1. Ensure the Observer is Running
 
@@ -87,6 +89,48 @@ curl -s http://localhost:9090/api/status | jq '.probes.drain'
 curl -s http://localhost:9090/api/status | jq '.probes.crdStatus'
 ```
 
+### On-Demand Targeted Checks
+
+Use `/api/check` to run specific checks immediately without waiting for the next cycle:
+```bash
+# Run only replication and connectivity checks
+curl -s 'http://localhost:9090/api/check?categories=replication,connectivity' | jq .
+
+# Run all checks on demand
+curl -s http://localhost:9090/api/check | jq .
+```
+
+Valid categories: `pod-health`, `resource-validation`, `crd-status`, `drain-state`, `connectivity`, `logs`, `events`, `topology`, `replication`
+
+Use this when you've made a change and want to verify immediately rather than waiting 10 seconds for the next cycle.
+
+### Finding History and Pattern Detection
+
+Use `/api/history` to see how findings behave over time:
+```bash
+# Full history with classification
+curl -s http://localhost:9090/api/history | jq .
+
+# Just persistent and flapping findings (the ones that matter)
+curl -s http://localhost:9090/api/history | jq '{
+  persistent: [.persistent[]? | {check, component, message, severity, count}],
+  flapping: [.flapping[]? | {check, component, message, severity, count}],
+  transientCount: (.transient | length),
+  totalCycles: .totalCycles,
+  observerStartedAt: .observerStartedAt
+}'
+```
+
+**Classification:**
+
+| Category | Meaning | Action |
+|----------|---------|--------|
+| `persistent` | Present in 75%+ of cycles (or <3 cycles) | Real issue — investigate |
+| `flapping` | Active with gaps (3+ appearances, <75%) | Intermittent — may be a race condition |
+| `transient` | Appeared then resolved | Expected during operations — report but don't block |
+
+**`observerStartedAt`** tells you when the observer process started. If `totalCycles` is low and `observerStartedAt` is recent, findings may not have stabilized yet — wait for more cycles before classifying.
+
 ### Fallback: Read Logs Directly
 
 If port-forwarding isn't available, fall back to logs. Observer logs use double-nested JSON:
@@ -135,8 +179,10 @@ Process findings in this order:
 - **SPLIT-BRAIN**: Multiple pods report as primary. Data integrity emergency.
 - **Writes blocked**: The write probe timed out, `INSERT`/`UPDATE` will hang.
 - **Backward drain transition**: Drain state went backwards, indicating a bug.
+- **Invalid phase transition**: Phase went `Healthy` → `Initializing` — controller bug, should never happen.
 - **Readiness cross-check**: Pod reports Ready but gRPC/readiness probe failed — silent data plane failure.
 - **All poolers unreachable**: `multiorch-pooler-health` shows all poolers down — total data plane outage.
+- **Missing PVC**: Running pool pod references a PVC that doesn't exist — pod cannot function.
 
 ### Error (Investigate)
 - **Missing replicas**: Primary sees 0 replication connections.
@@ -144,15 +190,24 @@ Process findings in this order:
 - **Generation divergence**: Controller isn't reconciling (observed generation stale >60s).
 - **WAL receiver down**: Replica disconnected from primary.
 - **Connectivity failure**: Can't reach a multigres service.
+- **PVC not Bound**: Pool pod's PVC exists but is not in `Bound` phase.
+- **Backup very stale**: Last backup >49h old.
+- **Cell ready > total**: `GatewayReadyReplicas` exceeds `GatewayReplicas` — impossible state, status update bug.
 
 ### Warn (Monitor)
 - **Replication lag >10s**: Standby falling behind.
 - **WAL replay paused**: Someone paused replay on a replica.
 - **Backup stale**: Last backup >25h old.
+- **Backup never completed**: Backup is configured but `LastBackupTime` is nil.
+- **Stuck Progressing**: Phase stuck in `Progressing` for >10 minutes without advancing.
+- **Empty status message**: `Degraded` or `Unknown` phase with no status message.
+- **Service missing endpoints**: Multigres-managed Service has no Endpoints object or zero ready addresses.
+- **Cell deployment mismatch**: Actual gateway Deployment readyReplicas doesn't match Cell status.
+- **Operator metrics unreachable**: Can't probe operator `/metrics` endpoint on port 8443.
 - **Topology unreachable**: etcd checks skipped (may be expected during startup).
 
 ### Info (Normal)
-- Synced events, successful probes — no action needed.
+- Synced events, successful probes, orphaned PVCs — no action needed.
 
 ## 5. Common Diagnostic Patterns
 
@@ -206,6 +261,17 @@ KUBECONFIG=kubeconfig.yaml kubectl get multigresclusters -A -o yaml | grep -A5 c
 
 # Check drain annotations
 KUBECONFIG=kubeconfig.yaml kubectl get pods -l app.kubernetes.io/component=shard-pool -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.drain\.multigres\.com/state}{"\n"}{end}'
+
+# Cross-reference CRD podRoles with actual SQL state
+# (catches stale podRoles where CRD says REPLICA but pod is actually PRIMARY)
+KUBECONFIG=kubeconfig.yaml kubectl get shard -A -o json | jq '[.items[] | {name: .metadata.name, podRoles: .status.podRoles}]'
+for pod in $(KUBECONFIG=kubeconfig.yaml kubectl get pods -l app.kubernetes.io/component=shard-pool -o name); do
+  echo -n "$pod: "
+  KUBECONFIG=kubeconfig.yaml kubectl exec $pod -c postgres -- psql -h 127.0.0.1 -p 5432 -U postgres -tAc "SELECT CASE WHEN pg_is_in_recovery() THEN 'REPLICA' ELSE 'PRIMARY' END"
+done
+
+# Check finding history for patterns
+curl -s http://localhost:9090/api/history | jq '{persistent: (.persistent // []) | length, flapping: (.flapping // []) | length, transient: (.transient // []) | length}'
 ```
 
 ## 7. Trace the Failure Chain in Component Logs

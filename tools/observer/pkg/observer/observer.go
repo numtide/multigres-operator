@@ -90,6 +90,12 @@ type Observer struct {
 	// Latest cycle snapshot for the /api/status endpoint.
 	snap snapshot
 
+	// Phase transition tracking: "component" → previous phase.
+	prevPhase map[string]string
+
+	// Progressing timeout tracking: "component" → when Progressing first seen.
+	progressingSince map[string]time.Time
+
 	// Finding history across cycles for pattern detection.
 	history *findingHistory
 
@@ -133,6 +139,8 @@ func New(cfg Config) *Observer {
 		prevDrainState:         make(map[string]string),
 		generationDivergeSince: make(map[string]time.Time),
 		primaryViolationSince:  make(map[string]time.Time),
+		prevPhase:              make(map[string]string),
+		progressingSince:       make(map[string]time.Time),
 		podStartup:             make(map[string]podInfo),
 		knownPodNames:          make(map[string]bool),
 		seenEventCounts:        make(map[types.UID]int32),

@@ -49,6 +49,23 @@ Validates the existence, ownership, and consistency of all Multigres-managed Kub
 | Pool headless Services | Missing headless services per pool per cell | error |
 | Orphan detection | Resources with multigres labels but no ownerReference | warn |
 | Stuck terminating | Multigres resources stuck in `Terminating` for >5min | error |
+| PVC missing | Running pool pod references a PVC that doesn't exist | fatal |
+| PVC not Bound | Pool pod's PVC exists but is not in `Bound` phase | error |
+| Orphaned PVC | PVC with multigres labels not referenced by any pod (beyond grace period) | info |
+| Service missing endpoints | Multigres-managed Service has no Endpoints object | warn |
+| Service zero ready | Service's Endpoints object has zero ready addresses | warn |
+
+**PVC validation details:**
+- Lists all running pool pods and all PVCs in the namespace
+- For each pool pod, resolves PVC references from `pod.spec.volumes`
+- A missing PVC is `fatal` — the pod cannot function without its storage volume
+- An unbound PVC is `error` — Kubernetes hasn't provisioned the storage yet
+- Orphaned PVCs are `info` — may be expected temporarily during scale-down
+
+**Service endpoint validation details:**
+- Checks all multigres-managed Services (skips headless services with `ClusterIP: None`)
+- Gets the matching Endpoints object by name
+- Skips findings during the startup grace period
 
 ---
 
@@ -61,6 +78,9 @@ Validates the `.status` fields of all Multigres CRDs.
 | Sub-check | What it detects | Threshold | Severity |
 |-----------|----------------|-----------|----------|
 | Phase regression | Cluster/Shard/Cell/TopoServer in `Degraded` or `Unknown` | >5min | error |
+| Stuck Progressing | Phase stuck in `Progressing` without advancing | >10min | warn |
+| Invalid transition | Impossible phase transition (e.g., `Healthy` → `Initializing`) | Immediate | fatal |
+| Status message empty | `Degraded` or `Unknown` phase with no status message | Immediate | warn |
 | Generation staleness | `observedGeneration ≠ generation` | >60s | error |
 | PodRoles validation | Wrong number of primaries per pool per cell | 30s grace | error |
 | PodRoles stale entries | PodRoles referencing pods that no longer exist | 30s grace | warn |
@@ -69,10 +89,32 @@ Validates the `.status` fields of all Multigres CRDs.
 | Shard cells list | Missing or extra entries in `status.cells` | Immediate | error |
 | ReadyForDeletion condition | Present on a shard that isn't being deleted | Immediate | warn |
 | BackupHealthy condition | `BackupStale` (warn), `BackupFailed` (error) | Immediate | warn/error |
+| Backup staleness | `LastBackupTime` age exceeds thresholds | >25h warn, >49h error | warn/error |
+| Backup never completed | Backup configured (`BackupHealthy` condition exists) but `LastBackupTime` is nil | Immediate | warn |
+| Unknown backup type | `LastBackupType` not in known types (`full`, `diff`, `incr`) | Immediate | warn |
+| Cell ready > total | `GatewayReadyReplicas` exceeds `GatewayReplicas` (impossible state) | Immediate | error |
+| Cell deployment mismatch | Actual gateway Deployment `readyReplicas` doesn't match Cell status | Immediate | warn |
+| Cell missing service name | Phase is `Healthy` but `GatewayServiceName` is empty | Immediate | warn |
 
 **Primary role validation details:**
 - Exactly 1 primary expected per pool per cell
 - 30-second grace period before flagging violations (failovers cause brief 0-or-2-primary windows)
+
+**Phase progression details:**
+- Tracks each component's previous phase via an in-memory map
+- Tracks when a component first entered `Progressing` phase
+- If `Progressing` for >10 minutes without transitioning, a `warn` is emitted (may indicate stuck reconciliation)
+- `Healthy` → `Initializing` is flagged as `fatal` — this should never happen and indicates a controller bug
+- All tracking is cleared when a component reaches `Healthy` or is being deleted
+
+**Backup staleness details:**
+- Only checked when the shard has a `BackupHealthy` condition (backup is configured)
+- Uses `LastBackupTime` from shard status to compute age
+- Known backup types: `full`, `diff`, `incr` (pgBackRest types)
+
+**Cell status field details:**
+- Cross-checks `GatewayReadyReplicas` from Cell status against the actual gateway Deployment's `readyReplicas`
+- `GatewayReadyReplicas > GatewayReplicas` indicates an impossible state that could only arise from a status update bug
 
 ---
 
@@ -115,6 +157,7 @@ Probes all Multigres service endpoints for TCP/HTTP/gRPC/SQL connectivity.
 | `multipooler-grpc-health` | Pod | 15270 | gRPC `Health/Check` (3s timeout) | error/warn |
 | `operator-health` | Pod | 8081 | `GET /healthz` | error |
 | `operator-readiness` | Pod | 8081 | `GET /readyz` | error |
+| `operator-metrics` | Pod | 8443 | `GET /metrics` (HTTPS, TLS skip-verify) | warn |
 | Readiness cross-check | All pods | — | Compare K8s Ready vs probe results | fatal/error |
 
 **Latency tracking:** All probes measure and report latency. Alerts when >500ms.
@@ -122,6 +165,8 @@ Probes all Multigres service endpoints for TCP/HTTP/gRPC/SQL connectivity.
 **Readiness cross-check:** After all probes complete, the observer compares each pod's Kubernetes `Ready` condition against the observer's own probe results. If Kubernetes says `Ready=True` but our probes show the component is broken, a `fatal` finding is raised. This detects "lying" readiness endpoints — components that report healthy to Kubernetes while actually being non-functional (e.g., multipooler returning `/ready=200` while its gRPC server is hanging).
 
 **MultiOrch pooler health:** Scrapes the `/debug/status` HTML page and looks for error indicators (`DeadlineExceeded`, `Unavailable`, `unhealthy`, `connection refused`). If all poolers show errors, reports `fatal`; if some do, reports `error`.
+
+**Operator metrics:** Probes the operator's metrics endpoint over HTTPS on port 8443 (controller-runtime metricsserver). Uses TLS with certificate verification disabled for cluster-internal probing. Checks for expected metric names (`multigres_operator_cluster_info`, `multigres_operator_webhook_request_total`). Reports `warn` if unreachable or if expected metrics are missing — metrics are auxiliary, so failure is not `error`-level. Uses `MetricsProbeTimeout` (5s).
 
 > **Note:** The gateway SQL probe uses PostgreSQL simple query protocol (`QueryExecModeSimpleProtocol`)
 > instead of pgx's default extended protocol. The multigateway does not yet support the extended

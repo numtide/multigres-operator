@@ -11,6 +11,7 @@ The **[Multigres](https://github.com/multigres/multigres) Operator** is a Kubern
 - [Backup & Restore](#backup--restore)
 - [Observability](#observability)
 - [Webhook & Certificate Management](#webhook--certificate-management)
+- [GitOps & Webhook Defaults](#gitops--webhook-defaults)
 - [Pool Replication & Quorum](#pool-replication--quorum)
 - [Constraints & Limits](#constraints--limits-v1alpha1)
 - [Further Reading](#further-reading)
@@ -226,6 +227,18 @@ The operator **automatically detects** the certificate management strategy on st
 
 ---
 
+## GitOps & Webhook Defaults
+
+The operator's Mutating Webhook materialises all defaults (images, replicas, resources, backup config, etc.) directly into the `MultigresCluster` spec stored in etcd. This means `kubectl get multigrescluster -o yaml` always shows the full effective configuration — no hidden in-memory defaults.
+
+Some fields (like cell assignments on shards) are intentionally kept dynamic and resolved at reconcile time. The resolved values are visible on child CRs (`Shard`, `TableGroup`).
+
+If you use GitOps tooling (ArgoCD, Flux), the webhook-materialised fields can cause diffs between your Git manifests and the live state. The documentation covers recommended mitigations.
+
+📖 **Full documentation:** [Webhook Defaults & GitOps Guide](docs/gitops-and-webhook-defaults.md)
+
+---
+
 ## Pool Replication & Quorum
 
 Multigres uses a configurable **durability policy** to control synchronous replication quorum. The default policy is `ANY_2`, which requires every write to be acknowledged by at least 2 nodes (the primary + 1 synchronous standby). For multi-AZ clusters, `MULTI_CELL_ANY_2` enforces cross-zone quorum. This has implications for how many replicas you should run per cell in `readWrite` pools.
@@ -263,6 +276,7 @@ Please be aware of the following constraints in the current version:
 | Resource | Description |
 | :--- | :--- |
 | [Operator Capability Levels](docs/operator-capability-levels.md) | Maturity assessment against the [Operator Framework capability model](https://operatorframework.io/operator-capabilities/) |
+| [Webhook Defaults & GitOps](docs/gitops-and-webhook-defaults.md) | How the webhook materialises defaults, dynamic cell resolution, and GitOps compatibility |
 | [Durability Policy](docs/durability-policy.md) | Configurable replication quorum: `ANY_2` (default) and `MULTI_CELL_ANY_2` for cross-AZ durability |
 | [Storage Management](docs/storage.md) | PVC deletion policies (Retain/Delete) and volume expansion |
 | [Configuration Reference](docs/configuration.md) | Operator flags, environment variables, and logging |

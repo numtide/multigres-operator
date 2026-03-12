@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-s3-creds
+  namespace: default
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: "dumb-key"
+  AWS_SECRET_ACCESS_KEY: "dumb-secret"

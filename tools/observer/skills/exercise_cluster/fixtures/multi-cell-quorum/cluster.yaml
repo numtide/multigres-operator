@@ -1,0 +1,41 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: multi-cell-quorum
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  durabilityPolicy: "MULTI_CELL_ANY_2"
+  cells:
+    - name: "us-east-1a"
+      spec:
+        multigateway:
+          replicas: 1
+    - name: "us-east-1b"
+      spec:
+        multigateway:
+          replicas: 1
+    - name: "us-east-1c"
+      spec:
+        multigateway:
+          replicas: 1
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              spec:
+                multiorch:
+                  replicas: 3
+                pools:
+                  main-rw:
+                    type: readWrite
+                    cells: ["us-east-1a", "us-east-1b", "us-east-1c"]
+                    replicasPerCell: 4
+                    storage:
+                      size: "5Gi"
