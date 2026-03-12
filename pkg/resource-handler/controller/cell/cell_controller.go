@@ -257,6 +257,7 @@ func (r *CellReconciler) updateStatus(ctx context.Context, cell *multigresv1alph
 	r.setConditions(cell, mgDeploy)
 	cell.Status.GatewayReplicas = mgDeploy.Status.Replicas
 	cell.Status.GatewayReadyReplicas = mgDeploy.Status.ReadyReplicas
+	cell.Status.GatewayServiceName = BuildMultiGatewayServiceName(cell)
 	monitoring.SetCellGatewayReplicas(
 		cell.Name,
 		cell.Namespace,

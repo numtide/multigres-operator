@@ -175,6 +175,7 @@ spec:
                   shard belongs to.
                 maxLength: 30
                 minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               durabilityPolicy:
                 description: |-
@@ -1189,6 +1190,7 @@ spec:
                     items:
                       maxLength: 30
                       minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                     maxItems: 50
                     type: array
@@ -2307,6 +2309,7 @@ spec:
                       items:
                         maxLength: 30
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                         type: string
                       maxItems: 10
                       minItems: 1
@@ -2597,12 +2600,14 @@ spec:
                   "0").
                 maxLength: 25
                 minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               tableGroupName:
                 description: TableGroupName is the name of the table group this shard
                   belongs to.
                 maxLength: 25
                 minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               topologyPruning:
                 description: |-
@@ -2634,6 +2639,7 @@ spec:
                 items:
                   maxLength: 30
                   minLength: 1
+                  pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                   type: string
                 maxItems: 50
                 type: array

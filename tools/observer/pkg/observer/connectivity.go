@@ -936,6 +936,10 @@ func (o *Observer) probeOperatorMetrics(ctx context.Context) {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			// Authenticated metrics endpoint — reachable but requires RBAC.
+			continue
+		}
 		if resp.StatusCode != http.StatusOK {
 			o.reporter.Report(report.Finding{
 				Severity:  report.SeverityWarn,

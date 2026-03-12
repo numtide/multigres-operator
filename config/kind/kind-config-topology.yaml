@@ -1,0 +1,13 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+    labels:
+      topology.kubernetes.io/zone: us-east-1a
+  - role: worker
+    labels:
+      topology.kubernetes.io/zone: us-east-1b
+  - role: worker
+    labels:
+      topology.kubernetes.io/zone: us-east-1c

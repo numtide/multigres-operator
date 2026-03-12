@@ -355,9 +355,8 @@ func (o *Observer) checkPVCValidation(ctx context.Context) {
 		if pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
-		if o.isPodInGracePeriod(pod.Name) {
-			continue
-		}
+
+		inGracePeriod := o.isPodInGracePeriod(pod.Name)
 
 		for _, vol := range pod.Spec.Volumes {
 			if vol.PersistentVolumeClaim == nil {
@@ -365,6 +364,10 @@ func (o *Observer) checkPVCValidation(ctx context.Context) {
 			}
 			claimName := vol.PersistentVolumeClaim.ClaimName
 			referencedPVCs[claimName] = true
+
+			if inGracePeriod {
+				continue
+			}
 
 			pvc, exists := pvcByName[claimName]
 			if !exists {

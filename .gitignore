@@ -23,3 +23,6 @@ kubeconfig.yaml
 # MacOS
 .DS_Store
 multigres-operator
+
+# Results of Agent runs
+agent-docs/

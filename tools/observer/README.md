@@ -198,6 +198,81 @@ The two skills are designed to work together. A typical workflow:
 
 This separation keeps each skill focused: exercise finds the problem, diagnose traces the root cause. You can also use them independently — diagnose works on any running cluster, and exercise can operate without investigation if all scenarios pass cleanly.
 
+### Example Prompts
+
+The exerciser has three execution modes (`smoke`, `core`, `full`) and 8 fixtures with different characteristics. A full run across all fixtures can take over an hour. Use specific prompts to control what runs.
+
+#### Exerciser — Controlling Scope
+
+```
+# Quick sanity check (~5 min) — deploy one fixture, verify baseline only
+"Run a smoke test on the minimal-retain fixture"
+
+# Standard operator coverage (~15 min) — scale up, scale down, pod deletion, resource updates
+"Exercise the minimal-retain fixture in core mode"
+
+# Thorough testing (~30+ min) — all scenarios including concurrent mutations and webhook rejections
+"Run a full exercise on minimal-retain"
+
+# Specific scenario — run just one mutation
+"Exercise the minimal-retain fixture — only run the scale-down-pool-replicas scenario"
+
+# Template-focused testing — verify template resolution and propagation
+"Run smoke on templated-full and verify template propagation"
+
+# Multiple fixtures — cover different code paths
+"Exercise minimal-retain and minimal-delete in core mode"
+
+# Webhook validation only — fast, no cluster mutations
+"Run the webhook rejection scenarios (storage-shrink, etcd-replicas-immutable, invalid-template-reference)"
+
+# Failure injection — test degraded-state handling
+"Run the etcd-unavailability and image-pull-backoff failure injection scenarios on minimal-retain"
+
+# After a code change — targeted verification
+"I changed the drain state machine. Exercise minimal-retain with scale-down and rolling-update scenarios"
+
+# Full audit — test everything across multiple fixtures (1+ hour)
+"Run a full exercise on minimal-retain, minimal-delete, and templated-full. Test every scenario."
+
+# Pre-release audit — maximum coverage, all fixtures, all scenarios
+"I'm preparing a release. Run full exercises on all kind-ready fixtures, including webhook
+rejections, failure injection, concurrent mutations, and template verification. Take your time."
+```
+
+If you just say "exercise the cluster" without specifying, the agent defaults to **core** mode on whatever fixture is already deployed (or `minimal-retain` if nothing is deployed).
+
+#### Diagnose — Controlling Depth
+
+```
+# Quick look — just show what's wrong
+"What does the observer say about the cluster?"
+
+# Targeted investigation — focus on one check category
+"Diagnose the replication findings from the observer"
+
+# Full investigation with root cause analysis
+"The observer shows fatal findings — diagnose and trace the root cause"
+
+# After a mutation — check if things settled
+"I just scaled down a pool. Check the observer for any persistent findings"
+
+# History-based analysis — look for patterns over time
+"Check the observer history for flapping or persistent findings"
+```
+
+#### Choosing a Fixture
+
+| Fixture | Best for | Time |
+|---------|----------|------|
+| `minimal-retain` | Core operator logic, fastest feedback | ~5 min smoke, ~15 min core |
+| `minimal-delete` | PVC deletion paths (historically buggy) | ~5 min smoke, ~15 min core |
+| `templated-full` | Template resolution bugs, high bug surface | ~8 min smoke (includes TVP) |
+| `overrides-complex` | Override merging, template+override interaction | ~8 min smoke |
+| `multi-cell-quorum` | Multi-cell behavior, quorum | ~10 min smoke (resource heavy) |
+
+Start with `minimal-retain` for the fastest feedback loop. Move to `templated-full` when testing template-related changes.
+
 ## Architecture
 
 ```

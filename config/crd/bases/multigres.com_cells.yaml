@@ -56,6 +56,7 @@ spec:
                 items:
                   maxLength: 30
                   minLength: 1
+                  pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                   type: string
                 maxItems: 50
                 type: array
@@ -1133,6 +1134,7 @@ spec:
                 description: Name is the logical name of the cell.
                 maxLength: 30
                 minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               observability:
                 description: |-

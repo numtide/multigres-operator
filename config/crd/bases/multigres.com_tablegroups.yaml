@@ -171,6 +171,7 @@ spec:
                 description: DatabaseName is the name of the logical database.
                 maxLength: 30
                 minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               default:
                 description: IsDefault indicates if this is the default/unsharded
@@ -1436,6 +1437,7 @@ spec:
                           items:
                             maxLength: 30
                             minLength: 1
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
                           maxItems: 50
                           type: array
@@ -2471,6 +2473,7 @@ spec:
                             items:
                               maxLength: 30
                               minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                               type: string
                             maxItems: 10
                             minItems: 1
@@ -2765,6 +2768,7 @@ spec:
                 description: TableGroupName is the name of this table group.
                 maxLength: 25
                 minLength: 1
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               topologyPruning:
                 description: |-
