@@ -18,6 +18,7 @@ bin/
 
 # kind local development
 kubeconfig.yaml
+.last-built-tag
 
 
 # MacOS
