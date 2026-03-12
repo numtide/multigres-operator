@@ -351,6 +351,36 @@ kind-up: ## Create a kind cluster for local development
 	fi
 	@echo "==> Cluster ready. Use: export KUBECONFIG=$(KIND_KUBECONFIG)"
 
+.PHONY: kind-up-topology
+kind-up-topology: ## Create a multi-node kind cluster with topology zone labels
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "ERROR: kind is not installed."; \
+		echo "Install it from: https://kind.sigs.k8s.io/docs/user/quick-start/"; \
+		exit 1; \
+	}
+	@if $(KIND) get clusters | grep -q "^$(KIND_CLUSTER)$$"; then \
+		echo "Kind cluster '$(KIND_CLUSTER)' already exists."; \
+		echo "==> Exporting kubeconfig to $(KIND_KUBECONFIG)"; \
+		$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $(KIND_KUBECONFIG); \
+	else \
+		echo "Creating kind cluster '$(KIND_CLUSTER)' with topology zones..."; \
+		$(KIND) create cluster --name $(KIND_CLUSTER) --kubeconfig $(KIND_KUBECONFIG) \
+			--config config/kind/kind-config-topology.yaml; \
+	fi
+	@echo "==> Cluster ready (3 workers with zone labels). Use: export KUBECONFIG=$(KIND_KUBECONFIG)"
+
+.PHONY: kind-deploy-topology
+kind-deploy-topology: kind-up-topology manifests kustomize kind-load kind-load-images ## Deploy operator to multi-node kind cluster with topology zones
+	@echo "==> Installing CRDs..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@echo "==> Deploying operator..."
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	@git checkout -- config/manager/kustomization.yaml 2>/dev/null || true
+	@echo "==> Deployment complete!"
+	@echo "Check status: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get pods -n multigres-operator"
+	$(MAKE) kind-deploy-observer
+
 .PHONY: kind-load
 kind-load: container ## Build and load image into kind cluster
 	@echo "==> Loading image $(IMG) into kind cluster..."

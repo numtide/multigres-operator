@@ -33,6 +33,23 @@ description: Deploy MultigresCluster fixtures, run mutation scenarios, and valid
    ```
    Verify: `curl -s http://localhost:9090/api/status | jq '.summary'`
 
+## Kind Cluster Topology Awareness
+
+**Default kind clusters have a single node with NO topology labels.** This matters when cells specify `zone` or `region` fields:
+
+- The operator translates `CellConfig.Zone` into `nodeSelector: topology.kubernetes.io/zone: <value>` on all pods in that cell.
+- If no node has the matching label, pods stay **Pending forever**. The webhook warns about this (`no nodes currently match zone=X`) — treat that warning as a hard stop.
+- The `multi-cell-quorum` fixture uses logical cell names only (no `zone`/`region`), so it works on a default single-node kind cluster.
+
+**For topology testing** (zone-aware scheduling, verifying pods land on correct nodes):
+1. Destroy any existing kind cluster: `make kind-down`
+2. Deploy with topology zones: `make kind-deploy-topology`
+   - Creates a 3-worker kind cluster where each worker has a distinct `topology.kubernetes.io/zone` label (us-east-1a, us-east-1b, us-east-1c)
+   - The control-plane node has no zone label
+3. Use the `multi-cell-topology` fixture, which sets `zone` on each cell to match.
+
+**On EKS/GKE**, nodes already have `topology.kubernetes.io/zone` labels automatically — no special cluster setup needed. Use the real availability zones from `kubectl get nodes --show-labels | grep topology`.
+
 ## Phase 1: Deploy Fixture & Baseline Verification
 
 Pick a fixture from `fixtures/` (see **Fixture Selection** below).
@@ -519,7 +536,8 @@ When the user says "run tests" or "exercise the cluster" without specifying, def
 | `overrides-complex` | Yes (needs prereqs) | Override precedence TVP | Override merging, template+override interaction |
 | `external-etcd-mixed` | Yes (needs prereqs) | N/A | External topology server — no TopoServer StatefulSet created |
 | `s3-backup` | Partial (needs real S3 bucket) | N/A | Backup configuration with S3 |
-| `multi-cell-quorum` | Yes (resource heavy) | N/A | Multi-cell, quorum |
+| `multi-cell-quorum` | Yes (resource heavy) | N/A | Multi-cell, quorum (logical cells only, no topology constraints) |
+| `multi-cell-topology` | Requires `kind-deploy-topology` | N/A | Zone-aware scheduling, topology placement verification |
 | `observability-custom` | Yes (needs prereqs) | N/A | Custom observability config |
 
 **Prerequisites are self-contained.** Every fixture with "needs prereqs" includes a `prerequisites.yaml` that deploys everything required into the kind cluster — no external infrastructure needed. The only exception is `s3-backup` which requires a real S3 bucket and credentials.
@@ -532,6 +550,7 @@ For `external-etcd-mixed` specifically, the prerequisites deploy a standalone et
 3. `templated-full` — tests template resolution (complex, high bug surface)
 4. `overrides-complex` — tests override merging (known edge cases)
 5. `external-etcd-mixed` — tests external topology server path
+6. `multi-cell-topology` — tests zone-aware pod scheduling (requires `make kind-deploy-topology`)
 
 ## Negative Tests
 
