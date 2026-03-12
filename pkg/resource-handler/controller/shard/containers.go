@@ -198,6 +198,16 @@ func buildPgctldContainer(
 			RunAsNonRoot: ptr.To(true),
 		},
 		VolumeMounts: volumeMounts,
+		StartupProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/live",
+					Port: intstr.FromInt32(DefaultPgctldHTTPPort),
+				},
+			},
+			PeriodSeconds:    5,
+			FailureThreshold: 30,
+		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{

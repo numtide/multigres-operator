@@ -144,6 +144,16 @@ func BuildMultiAdminDeployment(
 							Env: multigresv1alpha1.BuildOTELEnvVars(
 								cluster.Spec.Observability,
 							),
+							StartupProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/ready",
+										Port: intstr.FromInt(18000),
+									},
+								},
+								PeriodSeconds:    5,
+								FailureThreshold: 30,
+							},
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
@@ -151,8 +161,7 @@ func BuildMultiAdminDeployment(
 										Port: intstr.FromInt(18000),
 									},
 								},
-								InitialDelaySeconds: 10,
-								PeriodSeconds:       10,
+								PeriodSeconds: 10,
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
@@ -161,8 +170,7 @@ func BuildMultiAdminDeployment(
 										Port: intstr.FromInt(18000),
 									},
 								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       5,
+								PeriodSeconds: 5,
 							},
 						},
 					},
@@ -296,6 +304,16 @@ func BuildMultiAdminWebDeployment(
 								},
 							},
 							Resources: spec.Resources,
+							StartupProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/",
+										Port: intstr.FromInt(18100),
+									},
+								},
+								PeriodSeconds:    5,
+								FailureThreshold: 30,
+							},
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
@@ -303,8 +321,7 @@ func BuildMultiAdminWebDeployment(
 										Port: intstr.FromInt(18100),
 									},
 								},
-								InitialDelaySeconds: 10,
-								PeriodSeconds:       10,
+								PeriodSeconds: 10,
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
@@ -313,8 +330,7 @@ func BuildMultiAdminWebDeployment(
 										Port: intstr.FromInt(18100),
 									},
 								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       5,
+								PeriodSeconds: 5,
 							},
 						},
 					},
