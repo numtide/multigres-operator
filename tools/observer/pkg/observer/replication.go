@@ -74,6 +74,8 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 	}
 
 	if len(primaryPodNames) == 0 {
+		// CRD says no primaries — run SQL probes to detect stale podRoles.
+		o.detectStalePodRoles(ctx, shard, shardLabelValue, comp, password)
 		return
 	}
 
@@ -120,6 +122,66 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 
 	// Split-brain detection: verify pg_is_in_recovery() matches podRoles.
 	o.detectSplitBrain(ctx, podIPs, shard.Status.PodRoles, comp, password)
+}
+
+// detectStalePodRoles runs SQL probes on all pool pods when the CRD reports 0
+// primaries. If any pod reports pg_is_in_recovery()=false (i.e. is actually a
+// primary), the CRD's podRoles are stale and a finding is emitted.
+func (o *Observer) detectStalePodRoles(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	shardLabel, comp, password string,
+) {
+	var pods corev1.PodList
+	if err := o.client.List(ctx, &pods,
+		o.listOpts(client.MatchingLabels{
+			common.LabelMultigresShard: shardLabel,
+			common.LabelAppComponent:   common.ComponentPool,
+		})...,
+	); err != nil {
+		return
+	}
+
+	var sqlPrimaries []string
+	for i := range pods.Items {
+		p := &pods.Items[i]
+		if p.Status.PodIP == "" || p.Status.Phase != corev1.PodRunning ||
+			p.DeletionTimestamp != nil || o.isPodInGracePeriod(p.Name) {
+			continue
+		}
+
+		conn, err := o.connectPostgres(ctx, p.Status.PodIP, password)
+		if err != nil {
+			continue
+		}
+		probeCtx, cancel := context.WithTimeout(ctx, common.ConnectivityTimeout)
+		var inRecovery bool
+		err = conn.QueryRow(probeCtx, "SELECT pg_is_in_recovery()").Scan(&inRecovery)
+		cancel()
+		_ = conn.Close(ctx)
+		if err != nil {
+			continue
+		}
+		if !inRecovery {
+			sqlPrimaries = append(sqlPrimaries, p.Name)
+		}
+	}
+
+	if len(sqlPrimaries) > 0 {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "replication",
+			Component: comp,
+			Message: fmt.Sprintf(
+				"CRD podRoles has 0 primaries but SQL confirms %d primary: %v (stale podRoles)",
+				len(sqlPrimaries), sqlPrimaries,
+			),
+			Details: map[string]any{
+				"sqlPrimaries": sqlPrimaries,
+				"podRoles":     shard.Status.PodRoles,
+			},
+		})
+	}
 }
 
 // probePrimaryReplication connects to a primary pod and checks replication topology.

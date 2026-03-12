@@ -74,11 +74,12 @@ type FindingOccurrence struct {
 
 // HistoryResponse is the JSON body returned by the /api/history endpoint.
 type HistoryResponse struct {
-	TotalCycles int                 `json:"totalCycles"`
-	WindowStart time.Time           `json:"windowStart"`
-	WindowEnd   time.Time           `json:"windowEnd"`
-	Persistent  []FindingOccurrence `json:"persistent"`
-	Transient   []FindingOccurrence `json:"transient"`
-	Flapping    []FindingOccurrence `json:"flapping"`
-	Cycles      []CycleRecord       `json:"cycles"`
+	TotalCycles     int                 `json:"totalCycles"`
+	ObserverStarted time.Time           `json:"observerStartedAt"`
+	WindowStart     time.Time           `json:"windowStart"`
+	WindowEnd       time.Time           `json:"windowEnd"`
+	Persistent      []FindingOccurrence `json:"persistent"`
+	Transient       []FindingOccurrence `json:"transient"`
+	Flapping        []FindingOccurrence `json:"flapping"`
+	Cycles          []CycleRecord       `json:"cycles"`
 }

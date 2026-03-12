@@ -257,6 +257,10 @@ func (o *Observer) scanPodLogs(
 		// 2. Fallback to raw substring matching for non-JSON lines
 		for _, p := range patterns {
 			if strings.Contains(strings.ToLower(line), strings.ToLower(p.substring)) {
+				// Skip benign Go runtime panics from graceful shutdowns.
+				if p.substring == "panic:" && isShutdownPanic(line) {
+					break
+				}
 				if m, ok := matches[p.substring]; ok {
 					m.count++
 				} else {
@@ -297,6 +301,28 @@ func (o *Observer) scanPodLogs(
 			},
 		})
 	}
+}
+
+// shutdownPanicPatterns are strings that co-occur with "panic:" in log lines
+// produced by Go's runtime during graceful process shutdown (e.g. pgctld
+// receiving SIGTERM during a rolling restart). These are benign.
+var shutdownPanicPatterns = []string{
+	"signal: terminated",
+	"context canceled",
+	"context deadline exceeded",
+	"use of closed network connection",
+}
+
+// isShutdownPanic returns true if a log line containing "panic:" also contains
+// a pattern indicating a benign Go runtime shutdown rather than a real crash.
+func isShutdownPanic(line string) bool {
+	lower := strings.ToLower(line)
+	for _, p := range shutdownPanicPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func truncate(s string, maxLen int) string {

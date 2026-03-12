@@ -204,6 +204,7 @@ Returns finding history across recent observer cycles. Findings are classified b
 ```json
 {
   "totalCycles": 30,
+  "observerStartedAt": "2026-03-06T09:50:00Z",
   "windowStart": "2026-03-06T09:55:00Z",
   "windowEnd": "2026-03-06T10:00:00Z",
   "persistent": [
@@ -240,6 +241,8 @@ Returns finding history across recent observer cycles. Findings are classified b
 | `flapping` | Active, 3+ appearances but <75% of cycles | Intermittent — possible race condition or instability |
 
 The history uses a ring buffer sized by `--history-capacity` (default 30 cycles). Resolved occurrences older than the oldest cycle in the buffer are automatically pruned. Finding identity is based on a truncated SHA-256 of `check|component|message`.
+
+The `observerStartedAt` field records when the observer process started. This lets consumers distinguish between "0 findings because the cluster is healthy" and "0 findings because the observer just started and hasn't run enough cycles yet."
 
 ### `GET /api/check`
 
