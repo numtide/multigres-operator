@@ -4,6 +4,41 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.5.2] — 2026-03-12
+
+**Previous release:** v0.5.1 (2026-03-11)
+
+Hardens data-plane reliability with startup probes on all remaining containers to prevent premature liveness kills during initialization, adds RFC 1123 DNS label validation on all user-provided name fields, and fixes cell gateway service name population and stale podRoles after primary election. The observer gains history tracking, on-demand check endpoints, 14 new health check categories, and a comprehensive exerciser skill for cluster smoke-testing.
+
+**13 commits, 63 files changed, ~5,249 insertions.**
+
+### Bug Fixes
+
+- **Startup probes for remaining containers:** Without startup probes, pgctld's liveness probe could kill the container during slow initdb or WAL replay, and multiadmin/multiadmin-web used `InitialDelaySeconds` as a workaround. Added startup probes to pgctld (`/live` :15400), multiadmin (`/ready` :18000), and multiadmin-web (`/` :18100) with a 150s startup window (period=5s, failureThreshold=30). Removed now-redundant `InitialDelaySeconds` from multiadmin and multiadmin-web probes.
+- **DNS name validation:** User-provided name fields accepted any characters (e.g., `INVALID_NAME`), which could produce invalid Kubernetes resource names downstream. Added RFC 1123 DNS label pattern validation to `DatabaseName`, `TableGroupName`, `ShardName`, `PoolName`, and `CellName` CRD types via CEL pattern constraints.
+- **Cell gateway service name:** Cell status never populated `GatewayServiceName`, leaving clients with an empty string for gateway service discovery. Now set via `BuildMultiGatewayServiceName()` in the cell status reconciler.
+- **Stale podRoles requeue:** The shard controller's reconciliation burst completed before multiorch elected a primary, leaving `podRoles` with 0 primaries indefinitely. Added a `hasPrimary` check with 10s requeue in `reconcileDataPlane` when the shard is Healthy but topology has no primary.
+
+### Dependencies
+
+- Upgrade multigres container images from `sha-8278fad` to `sha-f02e476`. Upstream changes: pprof endpoints enabled by default (no-op for operator), PrimaryObservation wired into multipooler health stream for faster gateway primary discovery.
+
+### Testing
+
+- **Startup probe tests:** Updated unit and integration test expected specs for startup probes on pgctld, multiadmin, and multiadmin-web containers.
+- **Samples bump:** All sample manifests updated to `replicasPerCell: 4` minimum.
+
+### Observer
+
+- **History and on-demand check endpoints:** New `/api/history` endpoint with ring buffer tracking findings across cycles, classifying them as persistent, transient, or flapping. New `/api/check` endpoint for immediate targeted checks via channel-based dispatch. Added `--history-capacity` flag (default 30 cycles).
+- **Coverage gap checks:** 14 new health check categories — PVC validation (missing/unbound/orphaned), service endpoint validation, backup staleness thresholds, status message checks on Degraded/Unknown phases, cell status field cross-checks, stuck-Progressing and invalid phase transition detection, and operator metrics HTTPS probe on port 8443.
+- **Stale podRoles detection:** New `detectStalePodRoles` replication check runs `pg_is_in_recovery()` SQL probes when CRD shows 0 primaries and flags the mismatch.
+- **Log pattern refinements:** Narrowed panic/runtime error patterns to avoid false positives during rolling restarts. Added filter for benign Go runtime shutdown panics. Fixed metrics probe to treat HTTP 401/403 as reachable. Fixed PVC orphan false positive during pod grace period.
+- **Exercise cluster skill:** New comprehensive exerciser skill with 10 fixtures, 5 mutation patches, 11 scenarios, stability verification protocol, and operator-knowledge reference. Includes topology-aware kind cluster config with zone-labeled workers.
+- **Documentation:** Rewrote observer README with skills as first-class citizens and example prompts section. Updated architecture, configuration, and diagnostic skill docs. Added `docs/gitops-and-webhook-defaults.md` documenting webhook default materialisation, intentionally dynamic fields, and GitOps compatibility.
+
+---
+
 ## [v0.5.1] — 2026-03-11
 
 **Previous release:** v0.5.0 (2026-03-10)

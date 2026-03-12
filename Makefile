@@ -8,12 +8,16 @@ VERSION ?= $(shell git describe --tags --match "v*" --always --dirty 2>/dev/null
 VERSION_SHORT ?= $(shell echo $(VERSION) | sed 's/^v//')
 
 # Image configuration
+# IMG is pinned to the last-built tag (written by the container target) when available.
+# This prevents tag drift between docker build and kind load caused by git state
+# changes (staging files, new commits) between make invocations.
 IMG_PREFIX ?= ghcr.io/numtide
 IMG_REPO ?= multigres-operator
-IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
+IMG_TAG_FILE ?= .last-built-tag
+IMG ?= $(if $(wildcard $(IMG_TAG_FILE)),$(IMG_PREFIX)/$(IMG_REPO):$(shell cat $(IMG_TAG_FILE)),$(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT))
 
 # Observer tool configuration
-OBSERVER_IMG ?= $(IMG_PREFIX)/multigres-observer:$(VERSION_SHORT)
+OBSERVER_IMG ?= $(if $(wildcard $(IMG_TAG_FILE)),$(IMG_PREFIX)/multigres-observer:$(shell cat $(IMG_TAG_FILE)),$(IMG_PREFIX)/multigres-observer:$(VERSION_SHORT))
 
 .PHONY: print-img
 print-img: ## Print the full operator container image reference
@@ -220,11 +224,13 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # Use docker-buildx target or pass --platform to docker build for multi-arch images.
 .PHONY: container
 container: ## Build container image
+	$(eval BUILT_TAG := $(VERSION_SHORT))
 	$(CONTAINER_TOOL) build \
 		--build-arg VERSION=$$(git rev-parse --short HEAD) \
 		--build-arg GIT_COMMIT=$$(git rev-parse HEAD) \
 		--build-arg BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-		-t ${IMG} .
+		-t $(IMG_PREFIX)/$(IMG_REPO):$(BUILT_TAG) .
+	@echo $(BUILT_TAG) > $(IMG_TAG_FILE)
 
 .PHONY: minikube-load
 minikube-load:
@@ -507,7 +513,7 @@ kind-redeploy: container manifests kustomize ## Rebuild image, reload to kind, a
 kind-down: ## Delete the kind cluster
 	@echo "==> Deleting kind cluster '$(KIND_CLUSTER)'..."
 	$(KIND) delete cluster --name $(KIND_CLUSTER)
-	@rm -f $(KIND_KUBECONFIG)
+	@rm -f $(KIND_KUBECONFIG) $(IMG_TAG_FILE)
 	@echo "==> Cluster and kubeconfig deleted"
 
 ##@ Observer
