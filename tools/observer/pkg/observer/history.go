@@ -19,6 +19,7 @@ type findingHistory struct {
 	capacity    int
 	head        int // next write position
 	count       int // total cycles stored (≤ capacity)
+	startedAt   time.Time
 }
 
 func newFindingHistory(capacity int) *findingHistory {
@@ -29,6 +30,7 @@ func newFindingHistory(capacity int) *findingHistory {
 		cycles:      make([]report.CycleRecord, capacity),
 		occurrences: make(map[string]*report.FindingOccurrence),
 		capacity:    capacity,
+		startedAt:   time.Now(),
 	}
 }
 
@@ -105,8 +107,9 @@ func (fh *findingHistory) Build() report.HistoryResponse {
 	defer fh.mu.RUnlock()
 
 	resp := report.HistoryResponse{
-		TotalCycles: fh.count,
-		Cycles:      fh.orderedCycles(),
+		TotalCycles:     fh.count,
+		ObserverStarted: fh.startedAt,
+		Cycles:          fh.orderedCycles(),
 	}
 
 	if len(resp.Cycles) > 0 {

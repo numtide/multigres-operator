@@ -47,6 +47,14 @@ func (r *ShardReconciler) reconcileDataPlane(
 		childSpan.End()
 	}
 
+	// Requeue when the shard is Healthy but topology hasn't elected a primary
+	// yet. This closes a race where the reconciliation burst settles before
+	// multiorch writes the primary type to etcd.
+	if shard.Status.Phase == multigresv1alpha1.PhaseHealthy && !hasPrimary(shard.Status.PodRoles) {
+		logger.Info("No primary in podRoles, requeueing to re-read topology")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	// Phase: Prune stale pooler entries from topology
 	{
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePoolerPrune")
@@ -340,6 +348,16 @@ func (r *ShardReconciler) reconcilePoolerPrune(
 		r.Recorder.Eventf(shard, "Normal", "PoolersPruned",
 			"Pruned %d stale pooler(s) from topology", pruned)
 	}
+}
+
+// hasPrimary returns true if at least one pod in podRoles has the PRIMARY role.
+func hasPrimary(podRoles map[string]string) bool {
+	for _, role := range podRoles {
+		if role == "PRIMARY" {
+			return true
+		}
+	}
+	return false
 }
 
 // isPoolerPruningEnabled returns true when topology pruning is enabled for
