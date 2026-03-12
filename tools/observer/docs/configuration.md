@@ -13,9 +13,10 @@ All flags, environment variables, thresholds, and tunable parameters for the obs
 | `--interval` | `10s` | — | Time between observer cycles |
 | `--kubeconfig` | `""` | `KUBECONFIG` | Path to kubeconfig. Empty = in-cluster config |
 | `--once` | `false` | — | Run one cycle and exit (useful for CI) |
-| `--metrics-addr` | `:9090` | — | Address for Prometheus metrics, health, and `/api/status` endpoint |
+| `--metrics-addr` | `:9090` | — | Address for Prometheus metrics, health, and API endpoints (`/api/status`, `/api/history`, `/api/check`) |
 | `--log-tail-lines` | `100` | — | Lines to tail from each container per cycle |
 | `--enable-sql-probe` | `true` | — | Enable SQL probes for replication health and gateway connectivity |
+| `--history-capacity` | `30` | — | Number of observer cycles to retain in finding history (30 = ~5 min at 10s interval) |
 
 Environment variables override the corresponding flag only when the flag is at its default value. The flag always takes precedence.
 

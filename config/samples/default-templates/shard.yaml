@@ -16,7 +16,7 @@ spec:
   pools:
     default:
       type: "readWrite"
-      replicasPerCell: 3
+      replicasPerCell: 4
       storage:
         size: "2Gi"
         class: "standard"

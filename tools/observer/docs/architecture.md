@@ -43,8 +43,11 @@ The observer runs a ticker loop. Each tick executes all 10 check categories sequ
 │  track("replication",         checkReplication)              │
 │                                                              │
 │  → Summary: {findings: N, errors: M, fatals: K}              │
+│  → history.Record(start, end, findings)                       │
 │  → Metric: multigres_observer_observer_cycle_duration_seconds│
 │  → Metric: multigres_observer_check_healthy{check=X} = 0|1   │
+│                                                              │
+│  Run() select also listens on onDemandCh for /api/check      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -175,7 +178,7 @@ Returns the latest cycle's complete diagnostic snapshot as JSON. Returns `503 Se
 
 ### Data Flow
 
-Each `runCycle()` creates a fresh `ProbeCollector`. Check functions append raw probe data to the collector alongside reporting findings. At the end of the cycle, the reporter returns findings via `SummaryWithFindings()`, and the observer atomically stores a `StatusResponse` snapshot. The HTTP handler reads the latest snapshot under a `sync.RWMutex`.
+Each `runCycle()` creates a fresh `ProbeCollector`. Check functions append raw probe data to the collector alongside reporting findings. At the end of the cycle, the reporter returns findings via `SummaryWithFindings()`, the observer atomically stores a `StatusResponse` snapshot, and records the cycle's findings into the history ring buffer.
 
 ```
 runCycle()
@@ -184,11 +187,89 @@ runCycle()
   ├── track("connectivity", ...) → findings + probes.RecordProbe(...)
   ├── ...
   ├── reporter.SummaryWithFindings() → []Finding, Summary, healthy
-  └── snap.Store(&StatusResponse{...})
+  ├── snap.Store(&StatusResponse{...})
+  └── history.Record(start, end, findings)
 
-StatusHandler()
-  └── snap.Load() → JSON response
+StatusHandler()   → snap.Load() → JSON response
+HistoryHandler()  → history.Build() → classified occurrences
+CheckHandler()    → onDemandCh → runOnDemand() → temporary StatusResponse
 ```
+
+On-demand checks (`/api/check`) are dispatched through a channel to the `Run` goroutine's select loop, ensuring check functions never race with the ticker cycle. A temporary reporter isolates findings from the main cycle.
+
+### `GET /api/history`
+
+Returns finding history across recent observer cycles. Findings are classified by their behavior over time. Returns `200` immediately with the current history window.
+
+```json
+{
+  "totalCycles": 30,
+  "windowStart": "2026-03-06T09:55:00Z",
+  "windowEnd": "2026-03-06T10:00:00Z",
+  "persistent": [
+    {
+      "key": "a1b2c3d4e5f60718",
+      "check": "connectivity",
+      "component": "multigateway-svc",
+      "message": "multigateway-pg: TCP probe failed ...",
+      "severity": "error",
+      "firstSeen": "2026-03-06T09:55:10Z",
+      "lastSeen": "2026-03-06T10:00:00Z",
+      "count": 30,
+      "active": true
+    }
+  ],
+  "transient": [],
+  "flapping": [],
+  "cycles": [
+    {
+      "cycleStart": "2026-03-06T09:59:50Z",
+      "cycleEnd": "2026-03-06T10:00:00Z",
+      "findings": [...]
+    }
+  ]
+}
+```
+
+**Classification rules:**
+
+| Category | Condition | Meaning |
+|----------|-----------|---------|
+| `persistent` | Active, appeared in 75%+ of cycles (or <3 cycles total) | Consistently present — likely a real issue |
+| `transient` | Resolved (no longer active) | Appeared then went away — may be expected during operations |
+| `flapping` | Active, 3+ appearances but <75% of cycles | Intermittent — possible race condition or instability |
+
+The history uses a ring buffer sized by `--history-capacity` (default 30 cycles). Resolved occurrences older than the oldest cycle in the buffer are automatically pruned. Finding identity is based on a truncated SHA-256 of `check|component|message`.
+
+### `GET /api/check`
+
+Triggers an immediate on-demand check without waiting for the next ticker cycle. Returns a `StatusResponse` (same schema as `/api/status`) scoped to the requested check categories.
+
+**Query parameters:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `categories` | No | Comma-separated list of check categories to run. If omitted, all checks are run. |
+
+**Valid categories:** `pod-health`, `resource-validation`, `crd-status`, `drain-state`, `connectivity`, `logs`, `events`, `topology`, `replication`
+
+```bash
+# Run only pod-health and connectivity checks
+curl -s 'http://localhost:9090/api/check?categories=pod-health,connectivity' | jq .
+
+# Run all checks on demand
+curl -s http://localhost:9090/api/check | jq .
+```
+
+**Error responses:**
+
+| Status | Condition |
+|--------|-----------|
+| `400 Bad Request` | No valid categories in the `categories` parameter |
+| `429 Too Many Requests` | Another on-demand check is already in progress |
+| `504 Gateway Timeout` | Check did not complete within 30 seconds |
+
+**Design note:** On-demand checks execute within the observer's main `Run` goroutine via a channel-based request/response. This is necessary because check functions mutate shared state (`podStartup`, `knownPodNames`, `prevRestarts`). The handler creates a temporary `Reporter` so findings do not leak into the main cycle's reporter. The on-demand check does NOT update the `/api/status` snapshot or the finding history.
 
 ### Other Endpoints
 
@@ -283,6 +364,8 @@ The observer maintains several tracking maps that persist across cycles but rese
 | `podStartup` | `pod-name` | Pool pod creation time + readiness for startup grace period |
 | `lastLogCheck` | single timestamp | Avoid re-tailing already-checked logs |
 | `lastEventResourceVersion` | single string | Only process new events each cycle |
+| `history` | `*findingHistory` | Ring buffer of cycle records + finding occurrence tracking |
+| `onDemandCh` | `chan checkRequest` | Channel for on-demand check requests from `/api/check` |
 
 This state is purely observational — losing it on restart is safe. The observer re-converges within 1-2 cycles.
 

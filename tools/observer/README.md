@@ -48,14 +48,28 @@ Findings are structured JSON — one line per finding with severity, check name,
 
 ### Diagnostic API
 
-The observer exposes a structured JSON endpoint with the complete diagnostic snapshot from the latest cycle:
+The observer exposes structured JSON endpoints for diagnostics:
 
 ```bash
 KUBECONFIG=kubeconfig.yaml kubectl port-forward svc/multigres-observer -n multigres-operator 9090:9090
+```
+
+**Latest cycle snapshot:**
+```bash
 curl -s http://localhost:9090/api/status | jq .
 ```
 
-The response includes findings (what's wrong), raw probe data (full picture), per-check health, and coverage info. See [Architecture](docs/architecture.md) for the full JSON schema.
+**Finding history** (persistent, transient, and flapping classification across cycles):
+```bash
+curl -s http://localhost:9090/api/history | jq .
+```
+
+**On-demand targeted check** (immediate, does not wait for next cycle):
+```bash
+curl -s 'http://localhost:9090/api/check?categories=pod-health,connectivity' | jq .
+```
+
+See [Architecture](docs/architecture.md) for the full JSON schemas and endpoint details.
 
 ### Prometheus Metrics
 
@@ -88,7 +102,7 @@ curl http://localhost:9090/metrics
    CRDs, Pods, Events, Logs      PostgreSQL on pool pods
 ```
 
-The observer is **stateless** — no PVC, no persistent storage. Every cycle re-evaluates from scratch. In-memory trackers (restart counts, phase timestamps, drain state) reset when the pod restarts.
+The observer is **mostly stateless** — no PVC, no persistent storage. Every cycle re-evaluates from scratch. In-memory trackers (restart counts, phase timestamps, drain state, finding history) reset when the pod restarts.
 
 ## What It Detects
 
@@ -147,7 +161,9 @@ tools/observer/
 │   └── main.go                    # Entrypoint, flags, metrics server
 ├── pkg/
 │   ├── observer/                  # 10 check categories + API
-│   │   ├── observer.go            # Main loop, cycle orchestration, StatusHandler
+│   │   ├── observer.go            # Main loop, cycle orchestration, HTTP handlers
+│   │   ├── history.go             # Finding history ring buffer + classification
+│   │   ├── history_test.go        # Unit tests for history
 │   │   ├── probes.go              # Per-cycle probe data collector
 │   │   ├── snapshot.go            # Thread-safe latest-cycle snapshot store
 │   │   ├── pods.go                # Pod health, restarts, OOM, counts
