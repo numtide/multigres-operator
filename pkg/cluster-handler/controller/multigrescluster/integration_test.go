@@ -305,6 +305,19 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											},
 										},
 										Resources: resolver.DefaultResourcesAdmin(),
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/ready",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
 										LivenessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
@@ -313,11 +326,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 10,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       10,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 										ReadinessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -327,11 +339,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 5,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       5,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 									},
 								},
@@ -378,6 +389,19 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
 										},
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
 										LivenessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
@@ -386,11 +410,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 10,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       10,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 										ReadinessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -400,11 +423,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 5,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       5,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 									},
 								},
@@ -605,6 +627,19 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											},
 										},
 										Resources: resolver.DefaultResourcesAdmin(),
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/ready",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
 										LivenessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
@@ -613,11 +648,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 10,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       10,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 										ReadinessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -627,11 +661,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 5,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       5,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 									},
 								},
@@ -677,6 +710,19 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
 										},
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
 										LivenessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
@@ -685,11 +731,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 10,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       10,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 										ReadinessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -699,11 +744,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 5,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       5,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 									},
 								},
@@ -901,6 +945,19 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											},
 										},
 										Resources: resolver.DefaultResourcesAdmin(),
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/ready",
+													Port:   intstr.FromInt(18000),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
 										LivenessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
@@ -909,11 +966,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 10,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       10,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 										ReadinessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -923,11 +979,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 5,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       5,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 									},
 								},
@@ -973,6 +1028,19 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
 										},
+										StartupProbe: &corev1.Probe{
+											ProbeHandler: corev1.ProbeHandler{
+												HTTPGet: &corev1.HTTPGetAction{
+													Path:   "/",
+													Port:   intstr.FromInt(18100),
+													Scheme: corev1.URISchemeHTTP,
+												},
+											},
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 30,
+										},
 										LivenessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
@@ -981,11 +1049,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 10,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       10,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    10,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 										ReadinessProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -995,11 +1062,10 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
-											InitialDelaySeconds: 5,
-											TimeoutSeconds:      1,
-											PeriodSeconds:       5,
-											SuccessThreshold:    1,
-											FailureThreshold:    3,
+											TimeoutSeconds:   1,
+											PeriodSeconds:    5,
+											SuccessThreshold: 1,
+											FailureThreshold: 3,
 										},
 									},
 								},

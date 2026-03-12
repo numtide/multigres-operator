@@ -462,6 +462,9 @@ func TestBuildPgctldContainer(t *testing.T) {
 			t.Errorf("Command = %v, want /usr/local/bin/pgctld", c.Command)
 		}
 		assertContainsFlag(t, c.Args, "--http-port=15400")
+		if c.StartupProbe == nil || c.StartupProbe.HTTPGet.Path != "/live" {
+			t.Errorf("expected StartupProbe to hit /live, got %v", c.StartupProbe)
+		}
 		if c.LivenessProbe == nil || c.LivenessProbe.HTTPGet.Path != "/live" {
 			t.Errorf("expected LivenessProbe to hit /live, got %v", c.LivenessProbe)
 		}
