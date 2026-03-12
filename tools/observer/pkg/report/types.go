@@ -50,3 +50,35 @@ type CoverageInfo struct {
 	ChecksRun       []string `json:"checksRun"`
 	Namespace       string   `json:"namespace"`
 }
+
+// CycleRecord stores findings from a single observer cycle.
+type CycleRecord struct {
+	CycleStart time.Time `json:"cycleStart"`
+	CycleEnd   time.Time `json:"cycleEnd"`
+	Findings   []Finding `json:"findings"`
+}
+
+// FindingOccurrence tracks a unique finding across multiple cycles.
+type FindingOccurrence struct {
+	Key        string    `json:"key"`
+	Check      string    `json:"check"`
+	Component  string    `json:"component,omitempty"`
+	Message    string    `json:"message"`
+	Severity   Severity  `json:"severity"`
+	FirstSeen  time.Time `json:"firstSeen"`
+	LastSeen   time.Time `json:"lastSeen"`
+	Count      int       `json:"count"`
+	Active     bool      `json:"active"`
+	ResolvedAt time.Time `json:"resolvedAt,omitzero"`
+}
+
+// HistoryResponse is the JSON body returned by the /api/history endpoint.
+type HistoryResponse struct {
+	TotalCycles int                 `json:"totalCycles"`
+	WindowStart time.Time           `json:"windowStart"`
+	WindowEnd   time.Time           `json:"windowEnd"`
+	Persistent  []FindingOccurrence `json:"persistent"`
+	Transient   []FindingOccurrence `json:"transient"`
+	Flapping    []FindingOccurrence `json:"flapping"`
+	Cycles      []CycleRecord       `json:"cycles"`
+}

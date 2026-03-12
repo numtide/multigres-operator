@@ -44,6 +44,6 @@ spec:
                     # Define a new pool not in template. This will produce a warning in case it's a typo.
                   "analytics":
                     type: "readOnly"
-                    replicasPerCell: 3
+                    replicasPerCell: 4
                     storage:
                       size: "50Gi"

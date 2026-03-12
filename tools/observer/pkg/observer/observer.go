@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -14,6 +16,12 @@ import (
 	"github.com/numtide/multigres-operator/tools/observer/pkg/common"
 	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
 )
+
+// checkRequest is sent from the HTTP handler to the Run goroutine for on-demand checks.
+type checkRequest struct {
+	categories []string
+	respCh     chan *report.StatusResponse
+}
 
 var allCheckNames = []string{
 	"pod-health", "resource-validation", "crd-status", "drain-state",
@@ -81,6 +89,12 @@ type Observer struct {
 
 	// Latest cycle snapshot for the /api/status endpoint.
 	snap snapshot
+
+	// Finding history across cycles for pattern detection.
+	history *findingHistory
+
+	// On-demand check requests from the /api/check endpoint.
+	onDemandCh chan checkRequest
 }
 
 // Config holds the configuration for creating an Observer.
@@ -95,6 +109,7 @@ type Config struct {
 	Logger            *slog.Logger
 	LogTailLines      int
 	EnableSQLProbe    bool
+	HistoryCapacity   int
 }
 
 // New creates an Observer from the provided configuration.
@@ -121,6 +136,8 @@ func New(cfg Config) *Observer {
 		podStartup:             make(map[string]podInfo),
 		knownPodNames:          make(map[string]bool),
 		seenEventCounts:        make(map[types.UID]int32),
+		history:                newFindingHistory(cfg.HistoryCapacity),
+		onDemandCh:             make(chan checkRequest, 1),
 	}
 }
 
@@ -193,6 +210,8 @@ func (o *Observer) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			o.runCycle(ctx)
+		case req := <-o.onDemandCh:
+			req.respCh <- o.runOnDemand(ctx, req.categories)
 		}
 	}
 }
@@ -258,6 +277,8 @@ func (o *Observer) runCycle(ctx context.Context) {
 		},
 	})
 
+	o.history.Record(start, time.Now(), findings)
+
 	o.logger.Info("observer cycle complete",
 		"duration", dur.Round(time.Millisecond),
 		"findings", s.TotalFindings,
@@ -278,5 +299,148 @@ func (o *Observer) StatusHandler() http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(data)
+	}
+}
+
+// HistoryHandler returns an http.HandlerFunc that serves finding history as JSON.
+func (o *Observer) HistoryHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp := o.history.Build()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// checkFuncs returns a map of check name to check function for dispatch.
+func (o *Observer) checkFuncs() map[string]func(context.Context) {
+	return map[string]func(context.Context){
+		"pod-health":          o.checkPodHealth,
+		"resource-validation": o.checkResources,
+		"crd-status":          o.checkCRDStatus,
+		"drain-state":         o.checkDrainState,
+		"connectivity":        o.checkConnectivity,
+		"logs":                o.checkLogs,
+		"events":              o.checkEvents,
+		"topology":            o.checkTopology,
+		"replication":         o.checkReplication,
+	}
+}
+
+// runOnDemand executes a subset of checks using a temporary reporter so
+// findings do not leak into the main cycle. Runs in the same goroutine
+// as Run() to avoid concurrent access to shared observer state.
+func (o *Observer) runOnDemand(ctx context.Context, categories []string) *report.StatusResponse {
+	start := time.Now()
+	o.logger.Debug("on-demand check requested", "categories", categories)
+
+	// Swap reporter to a temporary one.
+	origReporter := o.reporter
+	tmpReporter := report.NewReporter(o.logger, nil)
+	o.reporter = tmpReporter
+	defer func() { o.reporter = origReporter }()
+
+	o.probes = newProbeCollector()
+
+	funcs := o.checkFuncs()
+	checksRun := make([]string, 0, len(categories))
+
+	// Always run pod-health first if requested — it populates podStartup/knownPodNames.
+	if slices.Contains(categories, "pod-health") {
+		clear(o.knownPodNames)
+		clear(o.podStartup)
+		o.checkPodHealth(ctx)
+		checksRun = append(checksRun, "pod-health")
+	}
+
+	for _, cat := range categories {
+		if cat == "pod-health" {
+			continue // already ran
+		}
+		fn, ok := funcs[cat]
+		if !ok {
+			continue
+		}
+		fn(ctx)
+		checksRun = append(checksRun, cat)
+	}
+
+	findings, s, checkHealthy := tmpReporter.SummaryWithFindings()
+	s.CycleStart = start
+	s.CycleEnd = time.Now()
+
+	o.logger.Debug("on-demand check complete",
+		"categories", checksRun,
+		"findings", s.TotalFindings,
+	)
+
+	return &report.StatusResponse{
+		Summary:  s,
+		Healthy:  checkHealthy,
+		Findings: findings,
+		Probes:   o.probes.Data(),
+		Coverage: report.CoverageInfo{
+			SQLProbeEnabled: o.enableSQLProbe,
+			ChecksRun:       checksRun,
+			Namespace:       o.namespace,
+		},
+	}
+}
+
+// validCheckCategories returns the names that can be passed to /api/check.
+func validCheckCategories() []string {
+	return []string{
+		"pod-health", "resource-validation", "crd-status", "drain-state",
+		"connectivity", "logs", "events", "topology", "replication",
+	}
+}
+
+// CheckHandler returns an http.HandlerFunc for on-demand checks.
+// Query parameter: ?categories=pod-health,connectivity (comma-separated).
+// If no categories specified, all checks are run.
+func (o *Observer) CheckHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		allCategories := validCheckCategories()
+		categories := allCategories
+		if q := r.URL.Query().Get("categories"); q != "" {
+			requested := strings.Split(q, ",")
+			valid := make([]string, 0, len(requested))
+			for _, c := range requested {
+				c = strings.TrimSpace(c)
+				if slices.Contains(allCategories, c) {
+					valid = append(valid, c)
+				}
+			}
+			if len(valid) == 0 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":"no valid categories specified"}`))
+				return
+			}
+			categories = valid
+		}
+
+		req := checkRequest{
+			categories: categories,
+			respCh:     make(chan *report.StatusResponse, 1),
+		}
+
+		select {
+		case o.onDemandCh <- req:
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":"another on-demand check is already in progress"}`))
+			return
+		}
+
+		select {
+		case resp := <-req.respCh:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+		case <-time.After(30 * time.Second):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusGatewayTimeout)
+			_, _ = w.Write([]byte(`{"error":"on-demand check timed out"}`))
+		}
 	}
 }

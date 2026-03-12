@@ -34,6 +34,7 @@ func main() {
 		metricsAddr       string
 		logTailLines      int
 		enableSQLProbe    bool
+		historyCapacity   int
 	)
 
 	flag.StringVar(
@@ -69,6 +70,12 @@ func main() {
 		true,
 		"Enable SQL probes for replication health and connectivity checks",
 	)
+	flag.IntVar(
+		&historyCapacity,
+		"history-capacity",
+		30,
+		"Number of observer cycles to retain in finding history (default 30 = ~5 min at 10s interval)",
+	)
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -103,6 +110,7 @@ func main() {
 		Logger:            logger,
 		LogTailLines:      logTailLines,
 		EnableSQLProbe:    enableSQLProbe,
+		HistoryCapacity:   historyCapacity,
 	})
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -114,6 +122,8 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/api/status", obs.StatusHandler())
+	mux.HandleFunc("/api/history", obs.HistoryHandler())
+	mux.HandleFunc("/api/check", obs.CheckHandler())
 
 	srv := &http.Server{Addr: metricsAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
