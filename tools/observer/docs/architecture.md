@@ -364,6 +364,8 @@ The observer maintains several tracking maps that persist across cycles but rese
 | `prevDrainState` | `ns/pod` | Detect backward state transitions |
 | `generationDivergeSince` | `kind/ns/name` | Track how long generation hasn't caught up |
 | `primaryViolationSince` | `pool-cell` | Grace period before flagging wrong primary count |
+| `prevPhase` | `component` | Previous CRD phase for detecting invalid transitions |
+| `progressingSince` | `component` | When a component first entered Progressing phase |
 | `podStartup` | `pod-name` | Pool pod creation time + readiness for startup grace period |
 | `lastLogCheck` | single timestamp | Avoid re-tailing already-checked logs |
 | `lastEventResourceVersion` | single string | Only process new events each cycle |

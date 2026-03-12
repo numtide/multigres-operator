@@ -1,0 +1,49 @@
+apiVersion: multigres.com/v1alpha1
+kind: CoreTemplate
+metadata:
+  name: "full-core-template"
+  namespace: default
+spec:
+  globalTopoServer:
+    etcd:
+      replicas: 5
+      storage:
+        size: "10Gi"
+  multiadmin:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+    podLabels:
+      source: "core-template"
+---
+apiVersion: multigres.com/v1alpha1
+kind: CellTemplate
+metadata:
+  name: "full-cell-template"
+  namespace: default
+spec:
+  multigateway:
+    replicas: 2
+---
+apiVersion: multigres.com/v1alpha1
+kind: ShardTemplate
+metadata:
+  name: "full-shard-template"
+  namespace: default
+spec:
+  multiorch:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+    podLabels:
+      source: "shard-template"
+  pools:
+    read-write:
+      type: "readWrite"
+      replicasPerCell: 4
+      storage:
+        size: "10Gi"

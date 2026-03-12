@@ -52,6 +52,7 @@ const (
 	PortEtcdClient       = 2379
 	PortEtcdPeer         = 2380
 	PortOperatorHealth   = 8081
+	PortOperatorMetrics  = 8443
 	PortPostgres         = 5432
 )
 
@@ -81,7 +82,14 @@ const (
 	ReplicationLagWarnSecs       = 10
 	ReplicationLagErrorSecs      = 60
 	PodStartupGracePeriod        = 2 * time.Minute
+	BackupStalenessWarnAge       = 25 * time.Hour
+	BackupStalenessErrorAge      = 49 * time.Hour
+	PhaseProgressingTimeout      = 10 * time.Minute
+	MetricsProbeTimeout          = 5 * time.Second
 )
+
+// ValidBackupTypes lists the known pgBackRest backup types.
+var ValidBackupTypes = []string{"full", "diff", "incr"}
 
 // Operator event reasons to monitor.
 const (

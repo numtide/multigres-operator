@@ -21,6 +21,8 @@ func (o *Observer) checkResources(ctx context.Context) {
 	o.checkLabelConsistency(ctx)
 	o.checkOrphanedResources(ctx)
 	o.checkFinalizersAndDeletion(ctx)
+	o.checkPVCValidation(ctx)
+	o.checkServiceEndpoints(ctx)
 }
 
 func (o *Observer) checkOwnerReferences(ctx context.Context) {
@@ -322,4 +324,185 @@ func hasOwnerRef(refs []metav1.OwnerReference, uid types.UID) bool {
 		}
 	}
 	return false
+}
+
+func (o *Observer) checkPVCValidation(ctx context.Context) {
+	var pods corev1.PodList
+	if err := o.client.List(ctx, &pods,
+		o.listOpts(client.MatchingLabels{
+			common.LabelAppManagedBy: common.ManagedByMultigres,
+			common.LabelAppComponent: common.ComponentPool,
+		})...,
+	); err != nil {
+		return
+	}
+
+	var pvcs corev1.PersistentVolumeClaimList
+	if err := o.client.List(ctx, &pvcs, o.listOpts()...); err != nil {
+		return
+	}
+
+	pvcByName := make(map[string]*corev1.PersistentVolumeClaim, len(pvcs.Items))
+	for i := range pvcs.Items {
+		pvcByName[pvcs.Items[i].Name] = &pvcs.Items[i]
+	}
+
+	// Track which PVCs are referenced by pods.
+	referencedPVCs := make(map[string]bool)
+
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		if pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+		if o.isPodInGracePeriod(pod.Name) {
+			continue
+		}
+
+		for _, vol := range pod.Spec.Volumes {
+			if vol.PersistentVolumeClaim == nil {
+				continue
+			}
+			claimName := vol.PersistentVolumeClaim.ClaimName
+			referencedPVCs[claimName] = true
+
+			pvc, exists := pvcByName[claimName]
+			if !exists {
+				o.reporter.Report(report.Finding{
+					Severity:  report.SeverityFatal,
+					Check:     "resource-validation",
+					Component: componentForPod(pod),
+					Message: fmt.Sprintf(
+						"Pod %s references non-existent PVC %s",
+						pod.Name, claimName,
+					),
+					Details: map[string]any{
+						"pod":       pod.Name,
+						"pvcName":   claimName,
+						"volume":    vol.Name,
+					},
+				})
+				continue
+			}
+
+			if pvc.Status.Phase != corev1.ClaimBound {
+				o.reporter.Report(report.Finding{
+					Severity:  report.SeverityError,
+					Check:     "resource-validation",
+					Component: componentForPod(pod),
+					Message: fmt.Sprintf(
+						"Pod %s PVC %s is %s (expected Bound)",
+						pod.Name, claimName, pvc.Status.Phase,
+					),
+					Details: map[string]any{
+						"pod":      pod.Name,
+						"pvcName":  claimName,
+						"pvcPhase": string(pvc.Status.Phase),
+					},
+				})
+			}
+		}
+	}
+
+	// Check for orphaned PVCs with multigres labels but no pod referencing them.
+	for i := range pvcs.Items {
+		pvc := &pvcs.Items[i]
+		if pvc.DeletionTimestamp != nil {
+			continue
+		}
+		if pvc.Labels[common.LabelAppManagedBy] != common.ManagedByMultigres {
+			continue
+		}
+		if referencedPVCs[pvc.Name] {
+			continue
+		}
+
+		staleKey := "pvc/orphaned/" + pvc.Name
+		now := time.Now()
+		since, tracked := o.generationDivergeSince[staleKey]
+		if !tracked {
+			o.generationDivergeSince[staleKey] = now
+			continue
+		}
+		if now.Sub(since) > common.StaleStatusEntryGracePeriod {
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityInfo,
+				Check:     "resource-validation",
+				Component: fmt.Sprintf("pvc/%s/%s", pvc.Namespace, pvc.Name),
+				Message: fmt.Sprintf(
+					"Orphaned PVC %s has multigres labels but no pod references it",
+					pvc.Name,
+				),
+				Details: map[string]any{
+					"pvcName": pvc.Name,
+					"labels":  pvc.Labels,
+				},
+			})
+		}
+	}
+}
+
+func (o *Observer) checkServiceEndpoints(ctx context.Context) {
+	var svcs corev1.ServiceList
+	if err := o.client.List(ctx, &svcs,
+		o.listOpts(client.MatchingLabels{
+			common.LabelAppManagedBy: common.ManagedByMultigres,
+		})...,
+	); err != nil {
+		return
+	}
+
+	for i := range svcs.Items {
+		svc := &svcs.Items[i]
+		if svc.DeletionTimestamp != nil {
+			continue
+		}
+		// Skip headless services (ClusterIP: None) — they don't have traditional Endpoints.
+		if svc.Spec.ClusterIP == "None" {
+			continue
+		}
+
+		comp := fmt.Sprintf("service/%s/%s", svc.Namespace, svc.Name)
+
+		var endpoints corev1.Endpoints
+		if err := o.client.Get(ctx, types.NamespacedName{
+			Namespace: svc.Namespace,
+			Name:      svc.Name,
+		}, &endpoints); err != nil {
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityWarn,
+				Check:     "resource-validation",
+				Component: comp,
+				Message:   fmt.Sprintf("Service %s has no Endpoints object", svc.Name),
+			})
+			continue
+		}
+
+		readyAddresses := 0
+		for _, subset := range endpoints.Subsets {
+			readyAddresses += len(subset.Addresses)
+		}
+
+		if readyAddresses == 0 {
+			// Skip if all pods for this component are in grace period.
+			svcComponent := svc.Labels[common.LabelAppComponent]
+			if svcComponent != "" && o.hasAnyPodInGracePeriod() {
+				continue
+			}
+
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityWarn,
+				Check:     "resource-validation",
+				Component: comp,
+				Message: fmt.Sprintf(
+					"Service %s Endpoints has zero ready addresses",
+					svc.Name,
+				),
+				Details: map[string]any{
+					"service":   svc.Name,
+					"component": svcComponent,
+				},
+			})
+		}
+	}
 }

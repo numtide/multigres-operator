@@ -1,0 +1,42 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: overrides-complex
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  templateDefaults:
+    coreTemplate: "complex-core"
+    cellTemplate: "complex-cell"
+    shardTemplate: "complex-shard"
+  multiadmin:
+    spec:
+      replicas: 2
+      podLabels:
+        "custom-admin": "true"
+  cells:
+    - name: "us-east-1"
+      overrides:
+        multigateway:
+          replicas: 2
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              overrides:
+                multiorch:
+                  replicas: 2
+                  podLabels:
+                    from: "override"
+                pools:
+                  read-write:
+                    cells: ["us-east-1"]
+                    replicasPerCell: 4
+                    storage:
+                      size: "6Gi"

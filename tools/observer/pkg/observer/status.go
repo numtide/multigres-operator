@@ -3,8 +3,10 @@ package observer
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -83,6 +85,7 @@ func (o *Observer) checkClusterStatus(ctx context.Context) {
 		comp := fmt.Sprintf("cluster/%s/%s", cluster.Namespace, cluster.Name)
 		o.checkPhase(comp, cluster.Status.Phase, cluster.DeletionTimestamp != nil)
 		o.checkGenerationStaleness(comp, cluster.Generation, cluster.Status.ObservedGeneration)
+		o.checkStatusMessage(comp, cluster.Status.Phase, cluster.Status.Message, cluster.DeletionTimestamp != nil)
 	}
 }
 
@@ -98,10 +101,12 @@ func (o *Observer) checkShardStatus(ctx context.Context) {
 
 		o.checkPhase(comp, shard.Status.Phase, shard.DeletionTimestamp != nil)
 		o.checkGenerationStaleness(comp, shard.Generation, shard.Status.ObservedGeneration)
+		o.checkStatusMessage(comp, shard.Status.Phase, shard.Status.Message, shard.DeletionTimestamp != nil)
 		o.checkShardPodRoles(ctx, shard)
 		o.checkShardReadiness(ctx, shard)
 		o.checkShardCellsList(shard)
 		o.checkShardConditions(shard, comp)
+		o.checkBackupStaleness(shard, comp)
 	}
 }
 
@@ -116,6 +121,8 @@ func (o *Observer) checkCellStatus(ctx context.Context) {
 		comp := fmt.Sprintf("cell/%s/%s", cell.Namespace, cell.Name)
 		o.checkPhase(comp, cell.Status.Phase, cell.DeletionTimestamp != nil)
 		o.checkGenerationStaleness(comp, cell.Generation, cell.Status.ObservedGeneration)
+		o.checkStatusMessage(comp, cell.Status.Phase, cell.Status.Message, cell.DeletionTimestamp != nil)
+		o.checkCellStatusFields(ctx, cell)
 	}
 }
 
@@ -135,17 +142,41 @@ func (o *Observer) checkTopoServerStatus(ctx context.Context) {
 
 func (o *Observer) checkPhase(component string, phase multigresv1alpha1.Phase, deleting bool) {
 	if deleting {
+		delete(o.prevPhase, component)
+		delete(o.progressingSince, component)
 		return
 	}
 
 	now := time.Now()
 	key := component
 
+	// Detect invalid phase transitions.
+	if prev, ok := o.prevPhase[component]; ok && prev != string(phase) {
+		if prev == string(multigresv1alpha1.PhaseHealthy) && phase == multigresv1alpha1.PhaseInitializing {
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityFatal,
+				Check:     "crd-status",
+				Component: component,
+				Message: fmt.Sprintf(
+					"%s invalid phase transition: %s → %s",
+					component, prev, phase,
+				),
+				Details: map[string]any{
+					"previousPhase": prev,
+					"currentPhase":  string(phase),
+				},
+			})
+		}
+	}
+	o.prevPhase[component] = string(phase)
+
 	switch phase {
 	case multigresv1alpha1.PhaseHealthy:
 		delete(o.generationDivergeSince, key+"/phase")
+		delete(o.progressingSince, component)
 		return
 	case multigresv1alpha1.PhaseDegraded, multigresv1alpha1.PhaseUnknown:
+		delete(o.progressingSince, component)
 		since, tracked := o.generationDivergeSince[key+"/phase"]
 		if !tracked {
 			o.generationDivergeSince[key+"/phase"] = now
@@ -168,8 +199,30 @@ func (o *Observer) checkPhase(component string, phase multigresv1alpha1.Phase, d
 				},
 			})
 		}
-	case multigresv1alpha1.PhaseInitializing, multigresv1alpha1.PhaseProgressing:
-		// These are expected transitional phases, don't alert.
+	case multigresv1alpha1.PhaseProgressing:
+		since, tracked := o.progressingSince[component]
+		if !tracked {
+			o.progressingSince[component] = now
+			return
+		}
+		if now.Sub(since) > common.PhaseProgressingTimeout {
+			o.reporter.Report(report.Finding{
+				Severity:  report.SeverityWarn,
+				Check:     "crd-status",
+				Component: component,
+				Message: fmt.Sprintf(
+					"%s stuck in Progressing phase for %s",
+					component,
+					now.Sub(since).Round(time.Second),
+				),
+				Details: map[string]any{
+					"phase":    string(phase),
+					"duration": now.Sub(since).String(),
+				},
+			})
+		}
+	case multigresv1alpha1.PhaseInitializing:
+		// Expected transitional phase during initial creation.
 	}
 }
 
@@ -468,5 +521,178 @@ func (o *Observer) checkShardConditions(shard *multigresv1alpha1.Shard, comp str
 				})
 			}
 		}
+	}
+}
+
+func (o *Observer) checkStatusMessage(
+	comp string,
+	phase multigresv1alpha1.Phase,
+	message string,
+	deleting bool,
+) {
+	if deleting {
+		return
+	}
+	if (phase == multigresv1alpha1.PhaseDegraded || phase == multigresv1alpha1.PhaseUnknown) && message == "" {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "crd-status",
+			Component: comp,
+			Message: fmt.Sprintf(
+				"%s in %s phase with empty status message",
+				comp, phase,
+			),
+			Details: map[string]any{"phase": string(phase)},
+		})
+	}
+}
+
+func (o *Observer) checkBackupStaleness(shard *multigresv1alpha1.Shard, comp string) {
+	if shard.DeletionTimestamp != nil {
+		return
+	}
+
+	// Only check if backup is configured (has a BackupHealthy condition).
+	hasBackupCondition := false
+	for _, cond := range shard.Status.Conditions {
+		if cond.Type == "BackupHealthy" {
+			hasBackupCondition = true
+			break
+		}
+	}
+	if !hasBackupCondition {
+		return
+	}
+
+	if shard.Status.LastBackupTime == nil {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "crd-status",
+			Component: comp,
+			Message:   fmt.Sprintf("Shard %s has backup configured but no backup has completed", shard.Name),
+		})
+		return
+	}
+
+	age := time.Since(shard.Status.LastBackupTime.Time)
+	if age > common.BackupStalenessErrorAge {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "crd-status",
+			Component: comp,
+			Message: fmt.Sprintf(
+				"Shard %s last backup was %s ago (threshold %s)",
+				shard.Name,
+				age.Round(time.Minute),
+				common.BackupStalenessErrorAge,
+			),
+			Details: map[string]any{
+				"lastBackupTime": shard.Status.LastBackupTime.Time.String(),
+				"age":            age.String(),
+			},
+		})
+	} else if age > common.BackupStalenessWarnAge {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "crd-status",
+			Component: comp,
+			Message: fmt.Sprintf(
+				"Shard %s last backup was %s ago (threshold %s)",
+				shard.Name,
+				age.Round(time.Minute),
+				common.BackupStalenessWarnAge,
+			),
+			Details: map[string]any{
+				"lastBackupTime": shard.Status.LastBackupTime.Time.String(),
+				"age":            age.String(),
+			},
+		})
+	}
+
+	if shard.Status.LastBackupType != "" && !slices.Contains(common.ValidBackupTypes, shard.Status.LastBackupType) {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "crd-status",
+			Component: comp,
+			Message: fmt.Sprintf(
+				"Shard %s has unknown backup type %q",
+				shard.Name,
+				shard.Status.LastBackupType,
+			),
+			Details: map[string]any{
+				"lastBackupType": shard.Status.LastBackupType,
+				"validTypes":     common.ValidBackupTypes,
+			},
+		})
+	}
+}
+
+func (o *Observer) checkCellStatusFields(ctx context.Context, cell *multigresv1alpha1.Cell) {
+	if cell.DeletionTimestamp != nil {
+		return
+	}
+	comp := fmt.Sprintf("cell/%s/%s", cell.Namespace, cell.Name)
+
+	if cell.Status.GatewayReadyReplicas > cell.Status.GatewayReplicas {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityError,
+			Check:     "crd-status",
+			Component: comp,
+			Message: fmt.Sprintf(
+				"Cell %s gatewayReadyReplicas (%d) > gatewayReplicas (%d)",
+				cell.Name,
+				cell.Status.GatewayReadyReplicas,
+				cell.Status.GatewayReplicas,
+			),
+			Details: map[string]any{
+				"gatewayReplicas":      cell.Status.GatewayReplicas,
+				"gatewayReadyReplicas": cell.Status.GatewayReadyReplicas,
+			},
+		})
+	}
+
+	// Cross-check with actual gateway Deployment readiness.
+	cellLabel := cell.Labels[common.LabelMultigresCell]
+	if cellLabel != "" {
+		var deploys appsv1.DeploymentList
+		if err := o.client.List(ctx, &deploys,
+			o.listOpts(client.MatchingLabels{
+				common.LabelAppManagedBy: common.ManagedByMultigres,
+				common.LabelAppComponent: common.ComponentMultiGateway,
+				common.LabelMultigresCell: cellLabel,
+			})...,
+		); err == nil {
+			for j := range deploys.Items {
+				d := &deploys.Items[j]
+				if d.Status.ReadyReplicas != cell.Status.GatewayReadyReplicas {
+					o.reporter.Report(report.Finding{
+						Severity:  report.SeverityWarn,
+						Check:     "crd-status",
+						Component: comp,
+						Message: fmt.Sprintf(
+							"Cell %s gatewayReadyReplicas (%d) != deployment %s readyReplicas (%d)",
+							cell.Name,
+							cell.Status.GatewayReadyReplicas,
+							d.Name,
+							d.Status.ReadyReplicas,
+						),
+						Details: map[string]any{
+							"deployment":              d.Name,
+							"deploymentReadyReplicas": d.Status.ReadyReplicas,
+							"cellReadyReplicas":       cell.Status.GatewayReadyReplicas,
+						},
+					})
+				}
+			}
+		}
+	}
+
+	if cell.Status.Phase == multigresv1alpha1.PhaseHealthy && cell.Status.GatewayServiceName == "" {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "crd-status",
+			Component: comp,
+			Message:   fmt.Sprintf("Cell %s is Healthy but gatewayServiceName is empty", cell.Name),
+		})
 	}
 }

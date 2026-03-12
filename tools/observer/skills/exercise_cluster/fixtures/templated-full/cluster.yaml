@@ -1,0 +1,27 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: templated-full
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  templateDefaults:
+    coreTemplate: "full-core-template"
+    cellTemplate: "full-cell-template"
+    shardTemplate: "full-shard-template"
+  cells:
+    - name: "us-east-1"
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              overrides:
+                pools:
+                  read-write:
+                    cells: ["us-east-1"]

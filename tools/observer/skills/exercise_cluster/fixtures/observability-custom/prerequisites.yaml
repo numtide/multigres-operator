@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-sampler-config
+  namespace: default
+data:
+  sampling-config.yaml: |
+    categories:
+      default:
+        probability: 1.0
+      health-checks:
+        probability: 0.0
+    http:
+      exact:
+        "GET /live": health-checks
+        "GET /ready": health-checks
