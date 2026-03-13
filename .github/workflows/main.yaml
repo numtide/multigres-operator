@@ -32,8 +32,28 @@ jobs:
     with:
       COVERAGE_THRESHOLD: 70
 
+  e2e-build:
+    name: E2E build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Build operator image
+        run: make container
+      - name: Save operator image
+        run: docker save $(make -s print-img) -o /tmp/operator-image.tar
+      - name: Upload operator image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: operator-image
+          path: /tmp/operator-image.tar
+          retention-days: 1
+
   e2e:
     name: "E2E (${{ matrix.test }})"
+    needs: e2e-build
     strategy:
       fail-fast: false
       matrix:
@@ -44,3 +64,4 @@ jobs:
     with:
       test-spec: ${{ matrix.test }}
       mode: shared
+      operator-image-artifact: operator-image
