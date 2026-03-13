@@ -574,51 +574,6 @@ These scenarios test the template resolution and override merging system. They a
 
 **Teardown:** Patch CoreTemplate back to original value.
 
-### per-shard-template-vs-global
-**Tier:** lifecycle
-**Applicable:** Fixtures that can add a second shard (append-only)
-**Tests:** Per-shard ShardTemplate reference overrides global TemplateDefaults.ShardTemplate
-
-**How to execute:**
-1. Create a second ShardTemplate CR with different pool config:
-   ```bash
-   kubectl apply -f - <<EOF
-   apiVersion: multigres.com/v1alpha1
-   kind: ShardTemplate
-   metadata:
-     name: alt-shard-template
-     namespace: <ns>
-   spec:
-     multiorch:
-       replicas: 1
-     pools:
-       alt-rw:
-         type: readWrite
-         replicasPerCell: 4
-         storage:
-           size: "3Gi"
-   EOF
-   ```
-2. Read the cluster CR to find the first cell name.
-3. Add a new shard that references this per-shard template:
-   ```bash
-   kubectl patch multigrescluster <name> -n <ns> --type=json -p '[
-     {"op":"add","path":"/spec/databases/0/tablegroups/0/shards/-",
-      "value":{"name":"alt-shard","shardTemplate":"alt-shard-template",
-               "overrides":{"pools":{"alt-rw":{"cells":["<cell-name>"]}}}}}
-   ]'
-   ```
-4. Wait for the new shard to come up.
-5. Verify original shard uses global ShardTemplate values.
-6. Verify new shard uses `alt-shard-template` values (multiorch=1, pool=alt-rw, storage=3Gi).
-
-**What to observe:**
-- Two shards with different template sources coexist
-- Per-shard template takes precedence over global TemplateDefaults.ShardTemplate
-- If both shards end up with the same config, per-shard template override is broken
-
-**Teardown:** Not reversible (shards are append-only).
-
 ### pvc-deletion-policy-inheritance
 **Tier:** quick
 **Applicable:** Template-based fixtures

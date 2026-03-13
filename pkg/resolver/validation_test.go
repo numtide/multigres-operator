@@ -169,6 +169,15 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 		},
 	}
 
+	badPoolTpl := &multigresv1alpha1.ShardTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "bad-pool-tpl", Namespace: "default"},
+		Spec: multigresv1alpha1.ShardTemplateSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"BAD_POOL": {Type: "readWrite"},
+			},
+		},
+	}
+
 	defaultSC := &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "standard",
@@ -179,10 +188,13 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(shardTpl, defaultSC).
+		WithObjects(shardTpl, badPoolTpl, defaultSC).
 		Build()
 
-	noSCClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shardTpl).Build()
+	noSCClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardTpl, badPoolTpl).
+		Build()
 
 	nodeZoneA := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -198,15 +210,15 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 	}
 	withZoneAClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(shardTpl, defaultSC, nodeZoneA).
+		WithObjects(shardTpl, badPoolTpl, defaultSC, nodeZoneA).
 		Build()
 	withRegionClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(shardTpl, defaultSC, nodeRegionEast).
+		WithObjects(shardTpl, badPoolTpl, defaultSC, nodeRegionEast).
 		Build()
 	noMatchingNodeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(shardTpl, defaultSC).
+		WithObjects(shardTpl, badPoolTpl, defaultSC).
 		Build()
 
 	tests := map[string]struct {
@@ -722,6 +734,71 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 				"cell 'cell-a': no nodes currently match topology.kubernetes.io/zone=us-east-1a",
 				"cell 'cell-b': no nodes currently match topology.kubernetes.io/zone=us-east-1a",
 			},
+		},
+		"Invalid Pool Name (uppercase and special chars)": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0",
+								Spec: &multigresv1alpha1.ShardInlineSpec{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"INVALID_NAME!": {Type: "readOnly"},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "pool name 'INVALID_NAME!' is invalid",
+		},
+		"Invalid Pool Name (too long)": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0",
+								Spec: &multigresv1alpha1.ShardInlineSpec{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"this-pool-name-exceeds-max": {Type: "readOnly"},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "pool name 'this-pool-name-exceeds-max' must be between 1 and 25 characters",
+		},
+		"Invalid Pool Name from template": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "bad-pool-tpl",
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "pool name 'BAD_POOL' is invalid",
 		},
 		"TemplateDefaults.ShardTemplate propagates to validation": {
 			cluster: &multigresv1alpha1.MultigresCluster{

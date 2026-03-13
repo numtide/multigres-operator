@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -354,6 +355,14 @@ func (r *Resolver) ValidateClusterLogic(
 					)
 				}
 
+				// Pool Name Format: CRD structural schema does not enforce
+				// validation markers on map keys, so validate explicitly.
+				for poolName := range pools {
+					if err := ValidatePoolName(poolName); err != nil {
+						return nil, fmt.Errorf("shard '%s': %w", shard.Name, err)
+					}
+				}
+
 				// Check 1: Empty Cells (Orphaned Shard)
 				// If after resolution (and defaulting), cells are STILL empty, it's a broken config.
 				if len(orch.Cells) == 0 {
@@ -577,6 +586,34 @@ func getEffectiveEtcdReplicas(cluster *multigresv1alpha1.MultigresCluster) int32
 		return *cluster.Spec.GlobalTopoServer.Etcd.Replicas
 	}
 	return DefaultEtcdReplicas
+}
+
+// dnsLabelRegex matches valid DNS labels per RFC 1123. This mirrors the
+// kubebuilder Pattern marker on PoolName, which is not enforced for map keys.
+var dnsLabelRegex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
+const poolNameMaxLen = 25
+
+// ValidatePoolName checks that a pool name is a valid DNS label within length
+// limits. CRD structural schema does not enforce validation markers on map
+// keys, so pool names must be validated explicitly.
+func ValidatePoolName(name multigresv1alpha1.PoolName) error {
+	s := string(name)
+	if len(s) == 0 || len(s) > poolNameMaxLen {
+		return fmt.Errorf(
+			"pool name '%s' must be between 1 and %d characters",
+			name, poolNameMaxLen,
+		)
+	}
+	if !dnsLabelRegex.MatchString(s) {
+		return fmt.Errorf(
+			"pool name '%s' is invalid: "+
+				"must consist of lowercase alphanumeric characters or '-', "+
+				"and must start and end with an alphanumeric character",
+			name,
+		)
+	}
+	return nil
 }
 
 // validateResourceRequirements checks that for every resource type present in
