@@ -209,12 +209,16 @@ jobs:
           cp /tmp/coverage.txt ~/.cache/coverage.txt
 
       # If triggered from non-PR setup, save the cache.
+      # The key includes the git SHA so that every main push creates a fresh
+      # cache entry (actions/cache/save is a no-op when the exact key already
+      # exists). PR runs restore via the prefix in restore-keys and always
+      # get the latest main coverage data.
       - name: Save cache
         if: always() &&
           github.event_name != 'pull_request'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          key: ${{ runner.os }}-go-coverage-${{ hashFiles('**/go.sum', 'Makefile') }}
+          key: ${{ runner.os }}-go-coverage-${{ hashFiles('**/go.sum', 'Makefile') }}-${{ github.sha }}
           # Any location that we generate the test coverage report in
           path: |
             ~/.cache/coverage.txt
