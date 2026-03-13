@@ -22,12 +22,8 @@ import (
 )
 
 // ============================================================================
-// RBAC Markers (Temporary Location)
+// RBAC Markers
 // ============================================================================
-//
-// TODO: Move these RBAC markers to the controller implementation
-// (pkg/resource-handler/controller/toposerver/toposerver_controller.go)
-// and add that path to controller-gen in the Makefile.
 //
 // +kubebuilder:rbac:groups=multigres.com,resources=toposervers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=toposervers/status,verbs=get;update;patch

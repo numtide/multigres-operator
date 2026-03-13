@@ -299,7 +299,6 @@ func (r *ShardReconciler) reconcilePool(
 	}
 
 	// Create Pods and PVCs per cell
-	// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
 	for _, cell := range poolSpec.Cells {
 		cellName := string(cell)
 
@@ -339,7 +338,6 @@ func getMultiOrchCells(shard *multigresv1alpha1.Shard) ([]multigresv1alpha1.Cell
 	cells := shard.Spec.MultiOrch.Cells
 
 	// If MultiOrch specifies cells explicitly, use them
-	// TODO(#91): Add +listType=set validation to MultiOrch.Cells to prevent duplicates at API level
 	if len(cells) > 0 {
 		return cells, nil
 	}

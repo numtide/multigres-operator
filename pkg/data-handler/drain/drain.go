@@ -348,5 +348,8 @@ func IsPrimaryNotReady(
 			return cond.Status != corev1.ConditionTrue
 		}
 	}
+	// Optimistic default: if ContainersReady hasn't been populated yet, the pod
+	// is already registered as PRIMARY in the topology, so assume it's reachable
+	// and let the RPC call itself surface any real unavailability.
 	return false
 }

@@ -1122,3 +1122,114 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 - Whether observer reports any topology-related findings
 
 **Teardown:** Delete the `multi-cell-topology` cluster. This fixture uses `whenDeleted: Delete` so PVCs are cleaned up automatically.
+
+---
+
+## Verification Scenarios
+
+### verify-multiadminweb
+**Tier:** quick | **Fast-path:** yes
+**Tests:** MultiAdminWeb Deployment and Service are created and Running
+**Applicable fixtures:** `multiadmin-web`
+
+**How to execute:**
+1. Deploy the `multiadmin-web` fixture.
+2. Wait for CRD phase `Healthy` and all pods Running+Ready.
+3. Verify MultiAdminWeb Deployment exists:
+   ```bash
+   kubectl get deployment -n default -l app.kubernetes.io/component=multiadmin-web
+   ```
+4. Verify the Deployment has the expected replica count (1) and pods are Ready:
+   ```bash
+   kubectl get deployment -n default -l app.kubernetes.io/component=multiadmin-web -o jsonpath='{range .items[*]}{.metadata.name}: ready={.status.readyReplicas}/{.spec.replicas}{"\n"}{end}'
+   ```
+5. Verify MultiAdminWeb Service exists:
+   ```bash
+   kubectl get service -n default -l app.kubernetes.io/component=multiadmin-web
+   ```
+6. Verify pod labels include `fixture: multiadmin-web`:
+   ```bash
+   kubectl get pods -n default -l app.kubernetes.io/component=multiadmin-web -o jsonpath='{range .items[*]}{.metadata.name}: {.metadata.labels.fixture}{"\n"}{end}'
+   ```
+7. Verify the container image matches `DefaultMultiAdminWebImage`:
+   ```bash
+   kubectl get deployment -n default -l app.kubernetes.io/component=multiadmin-web -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
+   ```
+
+**Success criteria:**
+- MultiAdminWeb Deployment exists with 1 ready replica
+- MultiAdminWeb Service exists
+- Pod labels include `fixture: multiadmin-web`
+- Container image matches the default multiadmin-web image
+- Cluster is Healthy with no operator errors
+
+**Teardown:** Delete the `multiadmin-web` cluster.
+
+### verify-pdb
+**Tier:** quick | **Fast-path:** yes
+**Tests:** PodDisruptionBudgets are created with correct selectors for each pool/cell combination
+**Applicable fixtures:** `minimal-retain`, `minimal-delete`, `multi-cell-quorum` (any fixture with pools)
+
+**How to execute:**
+1. Deploy a fixture and wait for CRD phase `Healthy`.
+2. List all PDBs in the namespace:
+   ```bash
+   kubectl get pdb -n default -o wide
+   ```
+3. For each PDB, verify:
+   - `spec.maxUnavailable` is 1
+   - `spec.selector.matchLabels` contains the correct pool, cell, shard, and component labels
+   - The PDB's label selector matches actual running pods
+   ```bash
+   for pdb in $(kubectl get pdb -n default -o jsonpath='{.items[*].metadata.name}'); do
+     echo "=== PDB: $pdb ==="
+     kubectl get pdb $pdb -n default -o jsonpath='  maxUnavailable: {.spec.maxUnavailable}'
+     echo ""
+     selector=$(kubectl get pdb $pdb -n default -o jsonpath='{.spec.selector.matchLabels}')
+     echo "  selector: $selector"
+     # Convert selector to label query and count matching pods
+     labels=$(kubectl get pdb $pdb -n default -o json | jq -r '.spec.selector.matchLabels | to_entries | map(.key + "=" + .value) | join(",")')
+     matched=$(kubectl get pods -n default -l "$labels" --no-headers 2>/dev/null | wc -l)
+     echo "  matched pods: $matched"
+     if [ "$matched" -eq 0 ]; then
+       echo "  ERROR: PDB selector matches 0 pods!"
+     fi
+   done
+   ```
+4. Verify PDB count matches expected: one PDB per pool/cell combination.
+
+**Success criteria:**
+- At least one PDB exists per pool/cell combination
+- Every PDB has `maxUnavailable: 1`
+- Every PDB's selector matches at least one Running pod
+- PDB labels include cluster, shard, cell, and pool identifiers
+
+**Teardown:** None required (PDBs are owned by the Shard CR and will be cleaned up on delete).
+
+### verify-durability-policy
+**Tier:** quick | **Fast-path:** yes
+**Tests:** DurabilityPolicy from the cluster spec propagates to Shard CRDs
+**Applicable fixtures:** `multi-cell-quorum` (has `durabilityPolicy: "MULTI_CELL_ANY_2"`)
+
+**How to execute:**
+1. Deploy the `multi-cell-quorum` fixture.
+2. Wait for CRD phase `Healthy` and all pods Running+Ready.
+3. Verify the Shard CRD has the correct durabilityPolicy:
+   ```bash
+   kubectl get shard -n default -o jsonpath='{range .items[*]}{.metadata.name}: durabilityPolicy={.spec.durabilityPolicy}{"\n"}{end}'
+   ```
+4. Verify the cluster-level durabilityPolicy is set:
+   ```bash
+   kubectl get multigrescluster multi-cell-quorum -n default -o jsonpath='{.spec.durabilityPolicy}'
+   ```
+5. Verify the TableGroup CRD also has the durabilityPolicy:
+   ```bash
+   kubectl get tablegroup -n default -o jsonpath='{range .items[*]}{.metadata.name}: durabilityPolicy={.spec.durabilityPolicy}{"\n"}{end}'
+   ```
+
+**Success criteria:**
+- Shard CRD `spec.durabilityPolicy` equals `"MULTI_CELL_ANY_2"`
+- TableGroup CRD `spec.durabilityPolicy` equals `"MULTI_CELL_ANY_2"`
+- Cluster remains Healthy
+
+**Teardown:** Delete the `multi-cell-quorum` cluster.

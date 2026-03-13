@@ -27,9 +27,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	// Import topology implementations for Vitess
-	// TODO: This pulls in multigres/multigres upstream as the hard direct
-	// dependency from the main module, which we would like to avoid.
+	// Import topology implementations for multigres
 	"github.com/multigres/multigres/go/common/rpcclient"
 	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
 
