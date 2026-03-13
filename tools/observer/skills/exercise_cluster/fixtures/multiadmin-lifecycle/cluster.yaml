@@ -1,0 +1,41 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: multiadmin-lifecycle
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  multiadmin:
+    spec:
+      replicas: 2
+      resources:
+        requests:
+          cpu: "25m"
+          memory: "32Mi"
+      podLabels:
+        fixture: "multiadmin-lifecycle"
+  cells:
+    - name: "us-east-1"
+      spec:
+        multigateway:
+          replicas: 1
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              spec:
+                multiorch:
+                  replicas: 1
+                pools:
+                  main-rw:
+                    type: readWrite
+                    cells: ["us-east-1"]
+                    replicasPerCell: 4
+                    storage:
+                      size: "5Gi"

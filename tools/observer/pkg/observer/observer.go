@@ -26,7 +26,7 @@ type checkRequest struct {
 var allCheckNames = []string{
 	"pod-health", "resource-validation", "crd-status", "drain-state",
 	"connectivity", "operator-logs", "dataplane-logs", "events",
-	"topology", "replication",
+	"topology", "replication", "spec-compliance",
 }
 
 // podInfo tracks per-pod metadata used by the startup grace period logic.
@@ -253,6 +253,7 @@ func (o *Observer) runCycle(ctx context.Context) {
 	track("events", o.checkEvents)
 	track("topology", o.checkTopology)
 	track("replication", o.checkReplication)
+	track("spec-compliance", o.checkSpecCompliance)
 
 	dur := time.Since(start)
 	if o.metrics != nil {
@@ -331,6 +332,7 @@ func (o *Observer) checkFuncs() map[string]func(context.Context) {
 		"events":              o.checkEvents,
 		"topology":            o.checkTopology,
 		"replication":         o.checkReplication,
+		"spec-compliance":    o.checkSpecCompliance,
 	}
 }
 
@@ -399,6 +401,7 @@ func validCheckCategories() []string {
 	return []string{
 		"pod-health", "resource-validation", "crd-status", "drain-state",
 		"connectivity", "logs", "events", "topology", "replication",
+		"spec-compliance",
 	}
 }
 
