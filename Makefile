@@ -301,18 +301,32 @@ test-coverage: manifests generate fmt vet setup-envtest ## Generate coverage rep
 #   on-failure keep clusters from failed tests for debugging
 #   always     never destroy clusters
 
+# E2E_TEST_SPEC: comma-separated list of test names to run (default: all).
+# Example: make test-e2e E2E_TEST_SPEC="minimal,deletion"
+E2E_TEST_SPEC ?=
+E2E_PACKAGES_SHARED = $(if $(E2E_TEST_SPEC),$(foreach t,$(subst $(comma),$(space),$(E2E_TEST_SPEC)),./test/e2e/shared/$(t)/),./test/e2e/shared/...)
+E2E_PACKAGES_DEDICATED = $(if $(E2E_TEST_SPEC),$(foreach t,$(subst $(comma),$(space),$(E2E_TEST_SPEC)),./test/e2e/dedicated/$(t)/),./test/e2e/dedicated/...)
+comma := ,
+space := $(empty) $(empty)
+
 .PHONY: test-e2e
-test-e2e: manifests generate fmt vet container ## Run e2e tests (each test gets its own Kind cluster)
+test-e2e: manifests generate fmt vet container ## Run e2e tests (shared cluster, fast)
 	OPERATOR_IMG=$(IMG) \
 	REPO_ROOT=$(shell pwd) \
-	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=30m -parallel 2
+	go test -tags=e2e $(E2E_PACKAGES_SHARED) -v -count=1 -timeout=10m
 
 .PHONY: test-e2e-keep
-test-e2e-keep: manifests generate fmt vet container ## Run e2e tests; keep Kind clusters from failed tests for debugging
+test-e2e-keep: manifests generate fmt vet container ## Run e2e tests; keep cluster on failure
 	OPERATOR_IMG=$(IMG) \
 	REPO_ROOT=$(shell pwd) \
 	E2E_KEEP_CLUSTERS=on-failure \
-	go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=30m -parallel 2
+	go test -tags=e2e $(E2E_PACKAGES_SHARED) -v -count=1 -timeout=10m
+
+.PHONY: test-e2e-full
+test-e2e-full: manifests generate fmt vet container ## Run e2e tests (dedicated cluster per test, full isolation)
+	OPERATOR_IMG=$(IMG) \
+	REPO_ROOT=$(shell pwd) \
+	go test -tags=e2e $(E2E_PACKAGES_DEDICATED) -v -count=1 -timeout=30m -parallel 2
 
 ##@ Deployment
 

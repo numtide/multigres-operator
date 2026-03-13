@@ -10,16 +10,28 @@ on:
         type: string
       timeout-minutes:
         description: Timeout for the e2e test job
-        default: 30
+        default: 20
         required: false
         type: number
+      test-spec:
+        description: >
+          Comma-separated list of test names to run (e.g. "minimal,inline").
+          Empty string runs all tests.
+        default: ''
+        required: false
+        type: string
+      mode:
+        description: 'Test mode: "shared" (one cluster, fast) or "dedicated" (one cluster per test)'
+        default: 'shared'
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   e2e:
-    name: E2E tests
+    name: "E2E (${{ inputs.test-spec || 'all' }})"
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
@@ -55,11 +67,26 @@ jobs:
       - name: Pull e2e images
         run: make pull-e2e-images
 
+      - name: Compute test packages
+        id: packages
+        run: |
+          mode="${{ inputs.mode }}"
+          spec="${{ inputs.test-spec }}"
+          if [ -z "$spec" ]; then
+            echo "packages=./test/e2e/${mode}/..." >> "$GITHUB_OUTPUT"
+          else
+            pkgs=""
+            for t in $(echo "$spec" | tr ',' ' '); do
+              pkgs="$pkgs ./test/e2e/${mode}/${t}/"
+            done
+            echo "packages=$pkgs" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run e2e tests
         run: |
           OPERATOR_IMG=$(make -s print-img) \
           REPO_ROOT=$(pwd) \
-          go test -tags=e2e ./test/e2e/ -v -count=1 -timeout=30m -parallel=1
+          go test -tags=e2e ${{ steps.packages.outputs.packages }} -v -count=1 -timeout=${{ inputs.timeout-minutes }}m
         env:
           E2E_KEEP_CLUSTERS: never
 
@@ -75,7 +102,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: kind-logs
+          name: kind-logs-${{ inputs.test-spec || 'all' }}
           path: /tmp/kind-logs-*
           retention-days: 7
           if-no-files-found: ignore

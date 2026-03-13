@@ -336,7 +336,7 @@ func DeployOperator(t *testing.T, kubeconfigFile, clusterName, operatorImg strin
 
 	overlayRelPath := os.Getenv("KUSTOMIZE_OVERLAY")
 	if overlayRelPath == "" {
-		overlayRelPath = "config/default"
+		overlayRelPath = "config/no-webhook"
 	}
 	// Make relative to repo root so it works with the temp copy.
 	if strings.HasPrefix(overlayRelPath, repoRoot) {
