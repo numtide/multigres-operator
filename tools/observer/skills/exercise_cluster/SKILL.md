@@ -22,16 +22,19 @@ description: Deploy MultigresCluster fixtures, run mutation scenarios, and valid
    ```
    If not reachable, run `make kind-deploy` (deploys operator + observer).
 
-2. Ensure observer is running and port-forwarded:
+2. Ensure observer is running:
    ```bash
    KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl get pods -l app.kubernetes.io/name=multigres-observer -n multigres-operator
    ```
    If missing: `make kind-deploy-observer`.
-   Port-forward (check if already running first):
+
+3. Define the observer helper function for the session. We use `kubectl exec` into the observer pod instead of `kubectl port-forward` because port-forwards go stale during cluster mutations and require reconnection logic. `kubectl exec` is stateless — every call is independent, no background process to manage.
    ```bash
-   KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl port-forward -n multigres-operator svc/multigres-observer 9090:9090 &
+   observer() {
+     KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl exec -n multigres-operator deploy/multigres-observer -- curl -sf "http://localhost:9090$1"
+   }
    ```
-   Verify: `curl -s http://localhost:9090/api/status | jq '.summary'`
+   Verify: `observer /api/status | jq '.summary'`
 
 ## Kind Cluster Topology Awareness
 
@@ -130,7 +133,7 @@ Wait until ALL pool pods are at least **150 seconds old** (120s grace period + 3
 Poll the observer every 10 seconds. Track state across all polls.
 
 ```bash
-curl -s http://localhost:9090/api/status | jq '{
+observer /api/status | jq '{
   summary: .summary,
   errors: [(.findings // [])[] | select(.level == "error" or .level == "fatal")],
   warns: [(.findings // [])[] | select(.level == "warn")]
@@ -162,7 +165,7 @@ Report one of:
 
 After stability is confirmed, review warn-level findings:
 ```bash
-curl -s http://localhost:9090/api/status | jq '[(.findings // [])[] | select(.level == "warn")]'
+observer /api/status | jq '[(.findings // [])[] | select(.level == "warn")]'
 ```
 Warnings don't block progress but note them. Persistent warnings like replication lag >10s or WAL replay paused may indicate latent issues.
 
@@ -196,7 +199,7 @@ This step runs after EVERY scenario (both full and fast-path verification).
 After primary verification passes, check the observer's finding history for the mutation window:
 
 ```bash
-curl -s http://localhost:9090/api/history | jq '{persistent: .persistent, flapping: .flapping, transientCount: (.transient | length)}'
+observer /api/history | jq '{persistent: .persistent, flapping: .flapping, transientCount: (.transient | length)}'
 ```
 
 - Assert: `persistent == []` (no persistent findings remaining)
@@ -204,43 +207,6 @@ curl -s http://localhost:9090/api/history | jq '{persistent: .persistent, flappi
 - Log the transient finding count for the exercise report
 
 If persistent or flapping findings exist, investigate before proceeding to the next scenario.
-
-## Port-Forward Management
-
-The exerciser uses `kubectl port-forward` to reach the observer's HTTP API. Port-forwards can go stale during cluster mutations. Follow this protocol:
-
-### Setup (once per exercise run)
-```bash
-# Kill any existing port-forwards to port 9090
-pkill -f "port-forward.*9090" 2>/dev/null || true
-sleep 1
-
-# Find the observer pod and establish port-forward
-OBSERVER_POD=$(kubectl get pods -n multigres-operator -l app.kubernetes.io/name=multigres-observer -o name | head -1)
-kubectl port-forward -n multigres-operator $OBSERVER_POD 9090:9090 &
-PF_PID=$!
-sleep 2
-```
-
-### Health Check (before each observer API call)
-```bash
-curl -sf http://localhost:9090/healthz > /dev/null 2>&1 || {
-  # Port-forward is stale — re-establish
-  kill $PF_PID 2>/dev/null
-  pkill -f "port-forward.*9090" 2>/dev/null || true
-  sleep 1
-  OBSERVER_POD=$(kubectl get pods -n multigres-operator -l app.kubernetes.io/name=multigres-observer -o name | head -1)
-  kubectl port-forward -n multigres-operator $OBSERVER_POD 9090:9090 &
-  PF_PID=$!
-  sleep 2
-}
-```
-
-### Cleanup (end of exercise run)
-```bash
-kill $PF_PID 2>/dev/null
-pkill -f "port-forward.*9090" 2>/dev/null || true
-```
 
 ## Fast-Path Verification Protocol
 
@@ -282,7 +248,7 @@ If success criteria do NOT pass within 2 minutes, **fall back to full Stability 
 
 Once success criteria pass, trigger an immediate targeted observer check:
 ```bash
-curl -s 'http://localhost:9090/api/check?categories=pod-health,connectivity,crd-status' | jq '{
+observer '/api/check?categories=pod-health,connectivity,crd-status' | jq '{
   summary: .summary,
   errors: [(.findings // [])[] | select(.level == "error" or .level == "fatal")]
 }'
@@ -293,7 +259,7 @@ If any errors/fatals are returned, **fall back to full Stability Verification Pr
 
 Wait 60 seconds (instead of 150s), then poll `/api/status` twice with 15 seconds between polls:
 ```bash
-curl -s http://localhost:9090/api/status | jq '{
+observer /api/status | jq '{
   summary: .summary,
   errors: [(.findings // [])[] | select(.level == "error" or .level == "fatal")]
 }'
@@ -427,7 +393,7 @@ Applicable scenarios: `delete-and-recreate-cluster`.
 
 After any mutation, check the observer's finding history to detect patterns:
 ```bash
-curl -s http://localhost:9090/api/history | jq '{
+observer /api/history | jq '{
   persistent: [.persistent[]? | {check, component, message, count}],
   flapping: [.flapping[]? | {check, component, message, count}]
 }'
@@ -445,13 +411,13 @@ When a scenario results in UNSTABLE or persistent observer findings, follow this
 Before anything changes, capture the current state:
 ```bash
 # Full observer snapshot
-curl -s http://localhost:9090/api/status | jq . > /tmp/exercise-snapshot.json
+observer /api/status | jq . > /tmp/exercise-snapshot.json
 
 # Finding history with pattern classification
-curl -s http://localhost:9090/api/history | jq . > /tmp/exercise-history.json
+observer /api/history | jq . > /tmp/exercise-history.json
 
 # Targeted on-demand check for specific categories
-curl -s 'http://localhost:9090/api/check?categories=replication,connectivity' | jq .
+observer '/api/check?categories=replication,connectivity' | jq .
 ```
 
 ### Step 2 — Triage with diagnose_with_observer
@@ -505,7 +471,7 @@ Only in **full** execution mode. Concurrent mutations require thorough observati
 
 5. **Check observer history for transient findings**:
    ```bash
-   curl -s http://localhost:9090/api/history | jq '{
+   observer /api/history | jq '{
      transient: [.transient[]? | {check, component, message, count}],
      flapping: [.flapping[]? | {check, component, message, count}]
    }'

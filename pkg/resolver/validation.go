@@ -263,6 +263,42 @@ func (r *Resolver) ValidateClusterLogic(
 		))
 	}
 
+	// ------------------------------------------------------------------
+	// 0c. Resource Limits Validation (Top-Level Components)
+	// ------------------------------------------------------------------
+	if cluster.Spec.GlobalTopoServer != nil &&
+		cluster.Spec.GlobalTopoServer.Etcd != nil {
+		if err := validateResourceRequirements(
+			cluster.Spec.GlobalTopoServer.Etcd.Resources, "etcd",
+		); err != nil {
+			return nil, err
+		}
+	}
+	if cluster.Spec.MultiAdmin != nil && cluster.Spec.MultiAdmin.Spec != nil {
+		if err := validateResourceRequirements(
+			cluster.Spec.MultiAdmin.Spec.Resources, "multiadmin",
+		); err != nil {
+			return nil, err
+		}
+	}
+	if cluster.Spec.MultiAdminWeb != nil && cluster.Spec.MultiAdminWeb.Spec != nil {
+		if err := validateResourceRequirements(
+			cluster.Spec.MultiAdminWeb.Spec.Resources, "multiadmin-web",
+		); err != nil {
+			return nil, err
+		}
+	}
+	for _, cell := range cluster.Spec.Cells {
+		if cell.Spec != nil {
+			if err := validateResourceRequirements(
+				cell.Spec.MultiGateway.Resources,
+				fmt.Sprintf("cell '%s' multigateway", cell.Name),
+			); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Iterate through every Shard and "Simulate" Resolution
 	for _, db := range cluster.Spec.Databases {
 		dbBackup := multigresv1alpha1.MergeBackupConfig(db.Backup, cluster.Spec.Backup)
@@ -380,6 +416,30 @@ func (r *Resolver) ValidateClusterLogic(
 							shard.Name,
 							replicas,
 						))
+					}
+				}
+
+				// ------------------------------------------------------------------
+				// 3b. Resource Limits Validation (Resolved Shard Components)
+				// ------------------------------------------------------------------
+				if err := validateResourceRequirements(
+					orch.Resources,
+					fmt.Sprintf("shard '%s' multiorch", shard.Name),
+				); err != nil {
+					return nil, err
+				}
+				for poolName, pool := range pools {
+					if err := validateResourceRequirements(
+						pool.Postgres.Resources,
+						fmt.Sprintf("shard '%s' pool '%s' postgres", shard.Name, poolName),
+					); err != nil {
+						return nil, err
+					}
+					if err := validateResourceRequirements(
+						pool.Multipooler.Resources,
+						fmt.Sprintf("shard '%s' pool '%s' multipooler", shard.Name, poolName),
+					); err != nil {
+						return nil, err
 					}
 				}
 
@@ -517,6 +577,26 @@ func getEffectiveEtcdReplicas(cluster *multigresv1alpha1.MultigresCluster) int32
 		return *cluster.Spec.GlobalTopoServer.Etcd.Replicas
 	}
 	return DefaultEtcdReplicas
+}
+
+// validateResourceRequirements checks that for every resource type present in
+// both Limits and Requests, the limit is >= the request. Kubernetes enforces
+// this on Pods but NOT on CRDs, so we catch it early in the webhook.
+func validateResourceRequirements(resources corev1.ResourceRequirements, component string) error {
+	for resourceName, limit := range resources.Limits {
+		if request, ok := resources.Requests[resourceName]; ok {
+			if limit.Cmp(request) < 0 {
+				return fmt.Errorf(
+					"%s: resource %s limit (%s) must be >= request (%s)",
+					component,
+					resourceName,
+					limit.String(),
+					request.String(),
+				)
+			}
+		}
+	}
+	return nil
 }
 
 // validateCellTopology checks if nodes exist in the cluster matching each cell's
