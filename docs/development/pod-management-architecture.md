@@ -29,8 +29,7 @@
 The operator manages **individual Pods and PersistentVolumeClaims** for each pool replica instead of delegating to Kubernetes StatefulSets. The shard controller (`pkg/resource-handler/controller/shard/`) owns Pod, PVC, PDB, headless Service, and ConfigMap resources directly, reconciling them on every loop.
 
 This architectural change was motivated by the fact that multigres has its own identity and discovery system (etcd topology) that is completely independent of Kubernetes StatefulSet identity. The operator previously used `ParallelPodManagement` and did not leverage ordered deployment or scaling — the two main features that StatefulSets provide over Deployments.
-
-> **Scheduling Note:** One side effect of the move to direct pods is that backup volumes using `WaitForFirstConsumer` + RWO storage (e.g., EBS gp2) are now susceptible to `Multi-Attach` errors when `replicasPerCell > 1`. The old `ParallelPodManagement` StatefulSet submitted all pods simultaneously, allowing the `selected-node` annotation on the PVC to constrain them to the same AZ/node before any attachment occurred. With sequential pod creation, the volume is already attached when the next pod is scheduled, and the scheduler cannot prevent cross-node placement. See [PVC Management § Shared Backup PVC](#shared-backup-pvc) for details.
+> **Scheduling Note:** With parallel pod creation, all pods for a pool are submitted in the same reconcile pass. For backup volumes using `WaitForFirstConsumer` + RWO storage (e.g., EBS gp2), if multiple replicas are created simultaneously, the scheduler may place them on different nodes, causing `Multi-Attach` errors on the shared backup PVC. See [PVC Management § Shared Backup PVC](#shared-backup-pvc) for details and recommended solutions (S3 or RWX storage).
 
 ---
 
@@ -55,7 +54,7 @@ This architectural change was motivated by the fact that multigres has its own i
 | **Simpler PVC lifecycle** | PVC creation/deletion is handled directly in the reconcile loop. Previously delegated to StatefulSet's `PersistentVolumeClaimRetentionPolicy`, which had version and behavior quirks. |
 | **Drain state machine** | Scale-down coordinates drain and etcd cleanup within the shard controller to safely remove standbys from the sync standby list. |
 | **Rolling updates with primary awareness** | Updates replicas first, primary last, with switchover coordination. |
-| **Sequential provisioning** | New pods are created one at a time, waiting for readiness before creating the next. This prevents multiple pods from simultaneously trying to restore from backup. |
+| **Parallel creation** | New pods for a pool are all created in a single reconcile pass. This enables faster bootstrap by allowing multiple replicas to restore from backup simultaneously. Rolling updates and scale-down remain strictly one-at-a-time. |
 | **Pod Disruption Budgets** | Per-pool PDBs with `maxUnavailable: 1` protect against voluntary evictions. |
 | **Better observability** | Status aggregation directly from pod readiness conditions; no intermediate StatefulSet `.status` layer. |
 
@@ -63,7 +62,7 @@ This architectural change was motivated by the fact that multigres has its own i
 
 - **Automatic pod recreation**: The reconcile loop detects missing pods and recreates them.
 - **Stable network identity**: Pods still get DNS-resolvable names via the headless service (hostname + subdomain).
-- **Ordered startup**: Was never needed — `ParallelPodManagement` was already in use. The new sequential provisioning is superior for replica bootstrapping (avoids simultaneous backup restores). However, it introduces a scheduling trade-off for shared RWO volumes — see [PVC Management § Shared Backup PVC](#shared-backup-pvc).
+- **Ordered startup**: Was never needed — `ParallelPodManagement` was already in use. Parallel creation restores this behavior for initial bootstrap. However, it introduces a scheduling trade-off for shared RWO volumes — see [PVC Management § Shared Backup PVC](#shared-backup-pvc).
 - **PVC auto-creation**: Operator creates PVCs for each pod index, mirroring `volumeClaimTemplates` behavior.
 
 ---
@@ -115,8 +114,8 @@ The `createMissingResources` function handles pod creation:
 
 1. For each desired index `0..replicasPerCell-1`, check if a PVC and Pod exist.
 2. Create missing PVCs first, then Pods that reference them.
-3. **Sequential provisioning**: After creating a pod, the reconciler returns early and requeues. On the next reconcile, it checks if the pod is Ready before creating the next one. This prevents multiple replicas from simultaneously restoring from backup, which could exhaust I/O bandwidth.
-4. Terminal pods (`Failed` or `Succeeded`) are cleaned up and their index is reused.
+3. **Parallel creation**: All missing PVCs and pods are created in a single reconcile pass. This enables faster bootstrap by allowing standbys to restore from pgBackRest (S3/repo) in parallel without I/O impact on the primary. Multiorch dynamically manages synchronous replication membership via `FixReplicationAction`, so parallel creation is safe from a quorum perspective.
+4. Terminal pods (`Failed` or `Succeeded`) are cleaned up sequentially — one per reconcile — to avoid cascading deletions.
 
 ### Deletion (Scale-Down)
 
@@ -299,7 +298,7 @@ One shared PVC per shard per cell for filesystem-based backups, mounted at `/bac
 > 3. Pod-1 hits the scheduler. The PV's `nodeAffinity` constrains it to the same AZ, but the scheduler does not detect the active RWO attachment on Node A. If a second node exists in the AZ, the scheduler may place Pod-1 there.
 > 4. The `attachdetach-controller` attempts to attach the volume to Node B and fails with `Multi-Attach error`.
 >
-> **Why this didn't happen with StatefulSets (v0.2.6):** The old architecture used `ParallelPodManagement`, which submitted all pods to the scheduler simultaneously. With `WaitForFirstConsumer`, the PVC was still unbound when all pods entered the scheduling queue. The first pod to be processed annotated the PVC with `volume.kubernetes.io/selected-node`, constraining subsequent pods to the same AZ. With one node per AZ (common in dev/test EKS clusters), all pods landed on the same node deterministically. This prevented Multi-Attach errors but caused **silent HA loss** — all replicas on a single node.
+> **Why this didn't happen with StatefulSets (v0.2.6):** The old architecture used `ParallelPodManagement`, which submitted all pods to the scheduler simultaneously. With `WaitForFirstConsumer`, the PVC was still unbound when all pods entered the scheduling queue. The first pod to be processed annotated the PVC with `volume.kubernetes.io/selected-node`, constraining subsequent pods to the same AZ. With one node per AZ (common in dev/test EKS clusters), all pods landed on the same node deterministically. This prevented Multi-Attach errors but caused **silent HA loss** — all replicas on a single node. The current parallel creation approach has the same scheduling characteristic.
 >
 > **Solutions:**
 > - **S3 (Recommended for production):** No shared PVC needed — the operator uses `EmptyDir` for scratch space and all pods connect to S3 independently.
@@ -369,7 +368,7 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | Feature | Details |
 |---|---|
 | **Direct pod creation and recreation** | Pods created per-index, auto-recreated on failure |
-| **Sequential provisioning** | Pods created one-at-a-time, waiting for readiness |
+| **Parallel pod creation** | All missing pods created in a single reconcile pass for fast bootstrap |
 | **Per-pod data PVCs** | Explicitly created, named by index |
 | **Shared backup PVC** | Per-shard-per-cell, skipped for S3 |
 | **Headless Service for DNS** | Pod hostname + subdomain for FQDN resolution |

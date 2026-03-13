@@ -140,28 +140,26 @@ func (r *ShardReconciler) createMissingResources(
 
 		// Create PVC if missing, or expand if storage.size increased
 		if _, exists := existingPVCs[pvcName]; !exists {
-			if !actionTaken {
-				desiredPVC, buildErr := BuildPoolDataPVC(
-					shard,
-					poolName,
-					cellName,
-					poolSpec,
-					int(i),
-					ShouldDeletePVCOnShardRemoval(shard, poolSpec),
-					r.Scheme,
-				)
-				if buildErr != nil {
-					return 0, false, fmt.Errorf("failed to build PVC %s: %w", pvcName, buildErr)
-				}
-				if createErr := r.Create(
-					ctx,
-					desiredPVC,
-				); createErr != nil &&
-					!errors.IsAlreadyExists(createErr) {
-					return 0, false, fmt.Errorf("failed to create PVC %s: %w", pvcName, createErr)
-				}
-				logger.Info("Created missing pool PVC", "pvc", pvcName)
+			desiredPVC, buildErr := BuildPoolDataPVC(
+				shard,
+				poolName,
+				cellName,
+				poolSpec,
+				int(i),
+				ShouldDeletePVCOnShardRemoval(shard, poolSpec),
+				r.Scheme,
+			)
+			if buildErr != nil {
+				return 0, false, fmt.Errorf("failed to build PVC %s: %w", pvcName, buildErr)
 			}
+			if createErr := r.Create(
+				ctx,
+				desiredPVC,
+			); createErr != nil &&
+				!errors.IsAlreadyExists(createErr) {
+				return 0, false, fmt.Errorf("failed to create PVC %s: %w", pvcName, createErr)
+			}
+			logger.Info("Created missing pool PVC", "pvc", pvcName)
 		} else {
 			if err := r.expandPVCIfNeeded(ctx, shard, existingPVCs[pvcName], poolSpec); err != nil {
 				return 0, false, err
@@ -171,36 +169,34 @@ func (r *ShardReconciler) createMissingResources(
 		// Create Pod if missing
 		pod, exists := existingPods[podName]
 		if !exists {
-			if !actionTaken {
-				desiredPod, buildErr := BuildPoolPod(
-					shard,
-					poolName,
-					cellName,
-					poolSpec,
-					int(i),
-					r.Scheme,
-				)
-				if buildErr != nil {
-					return 0, false, fmt.Errorf("failed to build pod %s: %w", podName, buildErr)
-				}
-				if createErr := r.Create(
-					ctx,
-					desiredPod,
-				); createErr != nil &&
-					!errors.IsAlreadyExists(createErr) {
-					return 0, false, fmt.Errorf("failed to create pod %s: %w", podName, createErr)
-				}
-				logger.Info("Created missing pool pod", "pod", podName)
-				r.Recorder.Eventf(
-					shard,
-					"Normal",
-					"PodCreated",
-					"Created pod %s for pool %s",
-					podName,
-					poolName,
-				)
-				actionTaken = true
+			desiredPod, buildErr := BuildPoolPod(
+				shard,
+				poolName,
+				cellName,
+				poolSpec,
+				int(i),
+				r.Scheme,
+			)
+			if buildErr != nil {
+				return 0, false, fmt.Errorf("failed to build pod %s: %w", podName, buildErr)
 			}
+			if createErr := r.Create(
+				ctx,
+				desiredPod,
+			); createErr != nil &&
+				!errors.IsAlreadyExists(createErr) {
+				return 0, false, fmt.Errorf("failed to create pod %s: %w", podName, createErr)
+			}
+			logger.Info("Created missing pool pod", "pod", podName)
+			r.Recorder.Eventf(
+				shard,
+				"Normal",
+				"PodCreated",
+				"Created pod %s for pool %s",
+				podName,
+				poolName,
+			)
+			actionTaken = true
 			continue
 		}
 
@@ -270,12 +266,10 @@ func (r *ShardReconciler) createMissingResources(
 			}
 		}
 
-		// Block subsequent creations or updates if this pod is not ready and not already pending an update.
-		// DRAINED pods are naturally not ready, so we allow them to proceed so they can be replaced.
-		role := resolvePodRole(shard, pod.Name)
-		if pod.DeletionTimestamp.IsZero() && !isPodReady(pod) && !isDrifted && role != "DRAINED" {
-			actionTaken = true
-		}
+		// Drift detection above already counted this pod. No creation blocking
+		// needed here — unready pods do not prevent creation of other replicas.
+		// Phases 2 (scale-down) and 3 (rolling updates) are still gated by
+		// actionTaken set during any creation or deletion above.
 	}
 
 	return driftedCount, actionTaken, nil
