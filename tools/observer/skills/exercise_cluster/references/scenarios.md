@@ -146,6 +146,54 @@ Each scenario describes a mutation to apply to a live MultigresCluster CR. For e
 
 **Teardown:** Patch back to original image.
 
+### add-tolerations
+**Tier:** standard | **Fast-path:** no
+**Tests:** Adding tolerations to pool spec propagates to pods via rolling update
+**Applicable fixtures:** `minimal-retain`, `minimal-delete`, `tolerations-affinity`
+
+**How to patch:**
+1. Read the current pool path for the first shard.
+2. Merge patch adding a toleration:
+   ```
+   kubectl patch multigrescluster <name> -n <ns> --type merge -p '{"spec":{"databases":[{"name":"postgres","tablegroups":[{"name":"default","shards":[{"name":"<shard>","spec":{"pools":{"<pool>":{"tolerations":[{"key":"test-key","operator":"Equal","value":"test-value","effect":"NoSchedule"}]}}}}]}]}]}}'
+   ```
+
+**What to observe:**
+- Rolling update triggers on all pool pods
+- After rollout, all pods have the toleration in `.spec.tolerations`
+- Observer spec-compliance check reports no toleration mismatches
+- Verify: `kubectl get pods -n <ns> -l multigres.com/pool=<pool> -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.tolerations}{"\n"}{end}'`
+
+**Success criteria:**
+- All pool pods have the expected toleration after rolling update
+- Cluster returns to Healthy phase
+- No pods stuck in Pending (toleration key doesn't match any real taint)
+
+**Teardown:** Patch tolerations back to `[]`.
+
+### add-affinity
+**Tier:** standard | **Fast-path:** no
+**Tests:** Adding user affinity propagates to pods via rolling update
+**Applicable fixtures:** `minimal-retain`, `minimal-delete`, `tolerations-affinity`
+
+**How to patch:**
+1. Merge patch adding podAntiAffinity (uses `preferredDuring` so pods still schedule on single-node kind):
+   ```
+   kubectl patch multigrescluster <name> -n <ns> --type merge -p '{"spec":{"databases":[{"name":"postgres","tablegroups":[{"name":"default","shards":[{"name":"<shard>","spec":{"pools":{"<pool>":{"affinity":{"podAntiAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":50,"podAffinityTerm":{"labelSelector":{"matchLabels":{"multigres.com/pool":"<pool>"}},"topologyKey":"kubernetes.io/hostname"}}]}}}}}}]}]}]}}'
+   ```
+
+**What to observe:**
+- Rolling update triggers on all pool pods
+- After rollout, all pods have affinity in `.spec.affinity`
+- Verify: `kubectl get pods -n <ns> -l multigres.com/pool=<pool> -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.affinity}{"\n"}{end}'`
+
+**Success criteria:**
+- All pool pods have the expected affinity after rolling update
+- Cluster returns to Healthy phase
+- No pods Pending (using `preferred` not `required`)
+
+**Teardown:** Patch affinity to null.
+
 ---
 
 ## Restart Scenarios
@@ -209,6 +257,30 @@ Each scenario describes a mutation to apply to a live MultigresCluster CR. For e
 
 **Teardown:** Not needed — cluster is back.
 
+### multiadmin-scale
+**Tier:** standard | **Fast-path:** yes
+**Tests:** MultiAdmin deployment replica scaling up and down
+**Applicable fixtures:** `overrides-complex`, `templated-full`, `multiadmin-lifecycle`
+
+**How to execute:**
+1. Read current multiadmin replica count: `kubectl get multigrescluster <name> -n <ns> -o jsonpath='{.spec.multiadmin.spec.replicas}'`
+2. **Mutation A** (scale up): Merge patch `spec.multiadmin.spec.replicas` to current+1.
+   ```
+   kubectl patch multigrescluster <name> -n <ns> --type merge -p '{"spec":{"multiadmin":{"spec":{"replicas":<current+1>}}}}'
+   ```
+3. Wait for multiadmin deployment to scale: `kubectl get deployment -n <ns> -l app.kubernetes.io/component=multiadmin`
+4. Verify all multiadmin pods are Running+Ready.
+5. **Mutation B** (scale down): Patch replicas back to original value.
+6. Verify deployment scales down cleanly.
+
+**Success criteria:**
+- Multiadmin deployment matches requested replica count after each mutation
+- All multiadmin pods Running+Ready
+- No operator error logs during scaling
+- Cluster remains Healthy throughout
+
+**Teardown:** Restore original replica count if not already done.
+
 ---
 
 ## Fixture-Specific Scenarios
@@ -229,16 +301,29 @@ Each scenario describes a mutation to apply to a live MultigresCluster CR. For e
 **Teardown:** Patch back to original.
 
 ### expand-pvc-storage
-**Tier:** standard
-**Tests:** PVC expansion request handling
+**Tier:** standard | **Fast-path:** yes
+**Tests:** PVC expansion from pool storage.size patch, with observer verification
+**Applicable fixtures:** `minimal-delete`, `minimal-retain`
 
 **How to patch:**
-1. Find the first pool's `storage.size`.
-2. JSON patch to a larger value (e.g., "100Gi").
+1. Find the first pool's `storage.size` (typically `5Gi`).
+2. Check StorageClass supports expansion: `kubectl get storageclass standard -o jsonpath='{.allowVolumeExpansion}'`
+3. JSON patch to a larger value:
+   ```
+   kubectl patch multigrescluster <name> -n <ns> --type merge -p '{"spec":{"databases":[{"name":"postgres","tablegroups":[{"name":"default","shards":[{"name":"<shard>","spec":{"pools":{"<pool>":{"storage":{"size":"10Gi"}}}}}]}]}]}}'
+   ```
 
 **What to observe:**
-- PVC resize requests are created
-- In kind, the `standard` StorageClass may not support expansion — an error event is infrastructure, not an operator bug. Check StorageClass `allowVolumeExpansion` first.
+- Webhook accepts the expansion (not a shrink)
+- PVC `.spec.resources.requests.storage` updates to the new size
+- Verify: `kubectl get pvc -n <ns> -l multigres.com/pool=<pool> -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.resources.requests.storage}{"\n"}{end}'`
+- Observer spec-compliance check confirms PVC size >= spec size
+- In kind, the `standard` StorageClass may not support expansion — an error event is infrastructure, not an operator bug
+
+**Success criteria:**
+- PVC spec is updated with the new size
+- Operator does not restart pods for a storage-only change
+- Observer spec-compliance reports no PVC size violations
 
 **Teardown:** Not reversible (Kubernetes blocks PVC shrinking).
 
@@ -766,6 +851,25 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 
 **Teardown:** None needed.
 
+### resource-limits-violated
+**Tier:** standard | **Fast-path:** yes
+**Tests:** Webhook rejects resource configs where limits < requests
+
+**How to execute:**
+1. **Mutation**: Attempt to set resource limits below requests:
+   ```
+   kubectl patch multigrescluster <name> -n <ns> --type merge -p '{"spec":{"databases":[{"name":"postgres","tablegroups":[{"name":"default","shards":[{"name":"<shard>","spec":{"pools":{"<pool>":{"postgres":{"resources":{"requests":{"cpu":"200m"},"limits":{"cpu":"100m"}}}}}}}]}]}]}}'
+   ```
+2. **Expected**: kubectl returns a validation error containing "limit" and ">= request".
+3. Verify cluster spec unchanged.
+
+**Success criteria:**
+- Webhook rejects the request with a meaningful error message
+- Cluster remains Healthy and unmodified
+- Works for cpu and memory, on postgres and multipooler containers
+
+**Teardown:** None needed.
+
 ## Drain Scenarios
 
 ### drain-abort-on-scale
@@ -792,6 +896,38 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 - Check for race conditions: drain deleting a pod while scale-up is creating one
 
 **Teardown:** If replicas don't match original, restore manually.
+
+### drain-primary-scale-down
+**Tier:** lifecycle | **Fast-path:** no
+**Tests:** Primary pod drain state machine when forced by scale-down
+**Applicable fixtures:** `minimal-retain`, `minimal-delete` (replicasPerCell >= 4)
+
+**How to execute:**
+1. Identify the primary pod:
+   ```
+   kubectl get pods -n <ns> -l multigres.com/shard=<shard>,multigres.com/pool=<pool> -o jsonpath='{range .items[*]}{.metadata.name}: {.metadata.annotations.role\.multigres\.com/postgres}{"\n"}{end}'
+   ```
+2. Record the primary pod name.
+3. **Mutation**: Scale down replicasPerCell by 1 to force at least one pod to drain. If the primary pod is selected for drain, the operator must perform a primary drain (failover + drain).
+4. **Watch** drain annotations progress through all 4 states:
+   - `requested` → `draining` → `acknowledged` → `ready-for-deletion`
+5. After drain completes, verify a new primary has been elected.
+6. Run full Stability Verification Protocol.
+
+**Success criteria:**
+- Drain annotations progress through all 4 states without getting stuck
+- If primary was drained, a new primary is elected
+- Final pod count matches the new replicasPerCell
+- All remaining pods Running+Ready
+- Observer drain-state check shows no persistent findings
+- Replication re-establishes with the new primary
+
+**What to observe:**
+- Watch for primary drain taking longer than replica drains (expected — involves failover)
+- Check that no two pods are in drain state simultaneously (operator drains one at a time)
+- Watch for replication lag spikes during primary failover
+
+**Teardown:** Scale replicasPerCell back to original value.
 
 ## Backup Scenarios
 

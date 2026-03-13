@@ -1,0 +1,16 @@
+apiVersion: multigres.com/v1alpha1
+kind: ShardTemplate
+metadata:
+  name: "default"
+  namespace: default
+spec:
+  multiorch:
+    replicas: 1
+    podLabels:
+      template-source: "namespace-default"
+  pools:
+    main-rw:
+      type: "readWrite"
+      replicasPerCell: 4
+      storage:
+        size: "5Gi"

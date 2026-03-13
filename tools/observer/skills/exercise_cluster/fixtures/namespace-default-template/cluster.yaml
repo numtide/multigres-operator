@@ -1,0 +1,26 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: ns-default-template
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  cells:
+    - name: "us-east-1"
+      spec:
+        multigateway:
+          replicas: 1
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              overrides:
+                pools:
+                  main-rw:
+                    cells: ["us-east-1"]
