@@ -25,7 +25,7 @@ Environment variables override corresponding flags for Kubernetes-native configu
 
 ## Observer Cycle
 
-The observer runs a ticker loop. Each tick executes all 10 check categories sequentially, tracks each check's duration, then emits a summary.
+The observer runs a ticker loop. Each tick executes all 11 check categories sequentially, tracks each check's duration, then emits a summary.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -41,6 +41,7 @@ The observer runs a ticker loop. Each tick executes all 10 check categories sequ
 │  track("events",              checkEvents)                   │
 │  track("topology",            checkTopology)                 │
 │  track("replication",         checkReplication)              │
+│  track("spec-compliance",     checkSpecCompliance)           │
 │                                                              │
 │  → Summary: {findings: N, errors: M, fatals: K}              │
 │  → history.Record(start, end, findings)                       │
@@ -254,7 +255,7 @@ Triggers an immediate on-demand check without waiting for the next ticker cycle.
 |-----------|----------|-------------|
 | `categories` | No | Comma-separated list of check categories to run. If omitted, all checks are run. |
 
-**Valid categories:** `pod-health`, `resource-validation`, `crd-status`, `drain-state`, `connectivity`, `logs`, `events`, `topology`, `replication`
+**Valid categories:** `pod-health`, `resource-validation`, `crd-status`, `drain-state`, `connectivity`, `logs`, `events`, `topology`, `replication`, `spec-compliance`
 
 ```bash
 # Run only pod-health and connectivity checks
