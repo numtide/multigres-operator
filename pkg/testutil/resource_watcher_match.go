@@ -162,9 +162,6 @@ func (rw *ResourceWatcher) waitForSingleMatch(
 		return fmt.Errorf("waiting for %s to match: %w", kind, err)
 	}
 
-	// Match found, return nil.
-	// TODO: We could return the matched object, but not necessary with the
-	// current logic.
 	return nil
 }
 
@@ -178,9 +175,6 @@ func (rw *ResourceWatcher) waitForSingleMatch(
 // - (*ResourceEvent, nil): when predicate returns true (match found)
 // - (nil, context.Canceled): when the subscription channel is closed (watcher stopped)
 // - (nil, context.DeadlineExceeded): when the deadline is reached
-//
-// TODO: Currently there is no use of the matched event, maybe it's someting we
-// can drop.
 func (rw *ResourceWatcher) waitForEvent(
 	subCh chan ResourceEvent,
 	deadline time.Time,

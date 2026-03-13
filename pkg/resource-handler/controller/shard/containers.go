@@ -254,9 +254,7 @@ func buildMultiPoolerSidecar(
 		image = string(shard.Spec.Images.MultiPooler)
 	}
 
-	// TODO: Add remaining command line arguments:
-	// --grpc-socket-file, --log-level, --log-output
-	// --pgbackrest-stanza
+	// TODO: Add --log-level flag support, configurable via the spec.
 
 	args := []string{
 		"multipooler", // Subcommand
@@ -372,8 +370,7 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		image = string(shard.Spec.Images.MultiOrch)
 	}
 
-	// TODO: Add remaining command line arguments:
-	// --log-level, --log-output
+	// TODO: Add --log-level flag support, configurable via the spec.
 
 	watchTarget := fmt.Sprintf("%s/%s/%s",
 		shard.Spec.DatabaseName, shard.Spec.TableGroupName, shard.Spec.ShardName)

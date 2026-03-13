@@ -129,7 +129,6 @@ func (r *ShardReconciler) updatePoolsStatus(
 	for poolName, poolSpec := range shard.Spec.Pools {
 		var poolDesired, poolReady int32
 
-		// TODO(#91): Pool.Cells may contain duplicates - add +listType=set validation at API level
 		for _, cell := range poolSpec.Cells {
 			cellName := string(cell)
 			cellsSet[cell] = true
