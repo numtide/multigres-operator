@@ -31,3 +31,16 @@ jobs:
     uses: ./.github/workflows/_reusable-test-coverage.yaml
     with:
       COVERAGE_THRESHOLD: 70
+
+  e2e:
+    name: "E2E (${{ matrix.test }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        test: [minimal, inline, templated, deletion]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_reusable-e2e.yaml
+    with:
+      test-spec: ${{ matrix.test }}
+      mode: shared
