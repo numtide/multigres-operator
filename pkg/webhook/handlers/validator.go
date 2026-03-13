@@ -267,7 +267,7 @@ func effectiveEtcdReplicas(cluster *multigresv1alpha1.MultigresCluster) int32 {
 
 // +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-coretemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=coretemplates,verbs=delete,versions=v1alpha1,name=vcoretemplate.kb.io,admissionReviewVersions=v1
 // +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-celltemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=celltemplates,verbs=delete,versions=v1alpha1,name=vcelltemplate.kb.io,admissionReviewVersions=v1
-// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-shardtemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=shardtemplates,verbs=delete,versions=v1alpha1,name=vshardtemplate.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-multigres-com-v1alpha1-shardtemplate,mutating=false,failurePolicy=fail,sideEffects=None,groups=multigres.com,resources=shardtemplates,verbs=create;update;delete,versions=v1alpha1,name=vshardtemplate.kb.io,admissionReviewVersions=v1
 
 // TemplateValidator validates Delete events to ensure templates are not in use.
 type TemplateValidator struct {
@@ -285,13 +285,31 @@ func (v *TemplateValidator) ValidateCreate(
 	ctx context.Context,
 	obj runtime.Object,
 ) (admission.Warnings, error) {
-	return nil, nil
+	return v.validatePoolNames(obj)
 }
 
 func (v *TemplateValidator) ValidateUpdate(
 	ctx context.Context,
 	oldObj, newObj runtime.Object,
 ) (admission.Warnings, error) {
+	return v.validatePoolNames(newObj)
+}
+
+// validatePoolNames validates pool name map keys for ShardTemplates.
+// CRD structural schema does not enforce validation markers on map keys.
+func (v *TemplateValidator) validatePoolNames(obj runtime.Object) (admission.Warnings, error) {
+	if v.Kind != "ShardTemplate" {
+		return nil, nil
+	}
+	tpl, ok := obj.(*multigresv1alpha1.ShardTemplate)
+	if !ok {
+		return nil, nil
+	}
+	for poolName := range tpl.Spec.Pools {
+		if err := resolver.ValidatePoolName(poolName); err != nil {
+			return nil, err
+		}
+	}
 	return nil, nil
 }
 

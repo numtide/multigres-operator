@@ -860,6 +860,101 @@ func TestTemplateValidator(t *testing.T) {
 	}
 }
 
+func TestTemplateValidator_ShardTemplatePoolNames(t *testing.T) {
+	t.Parallel()
+
+	scheme := setupScheme()
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	tests := map[string]struct {
+		obj     *multigresv1alpha1.ShardTemplate
+		wantErr string
+	}{
+		"Valid pool names": {
+			obj: &multigresv1alpha1.ShardTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "good-tpl"},
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"main-rw": {Type: "readWrite"},
+						"ro":      {Type: "readOnly"},
+					},
+				},
+			},
+		},
+		"Invalid pool name (uppercase)": {
+			obj: &multigresv1alpha1.ShardTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "bad-tpl"},
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"BAD_POOL": {Type: "readWrite"},
+					},
+				},
+			},
+			wantErr: "pool name 'BAD_POOL' is invalid",
+		},
+		"Invalid pool name (special chars)": {
+			obj: &multigresv1alpha1.ShardTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "bad-tpl"},
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"pool!@#": {Type: "readWrite"},
+					},
+				},
+			},
+			wantErr: "pool name 'pool!@#' is invalid",
+		},
+		"No pools (empty map)": {
+			obj: &multigresv1alpha1.ShardTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "empty-tpl"},
+			},
+		},
+		"Non-ShardTemplate skipped": {},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			validator := NewTemplateValidator(fakeClient, "ShardTemplate")
+
+			if name == "Non-ShardTemplate skipped" {
+				// CellTemplate with Kind != ShardTemplate should skip validation
+				v := NewTemplateValidator(fakeClient, "CellTemplate")
+				_, err := v.ValidateCreate(t.Context(), &multigresv1alpha1.CellTemplate{})
+				if err != nil {
+					t.Fatalf("Expected nil for non-ShardTemplate, got %v", err)
+				}
+				return
+			}
+
+			// Test both Create and Update
+			for _, method := range []string{"Create", "Update"} {
+				var err error
+				switch method {
+				case "Create":
+					_, err = validator.ValidateCreate(t.Context(), tc.obj)
+				case "Update":
+					_, err = validator.ValidateUpdate(t.Context(), tc.obj, tc.obj)
+				}
+
+				if tc.wantErr == "" {
+					if err != nil {
+						t.Errorf("%s: expected nil error, got %v", method, err)
+					}
+				} else {
+					if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+						t.Errorf(
+							"%s: expected error containing '%s', got %v",
+							method,
+							tc.wantErr,
+							err,
+						)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestChildResourceValidator(t *testing.T) {
 	t.Parallel()
 
