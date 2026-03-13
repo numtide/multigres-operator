@@ -1,6 +1,6 @@
 # Multigres Observer
 
-A read-only health validation tool for Multigres clusters. It runs inside the cluster alongside the operator and provides continuous monitoring across 10 check categories. The observer's core purpose is catching issues that are **invisible to both `kubectl` and the operator itself** — silent data-plane failures, replication anomalies, and state mismatches that no single component can detect on its own.
+A read-only health validation tool for Multigres clusters. It runs inside the cluster alongside the operator and provides continuous monitoring across 11 check categories. The observer's core purpose is catching issues that are **invisible to both `kubectl` and the operator itself** — silent data-plane failures, replication anomalies, and state mismatches that no single component can detect on its own.
 
 ## Why This Exists
 
@@ -357,7 +357,7 @@ When a pod that Kubernetes marks as Ready is showing errors, that is exactly the
 
 | Document | Description |
 |----------|-------------|
-| [Observer Reference](docs/observer.md) | Full reference for all 10 check categories with thresholds and SQL queries |
+| [Observer Reference](docs/observer.md) | Full reference for all 11 check categories with thresholds and SQL queries |
 | [Configuration Reference](docs/configuration.md) | Flags, environment variables, thresholds, RBAC |
 | [Architecture](docs/architecture.md) | Internal design, report format, JSON schemas, metrics, deployment model |
 | [Skills Overview](skills/README.md) | AI agent skills for proactive testing and reactive diagnosis |
@@ -373,7 +373,7 @@ tools/observer/
 ├── cmd/multigres-observer/
 │   └── main.go                    # Entrypoint, flags, metrics server
 ├── pkg/
-│   ├── observer/                  # 10 check categories + API
+│   ├── observer/                  # 11 check categories + API
 │   │   ├── observer.go            # Main loop, cycle orchestration, HTTP handlers
 │   │   ├── history.go             # Finding history ring buffer + classification
 │   │   ├── history_test.go        # Unit tests for history

@@ -4,6 +4,42 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.5.3] — 2026-03-13
+
+**Previous release:** v0.5.2 (2026-03-12)
+
+Accelerates cluster bootstrap with parallel pod and PVC creation, hardens admission validation for pool names and resource limits, restructures the E2E test suite for parallel execution, and pins multigres images to upstream fixes for startup deadlocks and connection recycling. The observer gains a spec-compliance check for drift detection between CRD intent and running pod state.
+
+**13 commits, 63 files changed, ~2,910 insertions.**
+
+### Bug Fixes
+
+- **Parallel pod and PVC creation:** Sequential pod creation required one reconcile loop per pod, making bootstrap time proportional to replica count. Removed `actionTaken` and unready-blocks-creation gates in `createMissingResources` so all missing pods and PVCs are created in a single pass. Deletion, drain, filesystem-resize, and rolling-update operations remain strictly sequential and health-gated. Reduces N-replica bootstrap from N reconcile loops to 1.
+- **Pool name map key validation:** Kubernetes CRD structural schema does not enforce kubebuilder validation markers on map keys, allowing invalid pool names like `INVALID_NAME!` through the API server. These invalid names then caused PVC creation failures. Added `ValidatePoolName()` in `pkg/resolver/validation.go` with DNS label regex and 25-char length check, called after `ResolveShard` in the webhook validator. Extended `ShardTemplate` webhook to validate pool names on create, update, and delete.
+- **Resource limit validation:** The webhook accepted resource specs where limits < requests, causing pods to fail at creation and clusters to get stuck in Progressing. Added `validateResourceRequirements` helper checking limits ≥ requests for all component resource specs (etcd, multiadmin, multiadmin-web, multigateway, multiorch, pool postgres, pool multipooler).
+
+### Dependencies
+
+- Upgrade multigres image `sha-f02e476` → `sha-bb174f9` and pgctld image `sha-f02e476` → `sha-9b51b0f`. Upstream fixes: HTTP server startup deadlock (server now starts before run hooks), connection recycle bugfix (`RESET ROLE`/`SESSION AUTHORIZATION` before `RESET ALL`), and `POSTGRES_DB` env var support.
+
+### Refactoring
+
+- **Stale TODO cleanup:** Removed resolved or obsolete TODO comments from RBAC markers in cell/shard/tablegroup/toposerver types, upstream dependency note in `main.go`, empty `main_test.go` placeholder, duplicate-cell TODOs resolved by webhook validation, and stale comments in `resource_watcher_match.go`. Consolidated multipooler/multiorch container TODOs to a single `--log-level` item each. Added explanatory comment on `IsPrimaryNotReady` optimistic default in `drain.go`.
+
+### Testing
+
+- **E2E test suite restructure:** Split monolithic E2E tests into dedicated and shared test directories (`test/e2e/dedicated/`, `test/e2e/shared/`) with per-scenario `main_test.go` files for parallel execution. Extracted shared helpers into `test/e2e/framework/` package (cluster management, helpers, loader). Updated CI workflows and Makefile targets for the new structure.
+- **CI cache fix:** Fixed invalid cache name in the reusable test-coverage workflow causing cache misses.
+
+### Observer
+
+- **Spec-compliance check:** New `spec_compliance.go` with 4 sub-checks — pod resources, tolerations, images, and PVC sizes — compared against fully resolved Shard specs. Detects drift between CRD intent and actual pod state after template merging.
+- **Multi-cell primary count fix:** New `countPrimariesForPool` helper correctly counts primaries across all cells when `len(poolSpec.Cells) > 1`, eliminating false positive findings for multi-cell clusters.
+- **External etcd endpoint discovery:** `findEtcdAddress` now checks `GlobalTopoServer.External.Endpoints` before managed etcd lookup. `probeTopoServerServices` probes external etcd endpoints.
+- **New exerciser fixtures:** Added `multiadmin-web`, `tolerations-affinity`, `multiadmin-lifecycle`, and `namespace-default-template` fixtures with 9 new verification scenarios (resource-limits-violated, add-tolerations, add-affinity, drain-primary-scale-down, multiadmin-scale, expand-pvc-storage, multiadminweb, pdb, durability-policy).
+
+---
+
 ## [v0.5.2] — 2026-03-12
 
 **Previous release:** v0.5.1 (2026-03-11)

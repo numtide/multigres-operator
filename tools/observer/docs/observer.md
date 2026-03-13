@@ -1,6 +1,6 @@
 # Observer Reference
 
-The observer runs a continuous loop (default interval: 10 seconds) performing 10 categories of health checks against a Multigres cluster. Every finding is emitted as a structured JSON log line and recorded as a Prometheus metric. A complete diagnostic snapshot is available via `GET /api/status` (see `architecture.md` for the JSON schema).
+The observer runs a continuous loop (default interval: 10 seconds) performing 11 categories of health checks against a Multigres cluster. Every finding is emitted as a structured JSON log line and recorded as a Prometheus metric. A complete diagnostic snapshot is available via `GET /api/status` (see `architecture.md` for the JSON schema).
 
 The observer is **read-only** — it never modifies any resource. It runs in the `multigres-operator` namespace and watches all namespaces for Multigres CRDs by default.
 
@@ -312,6 +312,27 @@ Validates etcd topology state against Kubernetes CRDs. **Optional** — silently
 | Drained poolers | Pods in `ready-for-deletion` still registered in etcd | error |
 
 **When etcd is unreachable:** A single `warn` is emitted: `"topology validation skipped: etcd unreachable"`. No checks run. The observer never crashes due to etcd connectivity issues.
+
+---
+
+### 10. Spec Compliance (`spec-compliance`)
+
+**File:** `observer/spec_compliance.go`
+
+Detects drift between the resolved Shard CRD specification and the actual state of running pods and PVCs. This catches configuration changes that were applied to the CRD but haven't yet propagated to the running workload (e.g., during a pending rolling update) or cases where the actual state has drifted from intent.
+
+| Sub-check | What it detects | Severity |
+|-----------|----------------|----------|
+| Pod resources | Container CPU/memory requests/limits don't match resolved pool spec | warn |
+| Pod tolerations | Pod tolerations don't match resolved pool spec | warn |
+| Pod images | Container images don't match resolved pool spec (pgctld, multipooler) | warn |
+| PVC sizes | PVC storage capacity doesn't match resolved pool spec | warn |
+
+**How it works:**
+- Resolves each Shard's pool spec using the same resolver logic as the operator
+- Compares running pod containers against the resolved spec for each pool
+- Compares PVC storage requests against the resolved spec
+- All findings are `warn` severity because drift may be expected temporarily during rolling updates
 
 ---
 

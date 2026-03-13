@@ -246,8 +246,8 @@ blocking on unresponsive pods.
 
 ### Scale up and down
 
-- **Scale up**: New pool pods created sequentially with PVCs and registered in
-  topology
+- **Scale up**: New pool pods and PVCs created in parallel within a single
+  reconcile pass and registered in topology
 - **Scale down**: Excess pods routed through the drain state machine before
   deletion. Concurrent drain prevention via `inProgress` flag. PVC deleted if
   `WhenScaled=Delete`
