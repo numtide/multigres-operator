@@ -1998,7 +1998,7 @@ func TestCreateMissingResources(t *testing.T) {
 		},
 	)
 
-	t.Run("not-ready non-drifted pod blocks subsequent actions", func(t *testing.T) {
+	t.Run("not-ready pod does not block creation of other replicas", func(t *testing.T) {
 		shard := baseShard.DeepCopy()
 		podName0 := BuildPoolPodName(shard, poolName, cellName, 0)
 		podName1 := BuildPoolPodName(shard, poolName, cellName, 1)
@@ -2047,19 +2047,67 @@ func TestCreateMissingResources(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !actionTaken {
-			t.Error("expected actionTaken to be set (not-ready pod blocks subsequent actions)")
+			t.Error("expected actionTaken for pod creation")
 		}
 
-		// Pod 1 should NOT have been created because pod 0 is not ready
-		err = c.Get(
+		// Pod 1 SHOULD be created even though pod 0 is not ready
+		if err := c.Get(
 			context.Background(),
 			types.NamespacedName{Name: podName1, Namespace: "default"},
 			&corev1.Pod{},
-		)
-		if !errors.IsNotFound(err) {
-			t.Error("pod-1 should NOT have been created since pod-0 is not ready")
+		); err != nil {
+			t.Errorf("pod-1 should have been created despite pod-0 being not ready: %v", err)
 		}
-		_ = pvcName1
+		if err := c.Get(
+			context.Background(),
+			types.NamespacedName{Name: pvcName1, Namespace: "default"},
+			&corev1.PersistentVolumeClaim{},
+		); err != nil {
+			t.Errorf("pvc-1 should have been created despite pod-0 being not ready: %v", err)
+		}
+	})
+
+	t.Run("all missing pods and PVCs created in one pass", func(t *testing.T) {
+		shard := baseShard.DeepCopy()
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard).Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		_, actionTaken, err := r.createMissingResources(
+			context.Background(),
+			shard,
+			poolName,
+			cellName,
+			poolSpec,
+			map[string]*corev1.Pod{},
+			map[string]*corev1.PersistentVolumeClaim{},
+			3,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !actionTaken {
+			t.Error("expected actionTaken for pod creation")
+		}
+
+		for i := 0; i < 3; i++ {
+			podName := BuildPoolPodName(shard, poolName, cellName, i)
+			pvcName := BuildPoolDataPVCName(shard, poolName, cellName, i)
+			if err := c.Get(
+				context.Background(),
+				types.NamespacedName{Name: podName, Namespace: "default"},
+				&corev1.Pod{},
+			); err != nil {
+				t.Errorf("pod-%d should exist: %v", i, err)
+			}
+			if err := c.Get(
+				context.Background(),
+				types.NamespacedName{Name: pvcName, Namespace: "default"},
+				&corev1.PersistentVolumeClaim{},
+			); err != nil {
+				t.Errorf("pvc-%d should exist: %v", i, err)
+			}
+		}
 	})
 
 	t.Run("actionTaken blocks terminal pod deletion", func(t *testing.T) {
