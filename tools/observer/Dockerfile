@@ -24,7 +24,9 @@ RUN CGO_ENABLED=0 \
 	-a -o multigres-observer \
 	cmd/multigres-observer/main.go
 
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.23
+
+RUN apk add --no-cache curl
 
 LABEL org.opencontainers.image.source="https://github.com/numtide/multigres-operator"
 WORKDIR /

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -100,6 +101,7 @@ func (o *Observer) probeMultiOrchServices(ctx context.Context) {
 }
 
 func (o *Observer) probeTopoServerServices(ctx context.Context) {
+	// Probe managed etcd services.
 	var svcs corev1.ServiceList
 	if err := o.client.List(ctx, &svcs,
 		o.listOpts(client.MatchingLabels{
@@ -114,6 +116,34 @@ func (o *Observer) probeTopoServerServices(ctx context.Context) {
 		svc := &svcs.Items[i]
 		addr := fmt.Sprintf("%s.%s.svc", svc.Name, svc.Namespace)
 		o.probeHTTP(ctx, addr, common.PortEtcdClient, "/health", "etcd-health", svc.Name)
+	}
+
+	// Probe external etcd endpoints from clusters using external topo servers.
+	var clusters multigresv1alpha1.MultigresClusterList
+	if err := o.client.List(ctx, &clusters, o.listOpts()...); err != nil {
+		return
+	}
+	for i := range clusters.Items {
+		cluster := &clusters.Items[i]
+		if cluster.Spec.GlobalTopoServer == nil ||
+			cluster.Spec.GlobalTopoServer.External == nil {
+			continue
+		}
+		for _, ep := range cluster.Spec.GlobalTopoServer.External.Endpoints {
+			parsed, err := url.Parse(string(ep))
+			if err != nil {
+				continue
+			}
+			host := parsed.Hostname()
+			port := common.PortEtcdClient
+			if parsed.Port() != "" {
+				if p, err := net.LookupPort("tcp", parsed.Port()); err == nil {
+					port = p
+				}
+			}
+			component := fmt.Sprintf("external-etcd/%s/%s", cluster.Name, host)
+			o.probeHTTP(ctx, host, port, "/health", "etcd-health", component)
+		}
 	}
 }
 

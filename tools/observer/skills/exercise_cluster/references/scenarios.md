@@ -700,7 +700,7 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
    ```
 3. **Expected**: kubectl returns an error containing "storage shrink" or similar rejection.
 4. Verify cluster spec is unchanged: `kubectl get multigrescluster <name> -n <ns> -o jsonpath='{.spec.shards[0].pools[0].storage.size}'`
-5. Run targeted observer check: `curl http://localhost:9090/api/check?categories=crd-status`
+5. Run targeted observer check: `observer '/api/check?categories=crd-status'`
 
 **Success criteria:**
 - Webhook rejects the request (HTTP 422 or admission denied)
@@ -811,7 +811,7 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
    ```
    kubectl get shard -n <ns> -o jsonpath='{range .items[*]}{.metadata.name}: {range .status.conditions[?(@.type=="BackupHealthy")]}{.status} {.reason}{end}{"\n"}{end}'
    ```
-5. Run observer backup staleness check: `curl http://localhost:9090/api/check?categories=crd-status`
+5. Run observer backup staleness check: `observer '/api/check?categories=crd-status'`
 
 **Success criteria:**
 - `lastBackupTime` is populated (not nil) after initial backup completes
@@ -920,7 +920,7 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
    - **Do NOT use `kubectl scale`** — the operator reconciles it back immediately.
 3. Wait 60s for the system to detect the failure.
 4. **Observe**:
-   - Observer topology check should report errors: `curl http://localhost:9090/api/check?categories=topology`
+   - Observer topology check should report errors: `observer '/api/check?categories=topology'`
    - Shard/cluster phase should transition to Degraded
    - Data plane (pool pods) should continue serving reads
 5. **Recovery**: Remove the NetworkPolicy (or stop the deletion loop):
@@ -968,7 +968,7 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 3. Wait 60-90s for the rolling update to start and the new pod to fail.
 4. **Observe**:
    - New pod should enter `ImagePullBackOff` or `ErrImagePull` state
-   - Observer pod-health check should detect the failing pod: `curl http://localhost:9090/api/check?categories=pod-health`
+   - Observer pod-health check should detect the failing pod: `observer '/api/check?categories=pod-health'`
    - Shard phase should transition to Degraded
 5. **Recovery**: Restore the valid image:
    ```bash

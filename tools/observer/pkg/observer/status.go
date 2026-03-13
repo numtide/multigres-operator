@@ -334,15 +334,14 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 	}
 
 	for poolName, poolSpec := range shard.Spec.Pools {
-		for _, cellName := range poolSpec.Cells {
-			violationKey := fmt.Sprintf("%s/%s-%s", comp, poolName, cellName)
-			primaryCount := countPrimariesForPoolCell(
+		if len(poolSpec.Cells) > 1 {
+			// Multi-cell: expect exactly 1 primary across ALL cells for this pool.
+			violationKey := fmt.Sprintf("%s/%s-global", comp, poolName)
+			primaryCount := countPrimariesForPool(
 				shard.Status.PodRoles,
 				podLabels,
 				string(poolName),
-				string(cellName),
 			)
-
 			if primaryCount != 1 {
 				since, tracked := o.primaryViolationSince[violationKey]
 				if !tracked {
@@ -355,20 +354,58 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 						Check:     "crd-status",
 						Component: comp,
 						Message: fmt.Sprintf(
-							"Pool %s cell %s has %d primaries (expected 1)",
+							"Pool %s has %d primaries across all cells (expected 1)",
 							poolName,
-							cellName,
 							primaryCount,
 						),
 						Details: map[string]any{
 							"pool":         string(poolName),
-							"cell":         string(cellName),
 							"primaryCount": primaryCount,
+							"multiCell":    true,
 						},
 					})
 				}
 			} else {
 				delete(o.primaryViolationSince, violationKey)
+			}
+		} else {
+			// Single-cell: expect exactly 1 primary per cell.
+			for _, cellName := range poolSpec.Cells {
+				violationKey := fmt.Sprintf("%s/%s-%s", comp, poolName, cellName)
+				primaryCount := countPrimariesForPoolCell(
+					shard.Status.PodRoles,
+					podLabels,
+					string(poolName),
+					string(cellName),
+				)
+
+				if primaryCount != 1 {
+					since, tracked := o.primaryViolationSince[violationKey]
+					if !tracked {
+						o.primaryViolationSince[violationKey] = now
+						continue
+					}
+					if now.Sub(since) > common.PrimaryGracePeriod {
+						o.reporter.Report(report.Finding{
+							Severity:  report.SeverityError,
+							Check:     "crd-status",
+							Component: comp,
+							Message: fmt.Sprintf(
+								"Pool %s cell %s has %d primaries (expected 1)",
+								poolName,
+								cellName,
+								primaryCount,
+							),
+							Details: map[string]any{
+								"pool":         string(poolName),
+								"cell":         string(cellName),
+								"primaryCount": primaryCount,
+							},
+						})
+					}
+				} else {
+					delete(o.primaryViolationSince, violationKey)
+				}
 			}
 		}
 	}
@@ -378,6 +415,30 @@ func (o *Observer) checkShardPodRoles(ctx context.Context, shard *multigresv1alp
 type podPoolCell struct {
 	pool string
 	cell string
+}
+
+// countPrimariesForPool counts pods with a "primary" role across all cells
+// for the specified pool. Used for multi-cell durability policies where
+// exactly one primary exists across all cells.
+func countPrimariesForPool(
+	podRoles map[string]string,
+	podLabels map[string]podPoolCell,
+	poolName string,
+) int {
+	count := 0
+	for podName, role := range podRoles {
+		if role != "primary" && role != "PRIMARY" {
+			continue
+		}
+		info, ok := podLabels[podName]
+		if !ok {
+			continue
+		}
+		if info.pool == poolName {
+			count++
+		}
+	}
+	return count
 }
 
 // countPrimariesForPoolCell counts pods with a "primary" role that belong to

@@ -29,7 +29,7 @@ func (o *Observer) checkTopology(ctx context.Context) {
 	for i := range clusters.Items {
 		cluster := &clusters.Items[i]
 
-		etcdAddr := o.findEtcdAddress(ctx, cluster.Name)
+		etcdAddr := o.findEtcdAddress(ctx, cluster)
 		if etcdAddr == "" {
 			o.reporter.Report(report.Finding{
 				Severity:  report.SeverityWarn,
@@ -66,36 +66,51 @@ func (o *Observer) checkTopology(ctx context.Context) {
 	}
 }
 
-func (o *Observer) findEtcdAddress(ctx context.Context, clusterName string) string {
+func (o *Observer) findEtcdAddress(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) string {
+	// Check external etcd endpoints first.
+	if cluster.Spec.GlobalTopoServer != nil &&
+		cluster.Spec.GlobalTopoServer.External != nil &&
+		len(cluster.Spec.GlobalTopoServer.External.Endpoints) > 0 {
+		for _, ep := range cluster.Spec.GlobalTopoServer.External.Endpoints {
+			addr := strings.TrimRight(string(ep), "/")
+			if o.checkEtcdHealth(addr) {
+				return addr
+			}
+		}
+		return ""
+	}
+
+	// Fall through to managed etcd service lookup.
 	var svcs corev1.ServiceList
 	if err := o.client.List(ctx, &svcs,
 		o.listOpts(client.MatchingLabels{
 			common.LabelAppManagedBy:     common.ManagedByMultigres,
 			common.LabelAppComponent:     common.ComponentGlobalTopo,
-			common.LabelMultigresCluster: clusterName,
+			common.LabelMultigresCluster: cluster.Name,
 		})...,
 	); err != nil || len(svcs.Items) == 0 {
 		return ""
 	}
 
-	// Use the first topo service found.
 	svc := &svcs.Items[0]
 	addr := fmt.Sprintf("http://%s.%s.svc:%d", svc.Name, svc.Namespace, common.PortEtcdClient)
+	if o.checkEtcdHealth(addr) {
+		return addr
+	}
+	return ""
+}
 
-	// Verify connectivity with a health check.
+// checkEtcdHealth verifies etcd is reachable at the given address.
+func (o *Observer) checkEtcdHealth(addr string) bool {
 	resp, err := o.httpClient.Get(addr + "/health")
 	if err != nil {
-		return ""
+		return false
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	return addr
+	return resp.StatusCode == http.StatusOK
 }
 
 // etcdRangeResponse is the minimal JSON response from the etcd v3 gRPC-gateway range API.
