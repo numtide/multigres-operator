@@ -129,6 +129,11 @@ func WithCIResources(spec *multigresv1alpha1.MultigresClusterSpec) {
 			}
 			for k := range spec.Databases[i].TableGroups[j].Shards {
 				shard := &spec.Databases[i].TableGroups[j].Shards[k]
+				// Shards with overrides get resources from their template —
+				// setting Spec here would violate the "spec XOR overrides" rule.
+				if shard.Overrides != nil {
+					continue
+				}
 				if shard.Spec == nil {
 					shard.Spec = &multigresv1alpha1.ShardInlineSpec{}
 				}
