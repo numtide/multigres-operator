@@ -7946,6 +7946,57 @@ spec:
                     minLength: 1
                     type: string
                 type: object
+              logLevels:
+                description: |-
+                  LogLevels configures the --log-level flag for each multigres data-plane component.
+                  All fields default to "info" if not specified.
+                properties:
+                  multiadmin:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  multigateway:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  multiorch:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  multipooler:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  pgctld:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                type: object
               multiadmin:
                 description: MultiAdmin defines the configuration for the MultiAdmin
                   component.

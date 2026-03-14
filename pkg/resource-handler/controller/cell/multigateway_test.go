@@ -41,6 +41,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			scheme: scheme,
@@ -97,6 +104,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone1",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
@@ -166,6 +174,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Replicas: ptr.To(int32(5)),
 					},
@@ -225,6 +240,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone2",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
@@ -297,6 +313,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			scheme: scheme,
@@ -353,6 +376,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone3",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
@@ -421,6 +445,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						Address:        "global-topo:2379",
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
+					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
 					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Affinity: &corev1.Affinity{
@@ -497,6 +528,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone4",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
@@ -583,6 +615,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -651,6 +690,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone5",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{
 										Requests: corev1.ResourceList{
@@ -729,6 +769,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						PodLabels: map[string]string{
 							"custom-label":   "custom-value",
@@ -803,6 +850,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone-labels",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
@@ -872,6 +920,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 					MultiGateway: multigresv1alpha1.StatelessSpec{
 						PodLabels: map[string]string{
 							"app.kubernetes.io/component": "hacked",
@@ -936,6 +991,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone-override",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
@@ -1006,6 +1062,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			scheme: scheme,
@@ -1064,6 +1127,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone-topo",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{
@@ -1137,6 +1201,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			scheme: scheme,
@@ -1195,6 +1266,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "region-cell",
+										"--log-level", "info",
 									},
 									Resources: corev1.ResourceRequirements{},
 									Ports: []corev1.ContainerPort{

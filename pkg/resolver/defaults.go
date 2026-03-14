@@ -66,6 +66,9 @@ const (
 	DefaultMultiOrchImage     = multigresv1alpha1.DefaultMultiOrchImage
 	DefaultMultiPoolerImage   = multigresv1alpha1.DefaultMultiPoolerImage
 	DefaultMultiGatewayImage  = multigresv1alpha1.DefaultMultiGatewayImage
+
+	// DefaultLogLevel is the default log level for all multigres data-plane components.
+	DefaultLogLevel = multigresv1alpha1.LogLevel("info")
 )
 
 // DefaultResourcesAdmin returns the default resource requests and limits for the MultiAdmin deployment.

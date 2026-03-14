@@ -260,6 +260,57 @@ spec:
                 - multipooler
                 - postgres
                 type: object
+              logLevels:
+                description: |-
+                  LogLevels is the resolved log level configuration for shard-level components.
+                  Inherited from MultigresCluster.Spec.LogLevels.
+                properties:
+                  multiadmin:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  multigateway:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  multiorch:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  multipooler:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                  pgctld:
+                    description: LogLevel is a validated log level string for multigres
+                      components.
+                    enum:
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                type: object
               observability:
                 description: |-
                   Observability configures OpenTelemetry for shard-level data-plane components.

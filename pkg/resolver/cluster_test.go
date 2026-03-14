@@ -61,6 +61,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Enabled: ptr.To(true),
 					},
 					DurabilityPolicy: DefaultDurabilityPolicy,
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       DefaultLogLevel,
+						Multipooler:  DefaultLogLevel,
+						Multiorch:    DefaultLogLevel,
+						Multiadmin:   DefaultLogLevel,
+						Multigateway: DefaultLogLevel,
+					},
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -120,6 +127,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Enabled: ptr.To(true),
 					},
 					DurabilityPolicy: DefaultDurabilityPolicy,
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       DefaultLogLevel,
+						Multipooler:  DefaultLogLevel,
+						Multiorch:    DefaultLogLevel,
+						Multiadmin:   DefaultLogLevel,
+						Multigateway: DefaultLogLevel,
+					},
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -187,6 +201,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Enabled: ptr.To(true),
 					},
 					DurabilityPolicy: DefaultDurabilityPolicy,
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       DefaultLogLevel,
+						Multipooler:  DefaultLogLevel,
+						Multiorch:    DefaultLogLevel,
+						Multiadmin:   DefaultLogLevel,
+						Multigateway: DefaultLogLevel,
+					},
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -267,6 +288,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Enabled: ptr.To(true),
 					},
 					DurabilityPolicy: DefaultDurabilityPolicy,
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       DefaultLogLevel,
+						Multipooler:  DefaultLogLevel,
+						Multiorch:    DefaultLogLevel,
+						Multiadmin:   DefaultLogLevel,
+						Multigateway: DefaultLogLevel,
+					},
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -342,6 +370,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Enabled: ptr.To(true),
 					},
 					DurabilityPolicy: DefaultDurabilityPolicy,
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       DefaultLogLevel,
+						Multipooler:  DefaultLogLevel,
+						Multiorch:    DefaultLogLevel,
+						Multiadmin:   DefaultLogLevel,
+						Multigateway: DefaultLogLevel,
+					},
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
@@ -391,6 +426,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Enabled: ptr.To(false),
 					},
 					DurabilityPolicy: "MULTI_CELL_ANY_2",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       DefaultLogLevel,
+						Multipooler:  DefaultLogLevel,
+						Multiorch:    DefaultLogLevel,
+						Multiadmin:   DefaultLogLevel,
+						Multigateway: DefaultLogLevel,
+					},
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
@@ -438,6 +480,13 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 						Enabled: ptr.To(false),
 					},
 					DurabilityPolicy: "MULTI_CELL_ANY_2",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       DefaultLogLevel,
+						Multipooler:  DefaultLogLevel,
+						Multiorch:    DefaultLogLevel,
+						Multiadmin:   DefaultLogLevel,
+						Multigateway: DefaultLogLevel,
+					},
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 						WhenDeleted: multigresv1alpha1.DeletePVCRetentionPolicy,
 						WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,

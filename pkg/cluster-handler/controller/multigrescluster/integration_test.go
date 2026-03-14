@@ -291,6 +291,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--service-map=grpc-multiadmin",
 											"--pprof-http=true",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											{
@@ -464,6 +465,13 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							RegisterCell: true,
 							PrunePoolers: true,
 						},
+						LogLevels: multigresv1alpha1.ComponentLogLevels{
+							Pgctld:       "info",
+							Multipooler:  "info",
+							Multiorch:    "info",
+							Multiadmin:   "info",
+							Multigateway: "info",
+						},
 					},
 				},
 				// 4. TableGroup
@@ -478,7 +486,14 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
 							"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
 						},
-						DatabaseName:   "postgres",
+						DatabaseName: "postgres",
+						LogLevels: multigresv1alpha1.ComponentLogLevels{
+							Pgctld:       "info",
+							Multipooler:  "info",
+							Multiorch:    "info",
+							Multiadmin:   "info",
+							Multigateway: "info",
+						},
 						TableGroupName: "default",
 						IsDefault:      true,
 						Images: multigresv1alpha1.ShardImages{
@@ -613,6 +628,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--service-map=grpc-multiadmin",
 											"--pprof-http=true",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											{
@@ -784,6 +800,13 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							RegisterCell: true,
 							PrunePoolers: true,
 						},
+						LogLevels: multigresv1alpha1.ComponentLogLevels{
+							Pgctld:       "info",
+							Multipooler:  "info",
+							Multiorch:    "info",
+							Multiadmin:   "info",
+							Multigateway: "info",
+						},
 					},
 				},
 				// 4. Injected TableGroup
@@ -798,7 +821,14 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
 							"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
 						},
-						DatabaseName:   "postgres",
+						DatabaseName: "postgres",
+						LogLevels: multigresv1alpha1.ComponentLogLevels{
+							Pgctld:       "info",
+							Multipooler:  "info",
+							Multiorch:    "info",
+							Multiadmin:   "info",
+							Multigateway: "info",
+						},
 						TableGroupName: "default",
 						IsDefault:      true,
 						Images: multigresv1alpha1.ShardImages{
@@ -931,6 +961,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--service-map=grpc-multiadmin",
 											"--pprof-http=true",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											{
@@ -1102,6 +1133,13 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 							RegisterCell: true,
 							PrunePoolers: true,
 						},
+						LogLevels: multigresv1alpha1.ComponentLogLevels{
+							Pgctld:       "info",
+							Multipooler:  "info",
+							Multiorch:    "info",
+							Multiadmin:   "info",
+							Multigateway: "info",
+						},
 					},
 				},
 				// 4. Injected TableGroup
@@ -1116,7 +1154,14 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
 							"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
 						},
-						DatabaseName:   "postgres",
+						DatabaseName: "postgres",
+						LogLevels: multigresv1alpha1.ComponentLogLevels{
+							Pgctld:       "info",
+							Multipooler:  "info",
+							Multiorch:    "info",
+							Multiadmin:   "info",
+							Multigateway: "info",
+						},
 						TableGroupName: "default",
 						IsDefault:      true,
 						Images: multigresv1alpha1.ShardImages{

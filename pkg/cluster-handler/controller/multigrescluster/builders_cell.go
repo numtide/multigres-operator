@@ -49,6 +49,7 @@ func BuildCell(
 				PrunePoolers: isPruningEnabled(cluster),
 			},
 			Observability: cluster.Spec.Observability,
+			LogLevels:     cluster.Spec.LogLevels,
 		},
 	}
 

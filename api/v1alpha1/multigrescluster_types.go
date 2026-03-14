@@ -52,6 +52,11 @@ type MultigresClusterSpec struct {
 	// +optional
 	Images ClusterImages `json:"images,omitempty"`
 
+	// LogLevels configures the --log-level flag for each multigres data-plane component.
+	// All fields default to "info" if not specified.
+	// +optional
+	LogLevels ComponentLogLevels `json:"logLevels,omitempty"`
+
 	// TemplateDefaults defines the default templates to use for components
 	// that do not have explicit specs.
 	// +optional

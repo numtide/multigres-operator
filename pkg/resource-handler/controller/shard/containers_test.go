@@ -34,6 +34,13 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{
@@ -61,6 +68,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
 					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
+					"--log-level=info",
 				},
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
@@ -132,6 +140,13 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					Images: multigresv1alpha1.ShardImages{
 						MultiPooler: "custom/multipooler:v1.0.0",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{
@@ -159,6 +174,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
 					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
+					"--log-level=info",
 				},
 				Ports:         buildMultiPoolerContainerPorts(),
 				Resources:     corev1.ResourceRequirements{},
@@ -227,6 +243,13 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			poolSpec: multigresv1alpha1.PoolSpec{
@@ -266,6 +289,7 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
 					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
+					"--log-level=info",
 				},
 				Ports: buildMultiPoolerContainerPorts(),
 				Resources: corev1.ResourceRequirements{
@@ -367,6 +391,13 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 						RootPath:       "/multigres/global",
 						Implementation: "etcd",
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			},
 			cellName: "zone1",
@@ -384,6 +415,7 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 					"--cluster-metadata-refresh-interval=500ms",
 					"--pooler-health-check-interval=500ms",
 					"--recovery-cycle-interval=500ms",
+					"--log-level=info",
 				},
 				Ports:     buildMultiOrchContainerPorts(),
 				Resources: corev1.ResourceRequirements{},

@@ -75,6 +75,11 @@ type CellSpec struct {
 	// Inherited from MultigresCluster.Spec.Observability by the resolver.
 	// +optional
 	Observability *ObservabilityConfig `json:"observability,omitempty"`
+
+	// LogLevels is the resolved log level configuration for cell-level components.
+	// Inherited from MultigresCluster.Spec.LogLevels.
+	// +optional
+	LogLevels ComponentLogLevels `json:"logLevels,omitempty"`
 }
 
 // CellImages defines the images required for a Cell.

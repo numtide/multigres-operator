@@ -55,6 +55,7 @@ func BuildShard(
 				tg.Spec.PVCDeletionPolicy,
 			),
 			Observability:      tg.Spec.Observability,
+			LogLevels:          tg.Spec.LogLevels,
 			Backup:             shardSpec.Backup,
 			TopologyPruning:    tg.Spec.TopologyPruning,
 			DurabilityPolicy:   tg.Spec.DurabilityPolicy,

@@ -50,6 +50,23 @@ func (r *Resolver) PopulateClusterDefaults(
 		cluster.Spec.DurabilityPolicy = DefaultDurabilityPolicy
 	}
 
+	// Default Log Levels
+	if cluster.Spec.LogLevels.Pgctld == "" {
+		cluster.Spec.LogLevels.Pgctld = DefaultLogLevel
+	}
+	if cluster.Spec.LogLevels.Multipooler == "" {
+		cluster.Spec.LogLevels.Multipooler = DefaultLogLevel
+	}
+	if cluster.Spec.LogLevels.Multiorch == "" {
+		cluster.Spec.LogLevels.Multiorch = DefaultLogLevel
+	}
+	if cluster.Spec.LogLevels.Multiadmin == "" {
+		cluster.Spec.LogLevels.Multiadmin = DefaultLogLevel
+	}
+	if cluster.Spec.LogLevels.Multigateway == "" {
+		cluster.Spec.LogLevels.Multigateway = DefaultLogLevel
+	}
+
 	if cluster.Spec.PVCDeletionPolicy == nil {
 		cluster.Spec.PVCDeletionPolicy = &multigresv1alpha1.PVCDeletionPolicy{
 			WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,

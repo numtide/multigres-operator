@@ -69,6 +69,11 @@ type TableGroupSpec struct {
 	// +optional
 	Observability *ObservabilityConfig `json:"observability,omitempty"`
 
+	// LogLevels is the resolved log level configuration for shard-level components.
+	// Inherited from MultigresCluster.Spec.LogLevels.
+	// +optional
+	LogLevels ComponentLogLevels `json:"logLevels,omitempty"`
+
 	// Backup is the backup configuration inherited from MultigresCluster -> Database -> TableGroup.
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
