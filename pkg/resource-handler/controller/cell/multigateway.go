@@ -117,6 +117,8 @@ func BuildMultiGatewayDeployment(
 								cell.Spec.GlobalTopoServer.RootPath,
 								"--cell",
 								string(cell.Spec.Name),
+								"--log-level",
+								string(cell.Spec.LogLevels.Multigateway),
 							},
 							Resources: cell.Spec.MultiGateway.Resources,
 							Env:       multigresv1alpha1.BuildOTELEnvVars(cell.Spec.Observability),

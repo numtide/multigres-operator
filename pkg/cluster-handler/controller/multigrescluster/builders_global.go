@@ -127,6 +127,7 @@ func BuildMultiAdminDeployment(
 								"--topo-global-root=/multigres/global",
 								"--service-map=grpc-multiadmin",
 								"--pprof-http=true",
+								"--log-level=" + string(cluster.Spec.LogLevels.Multiadmin),
 							},
 							Ports: []corev1.ContainerPort{
 								{

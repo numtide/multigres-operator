@@ -74,7 +74,15 @@ func TestShardReconciliation(t *testing.T) {
 					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
+					DatabaseName: "testdb",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+
 					TableGroupName: "default",
 					ShardName:      "0",
 					Images: multigresv1alpha1.ShardImages{
@@ -140,6 +148,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--cluster-metadata-refresh-interval=500ms",
 											"--pooler-health-check-interval=500ms",
 											"--recovery-cycle-interval=500ms",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -229,6 +238,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--cluster-metadata-refresh-interval=500ms",
 											"--pooler-health-check-interval=500ms",
 											"--recovery-cycle-interval=500ms",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -314,7 +324,15 @@ func TestShardReconciliation(t *testing.T) {
 					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
+					DatabaseName: "testdb",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+
 					TableGroupName: "default",
 					ShardName:      "0",
 					PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
@@ -384,6 +402,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--cluster-metadata-refresh-interval=500ms",
 											"--pooler-health-check-interval=500ms",
 											"--recovery-cycle-interval=500ms",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -469,7 +488,15 @@ func TestShardReconciliation(t *testing.T) {
 					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
 				Spec: multigresv1alpha1.ShardSpec{
-					DatabaseName:   "testdb",
+					DatabaseName: "testdb",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+
 					TableGroupName: "default",
 					ShardName:      "0",
 					Images: multigresv1alpha1.ShardImages{
@@ -535,6 +562,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--cluster-metadata-refresh-interval=500ms",
 											"--pooler-health-check-interval=500ms",
 											"--recovery-cycle-interval=500ms",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -624,6 +652,7 @@ func TestShardReconciliation(t *testing.T) {
 											"--cluster-metadata-refresh-interval=500ms",
 											"--pooler-health-check-interval=500ms",
 											"--recovery-cycle-interval=500ms",
+											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15300),
@@ -1015,7 +1044,15 @@ func TestReconcileDeletions(t *testing.T) {
 			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 		},
 		Spec: multigresv1alpha1.ShardSpec{
-			DatabaseName:   "testdb",
+			DatabaseName: "testdb",
+			LogLevels: multigresv1alpha1.ComponentLogLevels{
+				Pgctld:       "info",
+				Multipooler:  "info",
+				Multiorch:    "info",
+				Multiadmin:   "info",
+				Multigateway: "info",
+			},
+
 			TableGroupName: "default",
 			ShardName:      "0",
 			MultiOrch: multigresv1alpha1.MultiOrchSpec{

@@ -146,6 +146,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 									"--topo-global-root=/multigres/global",
 									"--service-map=grpc-multiadmin",
 									"--pprof-http=true",
+									"--log-level=info",
 								},
 								Ports: []corev1.ContainerPort{
 									{
@@ -255,6 +256,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 								"--topo-global-root=/multigres/global",
 								"--service-map=grpc-multiadmin",
 								"--pprof-http=true",
+								"--log-level=info",
 							},
 							Ports: []corev1.ContainerPort{
 								{
@@ -357,6 +359,7 @@ func TestMultigresCluster_Lifecycle(t *testing.T) {
 								"--topo-global-root=/multigres/global",
 								"--service-map=grpc-multiadmin",
 								"--pprof-http=true",
+								"--log-level=info",
 							},
 							Ports: []corev1.ContainerPort{
 								{

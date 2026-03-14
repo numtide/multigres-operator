@@ -61,6 +61,7 @@ func BuildTableGroup(
 				multigresv1alpha1.MergeBackupConfig(dbCfg.Backup, cluster.Spec.Backup),
 			),
 			Observability:      cluster.Spec.Observability,
+			LogLevels:          cluster.Spec.LogLevels,
 			CellTopologyLabels: buildCellTopologyLabels(cluster),
 			TopologyPruning:    cluster.Spec.TopologyPruning,
 			DurabilityPolicy: mergeDurabilityPolicy(

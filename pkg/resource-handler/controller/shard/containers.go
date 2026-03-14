@@ -125,7 +125,7 @@ func buildPgctldContainer(
 		"--pg-database=postgres",
 		"--pg-user=postgres",
 		"--timeout=30",
-		"--log-level=info",
+		"--log-level=" + string(shard.Spec.LogLevels.Pgctld),
 		"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
 		"--pg-hba-template=" + PgHbaTemplatePath,
 		"--http-port=15400",
@@ -254,8 +254,6 @@ func buildMultiPoolerSidecar(
 		image = string(shard.Spec.Images.MultiPooler)
 	}
 
-	// TODO: Add --log-level flag support, configurable via the spec.
-
 	args := []string{
 		"multipooler", // Subcommand
 		"--http-port=15200",
@@ -273,6 +271,7 @@ func buildMultiPoolerSidecar(
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
 		"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)", // Resolved from env var below
+		"--log-level=" + string(shard.Spec.LogLevels.Multipooler),
 	}
 
 	if shard.Spec.Backup != nil {
@@ -370,8 +369,6 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		image = string(shard.Spec.Images.MultiOrch)
 	}
 
-	// TODO: Add --log-level flag support, configurable via the spec.
-
 	watchTarget := fmt.Sprintf("%s/%s/%s",
 		shard.Spec.DatabaseName, shard.Spec.TableGroupName, shard.Spec.ShardName)
 
@@ -386,6 +383,7 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		"--cluster-metadata-refresh-interval=500ms",
 		"--pooler-health-check-interval=500ms",
 		"--recovery-cycle-interval=500ms",
+		"--log-level=" + string(shard.Spec.LogLevels.Multiorch),
 	}
 
 	c := corev1.Container{

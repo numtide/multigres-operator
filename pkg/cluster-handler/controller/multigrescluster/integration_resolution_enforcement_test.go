@@ -134,6 +134,13 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 						RegisterCell: true,
 						PrunePoolers: true,
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
 				},
 			}
 		}
@@ -207,6 +214,13 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 					RegisterCell: true,
 					PrunePoolers: true,
+				},
+				LogLevels: multigresv1alpha1.ComponentLogLevels{
+					Pgctld:       "info",
+					Multipooler:  "info",
+					Multiorch:    "info",
+					Multiadmin:   "info",
+					Multigateway: "info",
 				},
 			},
 		}
@@ -291,7 +305,14 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 					"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
 					"zone-c": {"topology.kubernetes.io/zone": "us-east-1c"},
 				},
-				DatabaseName:   "postgres",
+				DatabaseName: "postgres",
+				LogLevels: multigresv1alpha1.ComponentLogLevels{
+					Pgctld:       "info",
+					Multipooler:  "info",
+					Multiorch:    "info",
+					Multiadmin:   "info",
+					Multigateway: "info",
+				},
 				TableGroupName: "default",
 				IsDefault:      true,
 				Images: multigresv1alpha1.ShardImages{
@@ -413,6 +434,13 @@ func TestMultigresCluster_EnforcementLogic(t *testing.T) {
 			TopologyReconciliation: multigresv1alpha1.TopologyReconciliation{
 				RegisterCell: true,
 				PrunePoolers: true,
+			},
+			LogLevels: multigresv1alpha1.ComponentLogLevels{
+				Pgctld:       "info",
+				Multipooler:  "info",
+				Multiorch:    "info",
+				Multiadmin:   "info",
+				Multigateway: "info",
 			},
 		},
 	}
@@ -570,7 +598,14 @@ func TestMultigresCluster_TemplateOverrides(t *testing.T) {
 			CellTopologyLabels: map[multigresv1alpha1.CellName]map[string]string{
 				"zone-a": {"topology.kubernetes.io/zone": "us-east-1a"},
 			},
-			DatabaseName:   "postgres",
+			DatabaseName: "postgres",
+			LogLevels: multigresv1alpha1.ComponentLogLevels{
+				Pgctld:       "info",
+				Multipooler:  "info",
+				Multiorch:    "info",
+				Multiadmin:   "info",
+				Multigateway: "info",
+			},
 			TableGroupName: "default",
 			IsDefault:      true,
 			Images: multigresv1alpha1.ShardImages{

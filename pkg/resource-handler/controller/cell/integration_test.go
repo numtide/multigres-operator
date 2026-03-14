@@ -72,6 +72,14 @@ func TestCellReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone1",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+
 					Zone: "us-west-1a",
 					Images: multigresv1alpha1.CellImages{
 						MultiGateway: "ghcr.io/multigres/multigres:main",
@@ -119,6 +127,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone1",
+											"--log-level", "info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
@@ -190,6 +199,14 @@ func TestCellReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone2",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+
 					Zone: "us-west-1b",
 					Images: multigresv1alpha1.CellImages{
 						MultiGateway: "ghcr.io/multigres/multigres:main",
@@ -237,6 +254,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone2",
+											"--log-level", "info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
@@ -308,6 +326,14 @@ func TestCellReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone3",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+
 					Zone: "us-west-1c",
 					Images: multigresv1alpha1.CellImages{
 						MultiGateway: "custom/multigateway:v1.0.0",
@@ -355,6 +381,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone3",
+											"--log-level", "info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
@@ -426,6 +453,14 @@ func TestCellReconciliation(t *testing.T) {
 				},
 				Spec: multigresv1alpha1.CellSpec{
 					Name: "zone4",
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+
 					Zone: "us-west-1d",
 					Images: multigresv1alpha1.CellImages{
 						MultiGateway: "ghcr.io/multigres/multigres:main",
@@ -490,6 +525,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone4",
+											"--log-level", "info",
 										},
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),

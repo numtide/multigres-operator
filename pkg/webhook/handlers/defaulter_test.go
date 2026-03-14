@@ -76,6 +76,13 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 						MultiAdminWeb:   resolver.DefaultMultiAdminWebImage,
 						ImagePullPolicy: corev1.PullIfNotPresent,
 					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       resolver.DefaultLogLevel,
+						Multipooler:  resolver.DefaultLogLevel,
+						Multiorch:    resolver.DefaultLogLevel,
+						Multiadmin:   resolver.DefaultLogLevel,
+						Multigateway: resolver.DefaultLogLevel,
+					},
 					Cells: []multigresv1alpha1.CellConfig{
 						{
 							Name: "c1",
@@ -407,6 +414,13 @@ func TestMultigresClusterDefaulter_Handle(t *testing.T) {
 							MultiPooler:     resolver.DefaultMultiPoolerImage,
 							MultiGateway:    resolver.DefaultMultiGatewayImage,
 							ImagePullPolicy: resolver.DefaultImagePullPolicy,
+						},
+						LogLevels: multigresv1alpha1.ComponentLogLevels{
+							Pgctld:       resolver.DefaultLogLevel,
+							Multipooler:  resolver.DefaultLogLevel,
+							Multiorch:    resolver.DefaultLogLevel,
+							Multiadmin:   resolver.DefaultLogLevel,
+							Multigateway: resolver.DefaultLogLevel,
 						},
 						Databases: []multigresv1alpha1.DatabaseConfig{
 							{

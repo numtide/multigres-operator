@@ -251,6 +251,25 @@ type TemplateRef string
 // +kubebuilder:validation:MaxLength=512
 type ImageRef string
 
+// LogLevel is a validated log level string for multigres components.
+// +kubebuilder:validation:Enum=debug;info;warn;error
+type LogLevel string
+
+// ComponentLogLevels configures the --log-level flag for each multigres data-plane component.
+// All fields are optional; unset fields default to "info" via the admission webhook.
+type ComponentLogLevels struct {
+	// +optional
+	Pgctld LogLevel `json:"pgctld,omitempty"`
+	// +optional
+	Multipooler LogLevel `json:"multipooler,omitempty"`
+	// +optional
+	Multiorch LogLevel `json:"multiorch,omitempty"`
+	// +optional
+	Multiadmin LogLevel `json:"multiadmin,omitempty"`
+	// +optional
+	Multigateway LogLevel `json:"multigateway,omitempty"`
+}
+
 // +kubebuilder:validation:Enum=readWrite;readOnly
 type PoolType string
 
