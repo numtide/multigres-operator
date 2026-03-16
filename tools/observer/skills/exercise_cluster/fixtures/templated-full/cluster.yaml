@@ -11,6 +11,12 @@ spec:
     coreTemplate: "full-core-template"
     cellTemplate: "full-cell-template"
     shardTemplate: "full-shard-template"
+  logLevels:
+    pgctld: "debug"
+    multipooler: "debug"
+    multiorch: "debug"
+    multiadmin: "debug"
+    multigateway: "debug"
   cells:
     - name: "us-east-1"
   databases:

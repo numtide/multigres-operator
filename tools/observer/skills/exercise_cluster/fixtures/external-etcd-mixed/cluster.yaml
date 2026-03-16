@@ -11,6 +11,12 @@ spec:
     external:
       endpoints:
         - "http://external-etcd-service.default.svc:2379"
+  logLevels:
+    pgctld: "debug"
+    multipooler: "debug"
+    multiorch: "debug"
+    multiadmin: "debug"
+    multigateway: "debug"
   cells:
     - name: "us-east-1"
       spec:

@@ -16,6 +16,12 @@ spec:
     tracesSampler: "multigres_custom"
     samplingConfigRef:
       name: "custom-sampler-config"
+  logLevels:
+    pgctld: "debug"
+    multipooler: "debug"
+    multiorch: "debug"
+    multiadmin: "debug"
+    multigateway: "debug"
   cells:
     - name: "us-east-1"
       spec:

@@ -1,0 +1,11 @@
+apiVersion: multigres.com/v1alpha1
+kind: CoreTemplate
+metadata:
+  name: e2e-core
+  namespace: default
+spec:
+  globalTopoServer:
+    etcd:
+      replicas: 3
+  multiadmin:
+    replicas: 1

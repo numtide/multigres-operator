@@ -8,6 +8,12 @@ spec:
     whenDeleted: Delete
     whenScaled: Delete
   durabilityPolicy: "MULTI_CELL_ANY_2"
+  logLevels:
+    pgctld: "debug"
+    multipooler: "debug"
+    multiorch: "debug"
+    multiadmin: "debug"
+    multigateway: "debug"
   cells:
     - name: "us-east-1a"
       spec:

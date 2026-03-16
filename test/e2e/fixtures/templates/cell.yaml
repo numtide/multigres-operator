@@ -1,0 +1,8 @@
+apiVersion: multigres.com/v1alpha1
+kind: CellTemplate
+metadata:
+  name: e2e-cell
+  namespace: default
+spec:
+  multigateway:
+    replicas: 1

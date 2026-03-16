@@ -16,6 +16,12 @@ spec:
           memory: "32Mi"
       podLabels:
         fixture: "multiadmin-web"
+  logLevels:
+    pgctld: "debug"
+    multipooler: "debug"
+    multiorch: "debug"
+    multiadmin: "debug"
+    multigateway: "debug"
   cells:
     - name: "us-east-1"
       spec:

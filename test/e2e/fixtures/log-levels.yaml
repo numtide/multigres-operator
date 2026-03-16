@@ -1,32 +1,20 @@
 apiVersion: multigres.com/v1alpha1
 kind: MultigresCluster
 metadata:
-  name: multiadmin-lifecycle
+  name: e2e-log-levels
   namespace: default
 spec:
   pvcDeletionPolicy:
     whenDeleted: Delete
     whenScaled: Delete
-  multiadmin:
-    spec:
-      replicas: 2
-      resources:
-        requests:
-          cpu: "25m"
-          memory: "32Mi"
-      podLabels:
-        fixture: "multiadmin-lifecycle"
   logLevels:
     pgctld: "debug"
-    multipooler: "debug"
+    multipooler: "warn"
     multiorch: "debug"
-    multiadmin: "debug"
+    multiadmin: "warn"
     multigateway: "debug"
   cells:
-    - name: "us-east-1"
-      spec:
-        multigateway:
-          replicas: 1
+    - name: "zone-a"
   databases:
     - name: "postgres"
       default: true
@@ -39,9 +27,11 @@ spec:
                 multiorch:
                   replicas: 1
                 pools:
-                  main-rw:
+                  default:
                     type: readWrite
-                    cells: ["us-east-1"]
-                    replicasPerCell: 4
+                    cells: ["zone-a"]
+                    # 1 replica for CI resource constraints. Only operator
+                    # behavior is tested; data-plane correctness needs more.
+                    replicasPerCell: 1
                     storage:
-                      size: "5Gi"
+                      size: "1Gi"
