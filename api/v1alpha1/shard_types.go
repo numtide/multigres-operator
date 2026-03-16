@@ -57,8 +57,8 @@ type MultiOrchSpec struct {
 
 // PoolSpec defines the configuration for a data pool (StatefulSet).
 type PoolSpec struct {
-	// Type of the pool (e.g., "readWrite", "readOnly").
-	// +kubebuilder:validation:Enum=readWrite;readOnly
+	// Type of the pool. Currently only "readWrite" is supported.
+	// +kubebuilder:validation:Enum=readWrite
 	// +optional
 	Type PoolType `json:"type,omitempty"`
 

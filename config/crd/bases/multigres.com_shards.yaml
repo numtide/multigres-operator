@@ -2600,11 +2600,10 @@ spec:
                       allOf:
                       - enum:
                         - readWrite
-                        - readOnly
                       - enum:
                         - readWrite
-                        - readOnly
-                      description: Type of the pool (e.g., "readWrite", "readOnly").
+                      description: Type of the pool. Currently only "readWrite" is
+                        supported.
                       type: string
                   type: object
                 description: Pools is the map of fully resolved data pool configurations.

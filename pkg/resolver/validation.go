@@ -409,16 +409,16 @@ func (r *Resolver) ValidateClusterLogic(
 				}
 
 				// ------------------------------------------------------------------
-				// 3. Quorum Warning for readWrite pools
+				// 3. Quorum Warning for pools with insufficient replicas
 				// ------------------------------------------------------------------
 				for poolName, pool := range pools {
 					replicas := int32(3) // default
 					if pool.ReplicasPerCell != nil {
 						replicas = *pool.ReplicasPerCell
 					}
-					if pool.Type == "readWrite" && replicas < 3 {
+					if replicas < 3 {
 						warnings = append(warnings, fmt.Sprintf(
-							"pool '%s' in shard '%s' has replicasPerCell=%d; readWrite pools need at least 3 "+
+							"pool '%s' in shard '%s' has replicasPerCell=%d; pools need at least 3 "+
 								"for zero-downtime rolling upgrades (ANY_2 durability requires 1 primary + 2 standbys "+
 								"to maintain quorum while draining a replica)",
 							poolName,

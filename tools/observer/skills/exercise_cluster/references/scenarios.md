@@ -367,7 +367,7 @@ echo "exit_code=$?"
 1. Read the first cell name from `.spec.cells[0].name`.
 2. Merge patch to add a new pool to the first shard:
    ```json
-   {"new-ro-pool": {"type": "readOnly", "cells": ["<cell-name>"], "replicasPerCell": 1, "storage": {"size": "2Gi"}}}
+   {"new-pool": {"type": "readWrite", "cells": ["<cell-name>"], "replicasPerCell": 1, "storage": {"size": "2Gi"}}}
    ```
 
 **What to observe:**
@@ -1233,3 +1233,225 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 - Cluster remains Healthy
 
 **Teardown:** Delete the `multi-cell-quorum` cluster.
+
+---
+
+## Log Level Scenarios
+
+### verify-log-levels
+**Tier:** quick | **Fast-path:** yes
+**Tests:** `--log-level=<value>` flag propagation to all multigres data-plane containers
+**Applicable fixtures:** `log-levels`
+
+**How to execute:**
+1. Deploy the `log-levels` fixture.
+2. Wait for CRD phase `Healthy` and all pods Running+Ready.
+3. Verify pgctld container args contain `--log-level=debug`:
+   ```bash
+   kubectl get pods -l app.kubernetes.io/component=pool -o jsonpath='{range .items[*]}{.metadata.name}: {range .spec.containers[?(@.name=="postgres")]}{.args}{end}{"\n"}{end}'
+   ```
+4. Verify multipooler container args contain `--log-level=warn`:
+   ```bash
+   kubectl get pods -l app.kubernetes.io/component=pool -o jsonpath='{range .items[*]}{.metadata.name}: {range .spec.containers[?(@.name=="multipooler")]}{.args}{end}{"\n"}{end}'
+   ```
+5. Verify multiorch pod args contain `--log-level=debug`:
+   ```bash
+   kubectl get pods -l app.kubernetes.io/component=multiorch -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.containers[0].args}{"\n"}{end}'
+   ```
+6. Verify multiadmin pod args contain `--log-level=warn`:
+   ```bash
+   kubectl get pods -l app.kubernetes.io/component=multiadmin -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.containers[0].args}{"\n"}{end}'
+   ```
+7. Verify multigateway pod args contain `--log-level=debug`:
+   ```bash
+   kubectl get pods -l app.kubernetes.io/component=multigateway -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.containers[0].args}{"\n"}{end}'
+   ```
+
+**Success criteria:**
+- Each container type has the correct `--log-level` flag matching `spec.logLevels`
+- No pods in CrashLoopBackOff or error state
+
+**Teardown:** None (cluster stays for `change-log-levels`).
+
+### change-log-levels
+**Tier:** standard | **Fast-path:** no
+**Tests:** Changing log levels triggers rolling update with new `--log-level` flags
+**Applicable fixtures:** `log-levels`
+
+**How to patch:**
+1. Read the live CR to confirm current logLevels.
+2. Patch `spec.logLevels.pgctld` from `"debug"` to `"info"`:
+   ```bash
+   kubectl patch multigrescluster log-levels --type merge -p '{"spec":{"logLevels":{"pgctld":"info"}}}'
+   ```
+3. Wait for rolling update to complete (all pods restarted with new args).
+4. Verify pgctld containers now have `--log-level=info`.
+
+**Success criteria:**
+- All pool pods restarted with updated pgctld `--log-level=info`
+- Other log levels unchanged (multipooler still `warn`, etc.)
+- Observer reports no errors during or after rolling update
+
+**Teardown:** Patch back to `"debug"`:
+```bash
+kubectl patch multigrescluster log-levels --type merge -p '{"spec":{"logLevels":{"pgctld":"debug"}}}'
+```
+
+---
+
+## Large-Scale Scenarios
+
+### large-scale-up-pool
+**Tier:** lifecycle | **Fast-path:** no
+**Tests:** Large scale-up (4→10) and scale-down (10→4) of pool replicas
+**Applicable fixtures:** `minimal-delete`, `minimal-retain`, `multi-pool`
+
+**How to patch:**
+1. Read the live CR to find the readWrite pool path and current replicasPerCell.
+2. Scale up to 10:
+   ```bash
+   kubectl patch multigrescluster <name> --type json -p '[{"op":"replace","path":"/spec/databases/0/tablegroups/0/shards/0/spec/pools/main-rw/replicasPerCell","value":10}]'
+   ```
+3. Wait for all 10 pods Running+Ready (may take 60-120s for parallel creation).
+4. Run observer verification — check for split-brain, replication issues.
+5. Scale back down to 4:
+   ```bash
+   kubectl patch multigrescluster <name> --type json -p '[{"op":"replace","path":"/spec/databases/0/tablegroups/0/shards/0/spec/pools/main-rw/replicasPerCell","value":4}]'
+   ```
+6. Wait for drain state machine to remove 6 pods.
+7. Run observer verification again.
+
+**What to observe:**
+- All 10 pods created via parallel creation (no sequential bottleneck)
+- Drain state machine handles 6 pod removals on scale-down
+- No split-brain findings during scaling
+- Observer connectivity checks pass after stabilization
+
+**Success criteria:**
+- Scale-up: 10 pods Running+Ready within 120s
+- Scale-down: 4 pods remaining, 6 pods drained and deleted
+- PVCs follow the configured deletion policy (Delete = 4 PVCs, Retain = 10 PVCs)
+- Observer `/api/status` shows no error/fatal findings after stabilization
+
+**Teardown:** Ensure replicasPerCell is back to 4.
+
+### large-scale-multigateway
+**Tier:** standard | **Fast-path:** yes
+**Tests:** MultiGateway deployment scaling 1→5→1
+**Applicable fixtures:** `minimal-delete`, `minimal-retain`
+
+**How to patch:**
+1. Read the live CR to find the cell spec and current multigateway replicas.
+2. Scale up to 5:
+   ```bash
+   kubectl patch multigrescluster <name> --type json -p '[{"op":"replace","path":"/spec/cells/0/spec/multigateway/replicas","value":5}]'
+   ```
+3. Wait for 5 multigateway pods Running+Ready.
+4. Scale back to 1:
+   ```bash
+   kubectl patch multigrescluster <name> --type json -p '[{"op":"replace","path":"/spec/cells/0/spec/multigateway/replicas","value":1}]'
+   ```
+
+**Success criteria:**
+- 5 multigateway pods Running+Ready after scale-up
+- 1 multigateway pod after scale-down, 4 terminated cleanly
+- Observer reports no errors
+
+**Teardown:** Ensure multigateway replicas is back to 1.
+
+### large-scale-multiadmin
+**Tier:** standard | **Fast-path:** yes
+**Tests:** MultiAdmin deployment scaling to current+4 and back
+**Applicable fixtures:** `multiadmin-lifecycle`, `overrides-complex`
+
+**How to patch:**
+1. Read the live CR to find current multiadmin replicas (typically 1 or 2).
+2. Scale up by 4 (e.g., 2→6):
+   ```bash
+   kubectl patch multigrescluster <name> --type merge -p '{"spec":{"multiadmin":{"spec":{"replicas":6}}}}'
+   ```
+3. Wait for all replicas Running+Ready.
+4. Scale back to original:
+   ```bash
+   kubectl patch multigrescluster <name> --type merge -p '{"spec":{"multiadmin":{"spec":{"replicas":2}}}}'
+   ```
+
+**Success criteria:**
+- All scaled-up replicas Running+Ready
+- Clean scale-down to original count
+- Observer reports no errors
+
+**Teardown:** Ensure multiadmin replicas is back to original value.
+
+---
+
+## Stateless Component Scenarios
+
+### change-annotations-stateless
+**Tier:** standard | **Fast-path:** no
+**Tests:** Adding podAnnotations to multiadmin triggers rolling update
+**Applicable fixtures:** `minimal-delete`, `minimal-retain`
+
+**How to patch:**
+1. Read the live CR to confirm current multiadmin spec.
+2. Add a pod annotation:
+   ```bash
+   kubectl patch multigrescluster <name> --type merge -p '{"spec":{"multiadmin":{"spec":{"podAnnotations":{"test-annotation":"exerciser"}}}}}'
+   ```
+3. Wait for multiadmin pods to be restarted with the new annotation.
+4. Verify annotation is present:
+   ```bash
+   kubectl get pods -l app.kubernetes.io/component=multiadmin -o jsonpath='{range .items[*]}{.metadata.name}: {.metadata.annotations.test-annotation}{"\n"}{end}'
+   ```
+
+**Success criteria:**
+- All multiadmin pods have `test-annotation: exerciser` annotation
+- Observer reports no errors during or after rolling update
+
+**Teardown:** Remove the annotation:
+```bash
+kubectl patch multigrescluster <name> --type json -p '[{"op":"remove","path":"/spec/multiadmin/spec/podAnnotations"}]'
+```
+
+---
+
+## Multi-Pool Scenarios
+
+### verify-multi-pool
+**Tier:** quick | **Fast-path:** yes
+**Tests:** Multi-pool setup, PDB-per-pool, independent scaling
+**Applicable fixtures:** `multi-pool`
+
+**How to execute:**
+1. Deploy the `multi-pool` fixture.
+2. Wait for CRD phase `Healthy` and all pods Running+Ready.
+3. Verify readWrite pool has 4 pods:
+   ```bash
+   kubectl get pods -l multigres.com/pool=main-rw --no-headers | wc -l
+   ```
+4. Verify analytics-ro pool has 3 pods:
+   ```bash
+   kubectl get pods -l multigres.com/pool=analytics-ro --no-headers | wc -l
+   ```
+5. Verify 2 PDBs exist (one per pool):
+   ```bash
+   kubectl get pdb --no-headers | wc -l
+   ```
+6. Test independent scaling — scale analytics-ro 3→4 while main-rw stays at 4:
+   ```bash
+   kubectl patch multigrescluster multi-pool --type json -p '[{"op":"replace","path":"/spec/databases/0/tablegroups/0/shards/0/spec/pools/analytics-ro/replicasPerCell","value":4}]'
+   ```
+7. Verify analytics-ro has 4 pods, main-rw still has 4 pods.
+8. Scale analytics-ro back to 3:
+   ```bash
+   kubectl patch multigrescluster multi-pool --type json -p '[{"op":"replace","path":"/spec/databases/0/tablegroups/0/shards/0/spec/pools/analytics-ro/replicasPerCell","value":3}]'
+   ```
+
+**Success criteria:**
+- main-rw pool: 4 pods Running+Ready
+- analytics-ro pool: 3 pods Running+Ready (then 4, then back to 3)
+- 2 PDBs present (one per pool)
+- Pools scale independently without affecting each other
+- Observer reports no errors
+
+**Teardown:** Delete the `multi-pool` cluster.

@@ -249,9 +249,7 @@ Multigres uses a configurable **durability policy** to control synchronous repli
 | **2** | 1 primary + 1 standby | **Downtime during upgrades.** Draining the standby leaves zero synchronous standbys, violating `ANY_2`. Upstream multigres rejects the `UpdateSynchronousStandbyList REMOVE` because it would empty the synchronous standby list. |
 | **3** (recommended) | 1 primary + 2 standbys | **Zero-downtime upgrades.** One standby can be drained while the other maintains quorum. |
 
-The operator enforces a **hard minimum of 1** replica per cell (the CRD rejects `replicasPerCell: 0`). For `readWrite` pools with fewer than 3 replicas, the webhook returns an **admission warning** (not a rejection) explaining the quorum limitation.
-
-`readOnly` pools are not subject to this warning since they don't participate in write quorum.
+The operator enforces a **hard minimum of 1** replica per cell (the CRD rejects `replicasPerCell: 0`). For pools with fewer than 3 replicas, the webhook returns an **admission warning** (not a rejection) explaining the quorum limitation.
 
 📖 **Full documentation:** [Durability Policy](docs/durability-policy.md)
 
