@@ -4,6 +4,7 @@ package framework
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -12,8 +13,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -432,4 +435,181 @@ func WaitForQueryServing(t testing.TB, c *Cluster, ns, gatewaySvc string) {
 	if err != nil {
 		t.Fatalf("timed out waiting for query serving via multigateway: %v", err)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Mutation & assertion helpers
+// ---------------------------------------------------------------------------
+
+// WaitForPodCount waits until exactly count pods match the given labels.
+func WaitForPodCount(t testing.TB, c client.Client, ns string, labels client.MatchingLabels, count int, desc string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	err := wait.PollUntilContextCancel(ctx, 3*time.Second, true, func(ctx context.Context) (bool, error) {
+		list := &corev1.PodList{}
+		if err := c.List(ctx, list, client.InNamespace(ns), labels); err != nil {
+			return false, nil
+		}
+		return len(list.Items) == count, nil
+	})
+	if err != nil {
+		t.Fatalf("timed out waiting for %d %s pods: %v", count, desc, err)
+	}
+}
+
+// WaitForDeploymentReplicas waits until a Deployment with the given container
+// name has the expected number of ready replicas.
+func WaitForDeploymentReplicas(t testing.TB, c client.Client, ns, containerName string, replicas int32) *appsv1.Deployment {
+	t.Helper()
+	var found *appsv1.Deployment
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	err := wait.PollUntilContextCancel(ctx, 3*time.Second, true, func(ctx context.Context) (bool, error) {
+		list := &appsv1.DeploymentList{}
+		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
+			return false, nil
+		}
+		for i := range list.Items {
+			for _, cont := range list.Items[i].Spec.Template.Spec.Containers {
+				if cont.Name == containerName {
+					found = &list.Items[i]
+					return found.Status.ReadyReplicas == replicas, nil
+				}
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("timed out waiting for Deployment %q to have %d ready replicas: %v", containerName, replicas, err)
+	}
+	return found
+}
+
+// WaitForPodAnnotation waits until all pods matching labels have the given
+// annotation key=value pair.
+func WaitForPodAnnotation(t testing.TB, c client.Client, ns string, labels client.MatchingLabels, key, value string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	err := wait.PollUntilContextCancel(ctx, 3*time.Second, true, func(ctx context.Context) (bool, error) {
+		list := &corev1.PodList{}
+		if err := c.List(ctx, list, client.InNamespace(ns), labels); err != nil {
+			return false, nil
+		}
+		if len(list.Items) == 0 {
+			return false, nil
+		}
+		for _, pod := range list.Items {
+			if pod.Annotations[key] != value {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("timed out waiting for annotation %s=%s on pods: %v", key, value, err)
+	}
+}
+
+// WaitForPodToleration waits until all pods matching labels have a toleration
+// with the given key.
+func WaitForPodToleration(t testing.TB, c client.Client, ns string, labels client.MatchingLabels, tolerationKey string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	err := wait.PollUntilContextCancel(ctx, 3*time.Second, true, func(ctx context.Context) (bool, error) {
+		list := &corev1.PodList{}
+		if err := c.List(ctx, list, client.InNamespace(ns), labels); err != nil {
+			return false, nil
+		}
+		if len(list.Items) == 0 {
+			return false, nil
+		}
+		for _, pod := range list.Items {
+			found := false
+			for _, tol := range pod.Spec.Tolerations {
+				if tol.Key == tolerationKey {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("timed out waiting for toleration %q on pods: %v", tolerationKey, err)
+	}
+}
+
+// PatchCluster applies a JSON merge patch to a MultigresCluster and waits for
+// the controller to observe the new generation.
+func PatchCluster(t testing.TB, c client.Client, cr *multigresv1alpha1.MultigresCluster, patch []byte) {
+	t.Helper()
+	if err := c.Patch(context.Background(), cr, client.RawPatch(types.MergePatchType, patch)); err != nil {
+		t.Fatalf("patch MultigresCluster: %v", err)
+	}
+	// Wait for the controller to observe the new generation.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	key := client.ObjectKeyFromObject(cr)
+	err := wait.PollUntilContextCancel(ctx, 2*time.Second, false, func(ctx context.Context) (bool, error) {
+		live := &multigresv1alpha1.MultigresCluster{}
+		if err := c.Get(ctx, key, live); err != nil {
+			return false, nil
+		}
+		return live.Status.ObservedGeneration >= live.Generation, nil
+	})
+	if err != nil {
+		t.Fatalf("timed out waiting for observedGeneration to catch up: %v", err)
+	}
+}
+
+// AssertWebhookRejects verifies that updating the given object fails with a
+// webhook admission error containing the expected substring.
+func AssertWebhookRejects(t testing.TB, c client.Client, obj client.Object, expectedMsg string) {
+	t.Helper()
+	err := c.Update(context.Background(), obj)
+	if err == nil {
+		t.Fatalf("expected webhook rejection containing %q, but update succeeded", expectedMsg)
+	}
+	if !strings.Contains(err.Error(), expectedMsg) {
+		t.Fatalf("expected webhook error containing %q, got: %v", expectedMsg, err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Resource inspection helpers
+// ---------------------------------------------------------------------------
+
+// ListPDBs returns all PodDisruptionBudgets in the namespace.
+func ListPDBs(t testing.TB, c client.Client, ns string) []policyv1.PodDisruptionBudget {
+	t.Helper()
+	list := &policyv1.PodDisruptionBudgetList{}
+	if err := c.List(context.Background(), list, client.InNamespace(ns)); err != nil {
+		t.Fatalf("list PDBs: %v", err)
+	}
+	return list.Items
+}
+
+// GetCluster fetches the live MultigresCluster by name from the namespace.
+func GetCluster(t testing.TB, c client.Client, ns, name string) *multigresv1alpha1.MultigresCluster {
+	t.Helper()
+	cr := &multigresv1alpha1.MultigresCluster{}
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: ns, Name: name}, cr); err != nil {
+		t.Fatalf("get MultigresCluster %s/%s: %v", ns, name, err)
+	}
+	return cr
+}
+
+// MustMarshal JSON-encodes v and panics on error.
+func MustMarshal(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(fmt.Sprintf("json.Marshal: %v", err))
+	}
+	return data
 }

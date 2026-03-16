@@ -7,6 +7,12 @@ spec:
   pvcDeletionPolicy:
     whenDeleted: Delete
     whenScaled: Delete
+  logLevels:
+    pgctld: "debug"
+    multipooler: "debug"
+    multiorch: "debug"
+    multiadmin: "debug"
+    multigateway: "debug"
   cells:
     - name: "us-east-1"
       spec:

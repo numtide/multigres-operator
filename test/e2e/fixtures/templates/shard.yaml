@@ -1,0 +1,19 @@
+apiVersion: multigres.com/v1alpha1
+kind: ShardTemplate
+metadata:
+  name: e2e-shard
+  namespace: default
+spec:
+  multiorch:
+    replicas: 1
+  pools:
+    default:
+      type: readWrite
+      # 1 replica for CI resource constraints. Only operator
+      # behavior is tested; data-plane correctness needs more.
+      replicasPerCell: 1
+      storage:
+        size: "1Gi"
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete

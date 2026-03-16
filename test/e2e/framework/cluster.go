@@ -17,9 +17,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -74,6 +76,7 @@ func (c *Cluster) CRClient() (client.Client, error) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 	return client.New(c.RestCfg, client.Options{Scheme: scheme})
 }
 
@@ -96,7 +99,16 @@ func LoadImages(ctx context.Context, clusterName string, images []string) error 
 func setupCluster(name string) (*Cluster, error) {
 	ctx := context.Background()
 
-	// Create or connect (idempotent).
+	// Serialize cluster setup across test binaries. go test runs each
+	// package as a separate process; without locking they all race to
+	// create the same Kind cluster and only one wins.
+	unlock, err := lockSetup(name)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+
+	// Create or connect (idempotent — guarded by file lock above).
 	p := kind.NewCluster(name)
 	kubecfg, err := p.Create(ctx)
 	if err != nil {
@@ -210,6 +222,24 @@ func repoRoot() (string, error) {
 		return "", fmt.Errorf("git rev-parse: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// lockSetup acquires an exclusive file lock to serialize cluster setup
+// across concurrent test binaries.
+func lockSetup(name string) (unlock func(), err error) {
+	lockPath := filepath.Join(os.TempDir(), fmt.Sprintf("e2e-%s.lock", name))
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("open lock file: %w", err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("acquire setup lock: %w", err)
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		f.Close()
+	}, nil
 }
 
 func logf(format string, args ...any) {

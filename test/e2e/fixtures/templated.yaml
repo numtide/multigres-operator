@@ -1,0 +1,22 @@
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: e2e-templated
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  coreTemplateRef: "e2e-core"
+  cells:
+    - name: "zone-a"
+      cellTemplateRef: "e2e-cell"
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              shardTemplateRef: "e2e-shard"

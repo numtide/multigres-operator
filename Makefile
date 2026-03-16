@@ -313,14 +313,14 @@ space := $(empty) $(empty)
 test-e2e: manifests generate fmt vet container ## Run e2e tests (shared cluster, fast)
 	OPERATOR_IMG=$(IMG) \
 	REPO_ROOT=$(shell pwd) \
-	go test -tags=e2e $(E2E_PACKAGES_SHARED) -v -count=1 -timeout=10m
+	go test -tags=e2e $(E2E_PACKAGES_SHARED) -p 3 -v -count=1 -timeout=20m
 
 .PHONY: test-e2e-keep
 test-e2e-keep: manifests generate fmt vet container ## Run e2e tests; keep cluster on failure
 	OPERATOR_IMG=$(IMG) \
 	REPO_ROOT=$(shell pwd) \
 	E2E_KEEP_CLUSTERS=on-failure \
-	go test -tags=e2e $(E2E_PACKAGES_SHARED) -v -count=1 -timeout=10m
+	go test -tags=e2e $(E2E_PACKAGES_SHARED) -p 3 -v -count=1 -timeout=20m
 
 .PHONY: test-e2e-full
 test-e2e-full: manifests generate fmt vet container ## Run e2e tests (dedicated cluster per test, full isolation)
