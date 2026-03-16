@@ -629,7 +629,7 @@ spec:
 * **`pools` is a MAP, keyed by the pool name:** Using a map structure ensures that overrides are resilient to changes in the underlying template; unlike list arrays where inserting or reordering items shifts indices—potentially causing an override targeting "index 1" to accidentally apply to the wrong pool if the template order changes—keyed maps guarantee that an override for a specific pool (e.g., `main-app`) always targets that exact logical resource, regardless of how other pools are added or organized in the template.
 * **Pools and cells are append-only:** Once a pool or cell is added, it cannot be renamed or removed. This is enforced via CEL rules (`oldSelf.all(k, k in self)`).
 * **MultiOrch Placement:** `multiorch` is deployed to the cells listed in `multiorch.cells`. If this list is empty or omitted, it defaults to all cells where pools are defined.
-* **Pool Placement:** `pools` uses a `cells` list. For `readWrite` pools, this list typically contains only a few cells rather than using all available cells. For `readOnly` pools, this list can contain multiple cells to apply the same configuration across multiple zones and regions.
+* **Pool Placement:** `pools` uses a `cells` list. This list typically contains only a few cells rather than using all available cells. Multiple cells can be listed to apply the same configuration across multiple zones and regions.
 * **PVC management:** Pool pods are managed directly by the operator (no StatefulSets). PVC lifecycle is controlled by `PVCDeletionPolicy` at the pool, shard, tablegroup, or cluster level.
 * **PVC volume expansion:** Increasing `storage.size` on a pool triggers in-place PVC expansion. The `StorageClass` must have `allowVolumeExpansion: true`. Shrinks are rejected at admission. See [pod-management-architecture.md](../pod-management-architecture.md#pvc-volume-expansion) for details.
 
@@ -698,7 +698,7 @@ spec:
       #   whenDeleted: "Delete"
       #   whenScaled: "Delete"
     dr-replica:
-      type: "readOnly"
+      type: "readWrite"
       # This pool will be deployed to all cells listed here.
       cells:
         - "us-west-2a"

@@ -43,7 +43,7 @@ spec:
                       size: "200Gi" # Override: Increase from 100Gi (template) to 200Gi
                     # Define a new pool not in template. This will produce a warning in case it's a typo.
                   "analytics":
-                    type: "readOnly"
+                    type: "readWrite"
                     replicasPerCell: 4
                     storage:
                       size: "50Gi"

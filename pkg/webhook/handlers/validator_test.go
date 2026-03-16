@@ -876,7 +876,7 @@ func TestTemplateValidator_ShardTemplatePoolNames(t *testing.T) {
 				Spec: multigresv1alpha1.ShardTemplateSpec{
 					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
 						"main-rw": {Type: "readWrite"},
-						"ro":      {Type: "readOnly"},
+						"ro":      {Type: "readWrite"},
 					},
 				},
 			},

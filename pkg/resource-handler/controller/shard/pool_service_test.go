@@ -106,7 +106,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 				},
 			},
 		},
-		"readOnly pool with custom cell": {
+		"readWrite pool with custom cell": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "shard-001",
@@ -122,7 +122,7 @@ func TestBuildPoolHeadlessService(t *testing.T) {
 			poolName: "ro",
 			cellName: "zone-east",
 			poolSpec: multigresv1alpha1.PoolSpec{
-				Type:  "readonly",
+				Type:  "readWrite",
 				Cells: []multigresv1alpha1.CellName{"zone-east"},
 			},
 			want: &corev1.Service{

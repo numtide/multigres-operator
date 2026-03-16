@@ -5214,12 +5214,10 @@ spec:
                                             allOf:
                                             - enum:
                                               - readWrite
-                                              - readOnly
                                             - enum:
                                               - readWrite
-                                              - readOnly
-                                            description: Type of the pool (e.g., "readWrite",
-                                              "readOnly").
+                                            description: Type of the pool. Currently
+                                              only "readWrite" is supported.
                                             type: string
                                         type: object
                                       description: Pools overrides. Keyed by pool
@@ -7572,12 +7570,10 @@ spec:
                                             allOf:
                                             - enum:
                                               - readWrite
-                                              - readOnly
                                             - enum:
                                               - readWrite
-                                              - readOnly
-                                            description: Type of the pool (e.g., "readWrite",
-                                              "readOnly").
+                                            description: Type of the pool. Currently
+                                              only "readWrite" is supported.
                                             type: string
                                         type: object
                                       description: Pools configuration. Keyed by pool

@@ -136,9 +136,9 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 								Size: "10Gi",
 							},
 						},
-						"readOnly": {
+						"read-pool": {
 							Cells:           []multigresv1alpha1.CellName{"zone1"},
-							Type:            "readOnly",
+							Type:            "readWrite",
 							ReplicasPerCell: ptr.To(int32(3)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "5Gi",
@@ -161,15 +161,15 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					}
 				}
 
-				// Verify readOnly pool pods
+				// Verify read-pool pods
 				for i := 0; i < 3; i++ {
-					podName := BuildPoolPodName(shard, "readOnly", "zone1", i)
+					podName := BuildPoolPodName(shard, "read-pool", "zone1", i)
 					if err := c.Get(
 						t.Context(),
 						types.NamespacedName{Name: podName, Namespace: "default"},
 						&corev1.Pod{},
 					); err != nil {
-						t.Errorf("ReadOnly pool Pod %d should exist: %v", i, err)
+						t.Errorf("read-pool Pod %d should exist: %v", i, err)
 					}
 				}
 
@@ -182,16 +182,16 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 					t.Errorf("Replica pool headless Service should exist: %v", err)
 				}
 
-				hashReadOnlyHeadless := buildHashedPoolHeadlessServiceName(
+				hashReadPoolHeadless := buildHashedPoolHeadlessServiceName(
 					shard,
-					"readOnly",
+					"read-pool",
 					"zone1",
 				)
-				readOnlySvc := &corev1.Service{}
+				readPoolSvc := &corev1.Service{}
 				if err := c.Get(t.Context(),
-					types.NamespacedName{Name: hashReadOnlyHeadless, Namespace: "default"},
-					readOnlySvc); err != nil {
-					t.Errorf("ReadOnly pool headless Service should exist: %v", err)
+					types.NamespacedName{Name: hashReadPoolHeadless, Namespace: "default"},
+					readPoolSvc); err != nil {
+					t.Errorf("read-pool headless Service should exist: %v", err)
 				}
 			},
 		},
@@ -267,7 +267,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 						},
 						"readonly": {
 							Cells:           []multigresv1alpha1.CellName{"zone2"},
-							Type:            "readOnly",
+							Type:            "readWrite",
 							ReplicasPerCell: ptr.To(int32(1)),
 							Storage: multigresv1alpha1.StorageSpec{
 								Size: "10Gi",
@@ -1356,9 +1356,9 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 						Type:            "replica",
 						ReplicasPerCell: ptr.To(int32(2)),
 					},
-					"readOnly": {
+					"read-pool": {
 						Cells:           []multigresv1alpha1.CellName{"zone1"},
-						Type:            "readOnly",
+						Type:            "readWrite",
 						ReplicasPerCell: ptr.To(int32(3)),
 					},
 				},
@@ -1387,10 +1387,10 @@ func TestShardReconciler_UpdateStatus(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			p := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      BuildPoolPodName(shard, "readOnly", "zone1", i),
+					Name:      BuildPoolPodName(shard, "read-pool", "zone1", i),
 					Namespace: "default",
 					Labels: metadata.GetSelectorLabels(
-						buildPoolLabelsWithCell(shard, "readOnly", "zone1"),
+						buildPoolLabelsWithCell(shard, "read-pool", "zone1"),
 					),
 				},
 				Status: corev1.PodStatus{

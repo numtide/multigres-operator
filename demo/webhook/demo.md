@@ -284,7 +284,7 @@ spec:
               replicasPerCell: 1
               storage:
                 size: 50Gi   # <--- Override Storage
-              type: readOnly
+              type: readWrite
             main-app:
               storage:
                 size: 200Gi  # <--- Override Storage

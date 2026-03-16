@@ -270,7 +270,7 @@ type ComponentLogLevels struct {
 	Multigateway LogLevel `json:"multigateway,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=readWrite;readOnly
+// +kubebuilder:validation:Enum=readWrite
 type PoolType string
 
 // +kubebuilder:validation:Enum=Initializing;Progressing;Healthy;Degraded;Unknown

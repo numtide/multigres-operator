@@ -601,7 +601,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 				},
 			},
 			wantWarnings: []string{
-				"replicasPerCell=2; readWrite pools need at least 3",
+				"replicasPerCell=2; pools need at least 3",
 			},
 		},
 		"No Quorum Warning: readWrite pool with 3 replicas": {
@@ -629,7 +629,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 				},
 			},
 		},
-		"No Quorum Warning: readOnly pool with 2 replicas": {
+		"Quorum Warning: pool with 2 replicas": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
 				Spec: multigresv1alpha1.MultigresClusterSpec{
@@ -642,8 +642,8 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 								Name: "s0",
 								Spec: &multigresv1alpha1.ShardInlineSpec{
 									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-										"readonly": {
-											Type:            "readOnly",
+										"main-rw": {
+											Type:            "readWrite",
 											ReplicasPerCell: ptr.To(int32(2)),
 										},
 									},
@@ -653,6 +653,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 					}},
 				},
 			},
+			wantWarnings: []string{"has replicasPerCell=2"},
 		},
 		// COVERAGE: filesystem backup AccessModes branch (isRWO=false path)
 		"Filesystem RWX backup suppresses replica warning": {
@@ -748,7 +749,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 								Name: "s0",
 								Spec: &multigresv1alpha1.ShardInlineSpec{
 									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-										"INVALID_NAME!": {Type: "readOnly"},
+										"INVALID_NAME!": {Type: "readWrite"},
 									},
 								},
 							}},
@@ -771,7 +772,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 								Name: "s0",
 								Spec: &multigresv1alpha1.ShardInlineSpec{
 									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-										"this-pool-name-exceeds-max": {Type: "readOnly"},
+										"this-pool-name-exceeds-max": {Type: "readWrite"},
 									},
 								},
 							}},
