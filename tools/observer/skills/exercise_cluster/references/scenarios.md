@@ -241,6 +241,7 @@ Each scenario describes a mutation to apply to a live MultigresCluster CR. For e
 ### delete-and-recreate-cluster
 **Tier:** lifecycle | **Fast-path:** no
 **Tests:** Full teardown, cascade deletion via ownerReferences, fresh bootstrap
+**Also in e2e:** Basic deletion + cleanup verification is covered by `test/e2e/shared/deletion/`. The exerciser adds data-plane stability verification via the observer after recreation.
 **Negative assertion:** Cleanup Verification — all managed pods and child CRs gone before recreate
 
 **How to execute:**
@@ -346,19 +347,6 @@ Each scenario describes a mutation to apply to a live MultigresCluster CR. For e
 
 **Teardown:** Not reversible (cells are append-only by design).
 
-### remove-cell (Negative Test)
-**Tests:** Webhook enforces append-only cell rule
-**Negative assertion:** Webhook Rejection — exit code != 0, stderr contains `cells are append-only` or `cannot remove cell`
-
-Attempt to remove `.spec.cells/0` via JSON patch:
-```bash
-KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl patch multigrescluster <name> -n <ns> \
-  --type=json -p '[{"op":"remove","path":"/spec/cells/0"}]' 2>&1
-echo "exit_code=$?"
-```
-**Expected:** Webhook rejects with validation error.
-**If it succeeds (exit code 0):** Critical bug — webhook not enforcing append-only invariant.
-
 ### add-pool
 **Tier:** lifecycle
 **Tests:** Pool addition to existing shard, new pod creation
@@ -376,20 +364,6 @@ echo "exit_code=$?"
 - Observer connectivity checks include new pool endpoints
 
 **Teardown:** Not reversible (pools are append-only by design).
-
-### remove-pool (Negative Test)
-**Tests:** Webhook enforces append-only pool rule
-**Negative assertion:** Webhook Rejection — exit code != 0, stderr contains `pools are append-only` or `cannot remove pool`
-
-Attempt to remove the first pool via JSON patch:
-```bash
-# First read the CR to find the correct pool path
-KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl patch multigrescluster <name> -n <ns> \
-  --type=json -p '[{"op":"remove","path":"/spec/databases/0/tablegroups/0/shards/0/spec/pools/<pool-name>"}]' 2>&1
-echo "exit_code=$?"
-```
-**Expected:** Webhook rejects with validation error.
-**If it succeeds (exit code 0):** Critical bug — webhook not enforcing append-only invariant.
 
 ### switch-template
 **Tier:** lifecycle
@@ -444,50 +418,6 @@ echo "exit_code=$?"
 ## Template & Override Scenarios
 
 These scenarios test the template resolution and override merging system. They are applicable to fixtures that use `templateDefaults` and/or inline overrides (`templated-full`, `overrides-complex`).
-
-### verify-template-propagation
-**Tier:** standard
-**Applicable:** All template-based fixtures
-**Tests:** Full Template Verification Protocol — systematic field-by-field comparison of deployed resources against template definitions
-
-**How to execute:**
-1. Read all template CRs referenced by the cluster (`kubectl get coretemplate`, `celltemplate`, `shardtemplate`).
-2. Read the cluster CR to identify overrides and inline specs.
-3. Build the expected values map (template base → override → inline → defaults).
-4. Query every deployed resource (etcd STS, multiadmin Deploy, multigateway Deploy, multiorch Deploy, pool pods, PVCs).
-5. Compare field-by-field and classify each as PASS, COINCIDENCE, or FAIL.
-
-**What to observe:**
-- Every template-defined field should appear in the deployed resource with the correct value
-- Overrides should take precedence over template values
-- Hardcoded defaults should only appear for fields not set by template or override
-- COINCIDENCE results indicate the fixture should use non-default values
-
-**Teardown:** Not needed (read-only verification).
-
-### template-partial-override
-**Tier:** standard
-**Applicable:** `overrides-complex` or any fixture with both templates and overrides
-**Tests:** Partial override merging — override changes one field, template provides the rest
-
-**How to execute:**
-1. Read the ShardTemplate to note its multiorch resources and replicas.
-2. Patch the cluster's shard override to add ONLY a resource override:
-   ```bash
-   kubectl patch multigrescluster <name> -n <ns> --type=json -p '[
-     {"op":"add","path":"/spec/databases/0/tablegroups/0/shards/0/overrides/multiorch/resources",
-      "value":{"requests":{"cpu":"100m","memory":"128Mi"}}}
-   ]'
-   ```
-3. Verify multiorch gets: replicas from ShardTemplate (unchanged), resources from the override (new value).
-4. This confirms partial overrides don't clobber unset template fields.
-
-**What to observe:**
-- Multiorch replicas remain at the template/previous-override value (not reset to default)
-- Multiorch resources match the new override
-- No pod restarts unless the resource change triggers a rolling update
-
-**Teardown:** Remove the resource override via JSON patch.
 
 ### update-core-template-cr
 **Tier:** standard
@@ -573,36 +503,6 @@ These scenarios test the template resolution and override merging system. They a
 - If multiadmin stays at 2, the precedence chain is correct
 
 **Teardown:** Patch CoreTemplate back to original value.
-
-### pvc-deletion-policy-inheritance
-**Tier:** quick
-**Applicable:** Template-based fixtures
-**Tests:** PVCDeletionPolicy inheritance chain: cluster → ShardTemplate → shard override
-
-**How to execute:**
-1. Read current PVCDeletionPolicy at cluster level: `kubectl get multigrescluster <name> -o jsonpath='{.spec.pvcDeletionPolicy}'`
-2. Read Shard CRs to see current resolved policy: `kubectl get shard -n <ns> -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.pvcDeletionPolicy}{"\n"}{end}'`
-3. Patch ShardTemplate to set a different PVCDeletionPolicy:
-   ```bash
-   kubectl patch shardtemplate <name> -n <ns> --type=merge -p '{"spec":{"pvcDeletionPolicy":{"whenDeleted":"Retain","whenScaled":"Retain"}}}'
-   ```
-4. Wait for reconciliation. Verify Shard CRs pick up the template's policy.
-5. Patch the cluster's shard override to set yet another policy:
-   ```bash
-   kubectl patch multigrescluster <name> -n <ns> --type=json -p '[
-     {"op":"add","path":"/spec/databases/0/tablegroups/0/shards/0/overrides/pvcDeletionPolicy",
-      "value":{"whenDeleted":"Delete","whenScaled":"Delete"}}
-   ]'
-   ```
-6. Verify the override wins over the template.
-
-**What to observe:**
-- Spec-only changes, no pod restarts expected
-- ShardTemplate PVCDeletionPolicy propagates to Shard CRs
-- Shard-level override wins over ShardTemplate policy
-- Cluster-level policy is the weakest in the chain
-
-**Teardown:** Revert both patches.
 
 ### template-pod-labels-merge
 **Tier:** quick
@@ -1127,85 +1027,6 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 
 ## Verification Scenarios
 
-### verify-multiadminweb
-**Tier:** quick | **Fast-path:** yes
-**Tests:** MultiAdminWeb Deployment and Service are created and Running
-**Applicable fixtures:** `multiadmin-web`
-
-**How to execute:**
-1. Deploy the `multiadmin-web` fixture.
-2. Wait for CRD phase `Healthy` and all pods Running+Ready.
-3. Verify MultiAdminWeb Deployment exists:
-   ```bash
-   kubectl get deployment -n default -l app.kubernetes.io/component=multiadmin-web
-   ```
-4. Verify the Deployment has the expected replica count (1) and pods are Ready:
-   ```bash
-   kubectl get deployment -n default -l app.kubernetes.io/component=multiadmin-web -o jsonpath='{range .items[*]}{.metadata.name}: ready={.status.readyReplicas}/{.spec.replicas}{"\n"}{end}'
-   ```
-5. Verify MultiAdminWeb Service exists:
-   ```bash
-   kubectl get service -n default -l app.kubernetes.io/component=multiadmin-web
-   ```
-6. Verify pod labels include `fixture: multiadmin-web`:
-   ```bash
-   kubectl get pods -n default -l app.kubernetes.io/component=multiadmin-web -o jsonpath='{range .items[*]}{.metadata.name}: {.metadata.labels.fixture}{"\n"}{end}'
-   ```
-7. Verify the container image matches `DefaultMultiAdminWebImage`:
-   ```bash
-   kubectl get deployment -n default -l app.kubernetes.io/component=multiadmin-web -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
-   ```
-
-**Success criteria:**
-- MultiAdminWeb Deployment exists with 1 ready replica
-- MultiAdminWeb Service exists
-- Pod labels include `fixture: multiadmin-web`
-- Container image matches the default multiadmin-web image
-- Cluster is Healthy with no operator errors
-
-**Teardown:** Delete the `multiadmin-web` cluster.
-
-### verify-pdb
-**Tier:** quick | **Fast-path:** yes
-**Tests:** PodDisruptionBudgets are created with correct selectors for each pool/cell combination
-**Applicable fixtures:** `minimal-retain`, `minimal-delete`, `multi-cell-quorum` (any fixture with pools)
-
-**How to execute:**
-1. Deploy a fixture and wait for CRD phase `Healthy`.
-2. List all PDBs in the namespace:
-   ```bash
-   kubectl get pdb -n default -o wide
-   ```
-3. For each PDB, verify:
-   - `spec.maxUnavailable` is 1
-   - `spec.selector.matchLabels` contains the correct pool, cell, shard, and component labels
-   - The PDB's label selector matches actual running pods
-   ```bash
-   for pdb in $(kubectl get pdb -n default -o jsonpath='{.items[*].metadata.name}'); do
-     echo "=== PDB: $pdb ==="
-     kubectl get pdb $pdb -n default -o jsonpath='  maxUnavailable: {.spec.maxUnavailable}'
-     echo ""
-     selector=$(kubectl get pdb $pdb -n default -o jsonpath='{.spec.selector.matchLabels}')
-     echo "  selector: $selector"
-     # Convert selector to label query and count matching pods
-     labels=$(kubectl get pdb $pdb -n default -o json | jq -r '.spec.selector.matchLabels | to_entries | map(.key + "=" + .value) | join(",")')
-     matched=$(kubectl get pods -n default -l "$labels" --no-headers 2>/dev/null | wc -l)
-     echo "  matched pods: $matched"
-     if [ "$matched" -eq 0 ]; then
-       echo "  ERROR: PDB selector matches 0 pods!"
-     fi
-   done
-   ```
-4. Verify PDB count matches expected: one PDB per pool/cell combination.
-
-**Success criteria:**
-- At least one PDB exists per pool/cell combination
-- Every PDB has `maxUnavailable: 1`
-- Every PDB's selector matches at least one Running pod
-- PDB labels include cluster, shard, cell, and pool identifiers
-
-**Teardown:** None required (PDBs are owned by the Shard CR and will be cleaned up on delete).
-
 ### verify-durability-policy
 **Tier:** quick | **Fast-path:** yes
 **Tests:** DurabilityPolicy from the cluster spec propagates to Shard CRDs
@@ -1237,41 +1058,6 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 ---
 
 ## Log Level Scenarios
-
-### verify-log-levels
-**Tier:** quick | **Fast-path:** yes
-**Tests:** `--log-level=<value>` flag propagation to all multigres data-plane containers
-**Applicable fixtures:** `log-levels`
-
-**How to execute:**
-1. Deploy the `log-levels` fixture.
-2. Wait for CRD phase `Healthy` and all pods Running+Ready.
-3. Verify pgctld container args contain `--log-level=debug`:
-   ```bash
-   kubectl get pods -l app.kubernetes.io/component=pool -o jsonpath='{range .items[*]}{.metadata.name}: {range .spec.containers[?(@.name=="postgres")]}{.args}{end}{"\n"}{end}'
-   ```
-4. Verify multipooler container args contain `--log-level=warn`:
-   ```bash
-   kubectl get pods -l app.kubernetes.io/component=pool -o jsonpath='{range .items[*]}{.metadata.name}: {range .spec.containers[?(@.name=="multipooler")]}{.args}{end}{"\n"}{end}'
-   ```
-5. Verify multiorch pod args contain `--log-level=debug`:
-   ```bash
-   kubectl get pods -l app.kubernetes.io/component=multiorch -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.containers[0].args}{"\n"}{end}'
-   ```
-6. Verify multiadmin pod args contain `--log-level=warn`:
-   ```bash
-   kubectl get pods -l app.kubernetes.io/component=multiadmin -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.containers[0].args}{"\n"}{end}'
-   ```
-7. Verify multigateway pod args contain `--log-level=debug`:
-   ```bash
-   kubectl get pods -l app.kubernetes.io/component=multigateway -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.containers[0].args}{"\n"}{end}'
-   ```
-
-**Success criteria:**
-- Each container type has the correct `--log-level` flag matching `spec.logLevels`
-- No pods in CrashLoopBackOff or error state
-
-**Teardown:** None (cluster stays for `change-log-levels`).
 
 ### change-log-levels
 **Tier:** standard | **Fast-path:** no
@@ -1338,6 +1124,7 @@ kubectl patch multigrescluster log-levels --type merge -p '{"spec":{"logLevels":
 ### large-scale-multigateway
 **Tier:** standard | **Fast-path:** yes
 **Tests:** MultiGateway deployment scaling 1→5→1
+**Also in e2e:** Basic 1→2 scaling is covered by `test/e2e/shared/scaling/`. The exerciser adds data-plane stability verification via the observer (replication, connectivity) during large-scale operations.
 **Applicable fixtures:** `minimal-delete`, `minimal-retain`
 
 **How to patch:**
@@ -1362,6 +1149,7 @@ kubectl patch multigrescluster log-levels --type merge -p '{"spec":{"logLevels":
 ### large-scale-multiadmin
 **Tier:** standard | **Fast-path:** yes
 **Tests:** MultiAdmin deployment scaling to current+4 and back
+**Also in e2e:** Basic 1→2 scaling is covered by `test/e2e/shared/scaling/`. The exerciser adds data-plane stability verification via the observer (replication, connectivity) during large-scale operations.
 **Applicable fixtures:** `multiadmin-lifecycle`, `overrides-complex`
 
 **How to patch:**
