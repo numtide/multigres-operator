@@ -98,9 +98,9 @@ if policy.WhenScaled == DeletePVCRetentionPolicy {
 
 Two paths for resolving a DRAINED pod:
 
-**Remedy:** Someone investigates and fixes the data. Multiorch retries replication, succeeds, and converts the pooler back to `REPLICA`. The operator then sees `replicasPerCell + 0` DRAINED pods → the stand-in pod (highest index) becomes extra → normal scale-down logic drains it.
+**Remedy (not yet implemented upstream):** Someone investigates and fixes the data. Multigres converts the pooler back to `REPLICA`. The operator then sees `replicasPerCell + 0` DRAINED pods → the stand-in pod (highest index) becomes extra → normal scale-down logic drains it. This workflow does not exist in multigres yet — it will need to be implemented upstream. Until then, DRAINED pods will sit indefinitely until an admin manually deletes them. The stand-in pod ensures availability is maintained in the meantime.
 
-**Discard:** Admin does `kubectl delete pod` on the DRAINED pod. The operator catches it via `handleExternalDeletion`, runs drain state machine, deletes the PVC (DRAINED override), and creates a fresh replacement at the same index. The stand-in becomes extra and is cleaned up by scale-down.
+**Discard:** Admin does `kubectl delete pod` on the DRAINED pod. The operator catches it via `handleExternalDeletion`, runs drain state machine, deletes the PVC (DRAINED override — confirmed by Sugu: "the data in the PVC needs to be fixed, or wiped so the new pooler restores from backup"), and creates a fresh replacement at the same index. The stand-in becomes extra and is cleaned up by scale-down.
 
 Example walkthrough (replicas=3):
 
@@ -127,19 +127,23 @@ DRAINED pods must be visible to administrators:
 - **Events:** Emit a warning event on the Shard when a pod is detected as DRAINED and when a stand-in is provisioned.
 - **Observer:** Surface DRAINED pods in the observer's `/api/status` diagnostics endpoint.
 
-### 5. Change `WhenScaled` Default to `Delete`
+### 5. Change `WhenScaled` Default to `Delete` (Confirmed)
 
-The default for `WhenScaled` changes from `Retain` to `Delete`. With `Retain`, scaled-down PVCs persist and are reused on scale-up — fast but risky if data had issues. With `Delete`, scale-up always restores from pgbackrest backup — slower but safer. pgbackrest should be the source of truth for data recovery.
+The default for `WhenScaled` changes from `Retain` to `Delete`. With `Retain`, scaled-down PVCs persist and are reused on scale-up — fast but risky if data had issues. With `Delete`, scale-up always restores from pgbackrest backup — slower but safer. pgbackrest should be the source of truth for data recovery. Sugu confirmed this change.
 
 Users with large databases (500GB+) who want fast scale-up can explicitly set `WhenScaled: Retain`, accepting the tradeoff.
+
+## Resolved Questions
+
+1. ~~**Always delete DRAINED PVCs?**~~ Yes — confirmed by Sugu.
+2. ~~**Change `WhenScaled` default to `Delete`?**~~ Yes — confirmed by Sugu.
+3. ~~**What is the remedy workflow?**~~ Multigres will handle converting a pooler back to REPLICA, but this workflow is not implemented yet. For now, DRAINED pods must be manually deleted by an admin.
 
 ## Open Questions
 
 1. **Will `DRAINED` always mean diverged/unrecoverable data?** The protobuf definition is broader ("temporarily removed from serving traffic"). If DRAINED can mean "healthy but taken offline for rebalancing," the PVC handling needs to differ.
 
-2. **What is the remedy workflow?** Does multiorch automatically retry `pg_rewind` periodically, or does the admin trigger something explicitly to convert a DRAINED pooler back to REPLICA?
-
-3. **Should we remove `WhenScaled` entirely?** With the default changing to `Delete` and DRAINED pods always having their PVCs deleted, is there still enough value in offering `Retain` as an option? Removing it would simplify the code and eliminate a footgun. The tradeoff is slower scale-up for large databases.
+2. **Should we remove `WhenScaled` entirely?** With the default changing to `Delete` and DRAINED pods always having their PVCs deleted, is there still enough value in offering `Retain` as an option? Removing it would simplify the code and eliminate a footgun. The tradeoff is slower scale-up for large databases.
 
 ## Implementation Summary
 
