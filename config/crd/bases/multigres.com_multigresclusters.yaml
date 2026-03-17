@@ -1248,11 +1248,11 @@ spec:
                                       - Delete
                                       type: string
                                     whenScaled:
-                                      default: Retain
+                                      default: Delete
                                       description: |-
                                         WhenScaled controls PVC deletion when replicas are scaled down.
-                                        - Retain (default): PVCs from scaled-down pods are kept
-                                        - Delete: PVCs are automatically deleted when pods are removed
+                                        - Delete (default): PVCs are automatically deleted when pods are removed
+                                        - Retain: PVCs from scaled-down pods are kept for manual recovery
                                       enum:
                                       - Retain
                                       - Delete
@@ -2741,11 +2741,11 @@ spec:
                                 - Delete
                                 type: string
                               whenScaled:
-                                default: Retain
+                                default: Delete
                                 description: |-
                                   WhenScaled controls PVC deletion when replicas are scaled down.
-                                  - Retain (default): PVCs from scaled-down pods are kept
-                                  - Delete: PVCs are automatically deleted when pods are removed
+                                  - Delete (default): PVCs are automatically deleted when pods are removed
+                                  - Retain: PVCs from scaled-down pods are kept for manual recovery
                                 enum:
                                 - Retain
                                 - Delete
@@ -5131,11 +5131,11 @@ spec:
                                                 - Delete
                                                 type: string
                                               whenScaled:
-                                                default: Retain
+                                                default: Delete
                                                 description: |-
                                                   WhenScaled controls PVC deletion when replicas are scaled down.
-                                                  - Retain (default): PVCs from scaled-down pods are kept
-                                                  - Delete: PVCs are automatically deleted when pods are removed
+                                                  - Delete (default): PVCs are automatically deleted when pods are removed
+                                                  - Retain: PVCs from scaled-down pods are kept for manual recovery
                                                 enum:
                                                 - Retain
                                                 - Delete
@@ -7493,11 +7493,11 @@ spec:
                                                 - Delete
                                                 type: string
                                               whenScaled:
-                                                default: Retain
+                                                default: Delete
                                                 description: |-
                                                   WhenScaled controls PVC deletion when replicas are scaled down.
-                                                  - Retain (default): PVCs from scaled-down pods are kept
-                                                  - Delete: PVCs are automatically deleted when pods are removed
+                                                  - Delete (default): PVCs are automatically deleted when pods are removed
+                                                  - Retain: PVCs from scaled-down pods are kept for manual recovery
                                                 enum:
                                                 - Retain
                                                 - Delete
@@ -7615,11 +7615,11 @@ spec:
                                           - Delete
                                           type: string
                                         whenScaled:
-                                          default: Retain
+                                          default: Delete
                                           description: |-
                                             WhenScaled controls PVC deletion when replicas are scaled down.
-                                            - Retain (default): PVCs from scaled-down pods are kept
-                                            - Delete: PVCs are automatically deleted when pods are removed
+                                            - Delete (default): PVCs are automatically deleted when pods are removed
+                                            - Retain: PVCs from scaled-down pods are kept for manual recovery
                                           enum:
                                           - Retain
                                           - Delete
@@ -7709,11 +7709,11 @@ spec:
                             - Delete
                             type: string
                           whenScaled:
-                            default: Retain
+                            default: Delete
                             description: |-
                               WhenScaled controls PVC deletion when replicas are scaled down.
-                              - Retain (default): PVCs from scaled-down pods are kept
-                              - Delete: PVCs are automatically deleted when pods are removed
+                              - Delete (default): PVCs are automatically deleted when pods are removed
+                              - Retain: PVCs from scaled-down pods are kept for manual recovery
                             enum:
                             - Retain
                             - Delete
@@ -7876,11 +7876,11 @@ spec:
                         - Delete
                         type: string
                       whenScaled:
-                        default: Retain
+                        default: Delete
                         description: |-
                           WhenScaled controls PVC deletion when replicas are scaled down.
-                          - Retain (default): PVCs from scaled-down pods are kept
-                          - Delete: PVCs are automatically deleted when pods are removed
+                          - Delete (default): PVCs are automatically deleted when pods are removed
+                          - Retain: PVCs from scaled-down pods are kept for manual recovery
                         enum:
                         - Retain
                         - Delete
@@ -10174,10 +10174,10 @@ spec:
               pvcDeletionPolicy:
                 default:
                   whenDeleted: Retain
-                  whenScaled: Retain
+                  whenScaled: Delete
                 description: |-
                   PVCDeletionPolicy controls PVC lifecycle management for all stateful components.
-                  Defaults to Retain/Retain for production safety.
+                  Defaults to Retain/Delete — PVCs are kept on cluster deletion but removed on scale-down.
                 properties:
                   whenDeleted:
                     default: Retain
@@ -10190,11 +10190,11 @@ spec:
                     - Delete
                     type: string
                   whenScaled:
-                    default: Retain
+                    default: Delete
                     description: |-
                       WhenScaled controls PVC deletion when replicas are scaled down.
-                      - Retain (default): PVCs from scaled-down pods are kept
-                      - Delete: PVCs are automatically deleted when pods are removed
+                      - Delete (default): PVCs are automatically deleted when pods are removed
+                      - Retain: PVCs from scaled-down pods are kept for manual recovery
                     enum:
                     - Retain
                     - Delete

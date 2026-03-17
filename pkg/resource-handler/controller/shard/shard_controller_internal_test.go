@@ -1098,7 +1098,7 @@ func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
 			wantInProgress: true,
 			wantNoDrains:   true,
 		},
-		"no drain in progress allows DRAINED pod replacement": {
+		"no drain in progress with DRAINED pod does not auto-drain": {
 			replicas: 2,
 			pods: []*corev1.Pod{
 				makePod(podName0, nil),
@@ -1107,9 +1107,8 @@ func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
 			podRoles: map[string]string{
 				podName1: "DRAINED",
 			},
-			wantAction:     true,
-			wantInProgress: false,
-			wantDrainedPod: podName1,
+			wantAction:   false,
+			wantNoDrains: true,
 		},
 		"no drain in progress allows extra pod drain": {
 			replicas: 1,
@@ -1227,6 +1226,14 @@ func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
 
 			poolSpec := multigresv1alpha1.PoolSpec{}
 
+			var drainedInTest int32
+			for _, role := range tc.podRoles {
+				if role == "DRAINED" {
+					drainedInTest++
+				}
+			}
+			effectiveReplicas := tc.replicas + drainedInTest
+
 			gotAction, gotInProgress, err := reconciler.handleScaleDown(
 				context.Background(),
 				shard,
@@ -1234,6 +1241,7 @@ func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
 				poolSpec,
 				existingPods,
 				tc.replicas,
+				effectiveReplicas,
 				tc.actionTaken,
 			)
 			if err != nil {
@@ -1413,12 +1421,12 @@ func TestCleanupDrainedPod_PVCDeletion(t *testing.T) {
 			policy:   deletePolicy,
 			wantPVC:  false,
 		},
-		"DRAINED replacement (idx<replicas) with Retain policy keeps PVC": {
+		"DRAINED replacement (idx<replicas) with Retain policy deletes PVC": {
 			podName:  podName1,
 			pvcName:  pvcName1,
 			podRoles: map[string]string{podName1: "DRAINED"},
 			policy:   retainPolicy,
-			wantPVC:  true,
+			wantPVC:  false,
 		},
 		"non-DRAINED pod (idx<replicas) with Delete policy keeps PVC": {
 			podName:  podName0,
@@ -1442,6 +1450,9 @@ func TestCleanupDrainedPod_PVCDeletion(t *testing.T) {
 			shard.Status.PodRoles = tc.podRoles
 
 			pod := makePod(tc.podName)
+			if tc.podRoles[tc.podName] == "DRAINED" {
+				pod.Labels[metadata.LabelPodRole] = "DRAINED"
+			}
 			pvc := makePVC(tc.pvcName)
 
 			fakeClient := fake.NewClientBuilder().
@@ -2394,8 +2405,15 @@ func TestIsPodReady(t *testing.T) {
 }
 
 func TestIsPoolHealthy(t *testing.T) {
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+		},
+	}
+
 	t.Run("empty pool is healthy", func(t *testing.T) {
-		if !isPoolHealthy(map[string]*corev1.Pod{}, 1) {
+		if !isPoolHealthy(map[string]*corev1.Pod{}, 1, shard) {
 			t.Error("expected empty pool to be healthy")
 		}
 	})
@@ -2416,7 +2434,7 @@ func TestIsPoolHealthy(t *testing.T) {
 				},
 			},
 		}
-		if !isPoolHealthy(pods, 1) {
+		if !isPoolHealthy(pods, 1, shard) {
 			t.Error("draining pod should be excluded from health check")
 		}
 	})
@@ -2437,7 +2455,7 @@ func TestIsPoolHealthy(t *testing.T) {
 				},
 			},
 		}
-		if !isPoolHealthy(pods, 1) {
+		if !isPoolHealthy(pods, 1, shard) {
 			t.Error("terminating pod should be excluded from health check")
 		}
 	})
@@ -2461,8 +2479,26 @@ func TestIsPoolHealthy(t *testing.T) {
 				},
 			},
 		}
-		if !isPoolHealthy(pods, 1) {
+		if !isPoolHealthy(pods, 1, shard) {
 			t.Error("extra pod at index 2 with replicas=1 should be excluded from health check")
+		}
+	})
+
+	t.Run("DRAINED pod that is not ready does not block health check", func(t *testing.T) {
+		drainedShard := shard.DeepCopy()
+		drainedShard.Status.PodRoles = map[string]string{"pod-0": "DRAINED"}
+		pods := map[string]*corev1.Pod{
+			"pod-0": {
+				ObjectMeta: metav1.ObjectMeta{Name: "pod-0"},
+				Status: corev1.PodStatus{
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionFalse},
+					},
+				},
+			},
+		}
+		if !isPoolHealthy(pods, 1, drainedShard) {
+			t.Error("DRAINED pod should be excluded from health check")
 		}
 	})
 }
@@ -3175,7 +3211,7 @@ func TestCleanupDrainedPod_ErrorPaths(t *testing.T) {
 		}
 	})
 
-	t.Run("nil PVC deletion policy retains PVC", func(t *testing.T) {
+	t.Run("nil PVC deletion policy deletes PVC", func(t *testing.T) {
 		shard := baseShard.DeepCopy()
 		podName := BuildPoolPodName(shard, poolName, cellName, 5)
 		pvcName := BuildPoolDataPVCName(shard, poolName, cellName, 5)
@@ -3195,7 +3231,7 @@ func TestCleanupDrainedPod_ErrorPaths(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod, pvc).Build()
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
-		// nil PVCDeletionPolicy defaults to Retain
+		// nil PVCDeletionPolicy defaults to Delete
 		err := r.cleanupDrainedPod(
 			context.Background(),
 			shard,
@@ -3208,13 +3244,13 @@ func TestCleanupDrainedPod_ErrorPaths(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// PVC should still exist
+		// PVC should be deleted
 		if err := c.Get(
 			context.Background(),
 			types.NamespacedName{Name: pvcName, Namespace: "default"},
 			&corev1.PersistentVolumeClaim{},
-		); err != nil {
-			t.Errorf("PVC should be retained with nil policy: %v", err)
+		); !errors.IsNotFound(err) {
+			t.Errorf("PVC should be deleted with nil policy, got err: %v", err)
 		}
 	})
 }
@@ -3343,46 +3379,10 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 		existingPods := map[string]*corev1.Pod{podName0: pod0, podName1: pod1}
 		_, _, err := r.handleScaleDown(
 			context.Background(), shard, poolName,
-			multigresv1alpha1.PoolSpec{}, existingPods, 1, false,
+			multigresv1alpha1.PoolSpec{}, existingPods, 1, 1, false,
 		)
 		if err == nil {
 			t.Error("expected error on drain initiation failure for extra pod")
-		}
-	})
-
-	t.Run("error draining DRAINED pod", func(t *testing.T) {
-		shard := baseShard.DeepCopy()
-		podName0 := BuildPoolPodName(shard, poolName, cellName, 0)
-		shard.Status.PodRoles = map[string]string{podName0: "DRAINED"}
-
-		pod0 := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: podName0, Namespace: "default",
-				Annotations: map[string]string{},
-				Labels:      map[string]string{metadata.LabelMultigresCell: cellName},
-			},
-			Status: corev1.PodStatus{
-				Conditions: []corev1.PodCondition{
-					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
-				},
-			},
-		}
-
-		base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod0).Build()
-		c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
-			OnPatch: func(obj client.Object) error {
-				return testutil.ErrNetworkTimeout
-			},
-		})
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		existingPods := map[string]*corev1.Pod{podName0: pod0}
-		_, _, err := r.handleScaleDown(
-			context.Background(), shard, poolName,
-			multigresv1alpha1.PoolSpec{}, existingPods, 1, false,
-		)
-		if err == nil {
-			t.Error("expected error on drain initiation failure for DRAINED pod")
 		}
 	})
 
@@ -3415,7 +3415,7 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 		existingPods := map[string]*corev1.Pod{podName0: pod0}
 		_, _, err := r.handleScaleDown(
 			context.Background(), shard, poolName,
-			multigresv1alpha1.PoolSpec{}, existingPods, 1, false,
+			multigresv1alpha1.PoolSpec{}, existingPods, 1, 1, false,
 		)
 		if err == nil {
 			t.Error("expected error on pod delete failure after cleanup")
@@ -3453,7 +3453,7 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 		existingPods := map[string]*corev1.Pod{podName1: pod1}
 		_, _, err := r.handleScaleDown(
 			context.Background(), shard, poolName,
-			multigresv1alpha1.PoolSpec{}, existingPods, 1, false,
+			multigresv1alpha1.PoolSpec{}, existingPods, 1, 1, false,
 		)
 		if err == nil {
 			t.Error("expected error on external deletion handling failure")
@@ -3908,7 +3908,7 @@ func TestHandleScaleDown_ExternalDeletionSetsActionTaken(t *testing.T) {
 	actionTaken, _, err := r.handleScaleDown(
 		t.Context(), shard, poolName,
 		multigresv1alpha1.PoolSpec{ReplicasPerCell: ptr.To(int32(1))},
-		existingPods, 1, false,
+		existingPods, 1, 1, false,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

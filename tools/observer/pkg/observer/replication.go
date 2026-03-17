@@ -32,11 +32,14 @@ func (o *Observer) checkReplication(ctx context.Context) {
 		}
 		o.checkShardReplication(ctx, shard)
 
-		var primaryCount, replicaCount int
+		var primaryCount, replicaCount, drainedCount int
 		for _, role := range shard.Status.PodRoles {
-			if role == "PRIMARY" || role == "primary" {
+			switch {
+			case role == "PRIMARY" || role == "primary":
 				primaryCount++
-			} else {
+			case role == "DRAINED":
+				drainedCount++
+			default:
 				replicaCount++
 			}
 		}
@@ -45,6 +48,7 @@ func (o *Observer) checkReplication(ctx context.Context) {
 			"namespace":    shard.Namespace,
 			"primaryCount": primaryCount,
 			"replicaCount": replicaCount,
+			"drainedCount": drainedCount,
 			"podRoles":     shard.Status.PodRoles,
 		})
 	}
@@ -65,12 +69,31 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 	// Classify pods by role.
 	var primaryPodNames []string
 	var replicaPodNames []string
+	var drainedPodNames []string
 	for podName, role := range shard.Status.PodRoles {
-		if role == "PRIMARY" || role == "primary" {
+		switch {
+		case role == "PRIMARY" || role == "primary":
 			primaryPodNames = append(primaryPodNames, podName)
-		} else {
+		case role == "DRAINED":
+			drainedPodNames = append(drainedPodNames, podName)
+		default:
 			replicaPodNames = append(replicaPodNames, podName)
 		}
+	}
+
+	if len(drainedPodNames) > 0 {
+		o.reporter.Report(report.Finding{
+			Severity:  report.SeverityWarn,
+			Check:     "replication",
+			Component: comp,
+			Message: fmt.Sprintf(
+				"Shard has %d DRAINED pod(s) awaiting admin intervention: %v",
+				len(drainedPodNames), drainedPodNames,
+			),
+			Details: map[string]any{
+				"drainedPods": drainedPodNames,
+			},
+		})
 	}
 
 	if len(primaryPodNames) == 0 {

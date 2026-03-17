@@ -360,7 +360,7 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 				},
 				PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 					WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
-					WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+					WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
 				},
 				Backup: &multigresv1alpha1.BackupConfig{
 					Type:       multigresv1alpha1.BackupTypeFilesystem,
@@ -657,7 +657,7 @@ func TestMultigresCluster_TemplateOverrides(t *testing.T) {
 			// TG/Cluster level defaults (Retain/Retain)
 			PVCDeletionPolicy: &multigresv1alpha1.PVCDeletionPolicy{
 				WhenDeleted: multigresv1alpha1.RetainPVCRetentionPolicy,
-				WhenScaled:  multigresv1alpha1.RetainPVCRetentionPolicy,
+				WhenScaled:  multigresv1alpha1.DeletePVCRetentionPolicy,
 			},
 			Backup: &multigresv1alpha1.BackupConfig{
 				Type:       multigresv1alpha1.BackupTypeFilesystem,

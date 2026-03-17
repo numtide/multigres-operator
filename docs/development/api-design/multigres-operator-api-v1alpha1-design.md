@@ -411,10 +411,10 @@ spec:
   # PVC Lifecycle Management
   # ----------------------------------------------------------------
   # Controls what happens to PVCs when the cluster is deleted or scaled down.
-  # Defaults to Retain/Retain for production safety.
+  # Defaults to Retain/Delete for production safety.
   pvcDeletionPolicy:
     whenDeleted: "Retain"  # or "Delete"
-    whenScaled: "Retain"   # or "Delete"
+    whenScaled: "Delete"   # or "Retain"
 
   # ----------------------------------------------------------------
   # Backup Configuration
@@ -1051,7 +1051,7 @@ spec:
   # PVC lifecycle management, inherited from MultigresCluster
   pvcDeletionPolicy:
     whenDeleted: "Retain"
-    whenScaled: "Retain"
+    whenScaled: "Delete"
 
   # Observability inherited from MultigresCluster
   # observability:
@@ -1159,7 +1159,7 @@ spec:
   # PVC lifecycle management, inherited from cluster/tablegroup/shard settings
   pvcDeletionPolicy:
     whenDeleted: "Retain"
-    whenScaled: "Retain"
+    whenScaled: "Delete"
 
   # Backup configuration, inherited from cluster -> database -> tablegroup chain
   backup:
@@ -1510,6 +1510,7 @@ spec:
   * **2026-02-10:** Added `CellTopologyLabels` to `ShardSpec` to propagate zone/region labels without the shard controller needing to look up Cell CRs directly. Added `ResolvedTemplates` to `MultigresClusterStatus` for efficient template-change triggered reconciliation.
   * **2026-02-20:** Pool management migrated from StatefulSets to direct operator-managed Pods and PVCs. Added scale subresource to Shard CRD (`.spec.replicas` / `.status.readyReplicas`). Added `PodRoles`, `LastBackupTime`, `LastBackupType` to `ShardStatus`.
   * **2026-03-10:** Added `DurabilityPolicy` as a configurable string field at cluster level (`spec.durabilityPolicy`) and per-database override (`databases[].durabilityPolicy`). Propagated through TableGroup and Shard to the topology registration. Previously hardcoded to `"AT_LEAST_2"`. Also fixed `UpdateDatabaseFields()` to sync DurabilityPolicy on re-registration.
+  * **2026-03-17:** Changed `WhenScaled` PVC deletion default from `Retain` to `Delete` — pgbackrest should be the source of truth for data recovery. Added DRAINED pod handling: operator keeps DRAINED pods alive for investigation and provisions stand-in replicas to maintain availability.
 
 ## Drawbacks
 

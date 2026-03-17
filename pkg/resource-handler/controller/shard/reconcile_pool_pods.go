@@ -75,17 +75,26 @@ func (r *ShardReconciler) reconcilePoolPods(
 		existingPVCs[pvc.Name] = pvc
 	}
 
+	// Phase 0: Sync DRAINED labels and compute effective replicas.
+	// DRAINED pods stay alive for investigation; stand-in replicas compensate.
+	drainedCount := countDrainedPods(shard, existingPods)
+	effectiveReplicas := replicas + drainedCount
+
+	if err := r.syncDrainedLabels(ctx, shard, existingPods); err != nil {
+		return err
+	}
+
 	// Phase 1: Create missing resources and handle terminal/deleted pods
 	driftedCount, actionTaken, err := r.createMissingResources(
-		ctx, shard, poolName, cellName, poolSpec, existingPods, existingPVCs, replicas,
+		ctx, shard, poolName, cellName, poolSpec, existingPods, existingPVCs, effectiveReplicas,
 	)
 	if err != nil {
 		return err
 	}
 
-	// Phase 2: Handle scale-down (cleanup, DRAINED replacement, extra pod draining)
+	// Phase 2: Handle scale-down (extra pod draining, ready-for-deletion cleanup)
 	actionTaken, inProgress, err := r.handleScaleDown(
-		ctx, shard, poolName, poolSpec, existingPods, replicas, actionTaken,
+		ctx, shard, poolName, poolSpec, existingPods, replicas, effectiveReplicas, actionTaken,
 	)
 	if err != nil {
 		return err
@@ -122,6 +131,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 
 // createMissingResources creates PVCs and Pods that should exist but don't.
 // It also handles terminal pods (Failed/Succeeded) and externally-deleted pods.
+// effectiveReplicas includes stand-in pods for DRAINED pods (replicas + drainedCount).
 // Returns the number of drifted pods and whether an action was taken this reconcile.
 func (r *ShardReconciler) createMissingResources(
 	ctx context.Context,
@@ -130,11 +140,11 @@ func (r *ShardReconciler) createMissingResources(
 	poolSpec multigresv1alpha1.PoolSpec,
 	existingPods map[string]*corev1.Pod,
 	existingPVCs map[string]*corev1.PersistentVolumeClaim,
-	replicas int32,
+	effectiveReplicas int32,
 ) (driftedCount int, actionTaken bool, err error) {
 	logger := log.FromContext(ctx)
 
-	for i := int32(0); i < replicas; i++ {
+	for i := int32(0); i < effectiveReplicas; i++ {
 		podName := BuildPoolPodName(shard, poolName, cellName, int(i))
 		pvcName := BuildPoolDataPVCName(shard, poolName, cellName, int(i))
 
@@ -288,15 +298,24 @@ func isPodReady(pod *corev1.Pod) bool {
 	return false
 }
 
-// isPoolHealthy returns true if all non-draining, non-terminating pods that
-// will remain after scale-down are Ready. Extra pods (index >= replicas) are
-// excluded so an unhealthy extra pod does not block its own removal.
-func isPoolHealthy(existingPods map[string]*corev1.Pod, replicas int32) bool {
+// isPoolHealthy returns true if all non-draining, non-terminating, non-DRAINED
+// pods that will remain after scale-down are Ready. Extra pods (index >=
+// effectiveReplicas) are excluded so an unhealthy extra pod does not block its
+// own removal. DRAINED pods are excluded because they are expected to be
+// unhealthy and should not block scale-down of stand-in pods.
+func isPoolHealthy(
+	existingPods map[string]*corev1.Pod,
+	effectiveReplicas int32,
+	shard *multigresv1alpha1.Shard,
+) bool {
 	for _, pod := range existingPods {
 		if pod.Annotations[metadata.AnnotationDrainState] != "" || !pod.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if idx, ok := resolvePodIndex(pod.Name); !ok || idx >= int(replicas) {
+		if idx, ok := resolvePodIndex(pod.Name); !ok || idx >= int(effectiveReplicas) {
+			continue
+		}
+		if resolvePodRole(shard, pod.Name) == "DRAINED" {
 			continue
 		}
 		if !isPodReady(pod) {
@@ -345,8 +364,9 @@ func (r *ShardReconciler) handleExternalDeletion(
 	return nil
 }
 
-// handleScaleDown processes pods that need removal: ready-for-deletion cleanup,
-// DRAINED pod replacement, and draining extra pods beyond the desired replica count.
+// handleScaleDown processes pods that need removal: ready-for-deletion cleanup
+// and draining extra pods beyond the effective replica count.
+// replicas is the user-desired count; effectiveReplicas = replicas + drainedCount.
 // Returns whether an action was taken and whether any drain is in progress.
 func (r *ShardReconciler) handleScaleDown(
 	ctx context.Context,
@@ -355,6 +375,7 @@ func (r *ShardReconciler) handleScaleDown(
 	poolSpec multigresv1alpha1.PoolSpec,
 	existingPods map[string]*corev1.Pod,
 	replicas int32,
+	effectiveReplicas int32,
 	actionTaken bool,
 ) (bool, bool, error) {
 	logger := log.FromContext(ctx)
@@ -384,7 +405,7 @@ func (r *ShardReconciler) handleScaleDown(
 		}
 
 		index, ok := resolvePodIndex(pod.Name)
-		if !ok || index >= int(replicas) {
+		if !ok || index >= int(effectiveReplicas) {
 			extraPods = append(extraPods, pod)
 		}
 	}
@@ -422,39 +443,14 @@ func (r *ShardReconciler) handleScaleDown(
 		actionTaken = true
 	}
 
-	// Replace DRAINED pods (skip if another drain is already in progress)
-	for _, name := range podNames {
-		pod := existingPods[name]
-		if actionTaken || inProgress {
-			break
-		}
-		role := resolvePodRole(shard, pod.Name)
-		state := pod.Annotations[metadata.AnnotationDrainState]
-		logger.V(1).
-			Info("Checking pod for replacement", "pod", pod.Name, "role", role, "drainState", state)
-
-		if role == "DRAINED" && state == "" {
-			if err := r.initiateDrain(ctx, pod); err != nil {
-				return actionTaken, inProgress, fmt.Errorf(
-					"failed to initiate drain for DRAINED pod %s: %w",
-					pod.Name,
-					err,
-				)
-			}
-			logger.Info("Requested drain for DRAINED pod", "pod", pod.Name)
-			r.Recorder.Eventf(shard, "Warning", "PodReplaced", "Replacing DRAINED pod %s", pod.Name)
-			actionTaken = true
-		}
-	}
-
 	// Drain extra pods (scale-down, skip if another drain is already in progress).
 	// Health gate: refuse to start a new drain if the pool is already degraded.
 	// This prevents cascading failures where removing pods from an unhealthy pool
 	// could cause an outage.
 	logger.V(1).
-		Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "inProgress", inProgress, "desiredReplicas", replicas)
+		Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "inProgress", inProgress, "desiredReplicas", replicas, "effectiveReplicas", effectiveReplicas)
 	if !actionTaken && !inProgress && len(extraPods) > 0 {
-		if !isPoolHealthy(existingPods, replicas) {
+		if !isPoolHealthy(existingPods, effectiveReplicas, shard) {
 			logger.Info(
 				"Deferring scale-down: pool has non-ready pods",
 				"extraPods",
@@ -660,6 +656,43 @@ func (r *ShardReconciler) selectPodToDrain(
 	return bestPod
 }
 
+// syncDrainedLabels ensures pods with topology role DRAINED have the
+// multigres.com/role=DRAINED label, and pods no longer DRAINED have it removed.
+// The label is the durable signal for DRAINED PVC cleanup — PodRoles may be
+// cleared by the data-handler during drain before cleanup runs.
+func (r *ShardReconciler) syncDrainedLabels(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	existingPods map[string]*corev1.Pod,
+) error {
+	for _, pod := range existingPods {
+		role := resolvePodRole(shard, pod.Name)
+		currentLabel := pod.Labels[metadata.LabelPodRole]
+
+		if role == "DRAINED" && currentLabel != "DRAINED" {
+			patch := client.MergeFrom(pod.DeepCopy())
+			if pod.Labels == nil {
+				pod.Labels = make(map[string]string)
+			}
+			pod.Labels[metadata.LabelPodRole] = "DRAINED"
+			if err := r.Patch(ctx, pod, patch); err != nil {
+				return fmt.Errorf("failed to set DRAINED label on pod %s: %w", pod.Name, err)
+			}
+			r.Recorder.Eventf(shard, "Warning", "PodDrained",
+				"Pod %s detected as DRAINED — provisioning stand-in replica", pod.Name)
+		} else if role != "DRAINED" && currentLabel == "DRAINED" {
+			patch := client.MergeFrom(pod.DeepCopy())
+			delete(pod.Labels, metadata.LabelPodRole)
+			if err := r.Patch(ctx, pod, patch); err != nil {
+				return fmt.Errorf("failed to remove DRAINED label from pod %s: %w", pod.Name, err)
+			}
+			r.Recorder.Eventf(shard, "Normal", "PodRecovered",
+				"Pod %s is no longer DRAINED", pod.Name)
+		}
+	}
+	return nil
+}
+
 func (r *ShardReconciler) cleanupDrainedPod(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -670,13 +703,32 @@ func (r *ShardReconciler) cleanupDrainedPod(
 ) error {
 	logger := log.FromContext(ctx)
 
-	// Handle PVC deletion based on policy FIRST
+	// DRAINED pods always get their PVC deleted — data is known-bad.
+	// We check the pod label (not PodRoles) because the data-handler clears
+	// the topology entry during drain before this cleanup point.
+	if pod.Labels[metadata.LabelPodRole] == "DRAINED" {
+		if err := r.deletePodPVC(
+			ctx,
+			shard,
+			pod,
+			poolName,
+			"DRAINED (data known-bad)",
+		); err != nil {
+			return err
+		}
+		logger.Info("Drained pod cleanup complete", "pod", pod.Name)
+		r.Recorder.Eventf(shard, "Normal", "DrainCompleted",
+			"Completed drain for DRAINED pod %s — PVC deleted", pod.Name)
+		return nil
+	}
+
+	// For non-DRAINED pods, respect WhenScaled policy
 	mergedPolicy := multigresv1alpha1.MergePVCDeletionPolicy(
 		poolSpec.PVCDeletionPolicy,
 		shard.Spec.PVCDeletionPolicy,
 	)
 	policy := multigresv1alpha1.PVCDeletionPolicy{
-		WhenScaled: multigresv1alpha1.RetainPVCRetentionPolicy,
+		WhenScaled: multigresv1alpha1.DeletePVCRetentionPolicy,
 	}
 	if mergedPolicy != nil && mergedPolicy.WhenScaled != "" {
 		policy = *mergedPolicy
@@ -686,41 +738,20 @@ func (r *ShardReconciler) cleanupDrainedPod(
 		idx, idxOK := resolvePodIndex(pod.Name)
 		if !idxOK {
 			logger.Info("Skipping PVC deletion for pod with unparseable index", "pod", pod.Name)
-		} else {
-			isDrainedReplacement := idx < int(replicas) &&
-				resolvePodRole(shard, pod.Name) == "DRAINED"
-			if idx >= int(replicas) || isDrainedReplacement {
-				cellName := pod.Labels[metadata.LabelMultigresCell]
-				pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
-				pvc := &corev1.PersistentVolumeClaim{}
-				err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pvcName}, pvc)
-				if err != nil {
-					if !errors.IsNotFound(err) {
-						logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
-						return fmt.Errorf("failed to fetch PVC %s for deletion: %w", pvcName, err)
-					}
-				} else {
-					reason := "scaled down"
-					if isDrainedReplacement {
-						reason = "DRAINED replacement"
-					}
-					if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
-						logger.Error(err, "Failed to delete PVC for "+reason+" pod", "pvc", pvcName)
-						return fmt.Errorf("failed to delete PVC %s: %w", pvcName, err)
-					}
-					logger.Info("Deleted PVC for "+reason+" pod", "pvc", pvcName)
-				}
-			} else {
-				logger.Info(
-					"Retaining PVC for pod during rolling update",
-					"pod",
-					pod.Name,
-					"index",
-					idx,
-					"replicas",
-					replicas,
-				)
+		} else if idx >= int(replicas) {
+			if err := r.deletePodPVC(ctx, shard, pod, poolName, "scaled down"); err != nil {
+				return err
 			}
+		} else {
+			logger.Info(
+				"Retaining PVC for pod during rolling update",
+				"pod",
+				pod.Name,
+				"index",
+				idx,
+				"replicas",
+				replicas,
+			)
 		}
 	}
 
@@ -728,6 +759,44 @@ func (r *ShardReconciler) cleanupDrainedPod(
 	logger.Info("Drained pod cleanup complete", "pod", pod.Name)
 	r.Recorder.Eventf(shard, "Normal", "DrainCompleted", "Completed drain for pod %s", pod.Name)
 
+	return nil
+}
+
+// deletePodPVC fetches and deletes the data PVC for a pod. reason is used for logging.
+func (r *ShardReconciler) deletePodPVC(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+	pod *corev1.Pod,
+	poolName, reason string,
+) error {
+	logger := log.FromContext(ctx)
+
+	idx, ok := resolvePodIndex(pod.Name)
+	if !ok {
+		logger.Info("Skipping PVC deletion for pod with unparseable index", "pod", pod.Name)
+		return nil
+	}
+
+	cellName := pod.Labels[metadata.LabelMultigresCell]
+	pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := r.Get(
+		ctx,
+		client.ObjectKey{Namespace: pod.Namespace, Name: pvcName},
+		pvc,
+	); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
+		return fmt.Errorf("failed to fetch PVC %s for deletion: %w", pvcName, err)
+	}
+
+	if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
+		logger.Error(err, "Failed to delete PVC for "+reason+" pod", "pvc", pvcName)
+		return fmt.Errorf("failed to delete PVC %s: %w", pvcName, err)
+	}
+	logger.Info("Deleted PVC for "+reason+" pod", "pvc", pvcName)
 	return nil
 }
 
