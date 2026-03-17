@@ -85,6 +85,7 @@ pkg/
   testutil/         # Shared test infrastructure (envtest, Kind helpers)
 tools/
   observer/         # Standalone cluster health monitoring tool
+  skills/           # AI agent skills for development and release workflows
 ```
 
 ## Making Changes
@@ -131,3 +132,32 @@ fix(drain): prevent fallthrough on topo unavailability
 docs(readme): update backup architecture section
 chore(deps): update internal Go module dependencies
 ```
+
+## AI Agent Skills
+
+This project includes structured AI agent skills under `tools/skills/` and `tools/observer/skills/`. These are prompt-based workflows that teach AI coding agents (e.g., Claude Code) how to perform specific tasks consistently.
+
+### Available Skills
+
+**Operator Development** ([tools/skills/](tools/skills/)):
+
+| Skill | Trigger | Description |
+|:---|:---|:---|
+| `generate_commit_message` | `/generate_commit_message` | Generate semantic Conventional Commits messages from staged changes. |
+| `pin_upstream_images` | `/pin_upstream_images` | Pin multigres container image SHA tags and review upstream code changes. |
+| `prepare_release` | `/prepare_release` | Full release preparation: changelog, version inference, and doc audit. |
+
+**Observer** ([tools/observer/skills/](tools/observer/skills/)):
+
+| Skill | Trigger | Description |
+|:---|:---|:---|
+| `exercise_cluster` | `/exercise_cluster` | Deploy fixtures, run mutation scenarios, validate health. |
+| `diagnose_with_observer` | `/diagnose_with_observer` | Triage observer findings and produce bug reports. |
+
+### Adding a New Skill
+
+1. Create a directory under `tools/skills/<skill_name>/` with a `SKILL.md` file
+2. Use the frontmatter format (`name`, `description`) — see existing skills for examples
+3. Add reference files under `references/` or scripts under `scripts/` as needed
+4. Create a stub in `.agents/skills/<skill_name>/SKILL.md` pointing to the repo location
+5. Update the [tools/skills/README.md](tools/skills/README.md) table
