@@ -45,3 +45,27 @@ The operator uses structured JSON logging (`zap` via controller-runtime). When t
 
 > [!NOTE]
 > For production deployments, set `--zap-devel=false` to switch to JSON encoding and `info`-level logging.
+
+## Component Log Levels
+
+The operator exposes per-component log level configuration for multigres data-plane components via the `LogLevels` field on `MultigresClusterSpec`. These control the `--log-level` flag passed to each component's container.
+
+```yaml
+spec:
+  logLevels:
+    pgctld: "info"
+    multipooler: "info"
+    multiorch: "debug"      # Increase verbosity for multiorch
+    multiadmin: "info"
+    multigateway: "info"
+```
+
+| Component | Field | Default |
+| :--- | :--- | :--- |
+| pgctld | `spec.logLevels.pgctld` | `info` |
+| multipooler | `spec.logLevels.multipooler` | `info` |
+| multiorch | `spec.logLevels.multiorch` | `info` |
+| multiadmin | `spec.logLevels.multiadmin` | `info` |
+| multigateway | `spec.logLevels.multigateway` | `info` |
+
+Log levels are inherited through the resource hierarchy (`MultigresCluster` → `Cell` → `Shard` → `TableGroup`). The webhook materializes all fields to `info` on `CREATE` if not set.

@@ -4,6 +4,59 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.6.0] — 2026-03-17
+
+**Previous release:** v0.5.3 (2026-03-13)
+
+Adds per-component log level configuration, aligns with upstream multigres flag and enum renames, removes the unimplemented readOnly pool type, and expands e2e test coverage from 4 to 16 subtests. Includes a Go style audit with a P0 fix for a latent PVC deletion bug in pod index resolution.
+
+**17 commits, 127 files changed, ~2,957 insertions.**
+
+### Breaking Changes
+
+- **readOnly pool type removed:** The `readOnly` value has been removed from the `PoolType` enum. It had zero implementation in both the operator and upstream multigres — all pools were treated identically regardless of type. Users with `type: readOnly` in their specs must change to `type: readWrite`. Can be re-added when upstream supports differentiated pool types.
+- **Durability policy enum renamed:** `ANY_2` → `AT_LEAST_2` and `MULTI_CELL_ANY_2` → `MULTI_CELL_AT_LEAST_2` to match upstream proto renames. Users referencing the old values in `DurabilityPolicy` fields must update to the new names.
+- **Removed deprecated container flags:** `--connpool-admin-password`, `--cluster-metadata-refresh-interval`, `--timeout=30`, `--pg-database=postgres`, `--pg-user=postgres`, `--pooler-health-check-interval=500ms`, and `--recovery-cycle-interval=500ms` have been removed from container args. These either matched upstream defaults (no behavioral change) or were dropped upstream.
+
+### Features
+
+- **Configurable log levels:** New `LogLevels` field on `MultigresClusterSpec`, `CellSpec`, `ShardSpec`, and `TableGroupSpec` with per-component settings for pgctld, multipooler, multiorch, multiadmin, and multigateway. Each component's `--log-level` flag is wired through the resource hierarchy with inheritance. Default is `info`, materialized by the webhook.
+
+### Improvements
+
+- **Go style audit quick wins:** Applied 28 findings from a Go style audit with no behavioral changes: renamed stuttering exports (`EvaluateBackupHealth` → `Evaluate`, `ApplyBackupHealth` → `Apply`, `ParseBackupTime` → `ParseTime`, `ConditionBackupHealthy` → `ConditionHealthy`), replaced `sort.Slice` with `slices.Sort` (5 sites), replaced `reflect.DeepEqual` with `cmp.Diff` (3 test sites), lowercased error strings, fixed import ordering, added doc comments to 9 domain types and all CRD root types, and removed redundant comments.
+- **Webhook doc comments:** Added documentation to all webhook handler methods and `ResolveCoreTemplate`.
+
+### Bug Fixes
+
+- **resolvePodIndex in-band error:** `resolvePodIndex` returned `-1` as a sentinel value for missing pods, which was then used as a valid PVC index downstream — a latent PVC deletion bug. Changed to `(int, bool)` return signature.
+- **t.Fatalf in goroutine:** Fixed `t.Fatalf` called inside a goroutine in `resource_watcher_test.go`, which could cause test panics instead of clean failures.
+
+### Dependencies
+
+- **Upstream multigres images:** multigres `sha-bb174f9` → `sha-cb398c4`, pgctld `sha-9b51b0f` → `sha-cb398c4`, multiadmin-web `sha-b505c90` → `sha-d1ba30a`. Upstream changes include pooled yyParser, etcd watcher replacing polling in multiorch recovery, and `POSTGRES_USER`/`POSTGRES_PASSWORD` env vars replacing deprecated admin/internal user flags.
+
+### Refactoring
+
+- **Upstream flag alignment:** Removed hardcoded flags that match upstream defaults and dropped the `connpoolAdminPasswordEnvVar()` helper and `CONNPOOL_ADMIN_PASSWORD` env var, replaced by upstream's `POSTGRES_USER`/`POSTGRES_PASSWORD` mechanism.
+
+### Testing
+
+- **E2E test expansion:** Added 4 new shared-mode e2e test packages — scaling (4 subtests), templates (3 subtests), verification (3 subtests), and webhook (2 subtests) — with fixtures, framework helpers, and `syscall.Flock` for concurrent cluster setup. Brings automated e2e coverage from 4 to 16 subtests.
+- **Exerciser scenario deduplication:** Removed 8 exerciser scenarios fully covered by the new e2e tests. Reduced exerciser catalog from 56 to 48 scenarios with a documented testing strategy split.
+
+### Documentation
+
+- **Durability policy docs updated:** All references to `ANY_2` and `MULTI_CELL_ANY_2` updated across documentation, samples, and design docs.
+- **readOnly references removed:** Removed readOnly pool type references from README, samples, and design docs.
+
+### Observer
+
+- **New exerciser fixtures:** Added `log-levels` and `multi-pool` fixtures. Added debug `logLevels` to all 14 existing exerciser fixtures.
+- **Fixture scenario updates:** Updated `multi-cell-quorum` fixture durability policy to `AT_LEAST_2`. Removed exerciser scenarios covered by e2e tests.
+
+---
+
 ## [v0.5.3] — 2026-03-13
 
 **Previous release:** v0.5.2 (2026-03-12)
