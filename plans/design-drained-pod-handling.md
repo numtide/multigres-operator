@@ -127,11 +127,11 @@ DRAINED pods must be visible to administrators:
 - **Events:** Emit a warning event on the Shard when a pod is detected as DRAINED and when a stand-in is provisioned.
 - **Observer:** Surface DRAINED pods in the observer's `/api/status` diagnostics endpoint.
 
-### 5. Default Policy Change (Under Consideration)
+### 5. Change `WhenScaled` Default to `Delete`
 
-Change `WhenScaled` default from `Retain` to `Delete`. With `Retain` as default, scaled-down PVCs persist and are reused on scale-up — fast but risky if data had issues. With `Delete`, scale-up always restores from pgbackrest backup — slower but safer.
+The default for `WhenScaled` changes from `Retain` to `Delete`. With `Retain`, scaled-down PVCs persist and are reused on scale-up — fast but risky if data had issues. With `Delete`, scale-up always restores from pgbackrest backup — slower but safer. pgbackrest should be the source of truth for data recovery.
 
-Tradeoff: for large databases (500GB+), restoring from backup on every scale-up could take 30+ minutes vs. immediate PVC remount.
+Users with large databases (500GB+) who want fast scale-up can explicitly set `WhenScaled: Retain`, accepting the tradeoff.
 
 ## Open Questions
 
@@ -139,7 +139,7 @@ Tradeoff: for large databases (500GB+), restoring from backup on every scale-up 
 
 2. **What is the remedy workflow?** Does multiorch automatically retry `pg_rewind` periodically, or does the admin trigger something explicitly to convert a DRAINED pooler back to REPLICA?
 
-3. **`WhenScaled` default:** Should we change from `Retain` to `Delete`? Or remove `WhenScaled` entirely and always delete PVCs on scale-down?
+3. **Should we remove `WhenScaled` entirely?** With the default changing to `Delete` and DRAINED pods always having their PVCs deleted, is there still enough value in offering `Retain` as an option? Removing it would simplify the code and eliminate a footgun. The tradeoff is slower scale-up for large databases.
 
 ## Implementation Summary
 
