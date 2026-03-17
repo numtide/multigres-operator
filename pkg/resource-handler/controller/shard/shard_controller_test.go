@@ -1797,6 +1797,7 @@ func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
 			context.Background(), shard, poolName,
 			multigresv1alpha1.PoolSpec{}, existingPods,
 			2, // replicas: pod-2 is extra
+			2, // effectiveReplicas
 			false,
 		)
 		if err != nil {
@@ -1866,6 +1867,7 @@ func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
 			context.Background(), shard, poolName,
 			multigresv1alpha1.PoolSpec{}, existingPods,
 			2, // replicas: pod-2 is extra
+			2, // effectiveReplicas
 			false,
 		)
 		if err != nil {
@@ -1926,6 +1928,7 @@ func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
 			context.Background(), shard, poolName,
 			multigresv1alpha1.PoolSpec{}, existingPods,
 			2, // replicas: pod-2 is extra
+			2, // effectiveReplicas
 			false,
 		)
 		if err != nil {
@@ -2075,18 +2078,16 @@ func TestDrainedPodReplacement(t *testing.T) {
 				},
 			},
 		},
-		Status: multigresv1alpha1.ShardStatus{
-			// PodRoles assigned later
-		},
 	}
 
+	podName0 := BuildPoolPodName(shardObj, "primary", "zone1", 0)
 	shardObj.Status.PodRoles = map[string]string{
-		BuildPoolPodName(shardObj, "primary", "zone1", 0): "DRAINED",
+		podName0: "DRAINED",
 	}
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      BuildPoolPodName(shardObj, "primary", "zone1", 0),
+			Name:      podName0,
 			Namespace: "default",
 			Labels: map[string]string{
 				"app.kubernetes.io/component":     "shard-pool",
@@ -2097,10 +2098,9 @@ func TestDrainedPodReplacement(t *testing.T) {
 				metadata.LabelMultigresShard:      "s1",
 				metadata.LabelMultigresPool:       "primary",
 				metadata.LabelMultigresCell:       "zone1",
+				metadata.LabelPodRole:             "DRAINED",
 			},
-			Annotations: map[string]string{
-				// We need the hash to match so it doesn't get deleted as drifted
-			},
+			Annotations: map[string]string{},
 		},
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
@@ -2109,7 +2109,7 @@ func TestDrainedPodReplacement(t *testing.T) {
 		},
 	}
 
-	// Pre-calculate hash
+	// Pre-calculate hash so it doesn't get deleted as drifted
 	poolSpec := shardObj.Spec.Pools["primary"]
 	desiredPod, _ := BuildPoolPod(shardObj, "primary", "zone1", poolSpec, 0, scheme)
 	pod.Annotations[metadata.AnnotationSpecHash] = desiredPod.Annotations[metadata.AnnotationSpecHash]
@@ -2127,23 +2127,32 @@ func TestDrainedPodReplacement(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// The DRAINED pod should now have the drain requested annotation
+	// The DRAINED pod should NOT have a drain annotation (DRAINED pods are no longer auto-drained)
 	err = c.Get(
 		context.Background(),
-		types.NamespacedName{
-			Name:      BuildPoolPodName(shardObj, "primary", "zone1", 0),
-			Namespace: "default",
-		},
+		types.NamespacedName{Name: podName0, Namespace: "default"},
 		pod,
 	)
 	if err != nil {
 		t.Fatalf("expected pod to exist, got %v", err)
 	}
 
-	if pod.Annotations[metadata.AnnotationDrainState] != metadata.DrainStateRequested {
+	if pod.Annotations[metadata.AnnotationDrainState] != "" {
 		t.Errorf(
-			"Expected DRAINED pod to have drain requested annotation, got %v",
+			"Expected DRAINED pod to have no drain annotation, got %q",
 			pod.Annotations[metadata.AnnotationDrainState],
 		)
+	}
+
+	// A stand-in pod at index 1 should be created (replicas=1, effectiveReplicas=2)
+	podName1 := BuildPoolPodName(shardObj, "primary", "zone1", 1)
+	standInPod := &corev1.Pod{}
+	err = c.Get(
+		context.Background(),
+		types.NamespacedName{Name: podName1, Namespace: "default"},
+		standInPod,
+	)
+	if err != nil {
+		t.Fatalf("expected stand-in pod at index 1 to be created, got %v", err)
 	}
 }

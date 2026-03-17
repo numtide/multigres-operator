@@ -31,6 +31,17 @@ func resolvePodRole(shard *multigresv1alpha1.Shard, podName string) string {
 	return ""
 }
 
+// countDrainedPods returns the number of pods whose topology role is DRAINED.
+func countDrainedPods(shard *multigresv1alpha1.Shard, existingPods map[string]*corev1.Pod) int32 {
+	var count int32
+	for _, pod := range existingPods {
+		if resolvePodRole(shard, pod.Name) == "DRAINED" {
+			count++
+		}
+	}
+	return count
+}
+
 // clearDrainAnnotations removes all drain annotations from a pod via merge patch,
 // cancelling a drain that is no longer needed (e.g. scale-down reversed).
 func clearDrainAnnotations(ctx context.Context, k8sClient client.Client, pod *corev1.Pod) error {
