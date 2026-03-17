@@ -419,7 +419,7 @@ func (r *Resolver) ValidateClusterLogic(
 					if replicas < 3 {
 						warnings = append(warnings, fmt.Sprintf(
 							"pool '%s' in shard '%s' has replicasPerCell=%d; pools need at least 3 "+
-								"for zero-downtime rolling upgrades (ANY_2 durability requires 1 primary + 2 standbys "+
+								"for zero-downtime rolling upgrades (AT_LEAST_2 durability requires 1 primary + 2 standbys "+
 								"to maintain quorum while draining a replica)",
 							poolName,
 							shard.Name,

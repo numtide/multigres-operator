@@ -17,7 +17,7 @@ On every `CREATE` and `UPDATE` of a `MultigresCluster`, the webhook materialises
 | `spec.images.*` (all 7 component images) | Compiled-in image tags (SHA-pinned) |
 | `spec.images.imagePullPolicy` | `IfNotPresent` |
 | `spec.topologyPruning.enabled` | `true` |
-| `spec.durabilityPolicy` | `ANY_2` |
+| `spec.durabilityPolicy` | `AT_LEAST_2` |
 | `spec.pvcDeletionPolicy` | `Retain / Retain` |
 | `spec.backup` | Filesystem, `/backups`, `10Gi` |
 | `spec.databases` (system catalog) | `postgres` database, `default` table group, `0-inf` shard |

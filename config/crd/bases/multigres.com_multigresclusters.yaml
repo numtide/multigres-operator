@@ -5146,7 +5146,7 @@ spec:
                                               ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
                                               Sidecars (like Multipooler) will scale alongside the Postgres pods.
                                               Minimum 1 is required; readWrite pools need at least 3 for zero-downtime rolling upgrades
-                                              (ANY_2 durability requires 1 primary + 2 standbys to maintain quorum during drain).
+                                              (AT_LEAST_2 durability requires 1 primary + 2 standbys to maintain quorum during drain).
                                             format: int32
                                             maximum: 32
                                             minimum: 1
@@ -7508,7 +7508,7 @@ spec:
                                               ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
                                               Sidecars (like Multipooler) will scale alongside the Postgres pods.
                                               Minimum 1 is required; readWrite pools need at least 3 for zero-downtime rolling upgrades
-                                              (ANY_2 durability requires 1 primary + 2 standbys to maintain quorum during drain).
+                                              (AT_LEAST_2 durability requires 1 primary + 2 standbys to maintain quorum during drain).
                                             format: int32
                                             maximum: 32
                                             minimum: 1
@@ -7675,11 +7675,11 @@ spec:
                   synchronous replication acknowledgment during failover.
 
                   Currently supported values (upstream multiorch):
-                    - "ANY_2": any 2 nodes must acknowledge writes (single-cell quorum)
-                    - "MULTI_CELL_ANY_2": any 2 nodes from different cells must acknowledge (cross-AZ quorum)
+                    - "AT_LEAST_2": any 2 nodes must acknowledge writes (single-cell quorum)
+                    - "MULTI_CELL_AT_LEAST_2": any 2 nodes from different cells must acknowledge (cross-AZ quorum)
 
                   Additional user-defined policies may be supported in future upstream releases.
-                  Defaults to "ANY_2" if not set.
+                  Defaults to "AT_LEAST_2" if not set.
                 type: string
               globalTopoServer:
                 description: GlobalTopoServer defines the cluster-wide global topology

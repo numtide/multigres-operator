@@ -425,7 +425,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(false),
 					},
-					DurabilityPolicy: "MULTI_CELL_ANY_2",
+					DurabilityPolicy: "MULTI_CELL_AT_LEAST_2",
 					LogLevels: multigresv1alpha1.ComponentLogLevels{
 						Pgctld:       DefaultLogLevel,
 						Multipooler:  DefaultLogLevel,
@@ -479,7 +479,7 @@ func TestResolver_PopulateClusterDefaults(t *testing.T) {
 					TopologyPruning: &multigresv1alpha1.TopologyPruningConfig{
 						Enabled: ptr.To(false),
 					},
-					DurabilityPolicy: "MULTI_CELL_ANY_2",
+					DurabilityPolicy: "MULTI_CELL_AT_LEAST_2",
 					LogLevels: multigresv1alpha1.ComponentLogLevels{
 						Pgctld:       DefaultLogLevel,
 						Multipooler:  DefaultLogLevel,

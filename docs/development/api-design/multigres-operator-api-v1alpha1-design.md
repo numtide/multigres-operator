@@ -472,14 +472,14 @@ spec:
   # Controls how multiorch enforces synchronous replication acknowledgment
   # during failover. Written to the database entry in the topology (etcd).
   # This is a per-database setting; override per-database via databases[].durabilityPolicy.
-  # Defaults to "ANY_2" if not set.
+  # Defaults to "AT_LEAST_2" if not set.
   #
   # Currently supported (upstream multiorch):
-  #   "ANY_2"            - any 2 nodes must acknowledge writes (single-cell quorum)
-  #   "MULTI_CELL_ANY_2" - 2 nodes from different cells must acknowledge (cross-AZ quorum)
+  #   "AT_LEAST_2"            - any 2 nodes must acknowledge writes (single-cell quorum)
+  #   "MULTI_CELL_AT_LEAST_2" - 2 nodes from different cells must acknowledge (cross-AZ quorum)
   #
   # Additional user-defined policies may be supported in future upstream releases.
-  # durabilityPolicy: "ANY_2"
+  # durabilityPolicy: "AT_LEAST_2"
 
 status:
   observedGeneration: 1
@@ -1509,7 +1509,7 @@ spec:
   * **2026-02-01:** Added CEL rules for append-only cells, pools, and pool-cell lists to prevent accidental destructive operations. Enforced `MultigresCluster` name ≤ 25 chars. Set shard name to `"0-inf"` for v1alpha1.
   * **2026-02-10:** Added `CellTopologyLabels` to `ShardSpec` to propagate zone/region labels without the shard controller needing to look up Cell CRs directly. Added `ResolvedTemplates` to `MultigresClusterStatus` for efficient template-change triggered reconciliation.
   * **2026-02-20:** Pool management migrated from StatefulSets to direct operator-managed Pods and PVCs. Added scale subresource to Shard CRD (`.spec.replicas` / `.status.readyReplicas`). Added `PodRoles`, `LastBackupTime`, `LastBackupType` to `ShardStatus`.
-  * **2026-03-10:** Added `DurabilityPolicy` as a configurable string field at cluster level (`spec.durabilityPolicy`) and per-database override (`databases[].durabilityPolicy`). Propagated through TableGroup and Shard to the topology registration. Previously hardcoded to `"ANY_2"`. Also fixed `UpdateDatabaseFields()` to sync DurabilityPolicy on re-registration.
+  * **2026-03-10:** Added `DurabilityPolicy` as a configurable string field at cluster level (`spec.durabilityPolicy`) and per-database override (`databases[].durabilityPolicy`). Propagated through TableGroup and Shard to the topology registration. Previously hardcoded to `"AT_LEAST_2"`. Also fixed `UpdateDatabaseFields()` to sync DurabilityPolicy on re-registration.
 
 ## Drawbacks
 

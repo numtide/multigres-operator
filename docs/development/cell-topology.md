@@ -103,9 +103,9 @@ Upstream multigres has **no awareness of physical infrastructure topology**. The
 
 The durability policy controls how multiorch enforces synchronous replication acknowledgment during failover. It is configurable via `spec.durabilityPolicy` on the `MultigresCluster` (cluster-wide default) and per-database via the `databases[].durabilityPolicy` override. See the [Durability Policy](../durability-policy.md) user guide for configuration details.
 
-The `MULTI_CELL_ANY_2` policy groups standbys by `Id.Cell` and requires synchronous replication acknowledgment from N distinct cells. `BuildSyncReplicationConfig` in multiorch **excludes standbys in the same cell as the primary** when building the sync standby list for multi-cell policies.
+The `MULTI_CELL_AT_LEAST_2` policy groups standbys by `Id.Cell` and requires synchronous replication acknowledgment from N distinct cells. `BuildSyncReplicationConfig` in multiorch **excludes standbys in the same cell as the primary** when building the sync standby list for multi-cell policies.
 
-This means cells are the mechanism by which multigres guarantees that a committed write survives the failure of an entire availability zone. If a shard has pools in `zone-1` and `zone-2` and uses `MULTI_CELL_ANY_2`, a write is only acknowledged after replication to a standby in the opposite zone.
+This means cells are the mechanism by which multigres guarantees that a committed write survives the failure of an entire availability zone. If a shard has pools in `zone-1` and `zone-2` and uses `MULTI_CELL_AT_LEAST_2`, a write is only acknowledged after replication to a standby in the opposite zone.
 
 However, this guarantee is only real if the cell's pods actually run in the correct zone. If the Kubernetes scheduler places `zone-1` pool pods on `us-east-1b` nodes, the cross-cell quorum is meaningless — both "cells" are on the same physical infrastructure.
 

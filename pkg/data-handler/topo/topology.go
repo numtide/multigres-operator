@@ -36,7 +36,7 @@ func RegisterDatabaseFromSpec(
 		durabilityPolicy = clusterDurabilityPolicy
 	}
 	if durabilityPolicy == "" {
-		durabilityPolicy = "ANY_2"
+		durabilityPolicy = "AT_LEAST_2"
 	}
 
 	dbMetadata := &clustermetadatapb.Database{

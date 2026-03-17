@@ -145,9 +145,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--cell=zone-a",
 											"--watch-targets=testdb/default/0",
-											"--cluster-metadata-refresh-interval=500ms",
-											"--pooler-health-check-interval=500ms",
-											"--recovery-cycle-interval=500ms",
 											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
@@ -235,9 +232,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--cell=zone-b",
 											"--watch-targets=testdb/default/0",
-											"--cluster-metadata-refresh-interval=500ms",
-											"--pooler-health-check-interval=500ms",
-											"--recovery-cycle-interval=500ms",
 											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
@@ -399,9 +393,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--cell=zone-a",
 											"--watch-targets=testdb/default/0",
-											"--cluster-metadata-refresh-interval=500ms",
-											"--pooler-health-check-interval=500ms",
-											"--recovery-cycle-interval=500ms",
 											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
@@ -559,9 +550,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--cell=zone1",
 											"--watch-targets=testdb/default/0",
-											"--cluster-metadata-refresh-interval=500ms",
-											"--pooler-health-check-interval=500ms",
-											"--recovery-cycle-interval=500ms",
 											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{
@@ -649,9 +637,6 @@ func TestShardReconciliation(t *testing.T) {
 											"--topo-global-root=/multigres/global",
 											"--cell=zone2",
 											"--watch-targets=testdb/default/0",
-											"--cluster-metadata-refresh-interval=500ms",
-											"--pooler-health-check-interval=500ms",
-											"--recovery-cycle-interval=500ms",
 											"--log-level=info",
 										},
 										Ports: []corev1.ContainerPort{

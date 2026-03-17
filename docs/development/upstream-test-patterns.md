@@ -60,7 +60,7 @@ args:
   - --global-topo-address=etcd:2379
   - --global-topo-root=/multigres/test/global
   - --cells=zone1
-  - --durability-policy=ANY_2
+  - --durability-policy=AT_LEAST_2
   - --backup-location=/backups
 ```
 
@@ -84,7 +84,7 @@ err = ts.CreateCell(ctx, cellName, &clustermetadatapb.Cell{
 err = ts.CreateDatabase(ctx, database, &clustermetadatapb.Database{
     Name:             database,
     BackupLocation:   backupLocation,
-    DurabilityPolicy: "ANY_2",
+    DurabilityPolicy: "AT_LEAST_2",
 })
 ```
 
@@ -201,7 +201,7 @@ func (s *ShardSetup) WaitForMultigatewayQueryServing(t *testing.T) {
 --pooler-dir=/data
 --pgctld-addr=localhost:16200
 --pg-port=5432
---connpool-admin-password=postgres
+
 --socket-file=/data/pg_sockets/.s.PGSQL.5432
 --grpc-socket-file=/data/multipooler.sock
 --service-map=grpc-pooler
@@ -232,7 +232,6 @@ server
 --topo-global-root=/multigres/test/global
 --cell=zone1
 --watch-targets=postgres
---cluster-metadata-refresh-interval=500ms
 --pooler-health-check-interval=500ms
 --recovery-cycle-interval=500ms
 ```
@@ -256,7 +255,7 @@ TestPostgresPassword = "test_password_123"
 ```
 
 Set via `PGPASSWORD` environment variable before pgctld initializes PostgreSQL.
-The demo K8s manifests use `--connpool-admin-password=postgres` and trust auth in pg_hba.conf
+The demo K8s manifests use `` and trust auth in pg_hba.conf
 for all connections (appropriate for testing).
 
 ---
@@ -275,7 +274,7 @@ setup := shardsetup.New(t,
     shardsetup.WithMultigateway(),        // enable gateway
     shardsetup.WithDatabase("postgres"),
     shardsetup.WithCellName("test-cell"),
-    shardsetup.WithDurabilityPolicy("ANY_2"),
+    shardsetup.WithDurabilityPolicy("AT_LEAST_2"),
 )
 ```
 
@@ -501,7 +500,7 @@ Failover testing can be a separate, more targeted test suite.
 |----------|-------|--------|
 | Default table group | `"default"` | `constants.DefaultTableGroup` |
 | Default shard | `"0-inf"` | `constants.DefaultShard` |
-| Default durability policy | `"ANY_2"` | shardsetup defaults |
+| Default durability policy | `"AT_LEAST_2"` | shardsetup defaults |
 | Default cell name (tests) | `"test-cell"` | shardsetup defaults |
 | Default database | `"postgres"` | shardsetup defaults |
 | Topo implementation | `"etcd"` | topoclient default |

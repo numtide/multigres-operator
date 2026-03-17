@@ -91,14 +91,17 @@ func TestBuildShard(t *testing.T) {
 
 	t.Run("DurabilityPolicy propagates from TableGroup to Shard", func(t *testing.T) {
 		tgWithPolicy := tg.DeepCopy()
-		tgWithPolicy.Spec.DurabilityPolicy = "MULTI_CELL_ANY_2"
+		tgWithPolicy.Spec.DurabilityPolicy = "MULTI_CELL_AT_LEAST_2"
 
 		got, err := BuildShard(tgWithPolicy, shardSpec, scheme)
 		if err != nil {
 			t.Fatalf("BuildShard() error = %v", err)
 		}
-		if got.Spec.DurabilityPolicy != "MULTI_CELL_ANY_2" {
-			t.Errorf("Spec.DurabilityPolicy = %v, want MULTI_CELL_ANY_2", got.Spec.DurabilityPolicy)
+		if got.Spec.DurabilityPolicy != "MULTI_CELL_AT_LEAST_2" {
+			t.Errorf(
+				"Spec.DurabilityPolicy = %v, want MULTI_CELL_AT_LEAST_2",
+				got.Spec.DurabilityPolicy,
+			)
 		}
 	})
 

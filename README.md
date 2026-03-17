@@ -241,12 +241,12 @@ If you use GitOps tooling (ArgoCD, Flux), the webhook-materialised fields can ca
 
 ## Pool Replication & Quorum
 
-Multigres uses a configurable **durability policy** to control synchronous replication quorum. The default policy is `ANY_2`, which requires every write to be acknowledged by at least 2 nodes (the primary + 1 synchronous standby). For multi-AZ clusters, `MULTI_CELL_ANY_2` enforces cross-zone quorum. This has implications for how many replicas you should run per cell in `readWrite` pools.
+Multigres uses a configurable **durability policy** to control synchronous replication quorum. The default policy is `AT_LEAST_2`, which requires every write to be acknowledged by at least 2 nodes (the primary + 1 synchronous standby). For multi-AZ clusters, `MULTI_CELL_AT_LEAST_2` enforces cross-zone quorum. This has implications for how many replicas you should run per cell in `readWrite` pools.
 
 | Replicas per Cell | Configuration | Rolling Upgrade Behavior |
 | :--- | :--- | :--- |
 | **1** | 1 pod (primary only, no standbys) | **Downtime during upgrades.** No standby to maintain quorum. |
-| **2** | 1 primary + 1 standby | **Downtime during upgrades.** Draining the standby leaves zero synchronous standbys, violating `ANY_2`. Upstream multigres rejects the `UpdateSynchronousStandbyList REMOVE` because it would empty the synchronous standby list. |
+| **2** | 1 primary + 1 standby | **Downtime during upgrades.** Draining the standby leaves zero synchronous standbys, violating `AT_LEAST_2`. Upstream multigres rejects the `UpdateSynchronousStandbyList REMOVE` because it would empty the synchronous standby list. |
 | **3** (recommended) | 1 primary + 2 standbys | **Zero-downtime upgrades.** One standby can be drained while the other maintains quorum. |
 
 The operator enforces a **hard minimum of 1** replica per cell (the CRD rejects `replicasPerCell: 0`). For pools with fewer than 3 replicas, the webhook returns an **admission warning** (not a rejection) explaining the quorum limitation.
@@ -275,7 +275,7 @@ Please be aware of the following constraints in the current version:
 | :--- | :--- |
 | [Operator Capability Levels](docs/operator-capability-levels.md) | Maturity assessment against the [Operator Framework capability model](https://operatorframework.io/operator-capabilities/) |
 | [Webhook Defaults & GitOps](docs/gitops-and-webhook-defaults.md) | How the webhook materialises defaults, dynamic cell resolution, and GitOps compatibility |
-| [Durability Policy](docs/durability-policy.md) | Configurable replication quorum: `ANY_2` (default) and `MULTI_CELL_ANY_2` for cross-AZ durability |
+| [Durability Policy](docs/durability-policy.md) | Configurable replication quorum: `AT_LEAST_2` (default) and `MULTI_CELL_AT_LEAST_2` for cross-AZ durability |
 | [Storage Management](docs/storage.md) | PVC deletion policies (Retain/Delete) and volume expansion |
 | [Configuration Reference](docs/configuration.md) | Operator flags, environment variables, and logging |
 | [Demos](demo/) | Guided walkthroughs (webhook, cert-manager, observability) |

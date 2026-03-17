@@ -174,7 +174,7 @@ These constraints are already enforced or need to be enforced via CEL validation
 | Constraint | Status | Risk |
 |---|---|---|
 | **Cell rename prevention** | ✅ **Implemented** | CEL append-only rule added to `MultigresCluster` and `Shard` CRDs. Cells cannot be removed or renamed after creation. |
-| **Pool replica count floor** | ✅ **Validated** | CRD enforces minimum=1. Webhook warns for readWrite pools with <3 (ANY_2 quorum requires 1 primary + 2 standbys for rolling upgrades). |
+| **Pool replica count floor** | ✅ **Validated** | CRD enforces minimum=1. Webhook warns for readWrite pools with <3 (AT_LEAST_2 quorum requires 1 primary + 2 standbys for rolling upgrades). |
 
 ### Explicitly NOT Supported (v1alpha1)
 
