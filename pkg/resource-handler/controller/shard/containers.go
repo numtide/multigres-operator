@@ -122,9 +122,6 @@ func buildPgctldContainer(
 		"--grpc-port=15470",
 		"--pg-port=5432",
 		"--pg-listen-addresses=*",
-		"--pg-database=postgres",
-		"--pg-user=postgres",
-		"--timeout=30",
 		"--log-level=" + string(shard.Spec.LogLevels.Pgctld),
 		"--grpc-socket-file=" + PoolerDirMountPath + "/pgctld.sock",
 		"--pg-hba-template=" + PgHbaTemplatePath,
@@ -270,7 +267,6 @@ func buildMultiPoolerSidecar(
 		"--service-id=" + serviceID,
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
-		"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)", // Resolved from env var below
 		"--log-level=" + string(shard.Spec.LogLevels.Multipooler),
 	}
 
@@ -324,10 +320,7 @@ func buildMultiPoolerSidecar(
 		},
 	}
 
-	env := []corev1.EnvVar{
-		connpoolAdminPasswordEnvVar(shard.Name),
-	}
-	env = append(env, s3EnvVars(shard.Spec.Backup)...)
+	env := s3EnvVars(shard.Spec.Backup)
 	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
 		env = append(env, otelVars...)
 	}
@@ -380,9 +373,6 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 		"--topo-global-root=" + shard.Spec.GlobalTopoServer.RootPath,
 		"--cell=" + cellName,
 		"--watch-targets=" + watchTarget,
-		"--cluster-metadata-refresh-interval=500ms",
-		"--pooler-health-check-interval=500ms",
-		"--recovery-cycle-interval=500ms",
 		"--log-level=" + string(shard.Spec.LogLevels.Multiorch),
 	}
 
@@ -572,23 +562,6 @@ func buildPgBackRestCertVolume(shard *multigresv1alpha1.Shard) *corev1.Volume {
 func pgPasswordEnvVar(shardName string) corev1.EnvVar {
 	return corev1.EnvVar{
 		Name: "POSTGRES_PASSWORD",
-		ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: PostgresPasswordSecretName(shardName),
-				},
-				Key: PostgresPasswordSecretKey,
-			},
-		},
-	}
-}
-
-// connpoolAdminPasswordEnvVar returns a CONNPOOL_ADMIN_PASSWORD env var sourced
-// from the per-shard postgres password Secret. Multipooler uses this to authenticate
-// with PostgreSQL for connection pool administration.
-func connpoolAdminPasswordEnvVar(shardName string) corev1.EnvVar {
-	return corev1.EnvVar{
-		Name: "CONNPOOL_ADMIN_PASSWORD",
 		ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{

@@ -149,10 +149,10 @@ func GetBackupLocation(shard *multigresv1alpha1.Shard) *clustermetadatapb.Backup
 }
 
 // GetDurabilityPolicy extracts the durability policy from the shard config.
-// Falls back to "ANY_2" if not set (the default materialized by the webhook resolver).
+// Falls back to "AT_LEAST_2" if not set (the default materialized by the webhook resolver).
 func GetDurabilityPolicy(shard *multigresv1alpha1.Shard) string {
 	if shard.Spec.DurabilityPolicy != "" {
 		return shard.Spec.DurabilityPolicy
 	}
-	return "ANY_2"
+	return "AT_LEAST_2"
 }

@@ -123,7 +123,7 @@ This is the final and most powerful layer: an HTTP server run by our operator. I
 * **Goal:** Solve the "invisible defaults" problem and resolve the complex override logic defined in Design (6).
 * **Logic:** On `MultigresCluster` `CREATE` or `UPDATE`, the webhook will apply defaults:
 1. **System Catalog Injection:** If `spec.databases` is empty, inject the mandatory `postgres` database. If any database lacks a `tableGroups` list, inject the `default` tablegroup.
-2. **Static Defaults:** Materialize `TopologyPruning` (enabled), `PVCDeletionPolicy` (Retain/Retain), `Backup` (filesystem /backups), and `DurabilityPolicy` ("ANY_2") if not set.
+2. **Static Defaults:** Materialize `TopologyPruning` (enabled), `PVCDeletionPolicy` (Retain/Retain), `Backup` (filesystem /backups), and `DurabilityPolicy` ("AT_LEAST_2") if not set.
 3. **Override Chain:** Apply defaults for `GlobalTopoServer`, `MultiAdmin`, `Cells`, and `Shards` following this priority:
     * **Inline Spec:** Use if present.
     * **Explicit Template:** If `templateRef` (or `cellTemplate`/`shardTemplate`) is set, load that template.

@@ -243,9 +243,9 @@ func mergePoolSpec(
 
 func defaultPoolSpec(spec *multigresv1alpha1.PoolSpec) {
 	if spec.ReplicasPerCell == nil {
-		// Default to 3 replicas to satisfy multiorch's ANY_2 durability policy
+		// Default to 3 replicas to satisfy multiorch's AT_LEAST_2 durability policy
 		// requirement.
-		// TODO: multiorch currently only supports ANY_2 or MULTI_CELL_ANY_2,
+		// TODO: multiorch currently only supports AT_LEAST_2 or MULTI_CELL_AT_LEAST_2,
 		// both of which require at least 2 replicas for quorum. Single-node
 		// policies are not yet supported.
 		spec.ReplicasPerCell = ptr.To(int32(3))

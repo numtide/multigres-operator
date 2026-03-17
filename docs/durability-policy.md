@@ -6,8 +6,8 @@ The durability policy controls how multigres enforces synchronous replication ac
 
 | Policy | Description |
 |:---|:---|
-| `ANY_2` | Any 2 nodes in the shard must acknowledge writes. This is the default and provides single-cell quorum — suitable for clusters where all pools reside in one availability zone. |
-| `MULTI_CELL_ANY_2` | Any 2 nodes from **different cells** must acknowledge writes. This enforces cross-AZ quorum — a committed write survives the failure of an entire availability zone. Requires pools deployed in at least 2 cells. |
+| `AT_LEAST_2` | Any 2 nodes in the shard must acknowledge writes. This is the default and provides single-cell quorum — suitable for clusters where all pools reside in one availability zone. |
+| `MULTI_CELL_AT_LEAST_2` | Any 2 nodes from **different cells** must acknowledge writes. This enforces cross-AZ quorum — a committed write survives the failure of an entire availability zone. Requires pools deployed in at least 2 cells. |
 
 > [!NOTE]
 > Upstream multigres plans to support additional user-defined policies in the future. The field accepts any string value to accommodate this.
@@ -24,7 +24,7 @@ kind: MultigresCluster
 metadata:
   name: my-cluster
 spec:
-  durabilityPolicy: "ANY_2"
+  durabilityPolicy: "AT_LEAST_2"
   cells:
     - name: zone-a
       zone: us-east-1a
@@ -35,7 +35,7 @@ spec:
       default: true
 ```
 
-If omitted, the webhook defaults the field to `"ANY_2"`.
+If omitted, the webhook defaults the field to `"AT_LEAST_2"`.
 
 ### Per-database override
 
@@ -47,7 +47,7 @@ kind: MultigresCluster
 metadata:
   name: multi-az-cluster
 spec:
-  durabilityPolicy: "ANY_2"  # default for all databases
+  durabilityPolicy: "AT_LEAST_2"  # default for all databases
   cells:
     - name: zone-a
       zone: us-east-1a
@@ -56,14 +56,14 @@ spec:
   databases:
     - name: postgres
       default: true
-      durabilityPolicy: "MULTI_CELL_ANY_2"  # override for this database
+      durabilityPolicy: "MULTI_CELL_AT_LEAST_2"  # override for this database
 ```
 
-In this example, the `postgres` database uses `MULTI_CELL_ANY_2` (cross-AZ quorum), while any future databases would inherit the cluster default of `ANY_2`.
+In this example, the `postgres` database uses `MULTI_CELL_AT_LEAST_2` (cross-AZ quorum), while any future databases would inherit the cluster default of `AT_LEAST_2`.
 
 ## How It Works
 
-1. The webhook resolver materializes the default (`"ANY_2"`) on `CREATE` if the field is empty.
+1. The webhook resolver materializes the default (`"AT_LEAST_2"`) on `CREATE` if the field is empty.
 2. The cluster-handler merges the database-level override with the cluster default (database wins if set).
 3. The resolved value propagates through `TableGroup` → `Shard` child resources.
 4. The data-handler writes the policy to the database entry in the global topology (etcd).
@@ -73,12 +73,12 @@ In this example, the `postgres` database uses `MULTI_CELL_ANY_2` (cross-AZ quoru
 
 | Scenario | Recommended Policy |
 |:---|:---|
-| Single availability zone | `ANY_2` |
-| Multi-AZ with cross-zone durability requirement | `MULTI_CELL_ANY_2` |
-| Development / testing | `ANY_2` |
+| Single availability zone | `AT_LEAST_2` |
+| Multi-AZ with cross-zone durability requirement | `MULTI_CELL_AT_LEAST_2` |
+| Development / testing | `AT_LEAST_2` |
 
-When using `MULTI_CELL_ANY_2`, ensure your shard's pools span at least 2 cells and that each cell maps to a distinct availability zone via `spec.cells[].zone`. See [Cell Topology](development/cell-topology.md) for details on how cells map to Kubernetes scheduling constraints.
+When using `MULTI_CELL_AT_LEAST_2`, ensure your shard's pools span at least 2 cells and that each cell maps to a distinct availability zone via `spec.cells[].zone`. See [Cell Topology](development/cell-topology.md) for details on how cells map to Kubernetes scheduling constraints.
 
 ## Replica Count Considerations
 
-The `ANY_2` policy requires at least 3 replicas per pool (1 primary + 2 standbys) for zero-downtime rolling upgrades, since quorum must be maintained while one node is being drained. The CRD enforces a minimum of 1 replica, but pools with fewer than 3 replicas will lose quorum during drain operations.
+The `AT_LEAST_2` policy requires at least 3 replicas per pool (1 primary + 2 standbys) for zero-downtime rolling upgrades, since quorum must be maintained while one node is being drained. The CRD enforces a minimum of 1 replica, but pools with fewer than 3 replicas will lose quorum during drain operations.

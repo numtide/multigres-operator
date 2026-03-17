@@ -51,8 +51,8 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 		if err != nil {
 			t.Fatalf("database not found: %v", err)
 		}
-		if db.DurabilityPolicy != "ANY_2" {
-			t.Errorf("expected default durability ANY_2, got %s", db.DurabilityPolicy)
+		if db.DurabilityPolicy != "AT_LEAST_2" {
+			t.Errorf("expected default durability AT_LEAST_2, got %s", db.DurabilityPolicy)
 		}
 		fs := db.BackupLocation.GetFilesystem()
 		if fs == nil || fs.Path != "/backups" {
@@ -140,7 +140,7 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 		// Re-register with different cells.
 		if err := topo.RegisterDatabaseFromSpec(
 			ctx, store, recorder, owner, dbConfig,
-			[]string{"cell1", "cell2"}, nil, "MULTI_CELL_ANY_2",
+			[]string{"cell1", "cell2"}, nil, "MULTI_CELL_AT_LEAST_2",
 		); err != nil {
 			t.Fatalf("re-registration: %v", err)
 		}
@@ -152,8 +152,8 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 		if len(db.Cells) != 2 {
 			t.Errorf("expected 2 cells, got %d", len(db.Cells))
 		}
-		if db.DurabilityPolicy != "MULTI_CELL_ANY_2" {
-			t.Errorf("expected MULTI_CELL_ANY_2, got %s", db.DurabilityPolicy)
+		if db.DurabilityPolicy != "MULTI_CELL_AT_LEAST_2" {
+			t.Errorf("expected MULTI_CELL_AT_LEAST_2, got %s", db.DurabilityPolicy)
 		}
 	})
 
@@ -169,7 +169,7 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 
 		err := topo.RegisterDatabaseFromSpec(
 			context.Background(), store, recorder, owner,
-			dbConfig, []string{"cell1"}, nil, "ANY_2",
+			dbConfig, []string{"cell1"}, nil, "AT_LEAST_2",
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

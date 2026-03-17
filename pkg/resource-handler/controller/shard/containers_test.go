@@ -67,7 +67,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--service-id=p-test-id",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
-					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 					"--log-level=info",
 				},
 				Ports:         buildMultiPoolerContainerPorts(),
@@ -105,9 +104,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						},
 					},
 					PeriodSeconds: 5,
-				},
-				Env: []corev1.EnvVar{
-					connpoolAdminPasswordEnvVar("test-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -173,7 +169,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--service-id=p-custom-id",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
-					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 					"--log-level=info",
 				},
 				Ports:         buildMultiPoolerContainerPorts(),
@@ -211,9 +206,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						},
 					},
 					PeriodSeconds: 5,
-				},
-				Env: []corev1.EnvVar{
-					connpoolAdminPasswordEnvVar("custom-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -288,7 +280,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					"--service-id=p-resource-id",
 					"--pgctld-addr=localhost:15470",
 					"--pg-port=5432",
-					"--connpool-admin-password=$(CONNPOOL_ADMIN_PASSWORD)",
 					"--log-level=info",
 				},
 				Ports: buildMultiPoolerContainerPorts(),
@@ -335,9 +326,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						},
 					},
 					PeriodSeconds: 5,
-				},
-				Env: []corev1.EnvVar{
-					connpoolAdminPasswordEnvVar("resource-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -412,9 +400,6 @@ func TestBuildMultiOrchContainer(t *testing.T) {
 					"--topo-global-root=/multigres/global",
 					"--cell=zone1",
 					"--watch-targets=testdb/default/0",
-					"--cluster-metadata-refresh-interval=500ms",
-					"--pooler-health-check-interval=500ms",
-					"--recovery-cycle-interval=500ms",
 					"--log-level=info",
 				},
 				Ports:     buildMultiOrchContainerPorts(),

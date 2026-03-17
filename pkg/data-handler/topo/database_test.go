@@ -103,7 +103,7 @@ func TestRegisterDatabase(t *testing.T) {
 		shard := newTestShard("test-shard")
 		ctx := context.Background()
 
-		// First registration with default ANY_2.
+		// First registration with default AT_LEAST_2.
 		if err := topo.RegisterDatabase(ctx, store, recorder, shard); err != nil {
 			t.Fatalf("first registration failed: %v", err)
 		}
@@ -111,12 +111,12 @@ func TestRegisterDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("database not found: %v", err)
 		}
-		if db.DurabilityPolicy != "ANY_2" {
-			t.Errorf("expected ANY_2 after first registration, got %s", db.DurabilityPolicy)
+		if db.DurabilityPolicy != "AT_LEAST_2" {
+			t.Errorf("expected AT_LEAST_2 after first registration, got %s", db.DurabilityPolicy)
 		}
 
-		// Change to MULTI_CELL_ANY_2 and re-register.
-		shard.Spec.DurabilityPolicy = "MULTI_CELL_ANY_2"
+		// Change to MULTI_CELL_AT_LEAST_2 and re-register.
+		shard.Spec.DurabilityPolicy = "MULTI_CELL_AT_LEAST_2"
 		if err := topo.RegisterDatabase(ctx, store, recorder, shard); err != nil {
 			t.Fatalf("second registration failed: %v", err)
 		}
@@ -124,8 +124,8 @@ func TestRegisterDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("database not found after update: %v", err)
 		}
-		if db.DurabilityPolicy != "MULTI_CELL_ANY_2" {
-			t.Errorf("expected MULTI_CELL_ANY_2 after update, got %s", db.DurabilityPolicy)
+		if db.DurabilityPolicy != "MULTI_CELL_AT_LEAST_2" {
+			t.Errorf("expected MULTI_CELL_AT_LEAST_2 after update, got %s", db.DurabilityPolicy)
 		}
 	})
 }
@@ -183,32 +183,32 @@ func TestUnregisterDatabase(t *testing.T) {
 func TestGetDurabilityPolicy(t *testing.T) {
 	t.Parallel()
 
-	t.Run("defaults to ANY_2 when empty", func(t *testing.T) {
+	t.Run("defaults to AT_LEAST_2 when empty", func(t *testing.T) {
 		t.Parallel()
 		shard := newTestShard("test-shard")
 		got := topo.GetDurabilityPolicy(shard)
-		if got != "ANY_2" {
-			t.Errorf("expected ANY_2, got %s", got)
+		if got != "AT_LEAST_2" {
+			t.Errorf("expected AT_LEAST_2, got %s", got)
 		}
 	})
 
-	t.Run("returns explicit ANY_2", func(t *testing.T) {
+	t.Run("returns explicit AT_LEAST_2", func(t *testing.T) {
 		t.Parallel()
 		shard := newTestShard("test-shard")
-		shard.Spec.DurabilityPolicy = "ANY_2"
+		shard.Spec.DurabilityPolicy = "AT_LEAST_2"
 		got := topo.GetDurabilityPolicy(shard)
-		if got != "ANY_2" {
-			t.Errorf("expected ANY_2, got %s", got)
+		if got != "AT_LEAST_2" {
+			t.Errorf("expected AT_LEAST_2, got %s", got)
 		}
 	})
 
-	t.Run("returns MULTI_CELL_ANY_2 when set", func(t *testing.T) {
+	t.Run("returns MULTI_CELL_AT_LEAST_2 when set", func(t *testing.T) {
 		t.Parallel()
 		shard := newTestShard("test-shard")
-		shard.Spec.DurabilityPolicy = "MULTI_CELL_ANY_2"
+		shard.Spec.DurabilityPolicy = "MULTI_CELL_AT_LEAST_2"
 		got := topo.GetDurabilityPolicy(shard)
-		if got != "MULTI_CELL_ANY_2" {
-			t.Errorf("expected MULTI_CELL_ANY_2, got %s", got)
+		if got != "MULTI_CELL_AT_LEAST_2" {
+			t.Errorf("expected MULTI_CELL_AT_LEAST_2, got %s", got)
 		}
 	})
 }

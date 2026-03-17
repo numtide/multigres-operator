@@ -73,7 +73,7 @@ type PoolSpec struct {
 	// ReplicasPerCell is the desired number of Postgres data pods PER CELL in this pool.
 	// Sidecars (like Multipooler) will scale alongside the Postgres pods.
 	// Minimum 1 is required; readWrite pools need at least 3 for zero-downtime rolling upgrades
-	// (ANY_2 durability requires 1 primary + 2 standbys to maintain quorum during drain).
+	// (AT_LEAST_2 durability requires 1 primary + 2 standbys to maintain quorum during drain).
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=32
 	// +optional

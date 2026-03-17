@@ -7,7 +7,7 @@ spec:
   pvcDeletionPolicy:
     whenDeleted: Delete
     whenScaled: Delete
-  durabilityPolicy: "MULTI_CELL_ANY_2"
+  durabilityPolicy: "MULTI_CELL_AT_LEAST_2"
   logLevels:
     pgctld: "debug"
     multipooler: "debug"

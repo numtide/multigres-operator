@@ -116,11 +116,11 @@ type MultigresClusterSpec struct {
 	// synchronous replication acknowledgment during failover.
 	//
 	// Currently supported values (upstream multiorch):
-	//   - "ANY_2": any 2 nodes must acknowledge writes (single-cell quorum)
-	//   - "MULTI_CELL_ANY_2": any 2 nodes from different cells must acknowledge (cross-AZ quorum)
+	//   - "AT_LEAST_2": any 2 nodes must acknowledge writes (single-cell quorum)
+	//   - "MULTI_CELL_AT_LEAST_2": any 2 nodes from different cells must acknowledge (cross-AZ quorum)
 	//
 	// Additional user-defined policies may be supported in future upstream releases.
-	// Defaults to "ANY_2" if not set.
+	// Defaults to "AT_LEAST_2" if not set.
 	// +optional
 	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
 }

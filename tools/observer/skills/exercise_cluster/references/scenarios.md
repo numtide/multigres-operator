@@ -45,7 +45,7 @@ Each scenario describes a mutation to apply to a live MultigresCluster CR. For e
 1. Same discovery as scale-up. Current replicasPerCell must be > 3.
 2. JSON patch to decrement by 1.
 
-> **IMPORTANT:** Never scale below `replicasPerCell: 3`. Multigres uses `ANY_2` synchronous quorum by default, which requires at least 3 poolers to function correctly. Scaling to 2 or fewer causes write stalls and spurious recovery actions that are unrelated to operator logic and will waste investigation time.
+> **IMPORTANT:** Never scale below `replicasPerCell: 3`. Multigres uses `AT_LEAST_2` synchronous quorum by default, which requires at least 3 poolers to function correctly. Scaling to 2 or fewer causes write stalls and spurious recovery actions that are unrelated to operator logic and will waste investigation time.
 
 **What to observe:**
 - Drain state annotations should progress: `DrainStateRequested` → `DrainStateDraining` → `DrainStateAcknowledged` → `DrainStateReadyForDeletion`
@@ -1030,7 +1030,7 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
 ### verify-durability-policy
 **Tier:** quick | **Fast-path:** yes
 **Tests:** DurabilityPolicy from the cluster spec propagates to Shard CRDs
-**Applicable fixtures:** `multi-cell-quorum` (has `durabilityPolicy: "MULTI_CELL_ANY_2"`)
+**Applicable fixtures:** `multi-cell-quorum` (has `durabilityPolicy: "MULTI_CELL_AT_LEAST_2"`)
 
 **How to execute:**
 1. Deploy the `multi-cell-quorum` fixture.
@@ -1049,8 +1049,8 @@ These are **negative tests**: the mutation MUST be rejected by the admission web
    ```
 
 **Success criteria:**
-- Shard CRD `spec.durabilityPolicy` equals `"MULTI_CELL_ANY_2"`
-- TableGroup CRD `spec.durabilityPolicy` equals `"MULTI_CELL_ANY_2"`
+- Shard CRD `spec.durabilityPolicy` equals `"MULTI_CELL_AT_LEAST_2"`
+- TableGroup CRD `spec.durabilityPolicy` equals `"MULTI_CELL_AT_LEAST_2"`
 - Cluster remains Healthy
 
 **Teardown:** Delete the `multi-cell-quorum` cluster.
