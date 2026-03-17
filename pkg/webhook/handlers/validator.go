@@ -37,6 +37,7 @@ func NewMultigresClusterValidator(c client.Client) *MultigresClusterValidator {
 	return &MultigresClusterValidator{Client: c}
 }
 
+// ValidateCreate validates a MultigresCluster on creation.
 func (v *MultigresClusterValidator) ValidateCreate(
 	ctx context.Context,
 	obj runtime.Object,
@@ -44,6 +45,7 @@ func (v *MultigresClusterValidator) ValidateCreate(
 	return v.validate(ctx, obj)
 }
 
+// ValidateUpdate validates a MultigresCluster on update, including storage shrink and etcd replica checks.
 func (v *MultigresClusterValidator) ValidateUpdate(
 	ctx context.Context,
 	oldObj, newObj runtime.Object,
@@ -62,6 +64,7 @@ func (v *MultigresClusterValidator) ValidateUpdate(
 	return warnings, etcdErr
 }
 
+// ValidateDelete is a no-op for MultigresCluster deletion.
 func (v *MultigresClusterValidator) ValidateDelete(
 	ctx context.Context,
 	obj runtime.Object,
@@ -277,10 +280,12 @@ type TemplateValidator struct {
 
 var _ webhook.CustomValidator = &TemplateValidator{}
 
+// NewTemplateValidator creates a validator that prevents deletion of in-use templates.
 func NewTemplateValidator(c client.Client, kind string) *TemplateValidator {
 	return &TemplateValidator{Client: c, Kind: kind}
 }
 
+// ValidateCreate validates pool name map keys for ShardTemplates on creation.
 func (v *TemplateValidator) ValidateCreate(
 	ctx context.Context,
 	obj runtime.Object,
@@ -288,6 +293,7 @@ func (v *TemplateValidator) ValidateCreate(
 	return v.validatePoolNames(obj)
 }
 
+// ValidateUpdate validates pool name map keys for ShardTemplates on update.
 func (v *TemplateValidator) ValidateUpdate(
 	ctx context.Context,
 	oldObj, newObj runtime.Object,
@@ -313,6 +319,7 @@ func (v *TemplateValidator) validatePoolNames(obj runtime.Object) (admission.War
 	return nil, nil
 }
 
+// ValidateDelete rejects deletion of templates that are referenced by a MultigresCluster.
 func (v *TemplateValidator) ValidateDelete(
 	ctx context.Context,
 	obj runtime.Object,
@@ -421,12 +428,14 @@ type ChildResourceValidator struct {
 
 var _ webhook.CustomValidator = &ChildResourceValidator{}
 
+// NewChildResourceValidator creates a validator that blocks direct modification of managed child resources.
 func NewChildResourceValidator(exemptPrincipals ...string) *ChildResourceValidator {
 	return &ChildResourceValidator{
 		exemptPrincipals: exemptPrincipals,
 	}
 }
 
+// ValidateCreate rejects direct creation of managed child resources.
 func (v *ChildResourceValidator) ValidateCreate(
 	ctx context.Context,
 	obj runtime.Object,
@@ -434,6 +443,7 @@ func (v *ChildResourceValidator) ValidateCreate(
 	return v.validate(ctx, obj)
 }
 
+// ValidateUpdate rejects direct modification of managed child resources.
 func (v *ChildResourceValidator) ValidateUpdate(
 	ctx context.Context,
 	oldObj, newObj runtime.Object,
@@ -441,6 +451,7 @@ func (v *ChildResourceValidator) ValidateUpdate(
 	return v.validate(ctx, newObj)
 }
 
+// ValidateDelete rejects direct deletion of managed child resources.
 func (v *ChildResourceValidator) ValidateDelete(
 	ctx context.Context,
 	obj runtime.Object,

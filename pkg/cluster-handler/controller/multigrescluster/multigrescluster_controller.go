@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/multigres/multigres/go/common/topoclient"
@@ -39,8 +38,8 @@ type MultigresClusterReconciler struct {
 	CreateTopoStore func(multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error)
 }
 
-// Reconcile reads that state of the cluster for a MultigresCluster object and makes changes based on the state read
-// and what is in the MultigresCluster.Spec.
+// Reconcile resolves templates, reconciles child resources (Cells, TableGroups, TopoServer),
+// and updates the MultigresCluster status and tracking labels.
 //
 // +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=multigresclusters/status,verbs=get;update;patch
@@ -268,7 +267,7 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 	// Emit cluster-level metrics
 	monitoring.SetClusterInfo(cluster.Name, cluster.Namespace, string(cluster.Status.Phase))
-	totalShards := int(0)
+	var totalShards int
 	for _, db := range cluster.Status.Databases {
 		totalShards += int(db.TotalShards)
 	}
@@ -459,9 +458,7 @@ func collectResolvedTemplates(
 	for ref := range coreSet {
 		rt.CoreTemplates = append(rt.CoreTemplates, ref)
 	}
-	sort.Slice(rt.CoreTemplates, func(i, j int) bool {
-		return rt.CoreTemplates[i] < rt.CoreTemplates[j]
-	})
+	slices.Sort(rt.CoreTemplates)
 
 	// Cell templates.
 	cellSet := map[multigresv1alpha1.TemplateRef]struct{}{}
@@ -476,9 +473,7 @@ func collectResolvedTemplates(
 	for ref := range cellSet {
 		rt.CellTemplates = append(rt.CellTemplates, ref)
 	}
-	sort.Slice(rt.CellTemplates, func(i, j int) bool {
-		return rt.CellTemplates[i] < rt.CellTemplates[j]
-	})
+	slices.Sort(rt.CellTemplates)
 
 	// Shard templates.
 	shardSet := map[multigresv1alpha1.TemplateRef]struct{}{}
@@ -497,9 +492,7 @@ func collectResolvedTemplates(
 	for ref := range shardSet {
 		rt.ShardTemplates = append(rt.ShardTemplates, ref)
 	}
-	sort.Slice(rt.ShardTemplates, func(i, j int) bool {
-		return rt.ShardTemplates[i] < rt.ShardTemplates[j]
-	})
+	slices.Sort(rt.ShardTemplates)
 
 	return rt
 }

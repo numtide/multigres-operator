@@ -29,7 +29,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MultigresCluster is the Schema for the multigresclusters API
+        description: MultigresCluster represents a distributed database cluster managed
+          by the operator.
         properties:
           apiVersion:
             description: |-
@@ -3867,6 +3868,9 @@ spec:
                                             Cells defines the list of cells where this MultiOrch should be deployed.
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
+                                            description: CellName is a validated name
+                                              for a cell (availability zone unit)
+                                              within a cluster.
                                             maxLength: 30
                                             minLength: 1
                                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -4966,6 +4970,9 @@ spec:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
                                             items:
+                                              description: CellName is a validated
+                                                name for a cell (availability zone
+                                                unit) within a cluster.
                                               maxLength: 30
                                               minLength: 1
                                               pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -6223,6 +6230,9 @@ spec:
                                             Cells defines the list of cells where this MultiOrch should be deployed.
                                             If empty, it defaults to all cells where pools are defined.
                                           items:
+                                            description: CellName is a validated name
+                                              for a cell (availability zone unit)
+                                              within a cluster.
                                             maxLength: 30
                                             minLength: 1
                                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -7322,6 +7332,9 @@ spec:
                                             description: Cells defines the list of
                                               cells where this Pool should be deployed.
                                             items:
+                                              description: CellName is a validated
+                                                name for a cell (availability zone
+                                                unit) within a cluster.
                                               maxLength: 30
                                               minLength: 1
                                               pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -7917,10 +7930,12 @@ spec:
                       x-kubernetes-map-type: atomic
                     type: array
                   multiadmin:
+                    description: ImageRef is a container image reference.
                     maxLength: 512
                     minLength: 1
                     type: string
                   multiadminWeb:
+                    description: ImageRef is a container image reference.
                     maxLength: 512
                     minLength: 1
                     type: string
@@ -7930,14 +7945,17 @@ spec:
                     minLength: 1
                     type: string
                   multiorch:
+                    description: ImageRef is a container image reference.
                     maxLength: 512
                     minLength: 1
                     type: string
                   multipooler:
+                    description: ImageRef is a container image reference.
                     maxLength: 512
                     minLength: 1
                     type: string
                   postgres:
+                    description: ImageRef is a container image reference.
                     maxLength: 512
                     minLength: 1
                     type: string
@@ -10341,6 +10359,8 @@ spec:
                     description: CellTemplates is the deduplicated set of CellTemplate
                       names resolved.
                     items:
+                      description: TemplateRef is a reference to a named template
+                        resource (CoreTemplate, CellTemplate, or ShardTemplate).
                       maxLength: 63
                       minLength: 1
                       type: string
@@ -10349,6 +10369,8 @@ spec:
                     description: CoreTemplates is the deduplicated set of CoreTemplate
                       names resolved.
                     items:
+                      description: TemplateRef is a reference to a named template
+                        resource (CoreTemplate, CellTemplate, or ShardTemplate).
                       maxLength: 63
                       minLength: 1
                       type: string
@@ -10357,6 +10379,8 @@ spec:
                     description: ShardTemplates is the deduplicated set of ShardTemplate
                       names resolved.
                     items:
+                      description: TemplateRef is a reference to a named template
+                        resource (CoreTemplate, CellTemplate, or ShardTemplate).
                       maxLength: 63
                       minLength: 1
                       type: string

@@ -3,7 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,9 +53,7 @@ func (r *Resolver) ResolveShard(
 			multiOrch.Cells = append(multiOrch.Cells, multigresv1alpha1.CellName(c))
 		}
 		// Sort for deterministic output
-		sort.Slice(multiOrch.Cells, func(i, j int) bool {
-			return multiOrch.Cells[i] < multiOrch.Cells[j]
-		})
+		slices.Sort(multiOrch.Cells)
 	}
 
 	if len(pools) == 0 {
@@ -75,9 +73,7 @@ func (r *Resolver) ResolveShard(
 				p.Cells = append(p.Cells, multigresv1alpha1.CellName(c))
 			}
 			// Sort for deterministic output
-			sort.Slice(p.Cells, func(i, j int) bool {
-				return p.Cells[i] < p.Cells[j]
-			})
+			slices.Sort(p.Cells)
 		}
 
 		pools[name] = p

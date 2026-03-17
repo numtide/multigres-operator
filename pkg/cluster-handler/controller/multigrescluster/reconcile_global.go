@@ -157,8 +157,8 @@ func (r *MultigresClusterReconciler) reconcileMultiAdmin(
 	return nil
 }
 
-// getGlobalTopoRef helper shared by Cells and Databases
-func (r *MultigresClusterReconciler) getGlobalTopoRef(
+// globalTopoRef resolves the topology server reference, shared by Cells and Databases reconciliation.
+func (r *MultigresClusterReconciler) globalTopoRef(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 	res *resolver.Resolver,

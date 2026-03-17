@@ -72,7 +72,6 @@ const (
 )
 
 // DefaultResourcesAdmin returns the default resource requests and limits for the MultiAdmin deployment.
-// It requests 100m CPU and 128Mi memory, with a limit of 256Mi memory.
 func DefaultResourcesAdmin() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -86,7 +85,6 @@ func DefaultResourcesAdmin() corev1.ResourceRequirements {
 }
 
 // DefaultResourcesEtcd returns the default resource requests and limits for the managed Etcd cluster.
-// It requests 100m CPU and 256Mi memory, with a limit of 512Mi memory.
 func DefaultResourcesEtcd() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
@@ -152,7 +150,6 @@ func DefaultResourcesPooler() corev1.ResourceRequirements {
 }
 
 // DefaultResourcesAdminWeb returns the default resource requests and limits for the MultiAdminWeb deployment.
-// It requests 50m CPU and 64Mi memory, with a limit of 128Mi memory.
 func DefaultResourcesAdminWeb() corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{

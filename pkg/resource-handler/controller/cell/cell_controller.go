@@ -39,7 +39,7 @@ type CellReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// Reconcile handles Cell resource reconciliation.
+// Reconcile manages the MultiGateway deployment and per-cell services for a Cell.
 func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
 	ctx, span := monitoring.StartReconcileSpan(

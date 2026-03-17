@@ -39,7 +39,7 @@ type TopoServerReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// Reconcile handles TopoServer resource reconciliation.
+// Reconcile manages the etcd StatefulSet, headless service, and client service for a TopoServer.
 func (r *TopoServerReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,

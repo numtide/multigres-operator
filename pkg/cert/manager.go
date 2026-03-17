@@ -252,7 +252,7 @@ func (m *CertRotator) ensureCA(ctx context.Context, depth int) (*CAArtifacts, er
 			return nil, fmt.Errorf("failed to create CA secret: %w", err)
 		}
 
-		m.recorderEvent(secret, "Normal", "Generated",
+		m.emitEvent(secret, "Normal", "Generated",
 			fmt.Sprintf("Generated new %s CA certificate", m.Options.componentName()))
 		return artifacts, nil
 	}
@@ -344,7 +344,7 @@ func (m *CertRotator) ensureServerCert(
 			return nil, fmt.Errorf("failed to create server cert secret: %w", err)
 		}
 
-		m.recorderEvent(secret, "Normal", "Generated",
+		m.emitEvent(secret, "Normal", "Generated",
 			fmt.Sprintf("Generated new %s server certificate", m.Options.componentName()))
 		return artifacts.CertPEM, nil
 	}
@@ -392,7 +392,7 @@ func (m *CertRotator) ensureServerCert(
 		if err := m.Client.Update(ctx, secret); err != nil {
 			return nil, fmt.Errorf("failed to update server cert secret: %w", err)
 		}
-		m.recorderEvent(secret, "Normal", "Rotated",
+		m.emitEvent(secret, "Normal", "Rotated",
 			fmt.Sprintf("Rotated %s server certificate", m.Options.componentName()))
 		return srv.CertPEM, nil
 	}
@@ -440,7 +440,7 @@ func (m *CertRotator) setOwner(secret *corev1.Secret) error {
 	return nil
 }
 
-func (m *CertRotator) recorderEvent(object runtime.Object, eventtype, reason, message string) {
+func (m *CertRotator) emitEvent(object runtime.Object, eventtype, reason, message string) {
 	if m.Recorder != nil && object != nil {
 		m.Recorder.AnnotatedEventf(object, nil, eventtype, reason, message)
 	}

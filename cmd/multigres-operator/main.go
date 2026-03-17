@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// The multigres-operator command runs the Kubernetes operator for Multigres distributed database clusters.
 package main
 
 import (

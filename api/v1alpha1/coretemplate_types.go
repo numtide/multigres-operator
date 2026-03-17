@@ -47,7 +47,7 @@ type CoreTemplateSpec struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
 
-// CoreTemplate is the Schema for the coretemplates API
+// CoreTemplate provides reusable infrastructure configuration (pod resources, scheduling) for cluster core components.
 // +kubebuilder:resource:shortName=cot
 type CoreTemplate struct {
 	metav1.TypeMeta   `json:",inline"`

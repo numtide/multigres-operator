@@ -19,7 +19,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: CellTemplate is the Schema for the celltemplates API
+        description: CellTemplate provides reusable cell-level configuration (images,
+          resources) for MultigresCluster cells.
         properties:
           apiVersion:
             description: |-

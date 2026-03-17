@@ -26,7 +26,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: TopoServer is the Schema for the toposervers API
+        description: TopoServer represents the topology server (etcd) that stores
+          cluster metadata and routing state.
         properties:
           apiVersion:
             description: |-

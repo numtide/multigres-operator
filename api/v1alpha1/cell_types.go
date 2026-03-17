@@ -150,7 +150,7 @@ type CellStatus struct {
 // +kubebuilder:printcolumn:name="Gateway",type="integer",JSONPath=".status.gatewayReadyReplicas"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
-// Cell is the Schema for the cells API
+// Cell represents a failure-domain unit within a MultigresCluster (typically one per availability zone).
 // +kubebuilder:resource:shortName=cel
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 type Cell struct {

@@ -30,8 +30,8 @@ const (
 	// backupQueryLimit caps the number of backup records fetched per RPC call.
 	backupQueryLimit = 10
 
-	// ConditionBackupHealthy is the condition type for backup health.
-	ConditionBackupHealthy = "BackupHealthy"
+	// ConditionHealthy is the condition type for backup health.
+	ConditionHealthy = "BackupHealthy"
 )
 
 // Result holds the computed backup health information.
@@ -42,10 +42,10 @@ type Result struct {
 	Message        string
 }
 
-// EvaluateBackupHealth discovers the primary pooler from the topology and
+// Evaluate discovers the primary pooler from the topology and
 // queries it for backup metadata. Returns nil (no error) if no primary pooler
 // is registered yet, which is normal during cluster bootstrap.
-func EvaluateBackupHealth(
+func Evaluate(
 	ctx context.Context,
 	store topoclient.Store,
 	rpcClient rpcclient.MultiPoolerClient,
@@ -111,7 +111,7 @@ func EvaluateBackups(
 		}
 	}
 
-	backupTime := ParseBackupTime(latest.BackupId)
+	backupTime := ParseTime(latest.BackupId)
 	if backupTime.IsZero() {
 		return &Result{
 			Healthy: false,
@@ -142,9 +142,9 @@ func EvaluateBackups(
 	return result
 }
 
-// ParseBackupTime extracts the timestamp from a pgBackRest backup ID.
+// ParseTime extracts the timestamp from a pgBackRest backup ID.
 // Format: YYYYMMDD-HHMMSSF (F = fractional seconds suffix).
-func ParseBackupTime(backupID string) time.Time {
+func ParseTime(backupID string) time.Time {
 	if len(backupID) < 15 {
 		return time.Time{}
 	}
@@ -155,9 +155,9 @@ func ParseBackupTime(backupID string) time.Time {
 	return t
 }
 
-// ApplyBackupHealth updates the shard status with backup health information
+// Apply updates the shard status with backup health information
 // and sets the BackupHealthy condition.
-func ApplyBackupHealth(shard *multigresv1alpha1.Shard, result *Result) {
+func Apply(shard *multigresv1alpha1.Shard, result *Result) {
 	if result == nil {
 		return
 	}
@@ -166,7 +166,7 @@ func ApplyBackupHealth(shard *multigresv1alpha1.Shard, result *Result) {
 	shard.Status.LastBackupType = result.LastBackupType
 
 	condition := metav1.Condition{
-		Type:               ConditionBackupHealthy,
+		Type:               ConditionHealthy,
 		ObservedGeneration: shard.Generation,
 		LastTransitionTime: metav1.Now(),
 		Message:            result.Message,

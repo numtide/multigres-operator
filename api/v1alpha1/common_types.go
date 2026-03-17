@@ -130,8 +130,10 @@ type ContainerConfig struct {
 type BackupType string
 
 const (
+	// BackupTypeFilesystem uses a local PVC for pgBackRest backup storage.
 	BackupTypeFilesystem BackupType = "filesystem"
-	BackupTypeS3         BackupType = "s3"
+	// BackupTypeS3 uses S3-compatible object storage for pgBackRest backup storage.
+	BackupTypeS3 BackupType = "s3"
 )
 
 // BackupConfig defines the pgBackRest backup configuration.
@@ -210,43 +212,52 @@ type PgBackRestTLSConfig struct {
 // Domain Specific Types (Strong Typing)
 // ============================================================================
 
+// DatabaseName is a validated name for a logical database within a MultigresCluster.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=30
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type DatabaseName string
 
+// TableGroupName is a validated name for a table group within a database.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=25
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type TableGroupName string
 
+// ShardName is a validated name for a shard within a table group.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=25
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type ShardName string
 
+// PoolName is a validated name for a connection pool within a shard.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=25
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type PoolName string
 
+// CellName is a validated name for a cell (availability zone unit) within a cluster.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=30
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type CellName string
 
+// Zone is the cloud provider availability zone identifier.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63
 type Zone string
 
+// Region is the cloud provider region identifier.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63
 type Region string
 
+// TemplateRef is a reference to a named template resource (CoreTemplate, CellTemplate, or ShardTemplate).
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63
 type TemplateRef string
 
+// ImageRef is a container image reference.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=512
 type ImageRef string
@@ -270,9 +281,11 @@ type ComponentLogLevels struct {
 	Multigateway LogLevel `json:"multigateway,omitempty"`
 }
 
+// PoolType constrains the allowed pool access patterns.
 // +kubebuilder:validation:Enum=readWrite
 type PoolType string
 
+// Phase represents the lifecycle state of a Multigres resource.
 // +kubebuilder:validation:Enum=Initializing;Progressing;Healthy;Degraded;Unknown
 type Phase string
 

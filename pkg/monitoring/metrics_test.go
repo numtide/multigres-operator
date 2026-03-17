@@ -9,7 +9,6 @@ import (
 )
 
 func TestCollectorsRegistered(t *testing.T) {
-	t.Helper()
 	collectors := Collectors()
 	if len(collectors) == 0 {
 		t.Fatal("expected at least one collector, got 0")

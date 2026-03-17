@@ -15,19 +15,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-////========================================
-///  Resource Watcher
-//==========================================
-// The struct ResourceWatcher and its method provides a simple and flexible
-// interface for checking the resource status in envtest Kubernetes cluster.
+// ResourceWatcher provides a simple and flexible interface for checking
+// resource status in an envtest Kubernetes cluster.
 //
-// By using methods such as WaitForMatch, or WaitForDeletion, you can test the
-// controller logic without adding any arbitrary wait / poll logic, and check
-// for the exact object match based on go-cmp's diffing.
+// By using methods such as WaitForMatch or WaitForDeletion, you can test
+// controller logic without arbitrary wait/poll logic, checking for exact
+// object matches based on go-cmp's diffing.
 //
-// Because there are various scenarios for watching resources, and because it
-// involves both caching logic as well as realtime event handling, the code is
-// broken up into multiple resource_watcher_.*.go.
+// The implementation is split across multiple resource_watcher_*.go files
+// because it involves both caching logic and realtime event handling.
 
 // ErrUnwatchedKinds is returned when trying to wait for resource kinds
 // that aren't being watched by the ResourceWatcher.

@@ -296,7 +296,7 @@ func isPoolHealthy(existingPods map[string]*corev1.Pod, replicas int32) bool {
 		if pod.Annotations[metadata.AnnotationDrainState] != "" || !pod.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if resolvePodIndex(pod.Name) >= int(replicas) {
+		if idx, ok := resolvePodIndex(pod.Name); !ok || idx >= int(replicas) {
 			continue
 		}
 		if !isPodReady(pod) {
@@ -383,8 +383,8 @@ func (r *ShardReconciler) handleScaleDown(
 			inProgress = true
 		}
 
-		index := resolvePodIndex(pod.Name)
-		if index >= int(replicas) {
+		index, ok := resolvePodIndex(pod.Name)
+		if !ok || index >= int(replicas) {
 			extraPods = append(extraPods, pod)
 		}
 	}
@@ -548,13 +548,14 @@ func (r *ShardReconciler) handleRollingUpdates(
 	var waitPrimary *corev1.Pod
 	for _, name := range podNames {
 		pod := existingPods[name]
+		podIdx, _ := resolvePodIndex(pod.Name)
 		if !podNeedsUpdate(
 			pod,
 			shard,
 			poolName,
 			cellName,
 			poolSpec,
-			resolvePodIndex(pod.Name),
+			podIdx,
 			r.Scheme,
 		) {
 			continue
@@ -623,7 +624,7 @@ func (r *ShardReconciler) selectPodToDrain(
 		if pod == nil {
 			continue
 		}
-		score := resolvePodIndex(pod.Name) // higher index gets higher score
+		score, _ := resolvePodIndex(pod.Name) // higher index gets higher score
 
 		role := resolvePodRole(shard, pod.Name)
 		if role == "PRIMARY" {
@@ -682,39 +683,44 @@ func (r *ShardReconciler) cleanupDrainedPod(
 	}
 
 	if policy.WhenScaled == multigresv1alpha1.DeletePVCRetentionPolicy {
-		idx := resolvePodIndex(pod.Name)
-		isDrainedReplacement := idx < int(replicas) && resolvePodRole(shard, pod.Name) == "DRAINED"
-		if idx >= int(replicas) || isDrainedReplacement {
-			cellName := pod.Labels[metadata.LabelMultigresCell]
-			pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
-			pvc := &corev1.PersistentVolumeClaim{}
-			err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pvcName}, pvc)
-			if err != nil {
-				if !errors.IsNotFound(err) {
-					logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
-					return fmt.Errorf("failed to fetch PVC %s for deletion: %w", pvcName, err)
+		idx, idxOK := resolvePodIndex(pod.Name)
+		if !idxOK {
+			logger.Info("Skipping PVC deletion for pod with unparseable index", "pod", pod.Name)
+		} else {
+			isDrainedReplacement := idx < int(replicas) &&
+				resolvePodRole(shard, pod.Name) == "DRAINED"
+			if idx >= int(replicas) || isDrainedReplacement {
+				cellName := pod.Labels[metadata.LabelMultigresCell]
+				pvcName := BuildPoolDataPVCName(shard, poolName, cellName, idx)
+				pvc := &corev1.PersistentVolumeClaim{}
+				err := r.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pvcName}, pvc)
+				if err != nil {
+					if !errors.IsNotFound(err) {
+						logger.Error(err, "Failed to fetch PVC for deletion", "pvc", pvcName)
+						return fmt.Errorf("failed to fetch PVC %s for deletion: %w", pvcName, err)
+					}
+				} else {
+					reason := "scaled down"
+					if isDrainedReplacement {
+						reason = "DRAINED replacement"
+					}
+					if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
+						logger.Error(err, "Failed to delete PVC for "+reason+" pod", "pvc", pvcName)
+						return fmt.Errorf("failed to delete PVC %s: %w", pvcName, err)
+					}
+					logger.Info("Deleted PVC for "+reason+" pod", "pvc", pvcName)
 				}
 			} else {
-				reason := "scaled down"
-				if isDrainedReplacement {
-					reason = "DRAINED replacement"
-				}
-				if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
-					logger.Error(err, "Failed to delete PVC for "+reason+" pod", "pvc", pvcName)
-					return fmt.Errorf("failed to delete PVC %s: %w", pvcName, err)
-				}
-				logger.Info("Deleted PVC for "+reason+" pod", "pvc", pvcName)
+				logger.Info(
+					"Retaining PVC for pod during rolling update",
+					"pod",
+					pod.Name,
+					"index",
+					idx,
+					"replicas",
+					replicas,
+				)
 			}
-		} else {
-			logger.Info(
-				"Retaining PVC for pod during rolling update",
-				"pod",
-				pod.Name,
-				"index",
-				idx,
-				"replicas",
-				replicas,
-			)
 		}
 	}
 
@@ -825,14 +831,14 @@ func pvcNeedsFilesystemResize(pvcs map[string]*corev1.PersistentVolumeClaim, pvc
 }
 
 // resolvePodIndex parses the index from the pod name (the number after the last dash).
-func resolvePodIndex(podName string) int {
+func resolvePodIndex(podName string) (int, bool) {
 	lastDash := strings.LastIndex(podName, "-")
 	if lastDash == -1 {
-		return -1
+		return 0, false
 	}
 	index, err := strconv.Atoi(podName[lastDash+1:])
 	if err != nil {
-		return -1
+		return 0, false
 	}
-	return index
+	return index, true
 }

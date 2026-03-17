@@ -48,7 +48,7 @@ type ShardTemplateSpec struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
 
-// ShardTemplate is the Schema for the shardtemplates API
+// ShardTemplate provides reusable shard-level configuration (pools, storage, resources) for MultigresCluster shards.
 // +kubebuilder:resource:shortName=sht
 type ShardTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
