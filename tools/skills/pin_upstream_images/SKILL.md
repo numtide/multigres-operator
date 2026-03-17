@@ -81,6 +81,28 @@ For every potentially impactful upstream change:
 
 3. **Do not speculate.** Every recommendation must be backed by a concrete search result (or confirmed absence) in the operator codebase. No "if the operator does X" phrasing -- either it does or it doesn't.
 
+### 4a. Flag Compatibility Audit
+
+**This step is mandatory.** Independent of the diff review above, mechanically verify that every CLI flag the operator passes to upstream components still exists. This catches flag removals/renames that the diff review might miss.
+
+1. Extract every hardcoded `--flag-name` string from `pkg/resource-handler/controller/shard/containers.go`:
+   ```bash
+   grep -oE '\-\-[a-z][a-z0-9-]+' pkg/resource-handler/controller/shard/containers.go | sort -u
+   ```
+
+2. For each upstream component (pgctld, multipooler, multiorch), get its current flag set from the upstream repo at the **new SHA**:
+   ```bash
+   cd /tmp/multigres
+   # pgctld flags
+   grep -rh 'FlagName:' go/cmd/pgctld/ go/services/pgctld/ 2>/dev/null | grep -oE '"[a-z][a-z0-9-]+"' | tr -d '"' | sort -u
+   # multipooler flags
+   grep -rh 'FlagName:' go/services/multipooler/ 2>/dev/null | grep -oE '"[a-z][a-z0-9-]+"' | tr -d '"' | sort -u
+   # multiorch flags
+   grep -rh 'FlagName:' go/services/multiorch/ 2>/dev/null | grep -oE '"[a-z][a-z0-9-]+"' | tr -d '"' | sort -u
+   ```
+
+3. Cross-check: for each flag in the operator's `containers.go`, confirm it exists in the corresponding upstream component's flag set. Flag any mismatches as **Action required — flag removed/renamed upstream**.
+
 ### 5. Present Results
 
 Present a structured summary to the user:
@@ -94,6 +116,10 @@ For each upstream change, include:
 - Operator files affected (with file paths and line references) or "none found"
 - Verdict: **Action required** / **New feature opportunity** / **No impact**
 - For action-required items: specific description of what needs to change in the operator
+
+**Flag Compatibility:**
+- Table of all operator flags vs upstream status (present/missing)
+- Any mismatches flagged as action items
 
 ### 6. Finalize
 
