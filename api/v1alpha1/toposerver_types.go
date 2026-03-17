@@ -221,7 +221,7 @@ type GlobalTopoServerRef struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
-// TopoServer is the Schema for the toposervers API
+// TopoServer represents the topology server (etcd) that stores cluster metadata and routing state.
 // +kubebuilder:resource:shortName=tps
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 type TopoServer struct {

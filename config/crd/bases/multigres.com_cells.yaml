@@ -29,7 +29,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Cell is the Schema for the cells API
+        description: Cell represents a failure-domain unit within a MultigresCluster
+          (typically one per availability zone).
         properties:
           apiVersion:
             description: |-
@@ -54,6 +55,8 @@ spec:
               allCells:
                 description: AllCells list for discovery.
                 items:
+                  description: CellName is a validated name for a cell (availability
+                    zone unit) within a cluster.
                   maxLength: 30
                   minLength: 1
                   pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$

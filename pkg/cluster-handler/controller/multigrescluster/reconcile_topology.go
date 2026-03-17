@@ -41,7 +41,7 @@ func (r *MultigresClusterReconciler) reconcileTopology(
 ) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, res)
+	globalTopoRef, err := r.globalTopoRef(ctx, cluster, res)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get global topo ref: %w", err)
 	}

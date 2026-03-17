@@ -1,24 +1,19 @@
 package resolver
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // Resolver handles the logic for fetching templates and calculating defaults.
 // It serves as the single source of truth for defaulting logic across the operator.
 type Resolver struct {
-	// Client is the kubernetes client used to fetch templates or other cluster resources.
-	Client client.Client
-	// Namespace is the namespace where templates/resources are expected to exist.
-	Namespace string
-	// CoreTemplateCache is a request-scoped cache for CoreTemplates.
-	CoreTemplateCache map[string]*multigresv1alpha1.CoreTemplate
-	// CellTemplateCache is a request-scoped cache for CellTemplates.
-	CellTemplateCache map[string]*multigresv1alpha1.CellTemplate
-	// ShardTemplateCache is a request-scoped cache for ShardTemplates.
+	Client             client.Client
+	Namespace          string
+	CoreTemplateCache  map[string]*multigresv1alpha1.CoreTemplate
+	CellTemplateCache  map[string]*multigresv1alpha1.CellTemplate
 	ShardTemplateCache map[string]*multigresv1alpha1.ShardTemplate
 }
 

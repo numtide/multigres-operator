@@ -138,7 +138,7 @@ func TestEvaluateBackups_SelectsMostRecent(t *testing.T) {
 	}
 }
 
-func TestApplyBackupHealth(t *testing.T) {
+func TestApply(t *testing.T) {
 	t.Parallel()
 
 	t.Run("sets healthy condition", func(t *testing.T) {
@@ -155,16 +155,16 @@ func TestApplyBackupHealth(t *testing.T) {
 			Message:        "backup is healthy",
 		}
 
-		backuphealth.ApplyBackupHealth(shard, result)
+		backuphealth.Apply(shard, result)
 
 		if len(shard.Status.Conditions) != 1 {
 			t.Fatalf("expected 1 condition, got %d", len(shard.Status.Conditions))
 		}
 		c := shard.Status.Conditions[0]
-		if c.Type != backuphealth.ConditionBackupHealthy {
+		if c.Type != backuphealth.ConditionHealthy {
 			t.Errorf(
 				"expected condition type %s, got %s",
-				backuphealth.ConditionBackupHealthy,
+				backuphealth.ConditionHealthy,
 				c.Type,
 			)
 		}
@@ -188,7 +188,7 @@ func TestApplyBackupHealth(t *testing.T) {
 			Message: "backup is stale",
 		}
 
-		backuphealth.ApplyBackupHealth(shard, result)
+		backuphealth.Apply(shard, result)
 
 		if len(shard.Status.Conditions) != 1 {
 			t.Fatalf("expected 1 condition, got %d", len(shard.Status.Conditions))
@@ -206,14 +206,14 @@ func TestApplyBackupHealth(t *testing.T) {
 		t.Parallel()
 
 		shard := &multigresv1alpha1.Shard{}
-		backuphealth.ApplyBackupHealth(shard, nil)
+		backuphealth.Apply(shard, nil)
 		if len(shard.Status.Conditions) != 0 {
 			t.Error("expected no conditions for nil result")
 		}
 	})
 }
 
-func TestParseBackupTime(t *testing.T) {
+func TestParseTime(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -235,17 +235,17 @@ func TestParseBackupTime(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got := backuphealth.ParseBackupTime(tc.input)
+			got := backuphealth.ParseTime(tc.input)
 			if !got.Equal(tc.want) {
-				t.Errorf("ParseBackupTime(%q) = %v, want %v", tc.input, got, tc.want)
+				t.Errorf("ParseTime(%q) = %v, want %v", tc.input, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestParseBackupTime_InvalidFormat(t *testing.T) {
+func TestParseTime_InvalidFormat(t *testing.T) {
 	t.Parallel()
-	got := backuphealth.ParseBackupTime("ABCDEFG-HIJKLMN")
+	got := backuphealth.ParseTime("ABCDEFG-HIJKLMN")
 	if !got.IsZero() {
 		t.Errorf("expected zero time for invalid format, got %v", got)
 	}

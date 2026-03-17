@@ -1,14 +1,14 @@
 package multigrescluster
 
 import (
-	"reflect"
 	"testing"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -68,8 +68,8 @@ func TestBuildCell(t *testing.T) {
 		if got.Spec.Images.MultiGateway != "gateway:latest" {
 			t.Errorf("Gateway Image = %v, want %v", got.Spec.Images.MultiGateway, "gateway:latest")
 		}
-		if !reflect.DeepEqual(got.Spec.AllCells, allCells) {
-			t.Errorf("AllCells = %v, want %v", got.Spec.AllCells, allCells)
+		if diff := cmp.Diff(allCells, got.Spec.AllCells); diff != "" {
+			t.Errorf("AllCells mismatch (-want +got):\n%s", diff)
 		}
 
 		// Verify OwnerReference

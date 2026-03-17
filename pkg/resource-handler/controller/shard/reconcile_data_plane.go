@@ -29,7 +29,7 @@ func (r *ShardReconciler) reconcileDataPlane(
 	logger := log.FromContext(ctx)
 
 	// Open a single topo connection for PodRoles, drain, and backup health.
-	store, err := r.getTopoStore(shard)
+	store, err := r.topoStore(shard)
 	if err != nil {
 		if !topo.IsTopoUnavailable(err) {
 			r.Recorder.Eventf(shard, "Warning", "TopologyError",
@@ -80,7 +80,7 @@ func (r *ShardReconciler) reconcileDataPlane(
 	// Phase: Evaluate backup health
 	if r.RPCClient != nil {
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileBackupHealth")
-		result, err := backuphealth.EvaluateBackupHealth(ctx, store, r.RPCClient, shard)
+		result, err := backuphealth.Evaluate(ctx, store, r.RPCClient, shard)
 		if err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
@@ -96,9 +96,9 @@ func (r *ShardReconciler) reconcileDataPlane(
 			backupBase := shard.DeepCopy()
 			prevHealthy := status.IsConditionTrue(
 				shard.Status.Conditions,
-				backuphealth.ConditionBackupHealthy,
+				backuphealth.ConditionHealthy,
 			)
-			backuphealth.ApplyBackupHealth(shard, result)
+			backuphealth.Apply(shard, result)
 
 			if result.Healthy && !prevHealthy {
 				r.Recorder.Event(shard, "Normal", "BackupHealthy", result.Message)
@@ -286,8 +286,8 @@ func (r *ShardReconciler) isDrainStale(
 		replicas = *poolSpec.ReplicasPerCell
 	}
 
-	index := resolvePodIndex(pod.Name)
-	if index < 0 || index >= int(replicas) {
+	index, ok := resolvePodIndex(pod.Name)
+	if !ok || index >= int(replicas) {
 		return false // Pod is still an extra pod for scale-down
 	}
 
@@ -295,8 +295,8 @@ func (r *ShardReconciler) isDrainStale(
 	return !podNeedsUpdate(pod, shard, poolName, cellName, poolSpec, index, r.Scheme)
 }
 
-// getTopoStore returns a topology store, using the custom factory if set, otherwise the default.
-func (r *ShardReconciler) getTopoStore(shard *multigresv1alpha1.Shard) (topoclient.Store, error) {
+// topoStore returns a topology store, using the custom factory if set, otherwise the default.
+func (r *ShardReconciler) topoStore(shard *multigresv1alpha1.Shard) (topoclient.Store, error) {
 	if r.CreateTopoStore != nil {
 		return r.CreateTopoStore(shard)
 	}

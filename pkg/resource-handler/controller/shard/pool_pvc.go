@@ -99,7 +99,7 @@ func BuildPoolDataPVC(
 	return pvc, nil
 }
 
-// BuildSharedBackupPVCName builds the deterministic name for the cell-level shared backup PVC
+// BuildSharedBackupPVCName builds the deterministic name for the cell-level shared backup PVC.
 func BuildSharedBackupPVCName(shard *multigresv1alpha1.Shard, cellName string) string {
 	clusterName := shard.Labels["multigres.com/cluster"]
 	return nameutil.JoinWithConstraints(

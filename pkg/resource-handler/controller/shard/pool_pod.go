@@ -141,6 +141,9 @@ func buildHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName, cellName
 //
 // Fields included: images, commands, args, env vars, resources, volume mounts,
 // container security contexts, pod affinity, and node selector.
+//
+// Hash write errors are discarded throughout because hash.Hash.Write never returns an error
+// per the hash.Hash interface contract (it panics on failure instead).
 func ComputeSpecHash(pod *corev1.Pod) string {
 	h := fnv.New32a()
 	spec := &pod.Spec

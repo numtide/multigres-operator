@@ -26,7 +26,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Shard is the Schema for the shards API
+        description: Shard represents a horizontal partition of a table group, managing
+          pool pods and data-plane components.
         properties:
           apiVersion:
             description: |-
@@ -1239,6 +1240,8 @@ spec:
                       Cells defines the list of cells where this MultiOrch should be deployed.
                       If empty, it defaults to all cells where pools are defined.
                     items:
+                      description: CellName is a validated name for a cell (availability
+                        zone unit) within a cluster.
                       maxLength: 30
                       minLength: 1
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -2358,6 +2361,8 @@ spec:
                       description: Cells defines the list of cells where this Pool
                         should be deployed.
                       items:
+                        description: CellName is a validated name for a cell (availability
+                          zone unit) within a cluster.
                         maxLength: 30
                         minLength: 1
                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -2687,6 +2692,8 @@ spec:
                 description: Cells is a list of cells this shard is currently deployed
                   to.
                 items:
+                  description: CellName is a validated name for a cell (availability
+                    zone unit) within a cluster.
                   maxLength: 30
                   minLength: 1
                   pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$

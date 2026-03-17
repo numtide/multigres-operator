@@ -135,7 +135,7 @@ func (r *ShardReconciler) handlePendingDeletion(
 	var store topoclient.Store
 	if len(podList.Items) > 0 {
 		var err error
-		store, err = r.getTopoStore(shard)
+		store, err = r.topoStore(shard)
 		if err != nil {
 			logger.Error(err, "Failed to get topo store for PendingDeletion")
 			r.Recorder.Eventf(shard, "Warning", "TopologyError",

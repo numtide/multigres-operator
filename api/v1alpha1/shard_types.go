@@ -264,7 +264,7 @@ type ShardStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 
-// Shard is the Schema for the shards API
+// Shard represents a horizontal partition of a table group, managing pool pods and data-plane components.
 // +kubebuilder:resource:shortName=srd
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.readyReplicas

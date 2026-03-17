@@ -314,6 +314,7 @@ func (r *Resolver) ResolveMultiAdminWeb(
 	return finalSpec, nil
 }
 
+// ResolveCoreTemplate fetches and resolves a CoreTemplate by name, using the request-scoped cache.
 func (r *Resolver) ResolveCoreTemplate(
 	ctx context.Context,
 	name multigresv1alpha1.TemplateRef,

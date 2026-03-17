@@ -143,7 +143,9 @@ type TableGroupStatus struct {
 	// +optional
 	Message string `json:"message,omitempty"`
 
+	// ReadyShards is the number of shards that have reached the Healthy phase.
 	ReadyShards int32 `json:"readyShards"`
+	// TotalShards is the total number of shards declared for this table group.
 	TotalShards int32 `json:"totalShards"`
 }
 
@@ -155,7 +157,7 @@ type TableGroupStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Shards",type="integer",JSONPath=".status.readyShards"
 
-// TableGroup is the Schema for the tablegroups API
+// TableGroup represents a logical grouping of tables that are sharded together within a database.
 // +kubebuilder:resource:shortName=tbg
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 type TableGroup struct {

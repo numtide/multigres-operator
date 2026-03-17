@@ -47,7 +47,7 @@ type ShardReconciler struct {
 	CreateTopoStore func(*multigresv1alpha1.Shard) (topoclient.Store, error)
 }
 
-// Reconcile handles Shard resource reconciliation.
+// Reconcile manages pool pods, PVCs, services, and data-plane topology for a Shard.
 func (r *ShardReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,

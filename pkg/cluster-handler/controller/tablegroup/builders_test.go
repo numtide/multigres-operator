@@ -1,13 +1,13 @@
 package tablegroup
 
 import (
-	"reflect"
 	"testing"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
@@ -84,8 +84,8 @@ func TestBuildShard(t *testing.T) {
 		if got.Spec.DatabaseName != "my-db" {
 			t.Errorf("Spec.DatabaseName = %v, want %v", got.Spec.DatabaseName, "my-db")
 		}
-		if !reflect.DeepEqual(got.Spec.Pools, shardSpec.Pools) {
-			t.Errorf("Spec.Pools = %v, want %v", got.Spec.Pools, shardSpec.Pools)
+		if diff := cmp.Diff(shardSpec.Pools, got.Spec.Pools); diff != "" {
+			t.Errorf("Spec.Pools mismatch (-want +got):\n%s", diff)
 		}
 	})
 

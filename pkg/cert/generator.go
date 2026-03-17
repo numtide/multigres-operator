@@ -138,7 +138,7 @@ func GenerateServerCert(
 	opts ...ServerCertOption,
 ) (*ServerArtifacts, error) {
 	if ca == nil {
-		return nil, fmt.Errorf("CA artifacts cannot be nil")
+		return nil, fmt.Errorf("ca artifacts cannot be nil")
 	}
 
 	cfg := serverCertConfig{

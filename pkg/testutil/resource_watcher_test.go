@@ -6,10 +6,10 @@ package testutil_test
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -238,8 +238,8 @@ func TestResourceWatcher_BeforeCreation(t *testing.T) {
 					return
 				}
 
-				if !reflect.DeepEqual(want.Kinds, got.Kinds) {
-					t.Errorf("Expected unwatched kinds = %v, got = %v", want.Kinds, got.Kinds)
+				if diff := cmp.Diff(want.Kinds, got.Kinds); diff != "" {
+					t.Errorf("Unwatched kinds mismatch (-want +got):\n%s", diff)
 				}
 			},
 		},
@@ -373,7 +373,8 @@ func TestResourceWatcher_AfterCreation(t *testing.T) {
 				// Wait specifically for DELETED event
 				evt, err := watcher.WaitForEventType("Service", "DELETED")
 				if err != nil {
-					t.Fatalf("Failed to wait for Service DELETED event: %v", err)
+					t.Errorf("Failed to wait for Service DELETED event: %v", err)
+					return
 				}
 
 				if evt.Name != "test-svc-delete" {

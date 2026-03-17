@@ -19,7 +19,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: CoreTemplate is the Schema for the coretemplates API
+        description: CoreTemplate provides reusable infrastructure configuration (pod
+          resources, scheduling) for cluster core components.
         properties:
           apiVersion:
             description: |-

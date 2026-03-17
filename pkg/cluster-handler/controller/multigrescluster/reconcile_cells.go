@@ -29,7 +29,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 		return false, fmt.Errorf("failed to list existing cells: %w", err)
 	}
 
-	globalTopoRef, err := r.getGlobalTopoRef(ctx, cluster, res)
+	globalTopoRef, err := r.globalTopoRef(ctx, cluster, res)
 	if err != nil {
 		return false, fmt.Errorf("failed to get global topo ref: %w", err)
 	}

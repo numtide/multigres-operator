@@ -1195,14 +1195,14 @@ func TestManager_Misc(t *testing.T) {
 		t.Parallel()
 		mgr := NewManager(cl, nil, Options{})
 		// Should not panic
-		mgr.recorderEvent(&corev1.Secret{}, "Normal", "Test", "test message")
+		mgr.emitEvent(&corev1.Secret{}, "Normal", "Test", "test message")
 	})
 
 	t.Run("RecorderEvent with Nil Object", func(t *testing.T) {
 		t.Parallel()
 		mgr := NewManager(cl, record.NewFakeRecorder(10), Options{})
 		// Should not panic
-		mgr.recorderEvent(nil, "Normal", "Test", "test message")
+		mgr.emitEvent(nil, "Normal", "Test", "test message")
 	})
 }
 

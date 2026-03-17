@@ -447,7 +447,7 @@ type DatabaseStatusSummary struct {
 // +kubebuilder:printcolumn:name="Available",type="string",JSONPath=".status.conditions[?(@.type=='Available')].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// MultigresCluster is the Schema for the multigresclusters API
+// MultigresCluster represents a distributed database cluster managed by the operator.
 // +kubebuilder:resource:shortName=mgc
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
 // +kubebuilder:validation:XValidation:rule="self.metadata.name.size() <= 25",message="MultigresCluster name must be at most 25 characters"

@@ -2308,19 +2308,31 @@ func TestResolvePodIndex(t *testing.T) {
 	tests := map[string]struct {
 		podName string
 		want    int
+		wantOK  bool
 	}{
-		"normal pod name":   {podName: "test-cluster-db-tg-s1-pool-primary-zone1-3", want: 3},
-		"zero index":        {podName: "pod-0", want: 0},
-		"no dash":           {podName: "nodash", want: -1},
-		"non-numeric after": {podName: "pod-abc", want: -1},
-		"trailing dash":     {podName: "pod-", want: -1},
+		"normal pod name": {
+			podName: "test-cluster-db-tg-s1-pool-primary-zone1-3",
+			want:    3,
+			wantOK:  true,
+		},
+		"zero index":        {podName: "pod-0", want: 0, wantOK: true},
+		"no dash":           {podName: "nodash", want: 0, wantOK: false},
+		"non-numeric after": {podName: "pod-abc", want: 0, wantOK: false},
+		"trailing dash":     {podName: "pod-", want: 0, wantOK: false},
 	}
 
 	for tn, tc := range tests {
 		t.Run(tn, func(t *testing.T) {
-			got := resolvePodIndex(tc.podName)
-			if got != tc.want {
-				t.Errorf("resolvePodIndex(%q) = %d, want %d", tc.podName, got, tc.want)
+			got, ok := resolvePodIndex(tc.podName)
+			if got != tc.want || ok != tc.wantOK {
+				t.Errorf(
+					"resolvePodIndex(%q) = (%d, %v), want (%d, %v)",
+					tc.podName,
+					got,
+					ok,
+					tc.want,
+					tc.wantOK,
+				)
 			}
 		})
 	}

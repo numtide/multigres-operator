@@ -43,7 +43,7 @@ type CellTemplateSpec struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:scope=Namespaced
 
-// CellTemplate is the Schema for the celltemplates API
+// CellTemplate provides reusable cell-level configuration (images, resources) for MultigresCluster cells.
 // +kubebuilder:resource:shortName=cet
 type CellTemplate struct {
 	metav1.TypeMeta   `json:",inline"`

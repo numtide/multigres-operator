@@ -19,7 +19,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ShardTemplate is the Schema for the shardtemplates API
+        description: ShardTemplate provides reusable shard-level configuration (pools,
+          storage, resources) for MultigresCluster shards.
         properties:
           apiVersion:
             description: |-
@@ -969,6 +970,8 @@ spec:
                       Cells defines the list of cells where this MultiOrch should be deployed.
                       If empty, it defaults to all cells where pools are defined.
                     items:
+                      description: CellName is a validated name for a cell (availability
+                        zone unit) within a cluster.
                       maxLength: 30
                       minLength: 1
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
@@ -1989,6 +1992,8 @@ spec:
                       description: Cells defines the list of cells where this Pool
                         should be deployed.
                       items:
+                        description: CellName is a validated name for a cell (availability
+                          zone unit) within a cluster.
                         maxLength: 30
                         minLength: 1
                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
