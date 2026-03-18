@@ -70,7 +70,7 @@ A mutating admission webhook automatically resolves `CoreTemplate`,
 - **Replicas**: Etcd=3, MultiAdmin=1, MultiAdminWeb=1, Pool=1 per cell
 - **Storage**: Etcd=2Gi, Pool data=1Gi
 - **Resources**: CPU/memory requests and limits for all components
-- **PVC deletion policy**: Defaults to Retain/Retain
+- **PVC deletion policy**: Defaults to Retain/Delete
 - **System databases**: Mandatory "postgres" database injected automatically
 
 ### Webhook validation
@@ -277,7 +277,7 @@ Two-dimensional PVC deletion policy:
 | Policy | Retain (default) | Delete |
 |:-------|:-----------------|:-------|
 | **WhenDeleted** | PVCs kept after Shard deletion | PVCs removed with Shard |
-| **WhenScaled** | PVCs kept after scale-down | PVCs removed for DRAINED pods |
+| **WhenScaled** | PVCs kept after scale-down (explicit `Retain`) | PVCs removed on scale-down (default); always deleted for DRAINED pods |
 
 ---
 
@@ -395,8 +395,8 @@ The operator continuously reconciles desired state and recovers from failures:
   entries are missing
 - **PodRoles refresh**: Continuously updated from topology server to reflect
   actual database roles
-- **DRAINED pod replacement**: Detects DRAINED role from etcd, initiates drain
-  and recreation
+- **DRAINED pod handling**: Detects DRAINED role from etcd, keeps pod alive
+  for admin investigation, creates stand-in replica for availability
 - **Scale-down safety**: Blocks scale-down when pool is already degraded
 
 ### Auto-healing (upstream Multigres)

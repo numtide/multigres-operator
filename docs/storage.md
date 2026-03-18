@@ -13,16 +13,16 @@ The `pvcDeletionPolicy` field has two settings:
   - `Delete`: PVCs are automatically deleted along with the cluster
 
 - **`whenScaled`**: Controls what happens to PVCs when reducing the number of replicas (e.g., scaling from 3 pods down to 1 pod).
-  - `Retain` (default): PVCs from scaled-down pods are kept for potential scale-up
-  - `Delete`: PVCs are automatically deleted when pods are removed
+  - `Delete` (default): PVCs are automatically deleted when pods are removed
+  - `Retain`: PVCs from scaled-down pods are kept for manual recovery
 
-### Safe Defaults
+### Defaults
 
-**By default, the operator uses `Retain/Retain`** for maximum data safety. This means:
-- Deleting a cluster will **not** delete your data volumes
-- Scaling down will **not** delete the PVCs from removed pods
+**By default, the operator uses `Retain/Delete`**. This means:
+- Deleting a cluster will **not** delete your data volumes (`Retain`)
+- Scaling down **will** delete the PVCs from removed pods (`Delete`)
 
-This is a deliberate choice to prevent accidental data loss.
+The `Delete` default for `whenScaled` is deliberate: pgbackrest is the source of truth for data recovery, so retaining PVCs from scaled-down pods adds storage cost without benefit. If you need to retain scaled-down PVCs for manual recovery, set `whenScaled: Retain` explicitly.
 
 ### Where to Set the Policy
 
@@ -66,7 +66,7 @@ The policy is merged hierarchically:
 2. **TableGroup-level** policy
 3. **Cluster-level** policy
 4. **Template defaults** (CoreTemplate, ShardTemplate)
-5. **Operator defaults** (Retain/Retain)
+5. **Operator defaults** (Retain/Delete)
 
 **Note**: If a child policy specifies only `whenDeleted`, it will inherit `whenScaled` from its parent, and vice versa.
 
@@ -103,13 +103,11 @@ spec:
 - Ephemeral clusters
 - Scenarios where data is backed up externally
 
-⚠️ **Replica Scale-Down Behavior**: Setting `whenScaled: Delete` will **immediately delete PVCs** when the operator removes pods during scale-down. If you scale the replica count back up, new pods will start with **empty volumes** and will need to restore from backup. This is useful for:
-- Reducing storage costs in non-production environments
-- Stateless-like workloads where data is ephemeral
+⚠️ **Replica Scale-Down Behavior**: The default `whenScaled: Delete` will **immediately delete PVCs** when the operator removes pods during scale-down. If you scale the replica count back up, new pods will start with **empty volumes** and will need to restore from backup. Set `whenScaled: Retain` if you want to preserve PVCs for faster scale-up without backup restore.
 
 **Note**: This does NOT affect storage size. Changing PVC storage capacity is handled separately by the **PVC Volume Expansion** feature (see below).
 
-✅ **Production Recommendation**: For production clusters, use the default `Retain/Retain` policy and implement proper backup/restore procedures.
+✅ **Production Recommendation**: For production clusters, ensure proper backup/restore procedures are in place. The default `Retain/Delete` policy is appropriate when pgbackrest is configured for recovery.
 
 ---
 

@@ -24,8 +24,8 @@ const (
 - `WhenDeleted`: Controls PVC deletion when the parent resource (Cluster, TopoServer, Shard) is deleted
 - `WhenScaled`: Controls PVC deletion when replicas are reduced (scale-down)
 
-**Default Values**: Both fields default to `Retain` (safest option). This is enforced via:
-1. CRD-level defaults: `+kubebuilder:default=Retain`
+**Default Values**: `WhenDeleted` defaults to `Retain`, `WhenScaled` defaults to `Delete`. This is enforced via:
+1. CRD-level defaults: `+kubebuilder:default=Retain` (WhenDeleted), `+kubebuilder:default=Delete` (WhenScaled)
 2. Webhook defaulting: Ensures nil policies are populated
 3. Operator-level defaults in `pkg/resolver`
 
@@ -74,7 +74,7 @@ sts.Spec.PersistentVolumeClaimRetentionPolicy = pvc.BuildRetentionPolicy(
 ```
 
 **Shard Pool Pods** (`pkg/resource-handler/controller/shard/reconcile_pool_pods.go`):
-Pool pod PVCs are managed directly by the operator. During scale-down, the `cleanupDrainedPod` function checks `shard.Spec.PVCDeletionPolicy.WhenScaled` and deletes the data PVC if the policy is `Delete`. During shard/cluster deletion, PVCs are garbage-collected by Kubernetes via conditional owner references: when `WhenDeleted` is `Delete`, PVCs are created with an ownerRef to the Shard CR, enabling cascade deletion. When `WhenDeleted` is `Retain`, PVCs have no ownerRef and persist after deletion. The `reconcilePVCOwnerRefs` function ensures existing PVCs stay in sync with the current policy during mid-lifecycle changes.
+Pool pod PVCs are managed directly by the operator. During scale-down, the `cleanupDrainedPod` function checks `shard.Spec.PVCDeletionPolicy.WhenScaled` and deletes the data PVC if the policy is `Delete` (the default). For DRAINED pods (detected via the `multigres.com/role=DRAINED` label), the PVC is always deleted regardless of the `WhenScaled` policy because DRAINED pod data is known-bad. During shard/cluster deletion, PVCs are garbage-collected by Kubernetes via conditional owner references: when `WhenDeleted` is `Delete`, PVCs are created with an ownerRef to the Shard CR, enabling cascade deletion. When `WhenDeleted` is `Retain`, PVCs have no ownerRef and persist after deletion. The `reconcilePVCOwnerRefs` function ensures existing PVCs stay in sync with the current policy during mid-lifecycle changes.
 
 **Utility Function** (`pkg/util/pvc/retention.go:BuildRetentionPolicy`):
 - Used by TopoServer StatefulSets to convert operator's `PVCDeletionPolicy` to Kubernetes `StatefulSetPersistentVolumeClaimRetentionPolicy`
@@ -139,7 +139,7 @@ finalPolicy := resolvedPolicy
 if finalPolicy == nil {
     finalPolicy = &PVCDeletionPolicy{
         WhenDeleted: RetainPVCRetentionPolicy,
-        WhenScaled:  RetainPVCRetentionPolicy,
+        WhenScaled:  DeletePVCRetentionPolicy,
     }
 }
 ```
