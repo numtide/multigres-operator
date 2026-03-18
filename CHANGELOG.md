@@ -4,6 +4,45 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.7.0] — 2026-03-18
+
+**Previous release:** v0.6.0 (2026-03-17)
+
+Introduces DRAINED pod handling — when multiorch marks a pooler as DRAINED (diverged data, pg_rewind failure), the operator now keeps the pod alive for admin investigation instead of auto-draining it, and spins up a stand-in replica to maintain availability. Changes the `WhenScaled` PVC deletion default from `Retain` to `Delete` so pgbackrest is the sole source of truth for recovery.
+
+**5 commits, 27 files changed, ~567 insertions.**
+
+### Breaking Changes
+
+- **WhenScaled PVC default changed to Delete:** The `PVCDeletionPolicy.WhenScaled` field default changes from `Retain` to `Delete`. PVCs from scaled-down pods are now automatically deleted instead of being retained. Users relying on the `Retain` default for manual PVC recovery must explicitly set `whenScaled: Retain` in their `PVCDeletionPolicy` spec before upgrading.
+
+### Features
+
+- **DRAINED pod preservation:** When multiorch marks a pooler as DRAINED (diverged data, pg_rewind failed), the operator keeps the pod alive for admin investigation instead of auto-draining it. A stand-in replica is created at the next index to compensate for availability. Admins discard the DRAINED pod via `kubectl delete pod`, which triggers the drain state machine and always deletes the PVC (data is known-bad).
+- **DRAINED label as durable signal:** New `syncDrainedLabels` phase in `reconcilePoolPods` sets `multigres.com/role=DRAINED` as a durable label that survives data-handler clearing `PodRoles`, ensuring PVC cleanup always identifies DRAINED pods.
+
+### Improvements
+
+- **Effective replica accounting:** Pool replica count is computed as `replicas + drainedCount`, threaded through `createMissingResources`, `handleScaleDown`, and `isPoolHealthy` so DRAINED pods don't consume slots intended for healthy replicas.
+- **DRAINED pods excluded from health checks:** `isPoolHealthy` excludes pods with the DRAINED label so they don't block scale-down of stand-in replacements.
+
+### Dependencies
+
+- **Upstream multigres images:** multigres `sha-cb398c4` → `sha-803b6e7`, pgctld `sha-cb398c4` → `sha-803b6e7`, multiadmin-web unchanged at `sha-d1ba30a`. Upstream changes: multigateway EOF log level downgrade (ERROR → DEBUG), multipooler active postgres action tracking in status RPC, shard lock TTL fix (prevents stale lock deadlocks), multiorch `Health()` accessor removal.
+
+### Documentation
+
+- **Drained pod handling design:** New `plans/design-drained-pod-handling.md` documenting the design rationale, pod lifecycle, PVC cleanup semantics, and admin investigation workflow for DRAINED pods.
+- **Admission controller doc updated:** `WhenScaled` default updated to `Delete` in admission controller documentation.
+- **API design doc updated:** DRAINED pod handling semantics and `WhenScaled` default change reflected in the API design document.
+
+### Observer
+
+- **DRAINED pod detection:** The observer replication check now classifies DRAINED pods and reports a `SeverityWarn` finding when detected.
+- **New exerciser fixture:** Added `pvc-default-policy` fixture for validating default PVC deletion policy propagation.
+
+---
+
 ## [v0.6.0] — 2026-03-17
 
 **Previous release:** v0.5.3 (2026-03-13)
