@@ -105,6 +105,9 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 					},
 					PeriodSeconds: 5,
 				},
+				Env: []corev1.EnvVar{
+					{Name: "PGDATA", Value: PgDataPath},
+				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      DataVolumeName,
@@ -206,6 +209,9 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						},
 					},
 					PeriodSeconds: 5,
+				},
+				Env: []corev1.EnvVar{
+					{Name: "PGDATA", Value: PgDataPath},
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -326,6 +332,9 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 						},
 					},
 					PeriodSeconds: 5,
+				},
+				Env: []corev1.EnvVar{
+					{Name: "PGDATA", Value: PgDataPath},
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{

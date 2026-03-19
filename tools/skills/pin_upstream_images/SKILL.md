@@ -72,7 +72,7 @@ This is the critical step. Do NOT make hypothetical recommendations. For each up
 
 For every potentially impactful upstream change:
 
-1. **Search the operator code** using `grep_search`, `view_file_outline`, and `view_code_item` to find whether the operator references, uses, or depends on the changed upstream construct (proto field, gRPC service, CLI flag, topology record field, behavior, etc.).
+1. **Search the operator code** using `grep_search`, `view_file_outline`, and `view_code_item` to find whether the operator references, uses, or depends on the changed upstream construct (proto field, gRPC service, CLI flag, topology record field, env var, behavior, etc.).
 
 2. **Classify each change with evidence:**
    - **Action required** -- The operator code directly references or depends on something that changed. Cite the exact file and line in the operator. Describe what needs to change and why.
@@ -80,6 +80,8 @@ For every potentially impactful upstream change:
    - **No impact** -- The upstream change does not touch anything the operator interacts with. Confirm this by showing the search came up empty.
 
 3. **Do not speculate.** Every recommendation must be backed by a concrete search result (or confirmed absence) in the operator codebase. No "if the operator does X" phrasing -- either it does or it doesn't.
+
+4. **Per-container analysis is mandatory.** When an upstream change affects a component's requirements (env vars, flags, volumes, config files), verify the requirement is satisfied on the **specific container** for that component in `containers.go`. Finding a reference elsewhere in the operator is NOT sufficient — each container builder (`buildPgctldContainer`, `buildMultiPoolerSidecar`, `buildMultiOrchContainer`, etc.) is independent. A requirement met on one container does NOT mean it is met on another.
 
 ### 4a. Flag Compatibility Audit
 
@@ -103,6 +105,29 @@ For every potentially impactful upstream change:
 
 3. Cross-check: for each flag in the operator's `containers.go`, confirm it exists in the corresponding upstream component's flag set. Flag any mismatches as **Action required — flag removed/renamed upstream**.
 
+### 4b. Environment Variable Compatibility Audit
+
+**This step is mandatory.** Independent of the diff review, mechanically verify that every environment variable required by upstream components is set on the **correct operator container(s)**. This catches cases where an env var exists on one container but a different component now also requires it.
+
+1. Find every required env var in upstream at the **new SHA**:
+   ```bash
+   cd /tmp/multigres
+   # Required env vars (fatal if missing)
+   grep -rn 'os.Getenv\|os.LookupEnv' go/services/multipooler/ go/cmd/pgctld/ go/services/multiorch/ go/services/multigateway/ 2>/dev/null | grep -v _test.go
+   # Specifically look for hard failures on missing env vars
+   grep -rn 'is required\|must be set\|MustGetenv' go/services/multipooler/ go/cmd/pgctld/ go/services/multiorch/ go/services/multigateway/ 2>/dev/null | grep -v _test.go
+   ```
+
+2. For each required env var found, check `containers.go` to confirm it is set on the **specific container** for that component:
+   - `multipooler` env vars → must be in `buildMultiPoolerSidecar`
+   - `pgctld` env vars → must be in `buildPgctldContainer`
+   - `multiorch` env vars → must be in `buildMultiOrchContainer`
+   - `multigateway` env vars → must be in `buildMultiGatewayContainer` (if exists)
+
+   **Critical**: An env var being set on one container does NOT mean it's set on another. Check each component's container builder independently.
+
+3. Flag any missing env vars as **Action required — env var required by [component] but not set on [container]**.
+
 ### 5. Present Results
 
 Present a structured summary to the user:
@@ -120,6 +145,47 @@ For each upstream change, include:
 **Flag Compatibility:**
 - Table of all operator flags vs upstream status (present/missing)
 - Any mismatches flagged as action items
+
+**Environment Variable Compatibility:**
+- Table of required env vars per component vs operator container status (present/missing)
+- Any mismatches flagged as action items
+
+### 5b. Deployment Smoke Test
+
+**This step is mandatory.** Static analysis (steps 4, 4a, 4b) cannot catch every possible failure mode — unknown volume requirements, changed binary entrypoints, new config file expectations, port changes, etc. The only way to be certain is to **run the images and verify pods come up healthy.**
+
+1. Apply any action-required fixes identified in Steps 4/4a/4b first.
+
+2. Build and deploy to kind:
+   ```bash
+   make kind-redeploy
+   ```
+   If no kind cluster exists, use `make kind-deploy`.
+
+3. Apply a sample workload:
+   ```bash
+   kubectl apply -f config/samples/minimal.yaml
+   ```
+
+4. Wait for pods and check health:
+   ```bash
+   # Wait up to 2 minutes for pods to stabilize
+   sleep 60
+   kubectl get pods
+   ```
+
+5. **If any pool pods are in CrashLoopBackOff or Init:Error:**
+   - Check logs: `kubectl logs <pod> -c multipooler` and `kubectl logs <pod> -c postgres`
+   - Diagnose the root cause (missing env var, removed flag, changed path, etc.)
+   - Fix the issue in the operator code
+   - Update tests
+   - Re-run `make kind-redeploy` and re-verify
+   - **Do NOT proceed to Step 6 until all pods are healthy.**
+
+6. **If all pods reach Running/Ready**, the upgrade is verified. Clean up:
+   ```bash
+   kubectl delete multigrescluster --all
+   ```
 
 ### 6. Finalize
 

@@ -320,7 +320,13 @@ func buildMultiPoolerSidecar(
 		},
 	}
 
-	env := s3EnvVars(shard.Spec.Backup)
+	env := []corev1.EnvVar{
+		{
+			Name:  "PGDATA",
+			Value: PgDataPath,
+		},
+	}
+	env = append(env, s3EnvVars(shard.Spec.Backup)...)
 	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
 		env = append(env, otelVars...)
 	}
