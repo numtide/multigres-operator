@@ -56,6 +56,8 @@ func TestTopoServerReconciliation(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 
+	preferDualStack := corev1.IPFamilyPolicyPreferDualStack
+
 	tests := map[string]struct {
 		toposerver      *multigresv1alpha1.TopoServer
 		existingObjects []client.Object
@@ -128,8 +130,8 @@ func TestTopoServerReconciliation(t *testing.T) {
 											},
 											{Name: "ETCD_NAME", Value: "$(POD_NAME)"},
 											{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
-											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
-											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
+											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
+											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
 											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
 											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
 											{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
@@ -209,7 +211,8 @@ func TestTopoServerReconciliation(t *testing.T) {
 						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: corev1.ServiceSpec{
-						Type: corev1.ServiceTypeClusterIP,
+						IPFamilyPolicy: &preferDualStack,
+						Type:           corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "client", 2379),
 						},
@@ -224,8 +227,9 @@ func TestTopoServerReconciliation(t *testing.T) {
 						OwnerReferences: toposerverOwnerRefs(t, "test-toposerver"),
 					},
 					Spec: corev1.ServiceSpec{
-						Type:      corev1.ServiceTypeClusterIP,
-						ClusterIP: corev1.ClusterIPNone,
+						IPFamilyPolicy: &preferDualStack,
+						Type:           corev1.ServiceTypeClusterIP,
+						ClusterIP:      corev1.ClusterIPNone,
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "client", 2379),
 							tcpServicePort(t, "peer", 2380),
@@ -303,8 +307,8 @@ func TestTopoServerReconciliation(t *testing.T) {
 											},
 											{Name: "ETCD_NAME", Value: "$(POD_NAME)"},
 											{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
-											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://0.0.0.0:2379"},
-											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://0.0.0.0:2380"},
+											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
+											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
 											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).delete-policy-topo-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
 											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).delete-policy-topo-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
 											{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
@@ -382,7 +386,8 @@ func TestTopoServerReconciliation(t *testing.T) {
 						OwnerReferences: toposerverOwnerRefs(t, "delete-policy-topo"),
 					},
 					Spec: corev1.ServiceSpec{
-						Type: corev1.ServiceTypeClusterIP,
+						IPFamilyPolicy: &preferDualStack,
+						Type:           corev1.ServiceTypeClusterIP,
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "client", 2379),
 						},
@@ -397,8 +402,9 @@ func TestTopoServerReconciliation(t *testing.T) {
 						OwnerReferences: toposerverOwnerRefs(t, "delete-policy-topo"),
 					},
 					Spec: corev1.ServiceSpec{
-						Type:      corev1.ServiceTypeClusterIP,
-						ClusterIP: corev1.ClusterIPNone,
+						IPFamilyPolicy: &preferDualStack,
+						Type:           corev1.ServiceTypeClusterIP,
+						ClusterIP:      corev1.ClusterIPNone,
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "client", 2379),
 							tcpServicePort(t, "peer", 2380),

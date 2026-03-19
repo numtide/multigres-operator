@@ -24,6 +24,8 @@ func BuildHeadlessService(
 	labels := metadata.BuildStandardLabels(clusterName, ComponentName)
 	labels = metadata.MergeLabels(labels, toposerver.GetObjectMeta().GetLabels())
 
+	preferDualStack := corev1.IPFamilyPolicyPreferDualStack
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      toposerver.Name + "-headless",
@@ -31,6 +33,7 @@ func BuildHeadlessService(
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
+			IPFamilyPolicy:           &preferDualStack,
 			ClusterIP:                corev1.ClusterIPNone,
 			Selector:                 metadata.GetSelectorLabels(labels),
 			Ports:                    buildHeadlessServicePorts(toposerver),
@@ -57,6 +60,8 @@ func BuildClientService(
 	labels := metadata.BuildStandardLabels(clusterName, ComponentName)
 	labels = metadata.MergeLabels(labels, toposerver.GetObjectMeta().GetLabels())
 
+	preferDualStack := corev1.IPFamilyPolicyPreferDualStack
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      toposerver.Name,
@@ -64,9 +69,10 @@ func BuildClientService(
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: metadata.GetSelectorLabels(labels),
-			Ports:    buildClientServicePorts(toposerver),
+			IPFamilyPolicy: &preferDualStack,
+			Type:           corev1.ServiceTypeClusterIP,
+			Selector:       metadata.GetSelectorLabels(labels),
+			Ports:          buildClientServicePorts(toposerver),
 		},
 	}
 
