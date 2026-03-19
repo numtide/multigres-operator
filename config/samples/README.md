@@ -11,6 +11,7 @@ This directory contains various sample configurations to help you understand how
 | `default-templates/` | A directory containing individual default files (`cell.yaml`, `core.yaml`, `shard.yaml`). |
 | `external-etcd.yaml` | Demonstrates connecting to an existing external Etcd cluster instead of deploying one. |
 | `no-templates.yaml` | A verbose example where all configuration is defined inline (no templates used). |
+| `topology.yaml` | Multi-cell deployment with region/zone topology, cell-specific overrides, and topology-aware scheduling. |
 
 ---
 

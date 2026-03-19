@@ -4,6 +4,33 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.7.1] — 2026-03-19
+
+**Previous release:** v0.7.0 (2026-03-18)
+
+Patch release fixing a multipooler crash introduced by the upstream image pin, adding IPv6/dual-stack support to the toposerver, and resolving a critical gRPC CVE. Also adds a topology-aware sample manifest for multi-cell deployments.
+
+**10 commits, 12 files changed, ~296 insertions.**
+
+### Bug Fixes
+
+- **Multipooler PGDATA env var:** Upstream commit `c7cfd63` made the `PGDATA` environment variable mandatory for multipooler (previously only required by pgctld). The operator only set `PGDATA` on the postgres container, causing multipooler to crash with "PGDATA environment variable is required" on images >= `sha-96175f5`.
+
+### Improvements
+
+- **IPv6/dual-stack toposerver:** Etcd listen URLs changed from `http://0.0.0.0` to `http://[::]` for IPv6 compatibility. Headless and client Services now set `IPFamilyPolicy: PreferDualStack` for dual-stack cluster support. (Contributed by @Verolop)
+
+### Dependencies
+
+- **Upstream multigres images:** multigres `sha-803b6e7` → `sha-96175f5`, pgctld `sha-803b6e7` → `sha-96175f5`, multiadmin-web unchanged at `sha-d1ba30a`. Upstream changes: multigateway explicit transaction handling fix, pgctld `POSTGRES_INITDB_ARGS` support, per-table query metrics, `PGDATA` as data directory source of truth, multipooler `StateManager` for state transitions.
+- **gRPC CVE fix:** Bumped `google.golang.org/grpc` from v1.78.0 to v1.79.3 to resolve GHSA-p77j-4mvh-x3m3 (critical). Transitive bump: `cel.dev/expr` v0.24.0 → v0.25.1.
+
+### Documentation
+
+- **Topology sample:** New `config/samples/topology.yaml` demonstrating a multi-cell deployment with region/zone topology, cell-specific overrides, and topology-aware scheduling.
+
+---
+
 ## [v0.7.0] — 2026-03-18
 
 **Previous release:** v0.6.0 (2026-03-17)
