@@ -75,11 +75,11 @@ func buildEtcdConfigEnv(toposerverName, serviceName, namespace string) []corev1.
 		},
 		{
 			Name:  "ETCD_LISTEN_CLIENT_URLS",
-			Value: "http://0.0.0.0:2379",
+			Value: "http://[::]:2379",
 		},
 		{
 			Name:  "ETCD_LISTEN_PEER_URLS",
-			Value: "http://0.0.0.0:2380",
+			Value: "http://[::]:2380",
 		},
 		{
 			Name: "ETCD_ADVERTISE_CLIENT_URLS",

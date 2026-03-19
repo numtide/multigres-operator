@@ -17,6 +17,8 @@ func TestBuildHeadlessService(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
+	preferDualStack := corev1.IPFamilyPolicyPreferDualStack
+
 	tests := map[string]struct {
 		toposerver *multigresv1alpha1.TopoServer
 		scheme     *runtime.Scheme
@@ -58,7 +60,8 @@ func TestBuildHeadlessService(t *testing.T) {
 					},
 				},
 				Spec: corev1.ServiceSpec{
-					ClusterIP: corev1.ClusterIPNone,
+					IPFamilyPolicy: &preferDualStack,
+					ClusterIP:      corev1.ClusterIPNone,
 					Selector: map[string]string{
 						"app.kubernetes.io/instance":  "test-cluster",
 						"app.kubernetes.io/component": "toposerver",
@@ -108,6 +111,8 @@ func TestBuildClientService(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 
+	preferDualStack := corev1.IPFamilyPolicyPreferDualStack
+
 	tests := map[string]struct {
 		toposerver *multigresv1alpha1.TopoServer
 		scheme     *runtime.Scheme
@@ -149,7 +154,8 @@ func TestBuildClientService(t *testing.T) {
 					},
 				},
 				Spec: corev1.ServiceSpec{
-					Type: corev1.ServiceTypeClusterIP,
+					IPFamilyPolicy: &preferDualStack,
+					Type:           corev1.ServiceTypeClusterIP,
 					Selector: map[string]string{
 						"app.kubernetes.io/instance":  "test-cluster",
 						"app.kubernetes.io/component": "toposerver",
