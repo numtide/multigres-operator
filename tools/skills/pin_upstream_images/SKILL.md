@@ -127,4 +127,25 @@ For each upstream change, include:
 
 2. Suggest a branch name and generate a commit message using the `generate_commit_message` skill:
    - Branch name: `release/pin-image-tags-YYYY-MM-DD`
-   - The commit message should reference upgrading multigres images and include the old->new SHA transitions
+   - The commit message **must** include:
+     - The old->new SHA transitions for each image group
+     - A **complete list of upstream commits** (from `git log --oneline`) as bullet points under a "Upstream changes:" section
+     - Any **action-required** or **new-feature-opportunity** items called out explicitly
+   - Example body structure:
+     ```
+     deps(images): pin multigres images to sha-XXXXXXX
+
+     Upgrade default container images for pgctld and multigres
+     from sha-AAAAAAA to sha-BBBBBBB. multiadmin-web remains at
+     sha-CCCCCCC.
+
+     Upstream changes (AAAAAAA..BBBBBBB):
+     - fix(component): description of fix
+     - feat(component): description of feature
+     - refactor(component): description of refactoring
+     ...
+
+     Operator impact:
+     - No breaking changes detected
+     - New feature opportunity: <description if any>
+     ```
