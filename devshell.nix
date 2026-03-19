@@ -19,7 +19,7 @@ pkgs.mkShell rec {
   # Add environment variables
   env = {
     # NOTE: This is used with `make setup-envtest`
-    "ENVTEST_K8S_VERSION"= "1.33";  # Default version for Nix users
+    "ENVTEST_K8S_VERSION"= "1.35";  # Default version for Nix users
   };
 
   # Load custom bash code
