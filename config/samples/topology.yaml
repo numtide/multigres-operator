@@ -1,0 +1,133 @@
+# To try this sample, use: make kind-deploy-topology
+# This creates a kind cluster with 3 worker nodes labeled with topology zones.
+apiVersion: multigres.com/v1alpha1
+kind: MultigresCluster
+metadata:
+  name: topology
+  namespace: default
+spec:
+  pvcDeletionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
+  # ----------------------------------------------------------------
+  # 1. Global Components (Inline)
+  # ----------------------------------------------------------------
+  globalTopoServer:
+    etcd:
+      image: "gcr.io/etcd-development/etcd:v3.6.7"
+      replicas: 3
+      storage:
+        size: "10Gi"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "200m"
+          memory: "512Mi"
+
+  multiadmin:
+    spec:
+      replicas: 2
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "200m"
+          memory: "256Mi"
+
+  # ----------------------------------------------------------------
+  # 2. Cell Definitions (Inline) — one per availability zone
+  # ----------------------------------------------------------------
+  cells:
+    - name: "z1"
+      zone: "us-east-1a"
+      spec:
+         multigateway:
+           replicas: 2
+           resources:
+             requests:
+               cpu: "100m"
+               memory: "128Mi"
+             limits:
+               cpu: "200m"
+               memory: "256Mi"
+
+    - name: "z2"
+      zone: "us-east-1b"
+      spec:
+         multigateway:
+           replicas: 2
+           resources:
+             requests:
+               cpu: "100m"
+               memory: "128Mi"
+             limits:
+               cpu: "200m"
+               memory: "256Mi"
+
+    - name: "z3"
+      zone: "us-east-1c"
+      spec:
+         multigateway:
+           replicas: 2
+           resources:
+             requests:
+               cpu: "100m"
+               memory: "128Mi"
+             limits:
+               cpu: "200m"
+               memory: "256Mi"
+
+  # ----------------------------------------------------------------
+  # 3. Database Topology (Inline)
+  # ----------------------------------------------------------------
+  databases:
+    - name: "postgres"
+      default: true
+      tablegroups:
+        - name: "default"
+          default: true
+          shards:
+            - name: "0-inf"
+              spec:
+                multiorch:
+                  cells:
+                    - "z1"
+                    - "z2"
+                    - "z3"
+                  resources:
+                    requests:
+                      cpu: "50m"
+                      memory: "64Mi"
+                    limits:
+                      cpu: "100m"
+                      memory: "128Mi"
+
+                pools:
+                  main:
+                    type: "readWrite"
+                    cells:
+                      - "z1"
+                      - "z2"
+                      - "z3"
+                    replicasPerCell: 3
+                    storage:
+                      size: "100Gi"
+                    postgres:
+                       resources:
+                           requests:
+                             cpu: "100m"
+                             memory: "256Mi"
+                           limits:
+                             cpu: "500m"
+                             memory: "512Mi"
+                    multipooler:
+                       resources:
+                          requests:
+                            cpu: "50m"
+                            memory: "64Mi"
+                          limits:
+                            cpu: "200m"
+                            memory: "128Mi"
