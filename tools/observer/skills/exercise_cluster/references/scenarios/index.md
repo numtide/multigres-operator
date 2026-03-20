@@ -110,3 +110,6 @@ File: `scenarios/specialized.md`
 | large-scale-multiadmin | standard | yes | multiadmin-lifecycle, overrides-complex |
 | change-annotations-stateless | standard | no | minimal-delete, minimal-retain |
 | verify-multi-pool | quick | yes | multi-pool |
+| verify-external-adminweb | quick | yes | external-adminweb |
+| external-adminweb-enable-disable | quick | no | external-adminweb |
+| external-adminweb-change-annotations | quick | yes | external-adminweb |
