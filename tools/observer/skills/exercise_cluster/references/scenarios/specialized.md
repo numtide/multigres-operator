@@ -240,3 +240,88 @@ kubectl patch multigrescluster <name> --type json -p '[{"op":"remove","path":"/s
 - Observer reports no errors
 
 **Teardown:** Delete the `multi-pool` cluster.
+
+---
+
+### verify-external-adminweb
+**Tier:** quick | **Fast-path:** yes
+**Tests:** ExternalAdminWeb config lifecycle — Service externalIPs, annotations, status, and conditions
+**Applicable fixtures:** `external-adminweb`
+
+**How to execute:**
+1. Deploy the `external-adminweb` fixture.
+2. Wait for CRD phase `Healthy` and all pods Running+Ready.
+3. Verify the multiadmin-web Service has externalIPs and annotations:
+   ```bash
+   kubectl get svc ext-adminweb-multiadmin-web -o jsonpath='{.spec.externalIPs}'
+   # Expected: ["198.51.100.10"]
+   kubectl get svc ext-adminweb-multiadmin-web -o jsonpath='{.metadata.annotations.service\.beta\.kubernetes\.io/aws-load-balancer-scheme}'
+   # Expected: internet-facing
+   ```
+4. Verify status reports the external endpoint:
+   ```bash
+   kubectl get multigrescluster ext-adminweb -o jsonpath='{.status.adminWeb.externalEndpoint}'
+   # Expected: 198.51.100.10
+   ```
+5. Verify the AdminWebExternalReady condition:
+   ```bash
+   kubectl get multigrescluster ext-adminweb -o jsonpath='{.status.conditions[?(@.type=="AdminWebExternalReady")].status}'
+   # Expected: True (once multiadmin-web Deployment has ready replicas)
+   kubectl get multigrescluster ext-adminweb -o jsonpath='{.status.conditions[?(@.type=="AdminWebExternalReady")].reason}'
+   # Expected: EndpointReady
+   ```
+
+**Success criteria:**
+- Service has `spec.externalIPs` matching the CR
+- Service has user-provided annotations
+- `status.adminWeb.externalEndpoint` populated
+- `AdminWebExternalReady` condition is `True` with reason `EndpointReady`
+
+---
+
+### external-adminweb-enable-disable
+**Tier:** quick | **Fast-path:** no
+**Tests:** Toggling externalAdminWeb between enabled and disabled
+**Applicable fixtures:** `external-adminweb`
+
+**How to patch (disable):**
+```bash
+kubectl patch multigrescluster ext-adminweb --type merge -p '{"spec":{"externalAdminWeb":{"enabled":false}}}'
+```
+
+**What to observe after disabling:**
+- Service reverts to plain ClusterIP (no externalIPs, no custom annotations)
+- `status.adminWeb` becomes null
+- `AdminWebExternalReady` condition is removed
+
+**How to patch (re-enable with different IPs):**
+```bash
+kubectl patch multigrescluster ext-adminweb --type merge -p '{"spec":{"externalAdminWeb":{"enabled":true,"externalIPs":["203.0.113.50"],"annotations":{"new-annotation":"re-enabled"}}}}'
+```
+
+**What to observe after re-enabling:**
+- Service updated with new externalIP `203.0.113.50`
+- Service has new annotation
+- `status.adminWeb.externalEndpoint` set to `203.0.113.50`
+- `AdminWebExternalReady` condition returns with appropriate status
+
+**Teardown:** Patch back to original state or delete cluster.
+
+---
+
+### external-adminweb-change-annotations
+**Tier:** quick | **Fast-path:** yes
+**Tests:** Changing annotations on externalAdminWeb propagates to Service
+**Applicable fixtures:** `external-adminweb`
+
+**How to patch:**
+```bash
+kubectl patch multigrescluster ext-adminweb --type merge -p '{"spec":{"externalAdminWeb":{"enabled":true,"externalIPs":["198.51.100.10"],"annotations":{"service.beta.kubernetes.io/aws-load-balancer-scheme":"internal","new-key":"new-value"}}}}'
+```
+
+**What to observe:**
+- Service annotations updated (scheme changed, new key added)
+- Old annotations removed via SSA field ownership
+- `status.adminWeb` and condition unchanged (externalIPs didn't change)
+
+**Teardown:** Patch back to original annotations.

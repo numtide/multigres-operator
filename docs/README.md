@@ -10,6 +10,7 @@
 | [Durability Policy](durability-policy.md) | Durability policies, cross-AZ quorum, per-database overrides |
 | [Storage Management](storage.md) | PVC deletion policies and volume expansion |
 | [External Gateway](external-gateway.md) | External multigateway exposure, DNS wiring, GatewayExternalReady condition |
+| [External Admin Web](external-admin-web.md) | External multiadmin-web exposure, AdminWebExternalReady condition |
 | [PostgreSQL Initialization](postgresql-initialization.md) | Custom initdb arguments (locale, encoding, WAL segment size) |
 | [PostgreSQL Configuration](postgresql-configuration.md) | Custom postgresql.conf parameters (memory, connections, WAL, tuning) |
 | [Configuration Reference](configuration.md) | Operator flags, environment variables, and logging |
