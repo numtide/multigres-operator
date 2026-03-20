@@ -249,7 +249,7 @@ func (r *MultigresClusterReconciler) reconcileMultiAdminWeb(
 	}
 
 	// 3. Reconcile global multigateway Service
-	desiredGwSvc, err := buildMultiGatewayGlobalService(cluster, r.Scheme)
+	desiredGwSvc, err := buildMultiGatewayGlobalService(cluster, cluster.Spec.ExternalGateway, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build global multigateway service: %w", err)
 	}

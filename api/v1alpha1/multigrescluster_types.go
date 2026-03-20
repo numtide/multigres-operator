@@ -106,6 +106,11 @@ type MultigresClusterSpec struct {
 	// +optional
 	Backup *BackupConfig `json:"backup,omitempty"`
 
+	// ExternalGateway controls external exposure of the global multigateway Service.
+	// When nil or enabled: false, the Service remains ClusterIP.
+	// +optional
+	ExternalGateway *ExternalGatewayConfig `json:"externalGateway,omitempty"`
+
 	// TopologyPruning controls whether stale topology entries are pruned.
 	// Default: enabled (nil means pruning is on).
 	// +optional
@@ -372,6 +377,45 @@ type ShardInlineSpec struct {
 }
 
 // ============================================================================
+// External Gateway Configuration
+// ============================================================================
+
+// ExternalGatewayConfig controls external exposure of the global multigateway Service.
+type ExternalGatewayConfig struct {
+	// Enabled controls whether the global Service is LoadBalancer (true) or ClusterIP (false).
+	Enabled bool `json:"enabled"`
+
+	// Annotations are applied to the global multigateway Service metadata.
+	// The operator owns exactly these annotation keys via SSA field ownership.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// GatewayStatus reports the external gateway state.
+type GatewayStatus struct {
+	// ExternalEndpoint is the hostname or IP from the load balancer ingress.
+	// Empty when the load balancer has not yet provisioned an address.
+	ExternalEndpoint string `json:"externalEndpoint"`
+}
+
+const (
+	// ConditionGatewayExternalReady indicates whether the external endpoint
+	// is provisioned and backed by ready gateway pods.
+	ConditionGatewayExternalReady = "GatewayExternalReady"
+
+	// ReasonAwaitingLoadBalancer indicates the load balancer ingress address
+	// has not yet been provisioned.
+	ReasonAwaitingLoadBalancer = "AwaitingLoadBalancer"
+
+	// ReasonNoReadyGateways indicates the external endpoint is assigned but
+	// no multigateway pods are ready.
+	ReasonNoReadyGateways = "NoReadyGateways"
+
+	// ReasonEndpointReady indicates the external endpoint is serving traffic.
+	ReasonEndpointReady = "EndpointReady"
+)
+
+// ============================================================================
 // CR Controller Status Specs
 // ============================================================================
 
@@ -399,6 +443,11 @@ type MultigresClusterStatus struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=50
 	Cells map[CellName]CellStatusSummary `json:"cells,omitempty"`
+
+	// Gateway reports the external gateway state.
+	// Nil when spec.externalGateway is nil or disabled.
+	// +optional
+	Gateway *GatewayStatus `json:"gateway,omitempty"`
 
 	// Databases status summary.
 	// +optional

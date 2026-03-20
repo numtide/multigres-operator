@@ -435,7 +435,31 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
-				// 3. Cell
+				// 4. Global Multigateway Service (ClusterIP by default, no externalGateway)
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            clusterName + "-multigateway",
+						Namespace:       testNamespace,
+						Labels:          clusterLabels(t, clusterName, "multigateway", ""),
+						OwnerReferences: clusterOwnerRefs(t, clusterName),
+					},
+					Spec: corev1.ServiceSpec{
+						Selector: map[string]string{
+							metadata.LabelAppComponent: metadata.ComponentMultiGateway,
+							metadata.LabelAppInstance:  clusterName,
+						},
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							{
+								Name:       "postgres",
+								Port:       15432,
+								TargetPort: intstr.FromString("postgres"),
+								Protocol:   corev1.ProtocolTCP,
+							},
+						},
+					},
+				},
+				// 5. Cell
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            clusterName + "-zone-a",
@@ -474,7 +498,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
-				// 4. TableGroup
+				// 6. TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            clusterName + "-8b65dfba",
@@ -771,7 +795,31 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
-				// 3. Cell
+				// 4. Global Multigateway Service (ClusterIP by default, no externalGateway)
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "minimal-cluster-multigateway",
+						Namespace:       testNamespace,
+						Labels:          clusterLabels(t, "minimal-cluster", "multigateway", ""),
+						OwnerReferences: clusterOwnerRefs(t, "minimal-cluster"),
+					},
+					Spec: corev1.ServiceSpec{
+						Selector: map[string]string{
+							metadata.LabelAppComponent: metadata.ComponentMultiGateway,
+							metadata.LabelAppInstance:  "minimal-cluster",
+						},
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							{
+								Name:       "postgres",
+								Port:       15432,
+								TargetPort: intstr.FromString("postgres"),
+								Protocol:   corev1.ProtocolTCP,
+							},
+						},
+					},
+				},
+				// 5. Cell
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "minimal-cluster-zone-a",
@@ -809,7 +857,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
-				// 4. Injected TableGroup
+				// 6. Injected TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "minimal-cluster-8b65dfba",
@@ -1104,7 +1152,31 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
-				// 3. Cell
+				// 4. Global Multigateway Service (ClusterIP by default, no externalGateway)
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "lazy-cluster-multigateway",
+						Namespace:       testNamespace,
+						Labels:          clusterLabels(t, "lazy-cluster", "multigateway", ""),
+						OwnerReferences: clusterOwnerRefs(t, "lazy-cluster"),
+					},
+					Spec: corev1.ServiceSpec{
+						Selector: map[string]string{
+							metadata.LabelAppComponent: metadata.ComponentMultiGateway,
+							metadata.LabelAppInstance:  "lazy-cluster",
+						},
+						Type: corev1.ServiceTypeClusterIP,
+						Ports: []corev1.ServicePort{
+							{
+								Name:       "postgres",
+								Port:       15432,
+								TargetPort: intstr.FromString("postgres"),
+								Protocol:   corev1.ProtocolTCP,
+							},
+						},
+					},
+				},
+				// 5. Cell
 				&multigresv1alpha1.Cell{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "lazy-cluster-zone-a",
@@ -1142,7 +1214,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						},
 					},
 				},
-				// 4. Injected TableGroup
+				// 6. Injected TableGroup
 				&multigresv1alpha1.TableGroup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "lazy-cluster-8b65dfba",

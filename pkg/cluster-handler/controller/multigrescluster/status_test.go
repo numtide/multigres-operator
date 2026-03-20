@@ -3,9 +3,13 @@ package multigrescluster
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
-	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/testutil"
 )
 
 func TestReconcile_Status(t *testing.T) {
@@ -77,7 +82,6 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		},
 	}
 
-	// Ready Cell
 	cell := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cell-1",
@@ -95,7 +99,6 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		},
 	}
 
-	// Ready TableGroup
 	tg := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tg-1",
@@ -127,7 +130,6 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		t.Fatalf("updateStatus failed: %v", err)
 	}
 
-	// Refresh cluster
 	if err := fakeClient.Get(
 		context.Background(),
 		client.ObjectKeyFromObject(cluster),
@@ -136,7 +138,6 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		t.Fatalf("Failed to refresh cluster: %v", err)
 	}
 
-	// Verify Available Condition
 	found := false
 	for _, c := range cluster.Status.Conditions {
 		if c.Type == "Available" {
@@ -150,17 +151,14 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		t.Error("Available condition not found")
 	}
 
-	// Verify Cell Status Summary
 	if s, ok := cluster.Status.Cells["cell-1"]; !ok || !s.Ready {
 		t.Errorf("Expected cell-1 to be ready in status summary, got %v", s)
 	}
 
-	// Verify Database Status Summary
 	if s, ok := cluster.Status.Databases["db1"]; !ok || s.ReadyShards != 1 {
 		t.Errorf("Expected db1 to have 1 ready shard in status summary, got %v", s)
 	}
 
-	// Test Degraded Phase
 	cDegraded := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cell-degraded",
@@ -196,10 +194,6 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		t.Errorf("Expected PhaseDegraded, got %s", cluster.Status.Phase)
 	}
 
-	// Test Progressing Phase (Default case)
-	// We need a case where it's NOT Degraded AND NOT AllHealthy.
-	// cDegraded is now removed or fixed.
-	// Let's create a cell that is PhaseInitializing (or unknown)
 	cProgressing := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cell-prog",
@@ -214,7 +208,7 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 
 	fakeClient = fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(cluster, cell, tg, cProgressing). // cell-1 is healthy, cell-prog is init
+		WithObjects(cluster, cell, tg, cProgressing).
 		WithStatusSubresource(cluster, cell, tg, cProgressing).
 		Build()
 	r.Client = fakeClient
@@ -233,7 +227,6 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		t.Errorf("Expected PhaseProgressing, got %s", cluster.Status.Phase)
 	}
 
-	// Test Degraded Phase from TableGroup
 	tgDegraded := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tg-degraded",
@@ -272,7 +265,6 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 		t.Errorf("Expected PhaseDegraded, got %s", cluster.Status.Phase)
 	}
 
-	// Test Initializing/Progressing Phase from TableGroup (Default branch)
 	tgInit := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tg-init",
@@ -290,7 +282,7 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 
 	fakeClient = fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(cluster, cell, tg, tgInit). // cell is healthy, tg is healthy, tgInit is init
+		WithObjects(cluster, cell, tg, tgInit).
 		WithStatusSubresource(cluster, cell, tg, tgInit).
 		Build()
 
@@ -325,7 +317,7 @@ func TestUpdateStatus_ZeroResources(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(cluster). // No cells, no TGs
+		WithObjects(cluster).
 		WithStatusSubresource(cluster).
 		Build()
 
@@ -346,12 +338,6 @@ func TestUpdateStatus_ZeroResources(t *testing.T) {
 	); err != nil {
 		t.Fatalf("Failed to refresh cluster: %v", err)
 	}
-
-	// With 0 cells/TGs, logic:
-	// anyDegraded = false
-	// allHealthy = true (initial value) -> Loops skipped
-	// Switch case allHealthy -> PhaseHealthy
-	// But len(Cells) == 0 -> Available condition = False
 
 	if cluster.Status.Phase != multigresv1alpha1.PhaseHealthy {
 		t.Errorf("Expected PhaseHealthy (vacuously true), got %s", cluster.Status.Phase)
@@ -378,7 +364,6 @@ func TestUpdateStatus_GenerationMismatch(t *testing.T) {
 		},
 	}
 
-	// Cell with outdated generation
 	cell := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "cell-1",
@@ -388,12 +373,11 @@ func TestUpdateStatus_GenerationMismatch(t *testing.T) {
 		},
 		Spec: multigresv1alpha1.CellSpec{Name: "cell-1"},
 		Status: multigresv1alpha1.CellStatus{
-			ObservedGeneration: 1, // Mismatch
+			ObservedGeneration: 1,
 			Phase:              multigresv1alpha1.PhaseHealthy,
 		},
 	}
 
-	// TableGroup with outdated generation
 	tg := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "tg-1",
@@ -403,7 +387,7 @@ func TestUpdateStatus_GenerationMismatch(t *testing.T) {
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{DatabaseName: "db1"},
 		Status: multigresv1alpha1.TableGroupStatus{
-			ObservedGeneration: 1, // Mismatch
+			ObservedGeneration: 1,
 			Phase:              multigresv1alpha1.PhaseHealthy,
 		},
 	}
@@ -432,11 +416,350 @@ func TestUpdateStatus_GenerationMismatch(t *testing.T) {
 		t.Fatalf("Failed to refresh cluster: %v", err)
 	}
 
-	// Should be transitioning/progressing because components are not observing latest generation
 	if cluster.Status.Phase != multigresv1alpha1.PhaseProgressing {
 		t.Errorf(
 			"Expected PhaseProgressing due to generation mismatch, got %s",
 			cluster.Status.Phase,
 		)
 	}
+}
+
+func TestExtractExternalEndpoint(t *testing.T) {
+	tests := []struct {
+		name string
+		svc  *corev1.Service
+		want string
+	}{
+		{
+			name: "nil Service",
+			svc:  nil,
+			want: "",
+		},
+		{
+			name: "empty ingress list",
+			svc: &corev1.Service{
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "hostname only",
+			svc: &corev1.Service{
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{Hostname: "a1234.elb.us-east-1.amazonaws.com"},
+						},
+					},
+				},
+			},
+			want: "a1234.elb.us-east-1.amazonaws.com",
+		},
+		{
+			name: "IP only",
+			svc: &corev1.Service{
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{IP: "203.0.113.42"},
+						},
+					},
+				},
+			},
+			want: "203.0.113.42",
+		},
+		{
+			name: "both hostname and IP - hostname preferred",
+			svc: &corev1.Service{
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{
+								Hostname: "a1234.elb.us-east-1.amazonaws.com",
+								IP:       "203.0.113.42",
+							},
+						},
+					},
+				},
+			},
+			want: "a1234.elb.us-east-1.amazonaws.com",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractExternalEndpoint(tc.svc)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestComputeGatewayCondition(t *testing.T) {
+	const gen int64 = 7
+
+	tests := []struct {
+		name                   string
+		externalGatewayEnabled bool
+		externalEndpoint       string
+		aggregateReadyGateways int32
+		clusterGeneration      int64
+		wantNil                bool
+		wantStatus             metav1.ConditionStatus
+		wantReason             string
+		wantMessageContains    string
+	}{
+		{
+			name:                   "disabled - externalGateway nil equivalent",
+			externalGatewayEnabled: false,
+			wantNil:                true,
+		},
+		{
+			name:                   "disabled - enabled false",
+			externalGatewayEnabled: false,
+			externalEndpoint:       "",
+			aggregateReadyGateways: 0,
+			clusterGeneration:      gen,
+			wantNil:                true,
+		},
+		{
+			name:                   "enabled, empty endpoint - AwaitingLoadBalancer",
+			externalGatewayEnabled: true,
+			externalEndpoint:       "",
+			aggregateReadyGateways: 0,
+			clusterGeneration:      gen,
+			wantStatus:             metav1.ConditionFalse,
+			wantReason:             multigresv1alpha1.ReasonAwaitingLoadBalancer,
+			wantMessageContains:    "load balancer",
+		},
+		{
+			name:                   "enabled, endpoint present, 0 ready gateways - NoReadyGateways",
+			externalGatewayEnabled: true,
+			externalEndpoint:       "a1234.elb.us-east-1.amazonaws.com",
+			aggregateReadyGateways: 0,
+			clusterGeneration:      gen,
+			wantStatus:             metav1.ConditionFalse,
+			wantReason:             multigresv1alpha1.ReasonNoReadyGateways,
+			wantMessageContains:    "no multigateway pods are ready",
+		},
+		{
+			name:                   "enabled, endpoint present, >0 ready gateways - EndpointReady",
+			externalGatewayEnabled: true,
+			externalEndpoint:       "a1234.elb.us-east-1.amazonaws.com",
+			aggregateReadyGateways: 3,
+			clusterGeneration:      gen,
+			wantStatus:             metav1.ConditionTrue,
+			wantReason:             multigresv1alpha1.ReasonEndpointReady,
+			wantMessageContains:    "a1234.elb.us-east-1.amazonaws.com",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := computeGatewayCondition(
+				tc.externalGatewayEnabled,
+				tc.externalEndpoint,
+				tc.aggregateReadyGateways,
+				tc.clusterGeneration,
+			)
+
+			if tc.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NotNil(t, got)
+			assert.Equal(t, multigresv1alpha1.ConditionGatewayExternalReady, got.Type)
+			assert.Equal(t, tc.wantStatus, got.Status)
+			assert.Equal(t, tc.wantReason, got.Reason)
+			assert.Contains(t, got.Message, tc.wantMessageContains)
+			assert.Equal(t, tc.clusterGeneration, got.ObservedGeneration)
+		})
+	}
+}
+
+func TestUpdateStatus_GatewayServiceErrors(t *testing.T) {
+	scheme := setupScheme()
+
+	clusterName := "gw-test"
+	namespace := "default"
+
+	baseCluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       clusterName,
+			Namespace:  namespace,
+			Generation: 3,
+		},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{Enabled: true},
+		},
+		Status: multigresv1alpha1.MultigresClusterStatus{},
+	}
+
+	t.Run("non-NotFound error fetching global service returns error", func(t *testing.T) {
+		injectedErr := fmt.Errorf("simulated API server error")
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(baseCluster.DeepCopy()).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+			Build()
+
+		failClient := testutil.NewFakeClientWithFailures(cl, &testutil.FailureConfig{
+			OnGet: testutil.FailOnKeyName(clusterName+"-multigateway", injectedErr),
+		})
+
+		r := &MultigresClusterReconciler{
+			Client:   failClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		err := r.updateStatus(t.Context(), cluster)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get global multigateway service for status")
+	})
+
+	t.Run("NotFound global service sets AwaitingLoadBalancer when enabled", func(t *testing.T) {
+		// No Service object created — Get will return NotFound.
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(baseCluster.DeepCopy()).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+			Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   cl,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		err := r.updateStatus(t.Context(), cluster)
+		require.NoError(t, err)
+
+		require.NotNil(t, cluster.Status.Gateway)
+		assert.Empty(t, cluster.Status.Gateway.ExternalEndpoint)
+
+		cond := meta.FindStatusCondition(cluster.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, multigresv1alpha1.ReasonAwaitingLoadBalancer, cond.Reason)
+	})
+}
+
+func TestUpdateStatus_StaleCellGenerationIgnored(t *testing.T) {
+	scheme := setupScheme()
+
+	clusterName := "gw-stale"
+	namespace := "default"
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       clusterName,
+			Namespace:  namespace,
+			Generation: 5,
+		},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{Enabled: true},
+		},
+		Status: multigresv1alpha1.MultigresClusterStatus{},
+	}
+
+	// Global multigateway Service with an LB ingress so we get past AwaitingLoadBalancer.
+	gwSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName + "-multigateway",
+			Namespace: namespace,
+			Labels:    map[string]string{"multigres.com/cluster": clusterName},
+		},
+		Status: corev1.ServiceStatus{
+			LoadBalancer: corev1.LoadBalancerStatus{
+				Ingress: []corev1.LoadBalancerIngress{
+					{Hostname: "lb.example.com"},
+				},
+			},
+		},
+	}
+
+	// Fresh cell: ObservedGeneration == Generation, has 2 ready gateways.
+	freshCell := &multigresv1alpha1.Cell{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       clusterName + "-fresh",
+			Namespace:  namespace,
+			Generation: 4,
+			Labels:     map[string]string{"multigres.com/cluster": clusterName},
+		},
+		Spec: multigresv1alpha1.CellSpec{Name: "fresh"},
+		Status: multigresv1alpha1.CellStatus{
+			ObservedGeneration:   4,
+			GatewayReadyReplicas: 2,
+		},
+	}
+
+	// Stale cell: ObservedGeneration < Generation, has 5 ready gateways (should be ignored).
+	staleCell := &multigresv1alpha1.Cell{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       clusterName + "-stale",
+			Namespace:  namespace,
+			Generation: 10,
+			Labels:     map[string]string{"multigres.com/cluster": clusterName},
+		},
+		Spec: multigresv1alpha1.CellSpec{Name: "stale"},
+		Status: multigresv1alpha1.CellStatus{
+			ObservedGeneration:   8, // stale
+			GatewayReadyReplicas: 5,
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster.DeepCopy(), gwSvc, freshCell, staleCell).
+		WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+		Build()
+
+	r := &MultigresClusterReconciler{
+		Client:   cl,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	clusterCopy := cluster.DeepCopy()
+	err := r.updateStatus(t.Context(), clusterCopy)
+	require.NoError(t, err)
+
+	// Only the fresh cell's 2 ready gateways should count.
+	// With endpoint present and aggregateReadyGateways=2, condition should be EndpointReady.
+	cond := meta.FindStatusCondition(clusterCopy.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+	assert.Equal(t, multigresv1alpha1.ReasonEndpointReady, cond.Reason)
+	assert.Contains(t, cond.Message, "lb.example.com")
+
+	// Now verify that if we remove the fresh cell (only stale remains),
+	// the aggregate is 0 and condition becomes NoReadyGateways.
+	cl2 := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster.DeepCopy(), gwSvc, staleCell).
+		WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+		Build()
+
+	r2 := &MultigresClusterReconciler{
+		Client:   cl2,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	clusterCopy2 := cluster.DeepCopy()
+	err = r2.updateStatus(t.Context(), clusterCopy2)
+	require.NoError(t, err)
+
+	cond2 := meta.FindStatusCondition(clusterCopy2.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
+	require.NotNil(t, cond2)
+	assert.Equal(t, metav1.ConditionFalse, cond2.Status)
+	assert.Equal(t, multigresv1alpha1.ReasonNoReadyGateways, cond2.Reason)
 }

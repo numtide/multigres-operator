@@ -6,10 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resolver"
-	"github.com/numtide/multigres-operator/pkg/testutil"
-	"github.com/numtide/multigres-operator/pkg/util/name"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -21,6 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
+	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	"github.com/numtide/multigres-operator/pkg/resolver"
+	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 func TestReconcileGlobal_ErrorPaths(t *testing.T) {
@@ -958,7 +959,7 @@ func TestReconcile_Global_BuilderErrors(t *testing.T) {
 		originalBuild := buildMultiGatewayGlobalService
 		defer func() { buildMultiGatewayGlobalService = originalBuild }()
 
-		buildMultiGatewayGlobalService = func(_ *multigresv1alpha1.MultigresCluster, _ *runtime.Scheme) (*corev1.Service, error) {
+		buildMultiGatewayGlobalService = func(_ *multigresv1alpha1.MultigresCluster, _ *multigresv1alpha1.ExternalGatewayConfig, _ *runtime.Scheme) (*corev1.Service, error) {
 			return nil, errors.New("mocked builder error")
 		}
 
