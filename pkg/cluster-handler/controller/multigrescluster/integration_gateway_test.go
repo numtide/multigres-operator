@@ -49,7 +49,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 			},
 			ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{
 				Enabled:     true,
-				ExternalIPs: []string{"2001:db8::100"},
+				ExternalIPs: []multigresv1alpha1.IPAddress{"2001:db8::100"},
 				Annotations: map[string]string{
 					"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
 				},
@@ -222,7 +222,7 @@ func TestExternalGateway_NoReadyGatewaysTransition(t *testing.T) {
 			},
 			ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{
 				Enabled:     true,
-				ExternalIPs: []string{"2001:db8::101"},
+				ExternalIPs: []multigresv1alpha1.IPAddress{"2001:db8::101"},
 			},
 		},
 	}

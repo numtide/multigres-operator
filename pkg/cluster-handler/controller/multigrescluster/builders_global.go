@@ -408,7 +408,9 @@ func BuildMultiGatewayGlobalService(
 	if extGw != nil && extGw.Enabled {
 		if len(extGw.ExternalIPs) > 0 {
 			externalIPs = make([]string, len(extGw.ExternalIPs))
-			copy(externalIPs, extGw.ExternalIPs)
+			for i, ip := range extGw.ExternalIPs {
+				externalIPs[i] = string(ip)
+			}
 		}
 		if len(extGw.Annotations) > 0 {
 			annotations = make(map[string]string, len(extGw.Annotations))

@@ -242,6 +242,12 @@ type PoolName string
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type CellName string
 
+// IPAddress is a validated IPv4 or IPv6 address string.
+// +kubebuilder:validation:MinLength=3
+// +kubebuilder:validation:MaxLength=45
+// +kubebuilder:validation:Pattern=`^(([0-9]{1,3}\.){3}[0-9]{1,3})$|^(([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4})$`
+type IPAddress string
+
 // Zone is the cloud provider availability zone identifier.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63

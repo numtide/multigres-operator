@@ -428,7 +428,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 			name: "Enabled: true, with external IPs",
 			extGw: &multigresv1alpha1.ExternalGatewayConfig{
 				Enabled:     true,
-				ExternalIPs: []string{"2001:db8::10"},
+				ExternalIPs: []multigresv1alpha1.IPAddress{"2001:db8::10"},
 			},
 			wantType:        corev1.ServiceTypeClusterIP,
 			wantExternalIPs: []string{"2001:db8::10"},

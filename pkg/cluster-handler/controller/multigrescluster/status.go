@@ -57,8 +57,8 @@ func computeGatewayCondition(
 	switch {
 	case externalEndpoint == "":
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = multigresv1alpha1.ReasonAwaitingLoadBalancer
-		cond.Message = "Waiting for load balancer ingress address"
+		cond.Reason = multigresv1alpha1.ReasonAwaitingEndpoint
+		cond.Message = "Waiting for gateway service endpoint"
 	case aggregateReadyGateways == 0:
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = multigresv1alpha1.ReasonNoReadyGateways
