@@ -43,6 +43,14 @@ spec:
             description: ShardTemplateSpec defines reusable config for Shard components
               (MultiOrch, Pools).
             properties:
+              initdbArgs:
+                description: |-
+                  InitdbArgs specifies extra arguments passed to initdb during PostgreSQL
+                  data directory initialization (e.g., "--locale-provider=icu --icu-locale=en_US.UTF-8").
+                  Applied to all pool pods in shards using this template.
+                  Only takes effect when a pod initializes a new data directory.
+                maxLength: 512
+                type: string
               multiorch:
                 description: MultiOrch configuration.
                 properties:

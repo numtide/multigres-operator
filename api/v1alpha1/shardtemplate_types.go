@@ -30,6 +30,13 @@ type ShardTemplateSpec struct {
 	// +optional
 	MultiOrch *MultiOrchSpec `json:"multiorch,omitempty"`
 
+	// InitdbArgs specifies extra arguments passed to initdb during PostgreSQL
+	// data directory initialization (e.g., "--locale-provider=icu --icu-locale=en_US.UTF-8").
+	// Applied to all pool pods in shards using this template.
+	// Only takes effect when a pod initializes a new data directory.
+	// +optional
+	InitdbArgs InitdbArgs `json:"initdbArgs,omitempty"`
+
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"

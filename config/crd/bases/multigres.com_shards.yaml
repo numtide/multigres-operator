@@ -261,6 +261,11 @@ spec:
                 - multipooler
                 - postgres
                 type: object
+              initdbArgs:
+                description: InitdbArgs specifies extra arguments for initdb, propagated
+                  from the cluster spec.
+                maxLength: 512
+                type: string
               logLevels:
                 description: |-
                   LogLevels is the resolved log level configuration for shard-level components.

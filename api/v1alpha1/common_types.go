@@ -242,6 +242,11 @@ type PoolName string
 // +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 type CellName string
 
+// InitdbArgs is an opaque string of extra arguments forwarded to initdb
+// during PostgreSQL data directory initialization.
+// +kubebuilder:validation:MaxLength=512
+type InitdbArgs string
+
 // IPAddress is a validated IPv4 or IPv6 address string.
 // +kubebuilder:validation:MinLength=3
 // +kubebuilder:validation:MaxLength=45

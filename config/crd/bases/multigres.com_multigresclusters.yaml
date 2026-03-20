@@ -2886,6 +2886,11 @@ spec:
                                   description: Overrides are applied on top of the
                                     template.
                                   properties:
+                                    initdbArgs:
+                                      description: InitdbArgs overrides the template's
+                                        initdb arguments.
+                                      maxLength: 512
+                                      type: string
                                     multiorch:
                                       description: MultiOrch overrides.
                                       properties:
@@ -5248,6 +5253,14 @@ spec:
                                   description: Spec defines the inline configuration
                                     if no template is used.
                                   properties:
+                                    initdbArgs:
+                                      description: |-
+                                        InitdbArgs specifies extra arguments passed to initdb during PostgreSQL
+                                        data directory initialization (e.g., "--locale-provider=icu --icu-locale=en_US.UTF-8").
+                                        Applied uniformly to all pool pods in this shard.
+                                        Only takes effect when a pod initializes a new data directory.
+                                      maxLength: 512
+                                      type: string
                                     multiorch:
                                       description: MultiOrch configuration.
                                       properties:

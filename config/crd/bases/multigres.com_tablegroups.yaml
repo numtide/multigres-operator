@@ -554,6 +554,11 @@ spec:
                         rule: self.type != 's3' || has(self.s3)
                       - message: filesystem config is required when type is 'filesystem'
                         rule: self.type != 'filesystem' || has(self.filesystem)
+                    initdbArgs:
+                      description: InitdbArgs is the resolved initdb arguments for
+                        this shard.
+                      maxLength: 512
+                      type: string
                     multiorch:
                       description: MultiOrch is the fully resolved configuration for
                         the orchestrator.

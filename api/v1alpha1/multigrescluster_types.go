@@ -349,6 +349,10 @@ type ShardOverrides struct {
 	// +optional
 	MultiOrch *MultiOrchSpec `json:"multiorch,omitempty"`
 
+	// InitdbArgs overrides the template's initdb arguments.
+	// +optional
+	InitdbArgs InitdbArgs `json:"initdbArgs,omitempty"`
+
 	// Pools overrides. Keyed by pool name.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
@@ -362,6 +366,13 @@ type ShardInlineSpec struct {
 	// MultiOrch configuration.
 	// +optional
 	MultiOrch MultiOrchSpec `json:"multiorch,omitempty"`
+
+	// InitdbArgs specifies extra arguments passed to initdb during PostgreSQL
+	// data directory initialization (e.g., "--locale-provider=icu --icu-locale=en_US.UTF-8").
+	// Applied uniformly to all pool pods in this shard.
+	// Only takes effect when a pod initializes a new data directory.
+	// +optional
+	InitdbArgs InitdbArgs `json:"initdbArgs,omitempty"`
 
 	// Pools configuration. Keyed by pool name.
 	// +optional

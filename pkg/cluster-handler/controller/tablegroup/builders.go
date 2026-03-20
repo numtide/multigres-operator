@@ -47,6 +47,7 @@ func BuildShard(
 			Images:           tg.Spec.Images,
 			GlobalTopoServer: tg.Spec.GlobalTopoServer,
 			MultiOrch:        shardSpec.MultiOrch,
+			InitdbArgs:       shardSpec.InitdbArgs,
 			Pools:            shardSpec.Pools,
 			Replicas:         calculateTotalReplicas(shardSpec.Pools),
 			// Merge hierarchy: Shard → TableGroup
