@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -63,6 +64,43 @@ func computeGatewayCondition(
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = multigresv1alpha1.ReasonNoReadyGateways
 		cond.Message = "External endpoint assigned but no multigateway pods are ready"
+	default:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = multigresv1alpha1.ReasonEndpointReady
+		cond.Message = fmt.Sprintf("External endpoint %s is serving traffic", externalEndpoint)
+	}
+
+	return &cond
+}
+
+// computeAdminWebCondition returns the AdminWebExternalReady condition for the
+// given inputs, or nil when external admin web is disabled (condition should be
+// removed from the array).
+func computeAdminWebCondition(
+	enabled bool,
+	externalEndpoint string,
+	readyReplicas int32,
+	clusterGeneration int64,
+) *metav1.Condition {
+	if !enabled {
+		return nil
+	}
+
+	cond := metav1.Condition{
+		Type:               multigresv1alpha1.ConditionAdminWebExternalReady,
+		ObservedGeneration: clusterGeneration,
+		LastTransitionTime: metav1.Now(),
+	}
+
+	switch {
+	case externalEndpoint == "":
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = multigresv1alpha1.ReasonAwaitingEndpoint
+		cond.Message = "Waiting for admin web service endpoint"
+	case readyReplicas == 0:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = multigresv1alpha1.ReasonNoReadyAdminWeb
+		cond.Message = "External endpoint assigned but no multiadmin-web pods are ready"
 	default:
 		cond.Status = metav1.ConditionTrue
 		cond.Reason = multigresv1alpha1.ReasonEndpointReady
@@ -282,6 +320,63 @@ func (r *MultigresClusterReconciler) updateStatus(
 		meta.RemoveStatusCondition(
 			&cluster.Status.Conditions,
 			multigresv1alpha1.ConditionGatewayExternalReady,
+		)
+	}
+
+	// Admin Web external endpoint and condition
+	awEnabled := cluster.Spec.ExternalAdminWeb != nil && cluster.Spec.ExternalAdminWeb.Enabled
+	var awExternalEndpoint string
+	if awEnabled {
+		awSvc := &corev1.Service{}
+		awSvcKey := types.NamespacedName{
+			Name:      fmt.Sprintf("%s-multiadmin-web", cluster.Name),
+			Namespace: cluster.Namespace,
+		}
+		if err := r.Get(ctx, awSvcKey, awSvc); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("failed to get multiadmin-web service for status: %w", err)
+			}
+		} else {
+			awExternalEndpoint = extractExternalEndpoint(awSvc)
+		}
+	}
+
+	var awReadyReplicas int32
+	if awEnabled {
+		awDeploy := &appsv1.Deployment{}
+		awDeployKey := types.NamespacedName{
+			Name:      fmt.Sprintf("%s-multiadmin-web", cluster.Name),
+			Namespace: cluster.Namespace,
+		}
+		if err := r.Get(ctx, awDeployKey, awDeploy); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("failed to get multiadmin-web deployment for status: %w", err)
+			}
+		} else {
+			awReadyReplicas = awDeploy.Status.ReadyReplicas
+		}
+	}
+
+	if awEnabled {
+		cluster.Status.AdminWeb = &multigresv1alpha1.AdminWebStatus{
+			ExternalEndpoint: awExternalEndpoint,
+		}
+	} else {
+		cluster.Status.AdminWeb = nil
+	}
+
+	awCond := computeAdminWebCondition(
+		awEnabled,
+		awExternalEndpoint,
+		awReadyReplicas,
+		cluster.Generation,
+	)
+	if awCond != nil {
+		meta.SetStatusCondition(&cluster.Status.Conditions, *awCond)
+	} else {
+		meta.RemoveStatusCondition(
+			&cluster.Status.Conditions,
+			multigresv1alpha1.ConditionAdminWebExternalReady,
 		)
 	}
 

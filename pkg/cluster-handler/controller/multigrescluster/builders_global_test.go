@@ -270,6 +270,7 @@ func TestBuildMultiAdminWebDeployment(t *testing.T) {
 func TestBuildMultiAdminWebService(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
 
 	cluster := &multigresv1alpha1.MultigresCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -279,28 +280,139 @@ func TestBuildMultiAdminWebService(t *testing.T) {
 		},
 	}
 
-	t.Run("Success", func(t *testing.T) {
-		got, err := BuildMultiAdminWebService(cluster, scheme)
-		if err != nil {
-			t.Fatalf("BuildMultiAdminWebService() error = %v", err)
-		}
+	wantLabels := map[string]string{
+		"app.kubernetes.io/name":       "multigres",
+		"app.kubernetes.io/instance":   "my-cluster",
+		"app.kubernetes.io/component":  "multiadmin-web",
+		"app.kubernetes.io/part-of":    "multigres",
+		"app.kubernetes.io/managed-by": "multigres-operator",
+		"multigres.com/cluster":        "my-cluster",
+	}
 
-		if got.Name != "my-cluster-multiadmin-web" {
-			t.Errorf("Name = %v, want %v", got.Name, "my-cluster-multiadmin-web")
-		}
+	wantPort := corev1.ServicePort{
+		Name:       "http",
+		Port:       18100,
+		TargetPort: intstr.FromInt(18100),
+		Protocol:   corev1.ProtocolTCP,
+	}
 
-		// Verify OwnerReference
-		if len(got.OwnerReferences) != 1 {
-			t.Errorf("OwnerReferences count = %v, want 1", len(got.OwnerReferences))
+	tests := []struct {
+		name            string
+		extAW           *multigresv1alpha1.ExternalAdminWebConfig
+		wantType        corev1.ServiceType
+		wantAnnotations map[string]string
+		wantExternalIPs []string
+	}{
+		{
+			name:     "nil config → ClusterIP, no annotations",
+			extAW:    nil,
+			wantType: corev1.ServiceTypeClusterIP,
+		},
+		{
+			name:     "Enabled: false → ClusterIP, no annotations",
+			extAW:    &multigresv1alpha1.ExternalAdminWebConfig{Enabled: false},
+			wantType: corev1.ServiceTypeClusterIP,
+		},
+		{
+			name:     "Enabled: true, no annotations → ClusterIP",
+			extAW:    &multigresv1alpha1.ExternalAdminWebConfig{Enabled: true},
+			wantType: corev1.ServiceTypeClusterIP,
+		},
+		{
+			name: "Enabled: true, with annotations → annotations applied",
+			extAW: &multigresv1alpha1.ExternalAdminWebConfig{
+				Enabled: true,
+				Annotations: map[string]string{
+					"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+				},
+			},
+			wantType: corev1.ServiceTypeClusterIP,
+			wantAnnotations: map[string]string{
+				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+			},
+		},
+		{
+			name: "Enabled: true, with external IPs",
+			extAW: &multigresv1alpha1.ExternalAdminWebConfig{
+				Enabled:     true,
+				ExternalIPs: []multigresv1alpha1.IPAddress{"10.0.0.1"},
+			},
+			wantType:        corev1.ServiceTypeClusterIP,
+			wantExternalIPs: []string{"10.0.0.1"},
+		},
+		{
+			name: "Enabled: true, with IPs and annotations",
+			extAW: &multigresv1alpha1.ExternalAdminWebConfig{
+				Enabled:     true,
+				ExternalIPs: []multigresv1alpha1.IPAddress{"2001:db8::10"},
+				Annotations: map[string]string{"custom/key": "val"},
+			},
+			wantType:        corev1.ServiceTypeClusterIP,
+			wantExternalIPs: []string{"2001:db8::10"},
+			wantAnnotations: map[string]string{"custom/key": "val"},
+		},
+		{
+			name:     "Disabled after previously enabled → no annotations",
+			extAW:    &multigresv1alpha1.ExternalAdminWebConfig{Enabled: false},
+			wantType: corev1.ServiceTypeClusterIP,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := BuildMultiAdminWebService(cluster, tc.extAW, scheme)
+			require.NoError(t, err)
+
+			assert.Equal(t, "my-cluster-multiadmin-web", got.Name)
+			assert.Equal(t, "default", got.Namespace)
+			assert.Equal(t, tc.wantType, got.Spec.Type)
+			assert.Equal(t, tc.wantExternalIPs, got.Spec.ExternalIPs)
+
+			require.Len(t, got.Spec.Ports, 1)
+			assert.Equal(t, wantPort, got.Spec.Ports[0])
+
+			assert.Equal(t, wantLabels, got.Labels)
+
+			if tc.wantAnnotations != nil {
+				for k, v := range tc.wantAnnotations {
+					assert.Equal(t, v, got.Annotations[k], "annotation %s", k)
+				}
+			} else {
+				assert.Empty(t, got.Annotations)
+			}
+
+			require.Len(t, got.OwnerReferences, 1)
+			assert.Equal(t, "my-cluster", got.OwnerReferences[0].Name)
+		})
+	}
+
+	t.Run("Annotation removal on disable", func(t *testing.T) {
+		enabledCfg := &multigresv1alpha1.ExternalAdminWebConfig{
+			Enabled: true,
+			Annotations: map[string]string{
+				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+			},
 		}
+		enabled, err := BuildMultiAdminWebService(cluster, enabledCfg, scheme)
+		require.NoError(t, err)
+		assert.Equal(t, corev1.ServiceTypeClusterIP, enabled.Spec.Type)
+		assert.Equal(
+			t,
+			"internet-facing",
+			enabled.Annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"],
+		)
+
+		disabledCfg := &multigresv1alpha1.ExternalAdminWebConfig{Enabled: false}
+		disabled, err := BuildMultiAdminWebService(cluster, disabledCfg, scheme)
+		require.NoError(t, err)
+		assert.Equal(t, corev1.ServiceTypeClusterIP, disabled.Spec.Type)
+		assert.Empty(t, disabled.Annotations)
 	})
 
 	t.Run("ControllerRefError", func(t *testing.T) {
 		emptyScheme := runtime.NewScheme()
-		_, err := BuildMultiAdminWebService(cluster, emptyScheme)
-		if err == nil {
-			t.Error("Expected error due to missing scheme types, got nil")
-		}
+		_, err := BuildMultiAdminWebService(cluster, nil, emptyScheme)
+		assert.Error(t, err)
 	})
 }
 

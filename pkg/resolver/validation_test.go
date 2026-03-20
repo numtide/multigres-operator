@@ -902,6 +902,51 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			},
 			wantErr: "invalid IP address",
 		},
+		"External Admin Web Enabled Without ExternalIPs Warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "aw-no-ips", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1", CellTemplate: "prod-cell"},
+					},
+					ExternalAdminWeb: &multigresv1alpha1.ExternalAdminWebConfig{
+						Enabled: true,
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantWarnings: []string{"externalAdminWeb is enabled but no externalIPs specified"},
+		},
+		"External Admin Web Invalid IP Rejected": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "aw-bad-ip", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1", CellTemplate: "prod-cell"},
+					},
+					ExternalAdminWeb: &multigresv1alpha1.ExternalAdminWebConfig{
+						Enabled:     true,
+						ExternalIPs: []multigresv1alpha1.IPAddress{"999.999.999.999"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "invalid IP address",
+		},
 	}
 
 	for name, tc := range tests {

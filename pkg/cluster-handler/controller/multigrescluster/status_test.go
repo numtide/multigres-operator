@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -787,4 +788,237 @@ func TestUpdateStatus_StaleCellGenerationIgnored(t *testing.T) {
 	require.NotNil(t, cond2)
 	assert.Equal(t, metav1.ConditionFalse, cond2.Status)
 	assert.Equal(t, multigresv1alpha1.ReasonNoReadyGateways, cond2.Reason)
+}
+
+func TestComputeAdminWebCondition(t *testing.T) {
+	const gen int64 = 7
+
+	tests := []struct {
+		name                string
+		enabled             bool
+		externalEndpoint    string
+		readyReplicas       int32
+		clusterGeneration   int64
+		wantNil             bool
+		wantStatus          metav1.ConditionStatus
+		wantReason          string
+		wantMessageContains string
+	}{
+		{
+			name:    "disabled - returns nil",
+			enabled: false,
+			wantNil: true,
+		},
+		{
+			name:                "enabled, empty endpoint - AwaitingEndpoint",
+			enabled:             true,
+			externalEndpoint:    "",
+			readyReplicas:       0,
+			clusterGeneration:   gen,
+			wantStatus:          metav1.ConditionFalse,
+			wantReason:          multigresv1alpha1.ReasonAwaitingEndpoint,
+			wantMessageContains: "admin web service endpoint",
+		},
+		{
+			name:                "enabled, endpoint present, 0 ready replicas - NoReadyAdminWeb",
+			enabled:             true,
+			externalEndpoint:    "10.0.0.1",
+			readyReplicas:       0,
+			clusterGeneration:   gen,
+			wantStatus:          metav1.ConditionFalse,
+			wantReason:          multigresv1alpha1.ReasonNoReadyAdminWeb,
+			wantMessageContains: "no multiadmin-web pods are ready",
+		},
+		{
+			name:                "enabled, endpoint present, >0 ready replicas - EndpointReady",
+			enabled:             true,
+			externalEndpoint:    "10.0.0.1",
+			readyReplicas:       2,
+			clusterGeneration:   gen,
+			wantStatus:          metav1.ConditionTrue,
+			wantReason:          multigresv1alpha1.ReasonEndpointReady,
+			wantMessageContains: "10.0.0.1",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := computeAdminWebCondition(
+				tc.enabled,
+				tc.externalEndpoint,
+				tc.readyReplicas,
+				tc.clusterGeneration,
+			)
+
+			if tc.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NotNil(t, got)
+			assert.Equal(t, multigresv1alpha1.ConditionAdminWebExternalReady, got.Type)
+			assert.Equal(t, tc.wantStatus, got.Status)
+			assert.Equal(t, tc.wantReason, got.Reason)
+			assert.Contains(t, got.Message, tc.wantMessageContains)
+			assert.Equal(t, tc.clusterGeneration, got.ObservedGeneration)
+		})
+	}
+}
+
+func TestUpdateStatus_AdminWebServiceErrors(t *testing.T) {
+	scheme := setupScheme()
+
+	clusterName := "aw-test"
+	namespace := "default"
+
+	baseCluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       clusterName,
+			Namespace:  namespace,
+			Generation: 3,
+		},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			ExternalAdminWeb: &multigresv1alpha1.ExternalAdminWebConfig{Enabled: true},
+		},
+		Status: multigresv1alpha1.MultigresClusterStatus{},
+	}
+
+	t.Run("non-NotFound error fetching admin-web service returns error", func(t *testing.T) {
+		injectedErr := fmt.Errorf("simulated API server error")
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(baseCluster.DeepCopy()).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+			Build()
+
+		failClient := testutil.NewFakeClientWithFailures(cl, &testutil.FailureConfig{
+			OnGet: testutil.FailOnKeyName(clusterName+"-multiadmin-web", injectedErr),
+		})
+
+		r := &MultigresClusterReconciler{
+			Client:   failClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		err := r.updateStatus(t.Context(), cluster)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get multiadmin-web service for status")
+	})
+
+	t.Run("NotFound admin-web service sets AwaitingEndpoint when enabled", func(t *testing.T) {
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(baseCluster.DeepCopy()).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+			Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   cl,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		err := r.updateStatus(t.Context(), cluster)
+		require.NoError(t, err)
+
+		require.NotNil(t, cluster.Status.AdminWeb)
+		assert.Empty(t, cluster.Status.AdminWeb.ExternalEndpoint)
+
+		cond := meta.FindStatusCondition(
+			cluster.Status.Conditions,
+			multigresv1alpha1.ConditionAdminWebExternalReady,
+		)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, multigresv1alpha1.ReasonAwaitingEndpoint, cond.Reason)
+	})
+
+	t.Run("non-NotFound error fetching admin-web deployment returns error", func(t *testing.T) {
+		injectedErr := fmt.Errorf("simulated API server error")
+
+		awSvc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-multiadmin-web",
+				Namespace: namespace,
+			},
+			Spec: corev1.ServiceSpec{
+				ExternalIPs: []string{"10.0.0.1"},
+			},
+		}
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(baseCluster.DeepCopy(), awSvc).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+			Build()
+
+		failClient := testutil.NewFakeClientWithFailures(cl, &testutil.FailureConfig{
+			OnGet: testutil.FailOnKeyName(clusterName+"-multiadmin-web", injectedErr),
+		})
+
+		r := &MultigresClusterReconciler{
+			Client:   failClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		err := r.updateStatus(t.Context(), cluster)
+		require.Error(t, err)
+		// The Service Get will fail first since both have the same name
+		assert.Contains(t, err.Error(), "failed to get multiadmin-web")
+	})
+
+	t.Run("admin-web deployment ready replicas drives condition", func(t *testing.T) {
+		awSvc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-multiadmin-web",
+				Namespace: namespace,
+			},
+			Spec: corev1.ServiceSpec{
+				ExternalIPs: []string{"10.0.0.1"},
+			},
+		}
+
+		awDeploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-multiadmin-web",
+				Namespace: namespace,
+			},
+			Status: appsv1.DeploymentStatus{
+				ReadyReplicas: 2,
+			},
+		}
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(baseCluster.DeepCopy(), awSvc, awDeploy).
+			WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+			Build()
+
+		r := &MultigresClusterReconciler{
+			Client:   cl,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		cluster := baseCluster.DeepCopy()
+		err := r.updateStatus(t.Context(), cluster)
+		require.NoError(t, err)
+
+		require.NotNil(t, cluster.Status.AdminWeb)
+		assert.Equal(t, "10.0.0.1", cluster.Status.AdminWeb.ExternalEndpoint)
+
+		cond := meta.FindStatusCondition(
+			cluster.Status.Conditions,
+			multigresv1alpha1.ConditionAdminWebExternalReady,
+		)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionTrue, cond.Status)
+		assert.Equal(t, multigresv1alpha1.ReasonEndpointReady, cond.Reason)
+	})
 }

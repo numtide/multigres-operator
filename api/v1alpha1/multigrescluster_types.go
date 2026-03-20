@@ -111,6 +111,11 @@ type MultigresClusterSpec struct {
 	// +optional
 	ExternalGateway *ExternalGatewayConfig `json:"externalGateway,omitempty"`
 
+	// ExternalAdminWeb controls external exposure of the global multiadmin-web Service.
+	// When nil or enabled: false, the Service remains ClusterIP.
+	// +optional
+	ExternalAdminWeb *ExternalAdminWebConfig `json:"externalAdminWeb,omitempty"`
+
 	// TopologyPruning controls whether stale topology entries are pruned.
 	// Default: enabled (nil means pruning is on).
 	// +optional
@@ -440,7 +445,7 @@ const (
 	// is provisioned and backed by ready gateway pods.
 	ConditionGatewayExternalReady = "GatewayExternalReady"
 
-	// ReasonAwaitingEndpoint indicates the gateway service endpoint has not
+	// ReasonAwaitingEndpoint indicates the service endpoint has not
 	// yet been provisioned.
 	ReasonAwaitingEndpoint = "AwaitingEndpoint"
 
@@ -450,6 +455,52 @@ const (
 
 	// ReasonEndpointReady indicates the external endpoint is serving traffic.
 	ReasonEndpointReady = "EndpointReady"
+)
+
+// ============================================================================
+// External Admin Web Configuration
+// ============================================================================
+
+// ExternalAdminWebConfig controls external exposure of the global multiadmin-web Service.
+//
+// Annotations under the multigres.com/ prefix are rejected to avoid
+// conflicts with operator-managed metadata.
+// +kubebuilder:validation:XValidation:rule="!has(self.annotations) || self.annotations.all(k, !k.startsWith('multigres.com/'))",message="annotations must not use multigres.com/ prefix (reserved for operator)"
+type ExternalAdminWebConfig struct {
+	// Enabled controls whether external admin web exposure is enabled.
+	// The global Service remains ClusterIP; external reachability is provided
+	// via explicitly assigned external IPs and platform networking.
+	Enabled bool `json:"enabled"`
+
+	// ExternalIPs are externally routable addresses assigned to the global
+	// multiadmin-web Service. These are surfaced via Service.spec.externalIPs.
+	// +optional
+	// +kubebuilder:validation:MaxItems=10
+	ExternalIPs []IPAddress `json:"externalIPs,omitempty"`
+
+	// Annotations are applied to the global multiadmin-web Service metadata.
+	// The operator owns exactly these annotation keys via SSA field ownership.
+	// +optional
+	// +kubebuilder:validation:MaxProperties=20
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// AdminWebStatus reports the external admin web state.
+type AdminWebStatus struct {
+	// ExternalEndpoint is the hostname or IP for the external admin web endpoint,
+	// sourced from externalIPs or load balancer ingress (in that priority).
+	// Empty when no external endpoint has been provisioned.
+	ExternalEndpoint string `json:"externalEndpoint"`
+}
+
+const (
+	// ConditionAdminWebExternalReady indicates whether the external endpoint
+	// is provisioned and backed by ready multiadmin-web pods.
+	ConditionAdminWebExternalReady = "AdminWebExternalReady"
+
+	// ReasonNoReadyAdminWeb indicates the external endpoint is assigned but
+	// no multiadmin-web pods are ready.
+	ReasonNoReadyAdminWeb = "NoReadyAdminWeb"
 )
 
 // ============================================================================
@@ -485,6 +536,11 @@ type MultigresClusterStatus struct {
 	// Nil when spec.externalGateway is nil or disabled.
 	// +optional
 	Gateway *GatewayStatus `json:"gateway,omitempty"`
+
+	// AdminWeb reports the external admin web state.
+	// Nil when spec.externalAdminWeb is nil or disabled.
+	// +optional
+	AdminWeb *AdminWebStatus `json:"adminWeb,omitempty"`
 
 	// Databases status summary.
 	// +optional

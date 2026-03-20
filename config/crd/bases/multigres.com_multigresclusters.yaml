@@ -7738,6 +7738,44 @@ spec:
                   Additional user-defined policies may be supported in future upstream releases.
                   Defaults to "AT_LEAST_2" if not set.
                 type: string
+              externalAdminWeb:
+                description: |-
+                  ExternalAdminWeb controls external exposure of the global multiadmin-web Service.
+                  When nil or enabled: false, the Service remains ClusterIP.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations are applied to the global multiadmin-web Service metadata.
+                      The operator owns exactly these annotation keys via SSA field ownership.
+                    maxProperties: 20
+                    type: object
+                  enabled:
+                    description: |-
+                      Enabled controls whether external admin web exposure is enabled.
+                      The global Service remains ClusterIP; external reachability is provided
+                      via explicitly assigned external IPs and platform networking.
+                    type: boolean
+                  externalIPs:
+                    description: |-
+                      ExternalIPs are externally routable addresses assigned to the global
+                      multiadmin-web Service. These are surfaced via Service.spec.externalIPs.
+                    items:
+                      description: IPAddress is a validated IPv4 or IPv6 address string.
+                      maxLength: 45
+                      minLength: 3
+                      pattern: ^(([0-9]{1,3}\.){3}[0-9]{1,3})$|^(([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4})$
+                      type: string
+                    maxItems: 10
+                    type: array
+                required:
+                - enabled
+                type: object
+                x-kubernetes-validations:
+                - message: annotations must not use multigres.com/ prefix (reserved
+                    for operator)
+                  rule: '!has(self.annotations) || self.annotations.all(k, !k.startsWith(''multigres.com/''))'
               externalGateway:
                 description: |-
                   ExternalGateway controls external exposure of the global multigateway Service.
@@ -10332,6 +10370,20 @@ spec:
           status:
             description: MultigresClusterStatus defines the observed state.
             properties:
+              adminWeb:
+                description: |-
+                  AdminWeb reports the external admin web state.
+                  Nil when spec.externalAdminWeb is nil or disabled.
+                properties:
+                  externalEndpoint:
+                    description: |-
+                      ExternalEndpoint is the hostname or IP for the external admin web endpoint,
+                      sourced from externalIPs or load balancer ingress (in that priority).
+                      Empty when no external endpoint has been provisioned.
+                    type: string
+                required:
+                - externalEndpoint
+                type: object
               cells:
                 additionalProperties:
                   description: CellStatusSummary provides a high-level status of a

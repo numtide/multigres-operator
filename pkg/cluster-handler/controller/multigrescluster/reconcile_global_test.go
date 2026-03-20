@@ -924,7 +924,7 @@ func TestReconcile_Global_BuilderErrors(t *testing.T) {
 		originalBuild := buildMultiAdminWebService
 		defer func() { buildMultiAdminWebService = originalBuild }()
 
-		buildMultiAdminWebService = func(_ *multigresv1alpha1.MultigresCluster, _ *runtime.Scheme) (*corev1.Service, error) {
+		buildMultiAdminWebService = func(_ *multigresv1alpha1.MultigresCluster, _ *multigresv1alpha1.ExternalAdminWebConfig, _ *runtime.Scheme) (*corev1.Service, error) {
 			return nil, errors.New("mocked builder error")
 		}
 

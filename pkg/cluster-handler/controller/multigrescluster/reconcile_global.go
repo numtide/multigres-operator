@@ -232,7 +232,7 @@ func (r *MultigresClusterReconciler) reconcileMultiAdminWeb(
 	)
 
 	// 2. Reconcile Service
-	desiredSvc, err := buildMultiAdminWebService(cluster, r.Scheme)
+	desiredSvc, err := buildMultiAdminWebService(cluster, cluster.Spec.ExternalAdminWeb, r.Scheme)
 	if err != nil {
 		return fmt.Errorf("failed to build multiadmin-web service: %w", err)
 	}
