@@ -1,6 +1,6 @@
 ---
 name: diagnose_with_observer
-description: Use the multigres observer to diagnose cluster health issues. Fetch structured diagnostics from the /api/status endpoint, triage findings by severity, correlate root causes, and produce actionable bug reports.
+description: Use the multigres observer to diagnose cluster health issues. Fetch structured diagnostics from the /api/status endpoint, triage findings by severity, correlate root causes, and produce actionable bug reports. Use this whenever the user reports cluster problems, wants to investigate observer findings, needs to debug multigres issues, asks about cluster health, or sees errors in operator or data plane logs.
 ---
 
 # Diagnose with Observer Skill
@@ -11,35 +11,27 @@ description: Use the multigres observer to diagnose cluster health issues. Fetch
 
 ## 1. Ensure the Observer is Running
 
-Check if the observer pod is running:
 ```bash
 KUBECONFIG=kubeconfig.yaml kubectl get pods -l app.kubernetes.io/name=multigres-observer -n multigres-operator
 ```
 
-If not running, deploy it:
-```bash
-make kind-deploy-observer
-```
-
-The observer deploys automatically with `make kind-deploy`. Check the manage_local_cluster skill if you need to set up a cluster first.
+If not running: `make kind-deploy-observer`. The observer deploys automatically with `make kind-deploy`.
 
 ## 2. Fetch the Diagnostic Snapshot
 
-Port-forward the observer and fetch `/api/status`:
+Define the observer helper (stateless `kubectl exec` — no stale port-forwards to manage):
 ```bash
-# Start port-forward in background (kill when done)
-KUBECONFIG=kubeconfig.yaml kubectl port-forward -n multigres-operator svc/multigres-observer 9090:9090 &
-PF_PID=$!
-sleep 1
-
-# Fetch the full diagnostic snapshot
-curl -s http://localhost:9090/api/status | jq .
-
-# Clean up
-kill $PF_PID 2>/dev/null
+observer() {
+  KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl exec -n multigres-operator deploy/multigres-observer -- curl -sf "http://localhost:9090$1"
+}
 ```
 
-The response is a single JSON object with these top-level keys:
+Fetch the full snapshot:
+```bash
+observer /api/status | jq .
+```
+
+The response is a single JSON object:
 
 | Key | Contents |
 |-----|----------|
@@ -49,79 +41,28 @@ The response is a single JSON object with these top-level keys:
 | `probes` | Raw probe data per check (pods, connectivity, replication, drain, topology, crdStatus) |
 | `coverage` | What was checked: SQL probes enabled, checks run, namespace |
 
-### Quick Triage Queries
+### Quick Triage
 
 ```bash
-# Just the summary
-curl -s http://localhost:9090/api/status | jq '.summary'
+# Just errors and fatals
+observer /api/status | jq '[.findings[] | select(.level == "fatal" or .level == "error")]'
 
-# Unhealthy checks only
-curl -s http://localhost:9090/api/status | jq '.healthy | to_entries | map(select(.value == false))'
+# Finding history with classification
+observer /api/history | jq '{
+  persistent: [.persistent[]? | {check, component, message, severity, count}],
+  flapping: [.flapping[]? | {check, component, message, severity, count}],
+  transientCount: (.transient | length)
+}'
 
-# Fatal and error findings only
-curl -s http://localhost:9090/api/status | jq '[.findings[] | select(.level == "fatal" or .level == "error")]'
-
-# Findings for a specific check
-curl -s http://localhost:9090/api/status | jq '[.findings[] | select(.check == "replication")]'
-
-# Connectivity probe results (all failed probes)
-curl -s http://localhost:9090/api/status | jq '[.probes.connectivity[] | select(.ok == false)]'
-
-# gRPC health probes (detect pool starvation / hanging multipooler)
-curl -s http://localhost:9090/api/status | jq '[.probes.connectivity[] | select(.check == "multipooler-grpc-health")]'
-
-# Multiorch pooler health (detect when orchestrator sees all poolers down)
-curl -s http://localhost:9090/api/status | jq '[.probes.connectivity[] | select(.check == "multiorch-pooler-health")]'
-
-# Readiness cross-check failures (Kubernetes says Ready but observer probes disagree)
-curl -s http://localhost:9090/api/status | jq '[.findings[] | select(.message | test("reports Ready but"))]'
-
-# Replication topology (per-shard primary/replica counts)
-curl -s http://localhost:9090/api/status | jq '.probes.replication'
-
-# Pod inventory
-curl -s http://localhost:9090/api/status | jq '.probes.pods'
-
-# Drain state overview
-curl -s http://localhost:9090/api/status | jq '.probes.drain'
-
-# CRD status overview
-curl -s http://localhost:9090/api/status | jq '.probes.crdStatus'
-```
-
-### On-Demand Targeted Checks
-
-Use `/api/check` to run specific checks immediately without waiting for the next cycle:
-```bash
-# Run only replication and connectivity checks
-curl -s 'http://localhost:9090/api/check?categories=replication,connectivity' | jq .
-
-# Run all checks on demand
-curl -s http://localhost:9090/api/check | jq .
+# Run specific checks on demand (without waiting for next cycle)
+observer '/api/check?categories=replication,connectivity' | jq .
 ```
 
 Valid categories: `pod-health`, `resource-validation`, `crd-status`, `drain-state`, `connectivity`, `logs`, `events`, `topology`, `replication`
 
-Use this when you've made a change and want to verify immediately rather than waiting 10 seconds for the next cycle.
+For the full query catalog, see `references/observer-queries.md`.
 
-### Finding History and Pattern Detection
-
-Use `/api/history` to see how findings behave over time:
-```bash
-# Full history with classification
-curl -s http://localhost:9090/api/history | jq .
-
-# Just persistent and flapping findings (the ones that matter)
-curl -s http://localhost:9090/api/history | jq '{
-  persistent: [.persistent[]? | {check, component, message, severity, count}],
-  flapping: [.flapping[]? | {check, component, message, severity, count}],
-  transientCount: (.transient | length),
-  totalCycles: .totalCycles,
-  observerStartedAt: .observerStartedAt
-}'
-```
-
-**Classification:**
+### Finding History Classification
 
 | Category | Meaning | Action |
 |----------|---------|--------|
@@ -129,31 +70,18 @@ curl -s http://localhost:9090/api/history | jq '{
 | `flapping` | Active with gaps (3+ appearances, <75%) | Intermittent — may be a race condition |
 | `transient` | Appeared then resolved | Expected during operations — report but don't block |
 
-**`observerStartedAt`** tells you when the observer process started. If `totalCycles` is low and `observerStartedAt` is recent, findings may not have stabilized yet — wait for more cycles before classifying.
-
-### Fallback: Read Logs Directly
-
-If port-forwarding isn't available, fall back to logs. Observer logs use double-nested JSON:
-```bash
-KUBECONFIG=kubeconfig.yaml kubectl logs -l app.kubernetes.io/name=multigres-observer -n multigres-operator --tail=200 | grep '\"fatal\"'
-KUBECONFIG=kubeconfig.yaml kubectl logs -l app.kubernetes.io/name=multigres-observer -n multigres-operator --tail=200 | grep '\"error\"'
-```
-
-## 3. Understanding the Response Structure
-
-### Findings
+### Findings Structure
 
 Each finding has:
-- `ts`: Timestamp
-- `level`: Severity — `info`, `warn`, `error`, `fatal`
-- `check`: Check category — `pod-health`, `resource-validation`, `crd-status`, `drain-state`, `connectivity`, `operator-logs`, `dataplane-logs`, `events`, `topology`, `replication`
+- `level`: `info`, `warn`, `error`, `fatal`
+- `check`: Category — `pod-health`, `resource-validation`, `crd-status`, `drain-state`, `connectivity`, `operator-logs`, `dataplane-logs`, `events`, `topology`, `replication`
 - `component`: Affected resource, e.g., `shard/default/my-shard`
 - `message`: Human-readable description
 - `details`: Structured data for deeper investigation
 
 ### Probes
 
-Raw data collected during the cycle, independent of findings. Use probes to understand the full state even when there are no errors:
+Raw data collected during the cycle, independent of findings:
 - `probes.pods`: All managed pods with phase, readiness, component labels
 - `probes.connectivity`: Every TCP/HTTP/gRPC/SQL probe result with latency and error
 - `probes.replication`: Per-shard primary/replica counts and podRoles
@@ -165,24 +93,23 @@ Raw data collected during the cycle, independent of findings. Use probes to unde
 
 **NEVER blame infrastructure (kind, Docker, CPU, memory, network) without concrete proof.** If a probe times out, investigate the actual call chain — check logs of every component in the path (gateway → multiorch → pooler → postgres). A 5-second timeout on `SELECT 1` is not "expected in kind" — it means something is broken.
 
-When investigating errors:
-1. **Trace the full call chain.** If the gateway SQL probe fails, check gateway logs for the connection lifecycle, then check multiorch logs, then pooler logs. Find where the request gets stuck.
-2. **Check upstream component logs.** The observer only sees symptoms. Use `kubectl logs` on the actual components (multiorch, multipooler, pgctld) to find root causes. grep for `error`, `warn`, `failed`, `timeout`, `deadline`.
-3. **Never speculate about performance.** If something is slow, find the bottleneck with evidence. Check if gRPC calls are failing, if DNS resolution works, if ports are actually reachable.
-4. **Report what you actually found.** State the specific failure chain with log evidence, not theories about resource constraints.
+1. **Trace the full call chain.** If the gateway SQL probe fails, check gateway logs → multiorch logs → pooler logs. Find where the request gets stuck.
+2. **Check upstream component logs.** The observer only sees symptoms. Use `kubectl logs` on the actual components to find root causes.
+3. **Never speculate about performance.** If something is slow, find the bottleneck with evidence.
+4. **Report what you actually found.** State the specific failure chain with log evidence, not theories.
 
-## 4. Severity Triage
+## 3. Severity Triage
 
 Process findings in this order:
 
 ### Fatal (Critical — address immediately)
 - **SPLIT-BRAIN**: Multiple pods report as primary. Data integrity emergency.
-- **Writes blocked**: The write probe timed out, `INSERT`/`UPDATE` will hang.
-- **Backward drain transition**: Drain state went backwards, indicating a bug.
-- **Invalid phase transition**: Phase went `Healthy` → `Initializing` — controller bug, should never happen.
+- **Writes blocked**: Write probe timed out.
+- **Backward drain transition**: Drain state went backwards — controller bug.
+- **Invalid phase transition**: Phase went `Healthy` → `Initializing` — should never happen.
 - **Readiness cross-check**: Pod reports Ready but gRPC/readiness probe failed — silent data plane failure.
-- **All poolers unreachable**: `multiorch-pooler-health` shows all poolers down — total data plane outage.
-- **Missing PVC**: Running pool pod references a PVC that doesn't exist — pod cannot function.
+- **All poolers unreachable**: `multiorch-pooler-health` shows all poolers down — total outage.
+- **Missing PVC**: Running pool pod references a PVC that doesn't exist.
 
 ### Error (Investigate)
 - **Missing replicas**: Primary sees 0 replication connections.
@@ -192,169 +119,55 @@ Process findings in this order:
 - **Connectivity failure**: Can't reach a multigres service.
 - **PVC not Bound**: Pool pod's PVC exists but is not in `Bound` phase.
 - **Backup very stale**: Last backup >49h old.
-- **Cell ready > total**: `GatewayReadyReplicas` exceeds `GatewayReplicas` — impossible state, status update bug.
+- **Cell ready > total**: `GatewayReadyReplicas` exceeds `GatewayReplicas` — impossible state.
 
 ### Warn (Monitor)
 - **Replication lag >10s**: Standby falling behind.
 - **WAL replay paused**: Someone paused replay on a replica.
 - **Backup stale**: Last backup >25h old.
-- **Backup never completed**: Backup is configured but `LastBackupTime` is nil.
-- **Stuck Progressing**: Phase stuck in `Progressing` for >10 minutes without advancing.
-- **Empty status message**: `Degraded` or `Unknown` phase with no status message.
-- **Service missing endpoints**: Multigres-managed Service has no Endpoints object or zero ready addresses.
-- **Cell deployment mismatch**: Actual gateway Deployment readyReplicas doesn't match Cell status.
-- **Operator metrics unreachable**: Can't probe operator `/metrics` endpoint on port 8443.
+- **Backup never completed**: Backup configured but `LastBackupTime` is nil.
+- **Stuck Progressing**: Phase stuck in `Progressing` >10 minutes.
+- **Empty status message**: `Degraded`/`Unknown` phase with no status message.
+- **Service missing endpoints**: Managed Service has no ready addresses.
+- **Cell deployment mismatch**: Gateway readyReplicas doesn't match Cell status.
+- **Operator metrics unreachable**: Can't probe operator `/metrics` on port 8443.
 - **Topology unreachable**: etcd checks skipped (may be expected during startup).
 
 ### Info (Normal)
 - Synced events, successful probes, orphaned PVCs — no action needed.
 
-## 5. Common Diagnostic Patterns
+## 4. Common Diagnostic Patterns
 
 ### Multiple fatals from the same check
-When you see multiple `fatal` findings from the same `check` category, they often share a single root cause. Read the `details` fields — look for a common pod, application_name, or component. Fix the root cause rather than addressing each fatal individually.
+They often share a single root cause. Read the `details` fields — look for a common pod, application_name, or component. Fix the root cause rather than addressing each fatal individually.
 
 ### Silent data plane failure (all components "healthy" but queries fail)
-The highest-signal finding is a **readiness cross-check fatal**: "Pod X reports Ready but multipooler-grpc-health probe failed". This means the pod's Kubernetes readiness probe returns 200 but the observer's own gRPC probe (3s timeout) detected the component is broken. This pattern occurs when the multipooler's connection pool is exhausted or its gRPC server is hanging.
+The highest-signal finding is a **readiness cross-check fatal**: "Pod X reports Ready but multipooler-grpc-health probe failed". The pod passes Kubernetes readiness but the observer's gRPC probe detects the component is broken.
 
-Check these probes in order:
-1. `multipooler-grpc-health`: If failing on all pool pods, the multipooler gRPC server (port 15270) is hanging
+Check probes in order:
+1. `multipooler-grpc-health`: If failing on all pool pods, the gRPC server (port 15270) is hanging
 2. `multiorch-pooler-health`: If showing "all poolers unreachable", multiorch knows the data plane is down
 3. `sql-probe`: If timing out while the above are failing, confirms total data plane outage
-4. Cross-check findings: Any "reports Ready but... probe failed" finding means Kubernetes readiness probes are not detecting the failure
-
-```bash
-# Quick check for silent failures
-curl -s http://localhost:9090/api/status | jq '[.findings[] | select(.message | test("reports Ready but"))]'
-
-# All gRPC health probes
-curl -s http://localhost:9090/api/status | jq '[.probes.connectivity[] | select(.check == "multipooler-grpc-health")]'
-
-# Multiorch pooler health
-curl -s http://localhost:9090/api/status | jq '[.probes.connectivity[] | select(.check == "multiorch-pooler-health")]'
-```
 
 ### Connectivity errors — always investigate
-`context deadline exceeded` on SQL probes does NOT mean "kind is slow". Trace the call chain: check gateway logs for the connection ID lifecycle, check multiorch logs for pooler poll failures, check pooler logs for gRPC errors. If multiorch can't reach poolers via gRPC, that's the root cause — not network performance. TCP/HTTP probes passing while SQL fails means the problem is in the application layer (routing, gRPC, upstream bugs), not the transport layer.
+`context deadline exceeded` on SQL probes does NOT mean "kind is slow". Trace the call chain: gateway logs → multiorch logs → pooler logs. If multiorch can't reach poolers via gRPC, that's the root cause. TCP/HTTP probes passing while SQL fails means the problem is in the application layer, not the transport layer.
 
 ### System pod FailedScheduling in kind
-`FailedScheduling` errors on `coredns`, `local-path-provisioner`, or `kube-scheduler` pods are kind cluster artifacts during node startup. These resolve automatically. Ignore unless they persist >5 minutes.
+`FailedScheduling` on `coredns`, `local-path-provisioner`, or `kube-scheduler` are kind artifacts during node startup. Resolve automatically. Ignore unless they persist >5 minutes.
 
 ### Topology validation skipped
-`topology validation skipped: etcd unreachable` means the observer can't connect to the TopoServer etcd (which uses plain HTTP, not TLS). This typically indicates a label mismatch preventing service discovery, or that the TopoServer pods haven't started yet. If it persists after all pods are Running, check that the TopoServer service has the expected `app.kubernetes.io/component=toposerver` label.
+`topology validation skipped: etcd unreachable` — observer can't connect to TopoServer etcd. Typically a label mismatch or TopoServer pods haven't started yet.
 
-### Replication errors correlate with each other
-Replication findings often chain — for example, a broken sync config causes async standbys, which causes blocked writes. Look at the `details` to find the upstream cause rather than treating each finding independently.
+### Replication errors correlate
+Replication findings often chain — broken sync config causes async standbys, which causes blocked writes. Look at `details` to find the upstream cause.
 
-## 6. Cross-Referencing with kubectl
+## 5. Investigation and Bug Report
 
-After identifying findings, verify with direct kubectl:
-```bash
-# Check pod status
-KUBECONFIG=kubeconfig.yaml kubectl get pods -A | grep -v kube-system
+After triaging findings, investigate root causes using:
+- **Component log tracing**: `references/log-tracing.md` — trace failures through gateway → multiorch → pooler → postgres logs, plus kubectl cross-reference commands
+- **Code investigation**: `references/code-investigation.md` — determine if the bug is in the operator or upstream multigres, with directory maps and version checking
 
-# Check shard status
-KUBECONFIG=kubeconfig.yaml kubectl get shards -A -o wide
-
-# Check CRD conditions
-KUBECONFIG=kubeconfig.yaml kubectl get multigresclusters -A -o yaml | grep -A5 conditions
-
-# Check drain annotations
-KUBECONFIG=kubeconfig.yaml kubectl get pods -l app.kubernetes.io/component=shard-pool -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.drain\.multigres\.com/state}{"\n"}{end}'
-
-# Cross-reference CRD podRoles with actual SQL state
-# (catches stale podRoles where CRD says REPLICA but pod is actually PRIMARY)
-KUBECONFIG=kubeconfig.yaml kubectl get shard -A -o json | jq '[.items[] | {name: .metadata.name, podRoles: .status.podRoles}]'
-for pod in $(KUBECONFIG=kubeconfig.yaml kubectl get pods -l app.kubernetes.io/component=shard-pool -o name); do
-  echo -n "$pod: "
-  KUBECONFIG=kubeconfig.yaml kubectl exec $pod -c postgres -- psql -h 127.0.0.1 -p 5432 -U postgres -tAc "SELECT CASE WHEN pg_is_in_recovery() THEN 'REPLICA' ELSE 'PRIMARY' END"
-done
-
-# Check finding history for patterns
-curl -s http://localhost:9090/api/history | jq '{persistent: (.persistent // []) | length, flapping: (.flapping // []) | length, transient: (.transient // []) | length}'
-```
-
-## 7. Trace the Failure Chain in Component Logs
-
-Before jumping to code, trace the actual failure through component logs. The observer detects symptoms — the root cause is in the component logs.
-
-```bash
-# Gateway: trace a specific connection by ID, check routing decisions
-KUBECONFIG=kubeconfig.yaml kubectl logs -l app.kubernetes.io/component=multigateway --tail=200 | grep -E 'error|failed|timeout|cancel'
-
-# MultiOrch: check if it can reach poolers (gRPC Status RPCs)
-KUBECONFIG=kubeconfig.yaml kubectl logs -l app.kubernetes.io/component=multiorch --tail=200 | grep -v 'capacity' | grep -E 'error|warn|failed|poll|dead|quorum' -i
-
-# Pooler: check gRPC server health, backend connections
-KUBECONFIG=kubeconfig.yaml kubectl logs <pod-name> -c multipooler --tail=200 | grep -E 'error|failed|grpc|backend' -i
-
-# Postgres: check for replication issues, connection limits
-KUBECONFIG=kubeconfig.yaml kubectl logs <pod-name> -c postgres --tail=200 | grep -E 'ERROR|FATAL|LOG.*replication'
-```
-
-**Key patterns:**
-- Gateway SQL timeout + multiorch "pooler poll failed" = multiorch can't reach poolers, so gateway can't route queries
-- "DeadlineExceeded" on gRPC Status RPCs = pooler gRPC server is hanging or unreachable (check if port 15270 is listening, check for version mismatches)
-- "PrimaryIsDead" + "insufficient poolers for quorum" = multiorch thinks primary is dead because it can't poll it, and can't failover without quorum
-- "method not implemented" on gRPC calls = version mismatch between multiorch and multipooler binaries
-
-## 8. Investigate Root Causes in Code
-
-Once you have findings, investigate whether the bug is in the **operator** or **upstream multigres**:
-
-### Determine which multigres version is running
-
-Check what image tags the running pods are using:
-```bash
-KUBECONFIG=kubeconfig.yaml kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .spec.containers[*]}{.image}{" "}{end}{"\n"}{end}' | grep multigres
-```
-
-Or check the defaults compiled into the operator:
-```bash
-cat api/v1alpha1/image_defaults.go
-```
-
-Image tags use the format `sha-XXXXXXX` which corresponds to a commit SHA in the multigres repo.
-
-### Investigate operator code
-
-Search the operator repo for code related to the finding:
-- **Replication findings**: Check `pkg/resource-handler/controller/shard/` — especially `containers.go` (how pod names are set), `pool_pod.go` (pod spec construction)
-- **Drain findings**: Check `pkg/data-handler/drain/drain.go` — the drain state machine
-- **Status findings**: Check `pkg/resource-handler/controller/shard/shard_controller.go` — status reconciliation
-- **Connectivity/resource findings**: Check `pkg/resource-handler/controller/` for the relevant component
-- **Topology findings**: Check `pkg/data-handler/topo/` — etcd topology operations
-
-### Investigate upstream multigres code
-
-Clone or pull the latest upstream code:
-```bash
-# Clone if not present, pull if already cloned
-if [ -d /tmp/multigres ]; then
-  cd /tmp/multigres && git fetch origin && git pull origin main
-else
-  git clone https://github.com/multigres/multigres /tmp/multigres
-fi
-```
-
-**Check the version actually running, not just latest.** If the bug exists on `main` but not on the SHA the operator is using (or vice versa), note that in the report:
-```bash
-# Checkout the exact version running in the cluster
-cd /tmp/multigres
-git checkout <sha-from-image-tag>
-```
-
-Key upstream directories:
-- `go/cmd/multigateway/` — gateway behavior, routing, ports
-- `go/cmd/multipooler/` — connection pooling, health endpoints
-- `go/cmd/multiorch/` — orchestration, failover, replication management
-- `go/cmd/pgctld/` — PostgreSQL lifecycle, startup, shutdown
-- `go/proto/` — gRPC service definitions
-
-## 9. Produce a Bug Report
-
-After investigation, document:
-
+Then produce a bug report documenting:
 1. **Finding summary**: What the observer detected (severity, check, message)
 2. **Affected component**: Operator, upstream multigres, or both
 3. **Root cause**: The specific code path causing the issue
@@ -362,10 +175,15 @@ After investigation, document:
 5. **Fix location**: Whether it needs a fix in the operator, upstream, or both
 6. **Suggested fix**: Concrete code change recommendation
 
-If the bug exists on an older upstream SHA but is already fixed on `main`, **report this to the user** — do not update image tags yourself.
+If the bug exists on an older upstream SHA but is already fixed on `main`, report this — do not update image tags yourself.
 
-## 10. Reference Documentation
+## 6. Reference Documents
 
-- `tools/observer/docs/observer.md` — Full check reference with all sub-checks and SQL queries
-- `tools/observer/docs/configuration.md` — Threshold values and constants
-- `tools/observer/docs/architecture.md` — How the observer works internally
+| Reference | When to Read |
+|-----------|-------------|
+| `references/observer-queries.md` | Full catalog of jq queries for probing specific aspects of observer output |
+| `references/log-tracing.md` | When tracing failures through component logs and cross-referencing with kubectl |
+| `references/code-investigation.md` | When investigating root causes in operator or upstream multigres code |
+| `tools/observer/docs/observer.md` | Full check reference with all sub-checks and SQL queries |
+| `tools/observer/docs/configuration.md` | Threshold values and constants |
+| `tools/observer/docs/architecture.md` | How the observer works internally |
