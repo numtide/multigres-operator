@@ -23,6 +23,7 @@ The **[Multigres](https://github.com/multigres/multigres) Operator** is a Kubern
 - **Failover & High Availability**: Orchestrates Primary/Standby failovers across defined Cells.
 - **Template System**: Define configuration once (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) and reuse it across the cluster.
 - **Hierarchical Defaults**: Smart override logic allowing for global defaults, namespace defaults, and granular overrides.
+- **External Gateway Exposure**: Optional external gateway support via `spec.externalGateway` with configurable `externalIPs` and service annotations, tracked by a `GatewayExternalReady` condition.
 - **Integrated Cert Management**: Built-in self-signed certificate generation and rotation for validating webhooks, with optional support for `cert-manager`.
 
 ---
