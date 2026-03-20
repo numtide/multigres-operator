@@ -351,20 +351,40 @@ func BuildMultiAdminWebDeployment(
 // BuildMultiAdminWebService constructs the desired Service for MultiAdminWeb.
 func BuildMultiAdminWebService(
 	cluster *multigresv1alpha1.MultigresCluster,
+	extAW *multigresv1alpha1.ExternalAdminWebConfig,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
 	standardLabels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiAdminWeb)
 	metadata.AddClusterLabel(standardLabels, cluster.Name)
 
+	var annotations map[string]string
+	var externalIPs []string
+	if extAW != nil && extAW.Enabled {
+		if len(extAW.ExternalIPs) > 0 {
+			externalIPs = make([]string, len(extAW.ExternalIPs))
+			for i, ip := range extAW.ExternalIPs {
+				externalIPs[i] = string(ip)
+			}
+		}
+		if len(extAW.Annotations) > 0 {
+			annotations = make(map[string]string, len(extAW.Annotations))
+			for k, v := range extAW.Annotations {
+				annotations[k] = v
+			}
+		}
+	}
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-multiadmin-web", cluster.Name),
-			Namespace: cluster.Namespace,
-			Labels:    standardLabels,
+			Name:        fmt.Sprintf("%s-multiadmin-web", cluster.Name),
+			Namespace:   cluster.Namespace,
+			Labels:      standardLabels,
+			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: metadata.GetSelectorLabels(standardLabels),
-			Type:     corev1.ServiceTypeClusterIP,
+			Selector:    metadata.GetSelectorLabels(standardLabels),
+			Type:        corev1.ServiceTypeClusterIP,
+			ExternalIPs: externalIPs,
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "http",

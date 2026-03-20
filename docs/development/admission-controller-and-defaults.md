@@ -98,7 +98,9 @@ This logic is embedded directly into the CRD's OpenAPI v3.1 schema and is enforc
 `rule="self.filter(x, has(x.default) && x.default).size() == 1", message="every database must have exactly one tablegroup marked as default"`
 * **External Gateway Annotation Guard (`ExternalGatewayConfig`):** Reject annotations that use the `multigres.com/` prefix.
 `rule="!has(self.annotations) || self.annotations.all(k, !k.startsWith('multigres.com/'))", message="annotations must not use multigres.com/ prefix (reserved for operator)"`
-* **IPAddress Type Validation:** The `IPAddress` type validates IPv4/IPv6 addresses via kubebuilder pattern markers (Level 1). The resolver (Level 4) performs additional semantic validation when `externalGateway.enabled` is true: it warns if no `externalIPs` are specified.
+* **External Admin Web Annotation Guard (`ExternalAdminWebConfig`):** Same rule as the gateway — reject annotations that use the `multigres.com/` prefix.
+`rule="!has(self.annotations) || self.annotations.all(k, !k.startsWith('multigres.com/'))", message="annotations must not use multigres.com/ prefix (reserved for operator)"`
+* **IPAddress Type Validation:** The `IPAddress` type validates IPv4/IPv6 addresses via kubebuilder pattern markers (Level 1). The resolver (Level 4) performs additional semantic validation when `externalGateway.enabled` or `externalAdminWeb.enabled` is true: it warns if no `externalIPs` are specified.
 * **InitdbArgs:** The `InitdbArgs` type is validated at Level 1 via `MaxLength=512`. It has no CRD default — when unset, the `POSTGRES_INITDB_ARGS` env var is simply omitted from the pgctld container. The field participates in the standard shard override chain (inline > template > cluster-default > namespace-default).
 
 

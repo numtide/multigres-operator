@@ -285,7 +285,26 @@ func (r *Resolver) ValidateClusterLogic(
 	}
 
 	// ------------------------------------------------------------------
-	// 0d. Resource Limits Validation (Top-Level Components)
+	// 0d. External Admin Web Validation
+	// ------------------------------------------------------------------
+	if aw := cluster.Spec.ExternalAdminWeb; aw != nil && aw.Enabled {
+		if len(aw.ExternalIPs) == 0 {
+			warnings = append(warnings,
+				"externalAdminWeb is enabled but no externalIPs specified; "+
+					"endpoint resolution depends on an external load balancer controller "+
+					"provisioning an ingress address on the multiadmin-web Service")
+		}
+		for _, ip := range aw.ExternalIPs {
+			if net.ParseIP(string(ip)) == nil {
+				return nil, fmt.Errorf(
+					"externalAdminWeb.externalIPs contains invalid IP address: %q", ip,
+				)
+			}
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// 0e. Resource Limits Validation (Top-Level Components)
 	// ------------------------------------------------------------------
 	if cluster.Spec.GlobalTopoServer != nil &&
 		cluster.Spec.GlobalTopoServer.Etcd != nil {
