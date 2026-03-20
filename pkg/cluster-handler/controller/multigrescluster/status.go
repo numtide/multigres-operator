@@ -270,11 +270,19 @@ func (r *MultigresClusterReconciler) updateStatus(
 		cluster.Status.Gateway = nil
 	}
 
-	gwCond := computeGatewayCondition(gwEnabled, externalEndpoint, aggregateReadyGateways, cluster.Generation)
+	gwCond := computeGatewayCondition(
+		gwEnabled,
+		externalEndpoint,
+		aggregateReadyGateways,
+		cluster.Generation,
+	)
 	if gwCond != nil {
 		meta.SetStatusCondition(&cluster.Status.Conditions, *gwCond)
 	} else {
-		meta.RemoveStatusCondition(&cluster.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
+		meta.RemoveStatusCondition(
+			&cluster.Status.Conditions,
+			multigresv1alpha1.ConditionGatewayExternalReady,
+		)
 	}
 
 	// 1. Construct the Patch Object

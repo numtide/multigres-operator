@@ -492,7 +492,11 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 		enabled, err := BuildMultiGatewayGlobalService(cluster, enabledCfg, scheme)
 		require.NoError(t, err)
 		assert.Equal(t, corev1.ServiceTypeClusterIP, enabled.Spec.Type)
-		assert.Equal(t, "internet-facing", enabled.Annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"])
+		assert.Equal(
+			t,
+			"internet-facing",
+			enabled.Annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"],
+		)
 
 		// Build with disabled config; previously-set gateway annotations absent
 		disabledCfg := &multigresv1alpha1.ExternalGatewayConfig{Enabled: false}

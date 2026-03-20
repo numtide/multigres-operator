@@ -661,7 +661,10 @@ func TestUpdateStatus_GatewayServiceErrors(t *testing.T) {
 		require.NotNil(t, cluster.Status.Gateway)
 		assert.Empty(t, cluster.Status.Gateway.ExternalEndpoint)
 
-		cond := meta.FindStatusCondition(cluster.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
+		cond := meta.FindStatusCondition(
+			cluster.Status.Conditions,
+			multigresv1alpha1.ConditionGatewayExternalReady,
+		)
 		require.NotNil(t, cond)
 		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, multigresv1alpha1.ReasonAwaitingLoadBalancer, cond.Reason)
@@ -750,7 +753,10 @@ func TestUpdateStatus_StaleCellGenerationIgnored(t *testing.T) {
 
 	// Only the fresh cell's 2 ready gateways should count.
 	// With endpoint present and aggregateReadyGateways=2, condition should be EndpointReady.
-	cond := meta.FindStatusCondition(clusterCopy.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
+	cond := meta.FindStatusCondition(
+		clusterCopy.Status.Conditions,
+		multigresv1alpha1.ConditionGatewayExternalReady,
+	)
 	require.NotNil(t, cond)
 	assert.Equal(t, metav1.ConditionTrue, cond.Status)
 	assert.Equal(t, multigresv1alpha1.ReasonEndpointReady, cond.Reason)
@@ -774,7 +780,10 @@ func TestUpdateStatus_StaleCellGenerationIgnored(t *testing.T) {
 	err = r2.updateStatus(t.Context(), clusterCopy2)
 	require.NoError(t, err)
 
-	cond2 := meta.FindStatusCondition(clusterCopy2.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
+	cond2 := meta.FindStatusCondition(
+		clusterCopy2.Status.Conditions,
+		multigresv1alpha1.ConditionGatewayExternalReady,
+	)
 	require.NotNil(t, cond2)
 	assert.Equal(t, metav1.ConditionFalse, cond2.Status)
 	assert.Equal(t, multigresv1alpha1.ReasonNoReadyGateways, cond2.Reason)
