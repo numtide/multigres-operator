@@ -209,7 +209,7 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 				if !isUsingTemplate {
 					// We pass 'nil' for allCellNames to prevent "Sticky Context Defaults".
 					// We want the Stored Spec to remain empty (dynamic) rather than locking in the current list of cells.
-					multiOrchSpec, poolsSpec, resolvedPvcPolicy, resolvedBackupConfig, resolvedInitdbArgs, err := scopedResolver.ResolveShard(
+					multiOrchSpec, poolsSpec, resolvedPvcPolicy, resolvedBackupConfig, resolvedInitdbArgs, resolvedPostgresConfigRef, err := scopedResolver.ResolveShard(
 						ctx,
 						shard,
 						nil,
@@ -231,6 +231,7 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 					shard.Spec = &multigresv1alpha1.ShardInlineSpec{
 						MultiOrch:         *multiOrchSpec,
 						InitdbArgs:        resolvedInitdbArgs,
+						PostgresConfigRef: resolvedPostgresConfigRef,
 						Pools:             poolsSpec,
 						PVCDeletionPolicy: pvcPolicy,
 					}

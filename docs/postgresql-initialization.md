@@ -1,5 +1,7 @@
 # PostgreSQL Initialization
 
+> For runtime PostgreSQL tuning (`shared_buffers`, `max_connections`, `work_mem`, etc.), see [PostgreSQL Configuration](postgresql-configuration.md). This page covers one-time initialization options only.
+
 ## InitDB Arguments
 
 The operator supports passing custom arguments to PostgreSQL's `initdb` command during data directory initialization. This is useful for configuring locale settings, encoding, and other initialization-time options.

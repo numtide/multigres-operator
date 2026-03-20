@@ -52,6 +52,15 @@ const (
 	// PgHbaTemplatePath is the full path to the pg_hba template file
 	PgHbaTemplatePath = PgHbaMountPath + "/pg_hba_template.conf"
 
+	// PostgresConfigVolumeName is the name of the volume for the postgresql.conf template
+	PostgresConfigVolumeName = "postgres-config-template"
+
+	// PostgresConfigMountPath is where the postgresql.conf template is mounted
+	PostgresConfigMountPath = "/etc/pgctld/postgres"
+
+	// PostgresConfigFilePath is the full path to the postgresql.conf template file
+	PostgresConfigFilePath = PostgresConfigMountPath + "/postgresql.conf.tmpl"
+
 	// PostgresPasswordSecretKey is the key within the Secret that holds the password
 	PostgresPasswordSecretKey = "password"
 
@@ -128,6 +137,10 @@ func buildPgctldContainer(
 		"--http-port=15400",
 	}
 
+	if shard.Spec.PostgresConfigRef != nil {
+		args = append(args, "--postgres-config-template="+PostgresConfigFilePath)
+	}
+
 	if shard.Spec.Backup != nil {
 		// pgBackRest TLS cert dir and port (enables the pgBackRest TLS server).
 		// Backup type/path/S3 config is resolved by multipooler from the etcd
@@ -174,6 +187,13 @@ func buildPgctldContainer(
 			MountPath: PgHbaMountPath,
 			ReadOnly:  true,
 		},
+	}
+	if shard.Spec.PostgresConfigRef != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      PostgresConfigVolumeName,
+			MountPath: PostgresConfigMountPath,
+			ReadOnly:  true,
+		})
 	}
 	if shard.Spec.Backup != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -436,11 +456,32 @@ func buildMultiOrchContainer(shard *multigresv1alpha1.Shard, cellName string) co
 
 // buildPoolVolumes assembles the complete list of volumes for a pool pod.
 // Conditionally includes the pgBackRest cert volume when backup is configured.
+// buildPostgresConfigVolume creates a volume that projects a specific key from
+// the user-provided ConfigMap to the expected postgresql.conf.tmpl filename.
+func buildPostgresConfigVolume(ref *multigresv1alpha1.PostgresConfigRef) corev1.Volume {
+	return corev1.Volume{
+		Name: PostgresConfigVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: ref.Name,
+				},
+				Items: []corev1.KeyToPath{
+					{Key: ref.Key, Path: "postgresql.conf.tmpl"},
+				},
+			},
+		},
+	}
+}
+
 func buildPoolVolumes(shard *multigresv1alpha1.Shard, cellName string) []corev1.Volume {
 	volumes := []corev1.Volume{
 		buildSharedBackupVolume(shard, cellName),
 		buildSocketDirVolume(),
 		buildPgHbaVolume(shard.Name),
+	}
+	if shard.Spec.PostgresConfigRef != nil {
+		volumes = append(volumes, buildPostgresConfigVolume(shard.Spec.PostgresConfigRef))
 	}
 	if certVol := buildPgBackRestCertVolume(shard); certVol != nil {
 		volumes = append(volumes, *certVol)

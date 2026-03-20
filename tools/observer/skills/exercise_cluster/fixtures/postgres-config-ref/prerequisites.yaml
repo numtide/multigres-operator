@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-pg-config
+  namespace: default
+data:
+  postgresql.conf: |
+    # Custom PostgreSQL configuration for testing
+    # This is a Go template file — pgctld renders {{.Variable}} placeholders.
+    # Plain settings (no {{...}}) are passed through as-is.
+
+    # Override shared_buffers from the default auto-tuned value
+    shared_buffers = '256MB'
+
+    # Override work_mem
+    work_mem = '16MB'
+
+    # Override max_connections
+    max_connections = 50

@@ -64,7 +64,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 
 				// Pass allCellNames to the resolver so it can perform "Empty means Everybody" defaulting.
 				// tgBackup carries the merged chain: TableGroup -> Database -> Cluster.
-				orch, pools, pvcPolicy, finalShardBackup, initdbArgs, err := res.ResolveShard(
+				orch, pools, pvcPolicy, finalShardBackup, initdbArgs, postgresConfigRef, err := res.ResolveShard(
 					ctx,
 					shardCfg,
 					allCellNames,
@@ -92,6 +92,7 @@ func (r *MultigresClusterReconciler) reconcileDatabases(
 					Name:              string(shard.Name),
 					MultiOrch:         *orch,
 					InitdbArgs:        initdbArgs,
+					PostgresConfigRef: postgresConfigRef,
 					Pools:             pools,
 					PVCDeletionPolicy: pvcPolicy,
 					Backup:            finalShardBackup,

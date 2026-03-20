@@ -353,6 +353,12 @@ type ShardOverrides struct {
 	// +optional
 	InitdbArgs InitdbArgs `json:"initdbArgs,omitempty"`
 
+	// PostgresConfigRef references a ConfigMap containing custom postgresql.conf overrides.
+	// The ConfigMap must exist in the same namespace. When set, the operator mounts it
+	// and passes --postgres-config-template to pgctld.
+	// +optional
+	PostgresConfigRef *PostgresConfigRef `json:"postgresConfigRef,omitempty"`
+
 	// Pools overrides. Keyed by pool name.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=8
@@ -373,6 +379,12 @@ type ShardInlineSpec struct {
 	// Only takes effect when a pod initializes a new data directory.
 	// +optional
 	InitdbArgs InitdbArgs `json:"initdbArgs,omitempty"`
+
+	// PostgresConfigRef references a ConfigMap containing custom postgresql.conf overrides.
+	// The ConfigMap must exist in the same namespace. When set, the operator mounts it
+	// and passes --postgres-config-template to pgctld.
+	// +optional
+	PostgresConfigRef *PostgresConfigRef `json:"postgresConfigRef,omitempty"`
 
 	// Pools configuration. Keyed by pool name.
 	// +optional

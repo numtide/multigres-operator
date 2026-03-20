@@ -247,6 +247,20 @@ type CellName string
 // +kubebuilder:validation:MaxLength=512
 type InitdbArgs string
 
+// PostgresConfigRef references a ConfigMap containing custom postgresql.conf content.
+// The referenced ConfigMap must exist in the same namespace as the MultigresCluster.
+type PostgresConfigRef struct {
+	// Name is the name of the ConfigMap.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// Key is the key within the ConfigMap's data that contains the postgresql.conf content.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Key string `json:"key"`
+}
+
 // IPAddress is a validated IPv4 or IPv6 address string.
 // +kubebuilder:validation:MinLength=3
 // +kubebuilder:validation:MaxLength=45
