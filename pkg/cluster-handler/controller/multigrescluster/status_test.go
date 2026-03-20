@@ -542,14 +542,14 @@ func TestComputeGatewayCondition(t *testing.T) {
 			wantNil:                true,
 		},
 		{
-			name:                   "enabled, empty endpoint - AwaitingLoadBalancer",
+			name:                   "enabled, empty endpoint - AwaitingEndpoint",
 			externalGatewayEnabled: true,
 			externalEndpoint:       "",
 			aggregateReadyGateways: 0,
 			clusterGeneration:      gen,
 			wantStatus:             metav1.ConditionFalse,
-			wantReason:             multigresv1alpha1.ReasonAwaitingLoadBalancer,
-			wantMessageContains:    "load balancer",
+			wantReason:             multigresv1alpha1.ReasonAwaitingEndpoint,
+			wantMessageContains:    "gateway service endpoint",
 		},
 		{
 			name:                   "enabled, endpoint present, 0 ready gateways - NoReadyGateways",
@@ -640,7 +640,7 @@ func TestUpdateStatus_GatewayServiceErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to get global multigateway service for status")
 	})
 
-	t.Run("NotFound global service sets AwaitingLoadBalancer when enabled", func(t *testing.T) {
+	t.Run("NotFound global service sets AwaitingEndpoint when enabled", func(t *testing.T) {
 		// No Service object created — Get will return NotFound.
 		cl := fake.NewClientBuilder().
 			WithScheme(scheme).
@@ -667,7 +667,7 @@ func TestUpdateStatus_GatewayServiceErrors(t *testing.T) {
 		)
 		require.NotNil(t, cond)
 		assert.Equal(t, metav1.ConditionFalse, cond.Status)
-		assert.Equal(t, multigresv1alpha1.ReasonAwaitingLoadBalancer, cond.Reason)
+		assert.Equal(t, multigresv1alpha1.ReasonAwaitingEndpoint, cond.Reason)
 	})
 }
 
@@ -689,7 +689,7 @@ func TestUpdateStatus_StaleCellGenerationIgnored(t *testing.T) {
 		Status: multigresv1alpha1.MultigresClusterStatus{},
 	}
 
-	// Global multigateway Service with an LB ingress so we get past AwaitingLoadBalancer.
+	// Global multigateway Service with an LB ingress so we get past AwaitingEndpoint.
 	gwSvc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName + "-multigateway",

@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 
@@ -265,7 +266,26 @@ func (r *Resolver) ValidateClusterLogic(
 	}
 
 	// ------------------------------------------------------------------
-	// 0c. Resource Limits Validation (Top-Level Components)
+	// 0c. External Gateway Validation
+	// ------------------------------------------------------------------
+	if gw := cluster.Spec.ExternalGateway; gw != nil && gw.Enabled {
+		if len(gw.ExternalIPs) == 0 {
+			warnings = append(warnings,
+				"externalGateway is enabled but no externalIPs specified; "+
+					"endpoint resolution depends on an external load balancer controller "+
+					"provisioning an ingress address on the global multigateway Service")
+		}
+		for _, ip := range gw.ExternalIPs {
+			if net.ParseIP(string(ip)) == nil {
+				return nil, fmt.Errorf(
+					"externalGateway.externalIPs contains invalid IP address: %q", ip,
+				)
+			}
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// 0d. Resource Limits Validation (Top-Level Components)
 	// ------------------------------------------------------------------
 	if cluster.Spec.GlobalTopoServer != nil &&
 		cluster.Spec.GlobalTopoServer.Etcd != nil {

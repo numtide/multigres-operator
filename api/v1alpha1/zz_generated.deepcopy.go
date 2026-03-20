@@ -553,7 +553,7 @@ func (in *ExternalGatewayConfig) DeepCopyInto(out *ExternalGatewayConfig) {
 	*out = *in
 	if in.ExternalIPs != nil {
 		in, out := &in.ExternalIPs, &out.ExternalIPs
-		*out = make([]string, len(*in))
+		*out = make([]IPAddress, len(*in))
 		copy(*out, *in)
 	}
 	if in.Annotations != nil {

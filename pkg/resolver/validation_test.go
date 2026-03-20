@@ -857,6 +857,51 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 				},
 			},
 		},
+		"External Gateway Enabled Without ExternalIPs Warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw-no-ips", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1", CellTemplate: "prod-cell"},
+					},
+					ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{
+						Enabled: true,
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantWarnings: []string{"externalGateway is enabled but no externalIPs specified"},
+		},
+		"External Gateway Invalid IP Rejected": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw-bad-ip", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1", CellTemplate: "prod-cell"},
+					},
+					ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{
+						Enabled:     true,
+						ExternalIPs: []multigresv1alpha1.IPAddress{"999.999.999.999"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "invalid IP address",
+		},
 	}
 
 	for name, tc := range tests {

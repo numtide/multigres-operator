@@ -381,6 +381,10 @@ type ShardInlineSpec struct {
 // ============================================================================
 
 // ExternalGatewayConfig controls external exposure of the global multigateway Service.
+//
+// Annotations under the multigres.com/ prefix are rejected to avoid
+// conflicts with operator-managed metadata.
+// +kubebuilder:validation:XValidation:rule="!has(self.annotations) || self.annotations.all(k, !k.startsWith('multigres.com/'))",message="annotations must not use multigres.com/ prefix (reserved for operator)"
 type ExternalGatewayConfig struct {
 	// Enabled controls whether external gateway exposure is enabled.
 	// The global Service remains ClusterIP; external reachability is provided
@@ -390,18 +394,21 @@ type ExternalGatewayConfig struct {
 	// ExternalIPs are externally routable addresses assigned to the global
 	// multigateway Service. These are surfaced via Service.spec.externalIPs.
 	// +optional
-	ExternalIPs []string `json:"externalIPs,omitempty"`
+	// +kubebuilder:validation:MaxItems=10
+	ExternalIPs []IPAddress `json:"externalIPs,omitempty"`
 
 	// Annotations are applied to the global multigateway Service metadata.
 	// The operator owns exactly these annotation keys via SSA field ownership.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=20
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // GatewayStatus reports the external gateway state.
 type GatewayStatus struct {
-	// ExternalEndpoint is the hostname or IP from the load balancer ingress.
-	// Empty when the load balancer has not yet provisioned an address.
+	// ExternalEndpoint is the hostname or IP for the external gateway endpoint,
+	// sourced from externalIPs or load balancer ingress (in that priority).
+	// Empty when no external endpoint has been provisioned.
 	ExternalEndpoint string `json:"externalEndpoint"`
 }
 
@@ -410,9 +417,9 @@ const (
 	// is provisioned and backed by ready gateway pods.
 	ConditionGatewayExternalReady = "GatewayExternalReady"
 
-	// ReasonAwaitingLoadBalancer indicates the load balancer ingress address
-	// has not yet been provisioned.
-	ReasonAwaitingLoadBalancer = "AwaitingLoadBalancer"
+	// ReasonAwaitingEndpoint indicates the gateway service endpoint has not
+	// yet been provisioned.
+	ReasonAwaitingEndpoint = "AwaitingEndpoint"
 
 	// ReasonNoReadyGateways indicates the external endpoint is assigned but
 	// no multigateway pods are ready.
