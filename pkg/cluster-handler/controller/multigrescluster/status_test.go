@@ -447,6 +447,22 @@ func TestExtractExternalEndpoint(t *testing.T) {
 			want: "",
 		},
 		{
+			name: "service external IP preferred",
+			svc: &corev1.Service{
+				Spec: corev1.ServiceSpec{
+					ExternalIPs: []string{"2001:db8::10"},
+				},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{Hostname: "a1234.elb.us-east-1.amazonaws.com"},
+						},
+					},
+				},
+			},
+			want: "2001:db8::10",
+		},
+		{
 			name: "hostname only",
 			svc: &corev1.Service{
 				Status: corev1.ServiceStatus{

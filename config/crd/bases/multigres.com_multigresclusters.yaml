@@ -7694,9 +7694,18 @@ spec:
                       The operator owns exactly these annotation keys via SSA field ownership.
                     type: object
                   enabled:
-                    description: Enabled controls whether the global Service is LoadBalancer
-                      (true) or ClusterIP (false).
+                    description: |-
+                      Enabled controls whether external gateway exposure is enabled.
+                      The global Service remains ClusterIP; external reachability is provided
+                      via explicitly assigned external IPs and platform networking.
                     type: boolean
+                  externalIPs:
+                    description: |-
+                      ExternalIPs are externally routable addresses assigned to the global
+                      multigateway Service. These are surfaced via Service.spec.externalIPs.
+                    items:
+                      type: string
+                    type: array
                 required:
                 - enabled
                 type: object
@@ -10358,8 +10367,8 @@ spec:
                 properties:
                   externalEndpoint:
                     description: |-
-                      ExternalEndpoint is the hostname or IP from the load balancer ingress.
-                      Empty when the load balancer has not yet provisioned an address.
+                      ExternalEndpoint is the hostname or IP for the external gateway endpoint.
+                      Empty when no external endpoint has been provisioned.
                     type: string
                 required:
                 - externalEndpoint

@@ -377,6 +377,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 		extGw           *multigresv1alpha1.ExternalGatewayConfig
 		wantType        corev1.ServiceType
 		wantAnnotations map[string]string // nil means no gateway annotations expected
+		wantExternalIPs []string
 	}{
 		{
 			name:     "nil config → ClusterIP, no gateway annotations",
@@ -389,12 +390,12 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 			wantType: corev1.ServiceTypeClusterIP,
 		},
 		{
-			name:     "Enabled: true, no annotations → LoadBalancer",
+			name:     "Enabled: true, no annotations → ClusterIP",
 			extGw:    &multigresv1alpha1.ExternalGatewayConfig{Enabled: true},
-			wantType: corev1.ServiceTypeLoadBalancer,
+			wantType: corev1.ServiceTypeClusterIP,
 		},
 		{
-			name: "Enabled: true, with annotations → LoadBalancer, annotations applied",
+			name: "Enabled: true, with annotations → ClusterIP, annotations applied",
 			extGw: &multigresv1alpha1.ExternalGatewayConfig{
 				Enabled: true,
 				Annotations: map[string]string{
@@ -402,7 +403,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 					"service.beta.kubernetes.io/aws-load-balancer-type":   "external",
 				},
 			},
-			wantType: corev1.ServiceTypeLoadBalancer,
+			wantType: corev1.ServiceTypeClusterIP,
 			wantAnnotations: map[string]string{
 				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
 				"service.beta.kubernetes.io/aws-load-balancer-type":   "external",
@@ -417,11 +418,20 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 					"multigres.com/some-annotation":       "also-should-not-overwrite",
 				},
 			},
-			wantType: corev1.ServiceTypeLoadBalancer,
+			wantType: corev1.ServiceTypeClusterIP,
 			wantAnnotations: map[string]string{
 				"app.kubernetes.io/custom-annotation": "should-not-overwrite-labels",
 				"multigres.com/some-annotation":       "also-should-not-overwrite",
 			},
+		},
+		{
+			name: "Enabled: true, with external IPs",
+			extGw: &multigresv1alpha1.ExternalGatewayConfig{
+				Enabled:     true,
+				ExternalIPs: []string{"2001:db8::10"},
+			},
+			wantType:        corev1.ServiceTypeClusterIP,
+			wantExternalIPs: []string{"2001:db8::10"},
 		},
 		{
 			name:     "Disabled after previously enabled → ClusterIP, no gateway annotations",
@@ -441,6 +451,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 
 			// Service type
 			assert.Equal(t, tc.wantType, got.Spec.Type)
+			assert.Equal(t, tc.wantExternalIPs, got.Spec.ExternalIPs)
 
 			// Port 15432 invariant
 			require.Len(t, got.Spec.Ports, 1)
@@ -480,7 +491,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 		}
 		enabled, err := BuildMultiGatewayGlobalService(cluster, enabledCfg, scheme)
 		require.NoError(t, err)
-		assert.Equal(t, corev1.ServiceTypeLoadBalancer, enabled.Spec.Type)
+		assert.Equal(t, corev1.ServiceTypeClusterIP, enabled.Spec.Type)
 		assert.Equal(t, "internet-facing", enabled.Annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"])
 
 		// Build with disabled config; previously-set gateway annotations absent

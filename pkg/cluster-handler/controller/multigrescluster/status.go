@@ -14,11 +14,18 @@ import (
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
-// extractExternalEndpoint reads the first load balancer ingress entry from a
-// Service, preferring hostname over IP. Returns empty string when the Service
-// is nil or no ingress has been provisioned.
+// extractExternalEndpoint resolves the externally reachable endpoint for the
+// global multigateway Service. It prefers explicitly assigned Service
+// ExternalIPs, then falls back to load balancer ingress (hostname over IP).
+// Returns empty string when no endpoint has been provisioned.
 func extractExternalEndpoint(svc *corev1.Service) string {
-	if svc == nil || len(svc.Status.LoadBalancer.Ingress) == 0 {
+	if svc == nil {
+		return ""
+	}
+	if len(svc.Spec.ExternalIPs) > 0 && svc.Spec.ExternalIPs[0] != "" {
+		return svc.Spec.ExternalIPs[0]
+	}
+	if len(svc.Status.LoadBalancer.Ingress) == 0 {
 		return ""
 	}
 	ing := svc.Status.LoadBalancer.Ingress[0]

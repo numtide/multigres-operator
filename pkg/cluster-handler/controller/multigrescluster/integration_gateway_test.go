@@ -48,7 +48,8 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 				{Name: "zone-a", Zone: "us-east-1a"},
 			},
 			ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{
-				Enabled: true,
+				Enabled:     true,
+				ExternalIPs: []string{"2001:db8::100"},
 				Annotations: map[string]string{
 					"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
 				},
@@ -58,18 +59,15 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 
 	require.NoError(t, k8sClient.Create(t.Context(), cluster))
 
-	// Add extra comparison options for LoadBalancer Service runtime fields.
+	// Add extra comparison options for Service runtime fields.
 	watcher.SetCmpOpts(
 		testutil.IgnoreMetaRuntimeFields(),
 		testutil.IgnoreServiceRuntimeFields(),
-		cmpopts.IgnoreFields(corev1.ServiceSpec{},
-			"ExternalTrafficPolicy",
-			"AllocateLoadBalancerNodePorts",
-		),
+		cmpopts.IgnoreFields(corev1.ServiceSpec{}, "ExternalTrafficPolicy"),
 		cmpopts.IgnoreFields(corev1.ServicePort{}, "NodePort"),
 	)
 
-	// Step 2: Verify the global Service is created as LoadBalancer with annotations.
+	// Step 2: Verify the global Service is created as ClusterIP with externalIPs + annotations.
 	gwLabels := clusterLabels(t, clusterName, "multigateway", "")
 	expectedGwSvc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -86,7 +84,8 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 				metadata.LabelAppComponent: metadata.ComponentMultiGateway,
 				metadata.LabelAppInstance:  clusterName,
 			},
-			Type: corev1.ServiceTypeLoadBalancer,
+			Type:        corev1.ServiceTypeClusterIP,
+			ExternalIPs: []string{"2001:db8::100"},
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "postgres",
@@ -99,10 +98,9 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 	}
 
 	require.NoError(t, watcher.WaitForMatch(expectedGwSvc),
-		"global multigateway Service should be LoadBalancer with annotations")
+		"global multigateway Service should be ClusterIP with externalIPs and annotations")
 
-	// Step 3: Verify initial condition is AwaitingLoadBalancer (no ingress yet).
-	// The cluster status should have GatewayExternalReady=False/AwaitingLoadBalancer.
+	// Step 3: Verify initial condition is NoReadyGateways (endpoint assigned via externalIP, 0 ready gateways).
 	assert.Eventually(t, func() bool {
 		var mgc multigresv1alpha1.MultigresCluster
 		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), &mgc); err != nil {
@@ -111,40 +109,12 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 		cond := meta.FindStatusCondition(mgc.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
 		return cond != nil &&
 			cond.Status == metav1.ConditionFalse &&
-			cond.Reason == multigresv1alpha1.ReasonAwaitingLoadBalancer
-	}, testTimeout, pollInterval, "condition should be False/AwaitingLoadBalancer before LB ingress")
+			cond.Reason == multigresv1alpha1.ReasonNoReadyGateways &&
+			mgc.Status.Gateway != nil &&
+			mgc.Status.Gateway.ExternalEndpoint == "2001:db8::100"
+	}, testTimeout, pollInterval, "condition should be False/NoReadyGateways before gateways are ready")
 
-	// Step 4: Simulate cloud controller populating LB ingress on the Service.
-	var gwSvc corev1.Service
-	require.NoError(t, k8sClient.Get(t.Context(), client.ObjectKey{
-		Name:      clusterName + "-multigateway",
-		Namespace: testNamespace,
-	}, &gwSvc))
-
-	gwSvc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
-		{Hostname: "a1234.elb.us-east-1.amazonaws.com"},
-	}
-	require.NoError(t, k8sClient.Status().Update(t.Context(), &gwSvc),
-		"simulating cloud controller LB ingress population")
-
-	// Step 5: Verify condition transitions to NoReadyGateways (endpoint assigned, 0 ready gateways).
-	// No Cell CRs have gatewayReadyReplicas > 0 yet, so aggregate is 0.
-	assert.Eventually(t, func() bool {
-		var mgc multigresv1alpha1.MultigresCluster
-		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), &mgc); err != nil {
-			return false
-		}
-		cond := meta.FindStatusCondition(mgc.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
-		if cond == nil {
-			return false
-		}
-		endpointPopulated := mgc.Status.Gateway != nil && mgc.Status.Gateway.ExternalEndpoint != ""
-		return endpointPopulated &&
-			cond.Status == metav1.ConditionFalse &&
-			cond.Reason == multigresv1alpha1.ReasonNoReadyGateways
-	}, testTimeout, pollInterval, "condition should be False/NoReadyGateways after LB ingress assigned")
-
-	// Step 6: Simulate Cell reporting ready gateways by updating Cell status.
+	// Step 4: Simulate Cell reporting ready gateways by updating Cell status.
 	var cellList multigresv1alpha1.CellList
 	require.NoError(t, k8sClient.List(t.Context(), &cellList,
 		client.InNamespace(testNamespace),
@@ -159,7 +129,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 	require.NoError(t, k8sClient.Status().Update(t.Context(), cell),
 		"simulating Cell reporting ready gateway replicas")
 
-	// Step 7: Verify condition transitions to EndpointReady.
+	// Step 5: Verify condition transitions to EndpointReady.
 	assert.Eventually(t, func() bool {
 		var mgc multigresv1alpha1.MultigresCluster
 		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), &mgc); err != nil {
@@ -170,7 +140,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 			cond.Status == metav1.ConditionTrue &&
 			cond.Reason == multigresv1alpha1.ReasonEndpointReady &&
 			mgc.Status.Gateway != nil &&
-			mgc.Status.Gateway.ExternalEndpoint == "a1234.elb.us-east-1.amazonaws.com"
+			mgc.Status.Gateway.ExternalEndpoint == "2001:db8::100"
 	}, testTimeout, pollInterval, "condition should be True/EndpointReady with endpoint in status")
 
 	// Verify observedGeneration is set on the condition.
@@ -181,7 +151,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 	assert.Equal(t, mgcCheck.Generation, cond.ObservedGeneration,
 		"observedGeneration should match cluster generation")
 
-	// Step 8: Disable external gateway and verify reversion.
+	// Step 6: Disable external gateway and verify reversion.
 	require.NoError(t, k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), cluster))
 	cluster.Spec.ExternalGateway = &multigresv1alpha1.ExternalGatewayConfig{
 		Enabled: false,
@@ -189,7 +159,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 	require.NoError(t, k8sClient.Update(t.Context(), cluster),
 		"disabling external gateway")
 
-	// Step 9: Verify Service reverts to ClusterIP with no gateway annotations.
+	// Step 7: Verify Service reverts to ClusterIP with no gateway annotations.
 	expectedClusterIPSvc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            clusterName + "-multigateway",
@@ -217,7 +187,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 	require.NoError(t, watcher.WaitForMatch(expectedClusterIPSvc),
 		"global multigateway Service should revert to ClusterIP after disabling")
 
-	// Step 10: Verify gateway status is nil and condition is removed.
+	// Step 8: Verify gateway status is nil and condition is removed.
 	assert.Eventually(t, func() bool {
 		var mgc multigresv1alpha1.MultigresCluster
 		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), &mgc); err != nil {
@@ -251,14 +221,15 @@ func TestExternalGateway_NoReadyGatewaysTransition(t *testing.T) {
 				{Name: "zone-a", Zone: "us-east-1a"},
 			},
 			ExternalGateway: &multigresv1alpha1.ExternalGatewayConfig{
-				Enabled: true,
+				Enabled:     true,
+				ExternalIPs: []string{"2001:db8::101"},
 			},
 		},
 	}
 
 	require.NoError(t, k8sClient.Create(t.Context(), cluster))
 
-	// Step 2: Wait for initial AwaitingLoadBalancer condition (no LB ingress yet).
+	// Step 2: Wait for initial NoReadyGateways condition (external endpoint assigned, 0 ready gateways).
 	assert.Eventually(t, func() bool {
 		var mgc multigresv1alpha1.MultigresCluster
 		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), &mgc); err != nil {
@@ -267,40 +238,13 @@ func TestExternalGateway_NoReadyGatewaysTransition(t *testing.T) {
 		cond := meta.FindStatusCondition(mgc.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
 		return cond != nil &&
 			cond.Status == metav1.ConditionFalse &&
-			cond.Reason == multigresv1alpha1.ReasonAwaitingLoadBalancer
-	}, testTimeout, pollInterval, "condition should be False/AwaitingLoadBalancer initially")
-
-	// Step 3: Simulate cloud controller populating LB ingress.
-	var gwSvc corev1.Service
-	require.NoError(t, k8sClient.Get(t.Context(), client.ObjectKey{
-		Name:      clusterName + "-multigateway",
-		Namespace: testNamespace,
-	}, &gwSvc))
-
-	gwSvc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
-		{Hostname: "no-ready-gw.elb.us-east-1.amazonaws.com"},
-	}
-	require.NoError(t, k8sClient.Status().Update(t.Context(), &gwSvc))
-
-	// Step 4: Verify condition is False/NoReadyGateways — endpoint assigned but
-	// zero ready gateways across all Cells.
-	assert.Eventually(t, func() bool {
-		var mgc multigresv1alpha1.MultigresCluster
-		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), &mgc); err != nil {
-			return false
-		}
-		cond := meta.FindStatusCondition(mgc.Status.Conditions, multigresv1alpha1.ConditionGatewayExternalReady)
-		if cond == nil {
-			return false
-		}
-		return cond.Status == metav1.ConditionFalse &&
 			cond.Reason == multigresv1alpha1.ReasonNoReadyGateways &&
 			strings.Contains(cond.Message, "no multigateway pods are ready") &&
 			mgc.Status.Gateway != nil &&
-			mgc.Status.Gateway.ExternalEndpoint == "no-ready-gw.elb.us-east-1.amazonaws.com"
+			mgc.Status.Gateway.ExternalEndpoint == "2001:db8::101"
 	}, testTimeout, pollInterval, "condition should be False/NoReadyGateways with endpoint populated")
 
-	// Step 5: Simulate Cell reporting gatewayReadyReplicas > 0.
+	// Step 3: Simulate Cell reporting gatewayReadyReplicas > 0.
 	var cellList multigresv1alpha1.CellList
 	require.NoError(t, k8sClient.List(t.Context(), &cellList,
 		client.InNamespace(testNamespace),
@@ -314,7 +258,7 @@ func TestExternalGateway_NoReadyGatewaysTransition(t *testing.T) {
 	cell.Status.ObservedGeneration = cell.Generation
 	require.NoError(t, k8sClient.Status().Update(t.Context(), cell))
 
-	// Step 6: Verify condition transitions to True/EndpointReady.
+	// Step 4: Verify condition transitions to True/EndpointReady.
 	assert.Eventually(t, func() bool {
 		var mgc multigresv1alpha1.MultigresCluster
 		if err := k8sClient.Get(t.Context(), client.ObjectKeyFromObject(cluster), &mgc); err != nil {
@@ -326,7 +270,7 @@ func TestExternalGateway_NoReadyGatewaysTransition(t *testing.T) {
 			cond.Reason == multigresv1alpha1.ReasonEndpointReady &&
 			strings.Contains(cond.Message, "is serving traffic") &&
 			mgc.Status.Gateway != nil &&
-			mgc.Status.Gateway.ExternalEndpoint == "no-ready-gw.elb.us-east-1.amazonaws.com"
+			mgc.Status.Gateway.ExternalEndpoint == "2001:db8::101"
 	}, testTimeout, pollInterval, "condition should transition to True/EndpointReady after Cell reports ready gateways")
 
 	// Verify observedGeneration is set correctly.

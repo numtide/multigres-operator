@@ -404,8 +404,12 @@ func BuildMultiGatewayGlobalService(
 
 	svcType := corev1.ServiceTypeClusterIP
 	var annotations map[string]string
+	var externalIPs []string
 	if extGw != nil && extGw.Enabled {
-		svcType = corev1.ServiceTypeLoadBalancer
+		if len(extGw.ExternalIPs) > 0 {
+			externalIPs = make([]string, len(extGw.ExternalIPs))
+			copy(externalIPs, extGw.ExternalIPs)
+		}
 		if len(extGw.Annotations) > 0 {
 			annotations = make(map[string]string, len(extGw.Annotations))
 			for k, v := range extGw.Annotations {
@@ -422,8 +426,9 @@ func BuildMultiGatewayGlobalService(
 			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: selector,
-			Type:     svcType,
+			Selector:    selector,
+			Type:        svcType,
+			ExternalIPs: externalIPs,
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "postgres",

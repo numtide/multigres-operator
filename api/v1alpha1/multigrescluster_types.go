@@ -382,8 +382,15 @@ type ShardInlineSpec struct {
 
 // ExternalGatewayConfig controls external exposure of the global multigateway Service.
 type ExternalGatewayConfig struct {
-	// Enabled controls whether the global Service is LoadBalancer (true) or ClusterIP (false).
+	// Enabled controls whether external gateway exposure is enabled.
+	// The global Service remains ClusterIP; external reachability is provided
+	// via explicitly assigned external IPs and platform networking.
 	Enabled bool `json:"enabled"`
+
+	// ExternalIPs are externally routable addresses assigned to the global
+	// multigateway Service. These are surfaced via Service.spec.externalIPs.
+	// +optional
+	ExternalIPs []string `json:"externalIPs,omitempty"`
 
 	// Annotations are applied to the global multigateway Service metadata.
 	// The operator owns exactly these annotation keys via SSA field ownership.
