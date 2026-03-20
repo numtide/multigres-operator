@@ -136,6 +136,11 @@ type ShardSpec struct {
 	// +optional
 	InitdbArgs InitdbArgs `json:"initdbArgs,omitempty"`
 
+	// PostgresConfigRef references a ConfigMap containing custom postgresql.conf overrides.
+	// When set, the operator mounts it and passes --postgres-config-template to pgctld.
+	// +optional
+	PostgresConfigRef *PostgresConfigRef `json:"postgresConfigRef,omitempty"`
+
 	// Pools is the map of fully resolved data pool configurations.
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"

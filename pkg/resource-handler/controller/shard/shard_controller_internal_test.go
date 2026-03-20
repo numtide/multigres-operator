@@ -647,7 +647,7 @@ func TestReconcile_PostgresSecretError(t *testing.T) {
 		WithObjects(shard).
 		Build()
 
-	// Fail on the second Patch (first is pg_hba ConfigMap, second is postgres-password Secret).
+	// Fail on the second Patch (1st=pg_hba ConfigMap, 2nd=postgres-password Secret).
 	var patchCount atomic.Int32
 	fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
 		OnPatch: func(obj client.Object) error {

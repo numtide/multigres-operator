@@ -1537,7 +1537,117 @@ spec:
   * **2026-02-20:** Pool management migrated from StatefulSets to direct operator-managed Pods and PVCs. Added scale subresource to Shard CRD (`.spec.replicas` / `.status.readyReplicas`). Added `PodRoles`, `LastBackupTime`, `LastBackupType` to `ShardStatus`.
   * **2026-03-10:** Added `DurabilityPolicy` as a configurable string field at cluster level (`spec.durabilityPolicy`) and per-database override (`databases[].durabilityPolicy`). Propagated through TableGroup and Shard to the topology registration. Previously hardcoded to `"AT_LEAST_2"`. Also fixed `UpdateDatabaseFields()` to sync DurabilityPolicy on re-registration.
   * **2026-03-17:** Changed `WhenScaled` PVC deletion default from `Retain` to `Delete` — pgbackrest should be the source of truth for data recovery. Added DRAINED pod handling: operator keeps DRAINED pods alive for investigation and provisions stand-in replicas to maintain availability.
+  * **2026-03-20:** Added `PostgresConfigRef` type (ConfigMap reference) at the shard level for custom `postgresql.conf` parameters. Operator mounts the user-provided ConfigMap and passes `--postgres-config-template` to pgctld. See design rationale below.
   * **2026-03-20:** Added `ExternalGatewayConfig` (`spec.externalGateway`) for external exposure of the global multigateway Service via `externalIPs` and user-provided annotations. Added `GatewayStatus` (`status.gateway.externalEndpoint`) and `GatewayExternalReady` condition. Added `InitdbArgs` field to `ShardTemplateSpec`, `ShardInlineSpec`, and `ShardOverrides` for passing extra arguments to `initdb` during PostgreSQL data directory initialization. Added `IPAddress` and `InitdbArgs` validated types to `common_types.go`.
+
+## Design Rationale: PostgreSQL Configuration (`postgresConfigRef`)
+
+### The Problem
+
+Users need to tune PostgreSQL runtime parameters (`shared_buffers`, `max_connections`, `work_mem`, etc.) for their workloads. Upstream pgctld supports `--postgres-config-template`, which accepts a file path to a Go template that replaces the built-in `postgresql.conf` template. The operator needs to expose this capability through the CRD.
+
+### Approaches Considered
+
+#### Option A: Raw Template String (rejected)
+
+Expose the full Go template as a string field:
+
+```yaml
+spec:
+  postgresConfigTemplate: |
+    max_connections = {{.MaxConnections}}
+    shared_buffers = {{.SharedBuffers}}
+    work_mem = '256MB'
+```
+
+**Rejected because:**
+- Couples the CRD to pgctld's internal template variable names (`{{.MaxConnections}}`, `{{.SharedBuffers}}`). If upstream renames a field, user manifests break.
+- Users must understand Go template syntax and the `PostgresServerConfig` struct fields.
+- Template syntax errors cause pod crashes at startup with opaque errors.
+- Impossible to merge through the override chain -- you can't partially override a template string.
+- Any upstream change to the default template (new parameters, comment changes) requires users to update their custom templates or miss new defaults.
+
+#### Option B: Structured Fields with Typed Parameters (rejected)
+
+Define individual typed fields for each PostgreSQL parameter:
+
+```go
+type PostgresConfig struct {
+    SharedBuffers    string `json:"sharedBuffers,omitempty"`
+    MaxConnections   *int32 `json:"maxConnections,omitempty"`
+    WorkMem          string `json:"workMem,omitempty"`
+    // ... 50+ fields
+}
+```
+
+**Rejected because:**
+- PostgreSQL has hundreds of parameters. Maintaining a 1:1 mapping is a permanent maintenance burden.
+- Every new PostgreSQL version adds parameters -- the CRD would constantly need updating.
+- Users needing less common parameters (extension settings like `auto_explain.log_min_duration`) would be blocked until we add the field.
+- CRD schema bloat for parameters most users never touch.
+
+#### Option C: ConfigMap Reference (chosen)
+
+The user creates a ConfigMap with their postgresql.conf content and the CRD references it:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-postgres-config
+data:
+  custom.conf: |
+    shared_buffers = '8GB'
+    max_connections = 200
+    work_mem = '256MB'
+---
+spec:
+  postgresConfigRef:
+    name: my-postgres-config
+    key: custom.conf
+```
+
+**Chosen because:**
+- The operator does not need to carry a copy of upstream's default template -- eliminates drift risk entirely.
+- Works with any PostgreSQL parameter, including extension settings, without CRD changes.
+- Users have full control over the template content and can use Go template syntax if they want.
+- The ConfigMap is a standard Kubernetes resource that can be managed separately (GitOps, Helm, Kustomize).
+- Simple pointer override semantics through the override chain (last non-nil wins).
+- When not set, pgctld uses its built-in template -- zero operator involvement in the default path.
+
+#### Option D: Key-Value Map with Template Append (rejected)
+
+Expose a `map[string]string` of PostgreSQL parameter name to value. The operator embeds a copy of pgctld's default template and appends user parameters at the end:
+
+```yaml
+spec:
+  postgresConfig:
+    shared_buffers: "8GB"
+    max_connections: "200"
+```
+
+**Rejected because:**
+- Requires the operator to carry a copy of upstream's default Go template that can drift when upstream changes it.
+- Additive map merge through the override chain is more complex than atomic pointer replacement.
+- The operator must build and manage an operator-owned ConfigMap per shard.
+
+### Implementation
+
+When `postgresConfigRef` is set on a shard:
+
+1. The operator mounts the referenced ConfigMap as a volume using the `Items` field to project the user's key to the expected `postgresql.conf.tmpl` filename.
+2. pgctld reads it via `--postgres-config-template=/etc/pgctld/postgres/postgresql.conf.tmpl`.
+3. pgctld renders the template and writes the final `postgresql.conf`.
+
+When `postgresConfigRef` is nil, no volume is mounted and no `--postgres-config-template` flag is passed. pgctld uses its built-in template with auto-tuned values.
+
+### Scope
+
+`postgresConfigRef` is shard-level, not per-pool or per-cluster. All pods in a shard replicate from the same primary and must have compatible PostgreSQL settings. The ShardTemplate provides cluster-wide consistency, with per-shard overrides via the standard merge chain (last non-nil wins).
+
+### Upstream Dependency
+
+No upstream change is required -- the `--postgres-config-template` flag already exists in pgctld. The operator no longer carries a copy of upstream's template, eliminating drift risk.
 
 ## Drawbacks
 

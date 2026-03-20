@@ -5242,6 +5242,28 @@ spec:
                                       - message: Pools cannot be removed or renamed
                                           in this version (Append-Only)
                                         rule: oldSelf.all(k, k in self)
+                                    postgresConfigRef:
+                                      description: |-
+                                        PostgresConfigRef references a ConfigMap containing custom postgresql.conf overrides.
+                                        The ConfigMap must exist in the same namespace. When set, the operator mounts it
+                                        and passes --postgres-config-template to pgctld.
+                                      properties:
+                                        key:
+                                          description: Key is the key within the ConfigMap's
+                                            data that contains the postgresql.conf
+                                            content.
+                                          maxLength: 253
+                                          minLength: 1
+                                          type: string
+                                        name:
+                                          description: Name is the name of the ConfigMap.
+                                          maxLength: 253
+                                          minLength: 1
+                                          type: string
+                                      required:
+                                      - key
+                                      - name
+                                      type: object
                                   type: object
                                 shardTemplate:
                                   description: ShardTemplate refers to a ShardTemplate
@@ -7612,6 +7634,28 @@ spec:
                                       - message: Pools cannot be removed or renamed
                                           in this version (Append-Only)
                                         rule: oldSelf.all(k, k in self)
+                                    postgresConfigRef:
+                                      description: |-
+                                        PostgresConfigRef references a ConfigMap containing custom postgresql.conf overrides.
+                                        The ConfigMap must exist in the same namespace. When set, the operator mounts it
+                                        and passes --postgres-config-template to pgctld.
+                                      properties:
+                                        key:
+                                          description: Key is the key within the ConfigMap's
+                                            data that contains the postgresql.conf
+                                            content.
+                                          maxLength: 253
+                                          minLength: 1
+                                          type: string
+                                        name:
+                                          description: Name is the name of the ConfigMap.
+                                          maxLength: 253
+                                          minLength: 1
+                                          type: string
+                                      required:
+                                      - key
+                                      - name
+                                      type: object
                                     pvcDeletionPolicy:
                                       description: |-
                                         PVCDeletionPolicy controls PVC lifecycle for pools in this shard.
