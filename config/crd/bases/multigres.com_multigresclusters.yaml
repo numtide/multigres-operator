@@ -7681,6 +7681,34 @@ spec:
                   Additional user-defined policies may be supported in future upstream releases.
                   Defaults to "AT_LEAST_2" if not set.
                 type: string
+              externalGateway:
+                description: |-
+                  ExternalGateway controls external exposure of the global multigateway Service.
+                  When nil or enabled: false, the Service remains ClusterIP.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations are applied to the global multigateway Service metadata.
+                      The operator owns exactly these annotation keys via SSA field ownership.
+                    type: object
+                  enabled:
+                    description: |-
+                      Enabled controls whether external gateway exposure is enabled.
+                      The global Service remains ClusterIP; external reachability is provided
+                      via explicitly assigned external IPs and platform networking.
+                    type: boolean
+                  externalIPs:
+                    description: |-
+                      ExternalIPs are externally routable addresses assigned to the global
+                      multigateway Service. These are surfaced via Service.spec.externalIPs.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - enabled
+                type: object
               globalTopoServer:
                 description: GlobalTopoServer defines the cluster-wide global topology
                   server.
@@ -10331,6 +10359,19 @@ spec:
                   type: object
                 description: Databases status summary.
                 maxProperties: 50
+                type: object
+              gateway:
+                description: |-
+                  Gateway reports the external gateway state.
+                  Nil when spec.externalGateway is nil or disabled.
+                properties:
+                  externalEndpoint:
+                    description: |-
+                      ExternalEndpoint is the hostname or IP for the external gateway endpoint.
+                      Empty when no external endpoint has been provisioned.
+                    type: string
+                required:
+                - externalEndpoint
                 type: object
               message:
                 description: Message provides details about the current phase (e.g.

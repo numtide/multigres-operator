@@ -389,6 +389,7 @@ func BuildMultiAdminWebService(
 // regardless of which cells exist.
 func BuildMultiGatewayGlobalService(
 	cluster *multigresv1alpha1.MultigresCluster,
+	extGw *multigresv1alpha1.ExternalGatewayConfig,
 	scheme *runtime.Scheme,
 ) (*corev1.Service, error) {
 	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiGateway)
@@ -401,15 +402,33 @@ func BuildMultiGatewayGlobalService(
 		metadata.LabelAppInstance:  cluster.Name,
 	}
 
+	svcType := corev1.ServiceTypeClusterIP
+	var annotations map[string]string
+	var externalIPs []string
+	if extGw != nil && extGw.Enabled {
+		if len(extGw.ExternalIPs) > 0 {
+			externalIPs = make([]string, len(extGw.ExternalIPs))
+			copy(externalIPs, extGw.ExternalIPs)
+		}
+		if len(extGw.Annotations) > 0 {
+			annotations = make(map[string]string, len(extGw.Annotations))
+			for k, v := range extGw.Annotations {
+				annotations[k] = v
+			}
+		}
+	}
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-multigateway", cluster.Name),
-			Namespace: cluster.Namespace,
-			Labels:    labels,
+			Name:        fmt.Sprintf("%s-multigateway", cluster.Name),
+			Namespace:   cluster.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: selector,
-			Type:     corev1.ServiceTypeClusterIP,
+			Selector:    selector,
+			Type:        svcType,
+			ExternalIPs: externalIPs,
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "postgres",

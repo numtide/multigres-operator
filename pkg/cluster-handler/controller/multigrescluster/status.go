@@ -4,12 +4,73 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
+
+// extractExternalEndpoint resolves the externally reachable endpoint for the
+// global multigateway Service. It prefers explicitly assigned Service
+// ExternalIPs, then falls back to load balancer ingress (hostname over IP).
+// Returns empty string when no endpoint has been provisioned.
+func extractExternalEndpoint(svc *corev1.Service) string {
+	if svc == nil {
+		return ""
+	}
+	if len(svc.Spec.ExternalIPs) > 0 && svc.Spec.ExternalIPs[0] != "" {
+		return svc.Spec.ExternalIPs[0]
+	}
+	if len(svc.Status.LoadBalancer.Ingress) == 0 {
+		return ""
+	}
+	ing := svc.Status.LoadBalancer.Ingress[0]
+	if ing.Hostname != "" {
+		return ing.Hostname
+	}
+	return ing.IP
+}
+
+// computeGatewayCondition returns the GatewayExternalReady condition for the
+// given inputs, or nil when external gateway is disabled (condition should be
+// removed from the array).
+func computeGatewayCondition(
+	enabled bool,
+	externalEndpoint string,
+	aggregateReadyGateways int32,
+	clusterGeneration int64,
+) *metav1.Condition {
+	if !enabled {
+		return nil
+	}
+
+	cond := metav1.Condition{
+		Type:               multigresv1alpha1.ConditionGatewayExternalReady,
+		ObservedGeneration: clusterGeneration,
+		LastTransitionTime: metav1.Now(),
+	}
+
+	switch {
+	case externalEndpoint == "":
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = multigresv1alpha1.ReasonAwaitingLoadBalancer
+		cond.Message = "Waiting for load balancer ingress address"
+	case aggregateReadyGateways == 0:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = multigresv1alpha1.ReasonNoReadyGateways
+		cond.Message = "External endpoint assigned but no multigateway pods are ready"
+	default:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = multigresv1alpha1.ReasonEndpointReady
+		cond.Message = fmt.Sprintf("External endpoint %s is serving traffic", externalEndpoint)
+	}
+
+	return &cond
+}
 
 func (r *MultigresClusterReconciler) updateStatus(
 	ctx context.Context,
@@ -173,6 +234,56 @@ func (r *MultigresClusterReconciler) updateStatus(
 		Message:            "Aggregation of cell availability",
 		LastTransitionTime: metav1.Now(),
 	})
+
+	// Gateway external endpoint and condition
+	gwEnabled := cluster.Spec.ExternalGateway != nil && cluster.Spec.ExternalGateway.Enabled
+	var externalEndpoint string
+	if gwEnabled {
+		gwSvc := &corev1.Service{}
+		gwSvcKey := types.NamespacedName{
+			Name:      fmt.Sprintf("%s-multigateway", cluster.Name),
+			Namespace: cluster.Namespace,
+		}
+		if err := r.Get(ctx, gwSvcKey, gwSvc); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("failed to get global multigateway service for status: %w", err)
+			}
+			// NotFound is normal during first reconciliation; treat as empty endpoint.
+		} else {
+			externalEndpoint = extractExternalEndpoint(gwSvc)
+		}
+	}
+
+	var aggregateReadyGateways int32
+	for i := range cells.Items {
+		c := cells.Items[i]
+		if c.Status.ObservedGeneration == c.Generation {
+			aggregateReadyGateways += c.Status.GatewayReadyReplicas
+		}
+	}
+
+	if gwEnabled {
+		cluster.Status.Gateway = &multigresv1alpha1.GatewayStatus{
+			ExternalEndpoint: externalEndpoint,
+		}
+	} else {
+		cluster.Status.Gateway = nil
+	}
+
+	gwCond := computeGatewayCondition(
+		gwEnabled,
+		externalEndpoint,
+		aggregateReadyGateways,
+		cluster.Generation,
+	)
+	if gwCond != nil {
+		meta.SetStatusCondition(&cluster.Status.Conditions, *gwCond)
+	} else {
+		meta.RemoveStatusCondition(
+			&cluster.Status.Conditions,
+			multigresv1alpha1.ConditionGatewayExternalReady,
+		)
+	}
 
 	// 1. Construct the Patch Object
 	patchObj := &multigresv1alpha1.MultigresCluster{
