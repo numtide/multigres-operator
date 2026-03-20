@@ -132,6 +132,10 @@ type ShardSpec struct {
 	// MultiOrch is the fully resolved configuration for the shard orchestrator.
 	MultiOrch MultiOrchSpec `json:"multiorch"`
 
+	// InitdbArgs specifies extra arguments for initdb, propagated from the cluster spec.
+	// +optional
+	InitdbArgs InitdbArgs `json:"initdbArgs,omitempty"`
+
 	// Pools is the map of fully resolved data pool configurations.
 	// +kubebuilder:validation:MaxProperties=8
 	// +kubebuilder:validation:XValidation:rule="self.all(key, size(key) < 63)",message="pool names must be < 63 chars"

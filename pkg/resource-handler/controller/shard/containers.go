@@ -145,6 +145,12 @@ func buildPgctldContainer(
 		},
 		pgPasswordEnvVar(shard.Name),
 	}
+	if shard.Spec.InitdbArgs != "" {
+		env = append(env, corev1.EnvVar{
+			Name:  "POSTGRES_INITDB_ARGS",
+			Value: string(shard.Spec.InitdbArgs),
+		})
+	}
 	env = append(env, s3EnvVars(shard.Spec.Backup)...)
 	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
 		env = append(env, otelVars...)

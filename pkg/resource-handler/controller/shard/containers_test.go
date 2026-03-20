@@ -595,6 +595,33 @@ func TestBuildPgctldContainer(t *testing.T) {
 		assertNotContainsEnvVar(t, c.Env, "AWS_REGION")
 		assertNotContainsEnvVar(t, c.Env, "AWS_ACCESS_KEY_ID")
 	})
+
+	t.Run("with initdbArgs", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				InitdbArgs: "--locale-provider=icu --icu-locale=en_US.UTF-8",
+			},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertContainsEnvVar(t, c.Env, "POSTGRES_INITDB_ARGS")
+		for _, e := range c.Env {
+			if e.Name == "POSTGRES_INITDB_ARGS" {
+				if e.Value != "--locale-provider=icu --icu-locale=en_US.UTF-8" {
+					t.Errorf("POSTGRES_INITDB_ARGS = %q, want %q",
+						e.Value, "--locale-provider=icu --icu-locale=en_US.UTF-8")
+				}
+				return
+			}
+		}
+	})
+
+	t.Run("without initdbArgs", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{},
+		}
+		c := buildPgctldContainer(shard, multigresv1alpha1.PoolSpec{})
+		assertNotContainsEnvVar(t, c.Env, "POSTGRES_INITDB_ARGS")
+	})
 }
 
 func TestS3EnvVars(t *testing.T) {
