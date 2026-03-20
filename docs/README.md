@@ -9,6 +9,8 @@
 | [Observability](observability.md) | Metrics, alerts, dashboards, distributed tracing, structured logging |
 | [Durability Policy](durability-policy.md) | Durability policies, cross-AZ quorum, per-database overrides |
 | [Storage Management](storage.md) | PVC deletion policies and volume expansion |
+| [External Gateway](external-gateway.md) | External multigateway exposure, DNS wiring, GatewayExternalReady condition |
+| [PostgreSQL Initialization](postgresql-initialization.md) | Custom initdb arguments (locale, encoding, WAL segment size) |
 | [Configuration Reference](configuration.md) | Operator flags, environment variables, and logging |
 | [Operator Capability Levels](operator-capability-levels.md) | Assessment against Operator Framework capability model |
 | [Sample Configurations](../config/samples/README.md) | YAML examples with override hierarchy walkthrough |

@@ -481,6 +481,19 @@ spec:
   # Additional user-defined policies may be supported in future upstream releases.
   # durabilityPolicy: "AT_LEAST_2"
 
+  # ----------------------------------------------------------------
+  # External Gateway
+  # ----------------------------------------------------------------
+  # Controls external exposure of the global multigateway Service.
+  # When nil or enabled: false, the Service remains ClusterIP-only.
+  # externalGateway:
+  #   enabled: true
+  #   externalIPs:
+  #     - "203.0.113.10"
+  #     - "203.0.113.11"
+  #   annotations:
+  #     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+
 status:
   observedGeneration: 1
   phase: "Healthy"  # Initializing, Progressing, Healthy, Degraded, Unknown
@@ -504,6 +517,9 @@ status:
     production_db:
       readyShards: 3
       totalShards: 3
+  # External gateway status (present when spec.externalGateway is set and enabled)
+  # gateway:
+  #   externalEndpoint: "203.0.113.10"
   # Tracks which templates were resolved (for template-change enqueuing)
   resolvedTemplates:
     coreTemplates: ["cluster-wide-core"]
@@ -632,6 +648,7 @@ spec:
 * **Pool Placement:** `pools` uses a `cells` list. This list typically contains only a few cells rather than using all available cells. Multiple cells can be listed to apply the same configuration across multiple zones and regions.
 * **PVC management:** Pool pods are managed directly by the operator (no StatefulSets). PVC lifecycle is controlled by `PVCDeletionPolicy` at the pool, shard, tablegroup, or cluster level.
 * **PVC volume expansion:** Increasing `storage.size` on a pool triggers in-place PVC expansion. The `StorageClass` must have `allowVolumeExpansion: true`. Shrinks are rejected at admission. See [pod-management-architecture.md](../pod-management-architecture.md#pvc-volume-expansion) for details.
+* **InitdbArgs:** An optional `initdbArgs` field passes extra arguments to `initdb` during PostgreSQL data directory initialization (e.g., `--locale-provider=icu --icu-locale=en_US.UTF-8`). This value is resolved through the same 4-level override chain and propagated as the `POSTGRES_INITDB_ARGS` environment variable on the pgctld container. It only takes effect when a pod initializes a new data directory.
 
 ```yaml
 apiVersion: multigres.com/v1alpha1
@@ -641,6 +658,11 @@ metadata:
   namespace: example
 spec:
   # Template strictly defines only Shard-scoped components.
+
+  # InitdbArgs specifies extra arguments passed to initdb during PostgreSQL
+  # data directory initialization. Only takes effect when a pod initializes
+  # a new data directory. Applied to all pool pods in shards using this template.
+  # initdbArgs: "--locale-provider=icu --icu-locale=en_US.UTF-8"
 
   # MultiOrch is a shard-level component.
   # The Operator will deploy one instance of this Deployment into EVERY Cell
@@ -1130,6 +1152,10 @@ spec:
         cpu: "200m"
         memory: "256Mi"
 
+  # Extra initdb arguments, resolved from inline/template/override chain.
+  # Propagated as POSTGRES_INITDB_ARGS env var on pgctld containers.
+  # initdbArgs: "--locale-provider=icu --icu-locale=en_US.UTF-8"
+
   pools:
     main-app:
       cells:
@@ -1511,6 +1537,7 @@ spec:
   * **2026-02-20:** Pool management migrated from StatefulSets to direct operator-managed Pods and PVCs. Added scale subresource to Shard CRD (`.spec.replicas` / `.status.readyReplicas`). Added `PodRoles`, `LastBackupTime`, `LastBackupType` to `ShardStatus`.
   * **2026-03-10:** Added `DurabilityPolicy` as a configurable string field at cluster level (`spec.durabilityPolicy`) and per-database override (`databases[].durabilityPolicy`). Propagated through TableGroup and Shard to the topology registration. Previously hardcoded to `"AT_LEAST_2"`. Also fixed `UpdateDatabaseFields()` to sync DurabilityPolicy on re-registration.
   * **2026-03-17:** Changed `WhenScaled` PVC deletion default from `Retain` to `Delete` — pgbackrest should be the source of truth for data recovery. Added DRAINED pod handling: operator keeps DRAINED pods alive for investigation and provisions stand-in replicas to maintain availability.
+  * **2026-03-20:** Added `ExternalGatewayConfig` (`spec.externalGateway`) for external exposure of the global multigateway Service via `externalIPs` and user-provided annotations. Added `GatewayStatus` (`status.gateway.externalEndpoint`) and `GatewayExternalReady` condition. Added `InitdbArgs` field to `ShardTemplateSpec`, `ShardInlineSpec`, and `ShardOverrides` for passing extra arguments to `initdb` during PostgreSQL data directory initialization. Added `IPAddress` and `InitdbArgs` validated types to `common_types.go`.
 
 ## Drawbacks
 

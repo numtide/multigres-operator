@@ -19,7 +19,7 @@ On every `CREATE` and `UPDATE` of a `MultigresCluster`, the webhook materialises
 | `spec.topologyPruning.enabled` | `true` |
 | `spec.durabilityPolicy` | `AT_LEAST_2` |
 | `spec.logLevels.*` | `info` (all 5 components) |
-| `spec.pvcDeletionPolicy` | `Retain / Retain` |
+| `spec.pvcDeletionPolicy` | `Retain / Delete` |
 | `spec.backup` | Filesystem, `/backups`, `10Gi` |
 | `spec.databases` (system catalog) | `postgres` database, `default` table group, `0-inf` shard |
 | `spec.globalTopoServer` | Managed etcd (3 replicas, 1Gi storage) |
@@ -197,6 +197,7 @@ spec:
         - /spec/multiAdmin
         - /spec/multiAdminWeb
         - /spec/templateDefaults
+        - /spec/externalGateway
 ```
 
 Or use the broader `managedFieldsManagers` approach:

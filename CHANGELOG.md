@@ -4,6 +4,46 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.8.0] — 2026-03-20
+
+**Previous release:** v0.7.1 (2026-03-19)
+
+Adds external gateway exposure for DNS wiring and PostgreSQL initdb argument customization. The operator can now expose the global multigateway Service via `spec.externalIPs` with a `GatewayExternalReady` status condition, and users can pass custom initdb arguments (e.g., ICU locale settings) to PostgreSQL data directory initialization at the shard level.
+
+**7 commits, 31 files changed, ~1556 insertions.**
+
+### Features
+
+- **External gateway endpoint:** New `spec.externalGateway` field on MultigresCluster exposes the global multigateway Service via `ClusterIP` + `spec.externalIPs` for external access without requiring LoadBalancer Services. Includes user-defined annotations for cloud LB controller integration (e.g., AWS ALB scheme). Publishes the resolved endpoint to `status.gateway.externalEndpoint` and manages a `GatewayExternalReady` condition with deterministic transitions: `AwaitingEndpoint` → `NoReadyGateways` → `EndpointReady`. Condition is removed when disabled. (Contributed by @Verolop)
+- **PostgreSQL initdb arguments:** New `initdbArgs` field on `ShardTemplateSpec`, `ShardOverrides`, and `ShardInlineSpec` passes extra arguments to `initdb` during PostgreSQL data directory initialization (e.g., `--locale-provider=icu --icu-locale=en_US.UTF-8`). Injected as the `POSTGRES_INITDB_ARGS` environment variable on the pgctld container. Defined at the shard level because all pods in a shard must initialize with compatible settings for replication. Override chain: template → overrides → inline.
+
+### Improvements
+
+- **ExternalIP validation:** New `IPAddress` named type in `common_types.go` with kubebuilder `Pattern` validation for IPv4/IPv6 addresses. Applied per-item via schema validation (zero CEL cost). ExternalIPs also validated server-side via `net.ParseIP` in the admission webhook.
+- **Annotation key guardrail:** CEL `XValidation` rule on `ExternalGatewayConfig` rejects annotation keys under the `multigres.com/` prefix, preventing conflicts with operator-managed metadata.
+- **Webhook warning for missing externalIPs:** The admission webhook emits a warning when `externalGateway.enabled: true` is set without `externalIPs`, informing the user that endpoint resolution depends on an external load balancer controller.
+- **Stale cell generation filtering:** Gateway readiness aggregation ignores Cell CRs whose `ObservedGeneration` lags behind `Generation`, preventing false-ready outcomes during rolling updates.
+
+### Bug Fixes
+
+- **Defaulter webhook initdbArgs propagation:** The defaulting webhook discarded the resolved `initdbArgs` value (assigned to `_`), silently stripping the field on admission. Fixed by capturing and including `InitdbArgs` in the rebuilt `ShardInlineSpec`.
+
+### Dependencies
+
+- **Observer gRPC CVE fix:** Bumped `google.golang.org/grpc` in `tools/observer/go.mod` from v1.79.2 to v1.79.3 to resolve GHSA-p77j-4mvh-x3m3 (critical). The root module was already fixed in v0.7.1.
+
+### Documentation
+
+- **External gateway guide:** New `docs/external-gateway.md` covering configuration, status conditions, DNS automation, and cloud deployment patterns.
+- **PostgreSQL initialization guide:** New `docs/postgresql-initialization.md` covering initdb arguments, override chain, use cases (ICU locale, encoding, WAL segment size), and caveats.
+
+### Observer
+
+- **DRAINED pod detection in replication checks:** Observer now classifies DRAINED pods separately from replicas in `checkShardReplication` and `checkReplication`, emitting a `SeverityWarn` finding when DRAINED pods are detected. DRAINED pods are excluded from the expected replica count for primary replication probes.
+- **New exerciser fixtures:** Added `pvc-default-policy` and `initdb-args` fixtures for testing default PVC policy propagation and initdb argument injection.
+
+---
+
 ## [v0.7.1] — 2026-03-19
 
 **Previous release:** v0.7.0 (2026-03-18)
