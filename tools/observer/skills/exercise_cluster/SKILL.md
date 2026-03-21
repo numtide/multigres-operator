@@ -163,6 +163,7 @@ Default to **core** when unspecified.
 | `external-etcd-mixed` | Yes (prereqs) | — | External topology server |
 | `s3-backup` | Needs real S3 | — | Backup with S3 |
 | `multi-cell-quorum` | Yes (heavy) | — | Multi-cell, quorum |
+| `postgres-config-ref` | Yes (prereqs) | — | ConfigMap-based postgresql.conf, rolling update on content change |
 | `external-adminweb` | Yes | — | External admin web IPs, annotations, status |
 | `multi-cell-topology` | `kind-deploy-topology` | — | Zone-aware scheduling |
 | `observability-custom` | Yes (prereqs) | — | Custom observability |

@@ -64,6 +64,17 @@ File: `scenarios/template.md`
 | update-template | standard | no | templated-full |
 | template-affinity-propagation | standard | no | templated-full |
 
+## Postgres Config Scenarios
+
+File: `scenarios/postgres-config.md`
+
+| Scenario | Tier | Fast-path | Fixtures |
+|---|---|---|---|
+| verify-postgres-config-ref | quick | yes | postgres-config-ref |
+| update-postgres-config-content | standard | no | postgres-config-ref |
+| remove-postgres-config-ref | standard | no | postgres-config-ref |
+| verify-postgres-config-settings | quick | yes | postgres-config-ref |
+
 ## Concurrent Mutation Scenarios
 
 File: `scenarios/concurrent.md` — Full mode only
