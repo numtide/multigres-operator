@@ -132,7 +132,7 @@ For a complete list of PostgreSQL parameters, see the [PostgreSQL documentation]
 
 ## Rolling Updates
 
-Changing the referenced ConfigMap's content triggers a rolling update of all pool pods in the shard (when the ConfigMap change causes the pod spec hash to change). The operator recreates pods one at a time through the drain state machine.
+Changing the referenced ConfigMap's content triggers a rolling update of all pool pods in the shard. The operator computes a SHA-256 hash of the referenced key's data during every reconciliation and stores it as a pod annotation. When the hash changes, the pod's spec-hash changes, and the operator recreates pods one at a time through the drain state machine.
 
 ## Validation
 

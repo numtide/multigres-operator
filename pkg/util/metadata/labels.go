@@ -94,6 +94,11 @@ const (
 	// AnnotationSpecHash stores the hash of operator-managed pod spec fields.
 	AnnotationSpecHash = "multigres.com/spec-hash"
 
+	// AnnotationPostgresConfigHash stores the SHA-256 hash of the referenced
+	// postgres config ConfigMap data. Changes to the ConfigMap content produce
+	// a different hash, which changes the spec-hash and triggers a rolling update.
+	AnnotationPostgresConfigHash = "multigres.com/postgres-config-hash"
+
 	// AnnotationDrainState is used to coordinate graceful scale down between
 	// the resource-handler (Kubernetes) and data-handler (etcd).
 	AnnotationDrainState = "drain.multigres.com/state"

@@ -74,14 +74,19 @@ func BuildPoolPod(
 
 	serviceID := BuildPoolServiceID(podName)
 
+	annotations := map[string]string{
+		metadata.AnnotationSpecHash: "", // placeholder, computed below
+	}
+	if h := shard.Annotations[metadata.AnnotationPostgresConfigHash]; h != "" {
+		annotations[metadata.AnnotationPostgresConfigHash] = h
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: shard.Namespace,
-			Labels:    labels,
-			Annotations: map[string]string{
-				metadata.AnnotationSpecHash: "", // placeholder, computed below
-			},
+			Name:        podName,
+			Namespace:   shard.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
 			SecurityContext: &corev1.PodSecurityContext{
@@ -182,6 +187,10 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 	if spec.ServiceAccountName != "" {
 		_, _ = fmt.Fprintf(h, "sa=%s", spec.ServiceAccountName)
+	}
+
+	if v := pod.Annotations[metadata.AnnotationPostgresConfigHash]; v != "" {
+		_, _ = fmt.Fprintf(h, "pgcfg=%s", v)
 	}
 
 	return hex.EncodeToString(h.Sum(nil))
