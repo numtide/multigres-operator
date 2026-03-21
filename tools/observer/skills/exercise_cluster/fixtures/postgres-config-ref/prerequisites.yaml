@@ -5,9 +5,10 @@ metadata:
   namespace: default
 data:
   postgresql.conf: |
-    # Custom PostgreSQL configuration for testing
-    # This is a Go template file — pgctld renders {{.Variable}} placeholders.
-    # Plain settings (no {{...}}) are passed through as-is.
+    # Custom PostgreSQL configuration for exerciser testing.
+    # pgctld renders this as a Go template — use placeholders like
+    # the upstream template.cnf (e.g. shared_buffers = {{.SharedBuffers}}).
+    # Plain values without template directives are passed through as-is.
 
     # Override shared_buffers from the default auto-tuned value
     shared_buffers = '256MB'

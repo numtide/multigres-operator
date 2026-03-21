@@ -116,7 +116,9 @@ Different shards can have different configurations since they are independent Po
 
 ## ConfigMap Contents
 
-The ConfigMap value should be a valid postgresql.conf Go template (the same format pgctld uses). For most use cases, appending your overrides after the default template content works because PostgreSQL uses last-value-wins semantics.
+The ConfigMap value is processed by pgctld as a Go template via `text/template`. For most use cases, plain postgresql.conf settings (without template directives) work because pgctld passes them through as-is. You can also use pgctld's template variables (e.g., `{{.SharedBuffers}}`) if you want pgctld to fill in auto-tuned values for specific parameters.
+
+> **Warning:** Go template delimiters `{{...}}` are parsed everywhere in the file, including inside comments. Avoid writing `{{...}}` in comments or documentation lines within the ConfigMap -- use plain text to describe template usage instead. Invalid template syntax causes pgctld to silently fall back to initdb defaults.
 
 ### Common Parameters
 
