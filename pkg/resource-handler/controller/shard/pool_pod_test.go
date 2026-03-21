@@ -526,3 +526,68 @@ func TestBuildPoolPodName_ShortName(t *testing.T) {
 		t.Errorf("pod name %q should contain 'pool'", name)
 	}
 }
+
+func TestComputeSpecHash_ChangesOnPostgresConfigHash(t *testing.T) {
+	shard1 := newTestShard()
+	pod1, _ := BuildPoolPod(shard1, "main", "z1", newTestPoolSpec(), 0, testScheme())
+
+	shard2 := newTestShard()
+	shard2.Annotations = map[string]string{
+		metadata.AnnotationPostgresConfigHash: "abc123",
+	}
+	pod2, _ := BuildPoolPod(shard2, "main", "z1", newTestPoolSpec(), 0, testScheme())
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when postgres config hash annotation is added")
+	}
+}
+
+func TestComputeSpecHash_ChangesOnDifferentPostgresConfigHash(t *testing.T) {
+	shard1 := newTestShard()
+	shard1.Annotations = map[string]string{
+		metadata.AnnotationPostgresConfigHash: "hash-v1",
+	}
+	pod1, _ := BuildPoolPod(shard1, "main", "z1", newTestPoolSpec(), 0, testScheme())
+
+	shard2 := newTestShard()
+	shard2.Annotations = map[string]string{
+		metadata.AnnotationPostgresConfigHash: "hash-v2",
+	}
+	pod2, _ := BuildPoolPod(shard2, "main", "z1", newTestPoolSpec(), 0, testScheme())
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when postgres config hash value changes")
+	}
+}
+
+func TestBuildPoolPod_PropagatesPostgresConfigHash(t *testing.T) {
+	shard := newTestShard()
+	shard.Annotations = map[string]string{
+		metadata.AnnotationPostgresConfigHash: "deadbeef",
+	}
+
+	pod, err := BuildPoolPod(shard, "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := pod.Annotations[metadata.AnnotationPostgresConfigHash]
+	if got != "deadbeef" {
+		t.Errorf("postgres config hash annotation = %q, want %q", got, "deadbeef")
+	}
+}
+
+func TestBuildPoolPod_OmitsPostgresConfigHashWhenAbsent(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, ok := pod.Annotations[metadata.AnnotationPostgresConfigHash]; ok {
+		t.Error("postgres config hash annotation should not be present when shard has none")
+	}
+}

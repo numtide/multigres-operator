@@ -2,6 +2,8 @@ package shard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"time"
@@ -19,7 +21,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/monitoring"
@@ -223,6 +227,29 @@ func (r *ShardReconciler) Reconcile(
 			}
 		}
 		childSpan.End()
+	}
+
+	// Compute postgres config hash for rolling update detection.
+	// The hash is set as an in-memory annotation on the shard so that
+	// BuildPoolPod can propagate it to each pod without extra parameters.
+	if shard.Spec.PostgresConfigRef != nil {
+		configHash, err := r.computePostgresConfigHash(ctx, shard)
+		if err != nil {
+			logger.Error(err, "Failed to compute postgres config hash")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"ConfigError",
+				"Failed to read postgres config ConfigMap %q: %v",
+				shard.Spec.PostgresConfigRef.Name,
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		if shard.Annotations == nil {
+			shard.Annotations = make(map[string]string)
+		}
+		shard.Annotations[metadata.AnnotationPostgresConfigHash] = configHash
 	}
 
 	{
@@ -511,6 +538,59 @@ func (r *ShardReconciler) SetupWithManager(mgr ctrl.Manager, opts ...controller.
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueFromPostgresConfigMap),
+		).
 		WithOptions(controllerOpts).
 		Complete(r)
+}
+
+// computePostgresConfigHash fetches the referenced ConfigMap and returns a
+// SHA-256 hex digest of the referenced key's data. This hash is placed on each
+// pod as an annotation so that changes to the ConfigMap content produce a
+// different spec-hash, triggering the existing rolling update mechanism.
+func (r *ShardReconciler) computePostgresConfigHash(
+	ctx context.Context,
+	shard *multigresv1alpha1.Shard,
+) (string, error) {
+	ref := shard.Spec.PostgresConfigRef
+
+	cm := &corev1.ConfigMap{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: shard.Namespace,
+		Name:      ref.Name,
+	}, cm); err != nil {
+		return "", fmt.Errorf("failed to get ConfigMap %q: %w", ref.Name, err)
+	}
+
+	data, ok := cm.Data[ref.Key]
+	if !ok {
+		return "", fmt.Errorf("key %q not found in ConfigMap %q", ref.Key, ref.Name)
+	}
+
+	sum := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// enqueueFromPostgresConfigMap returns reconcile requests for Shards that
+// reference the changed ConfigMap via spec.postgresConfigRef.name.
+func (r *ShardReconciler) enqueueFromPostgresConfigMap(
+	ctx context.Context,
+	o client.Object,
+) []reconcile.Request {
+	shards := &multigresv1alpha1.ShardList{}
+	if err := r.List(ctx, shards, client.InNamespace(o.GetNamespace())); err != nil {
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, s := range shards.Items {
+		if s.Spec.PostgresConfigRef != nil && s.Spec.PostgresConfigRef.Name == o.GetName() {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(&s),
+			})
+		}
+	}
+	return requests
 }

@@ -5186,3 +5186,198 @@ func TestIsPoolerPruningEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestEnqueueFromPostgresConfigMap(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shardWithRef := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shard-with-ref",
+			Namespace: "default",
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			PostgresConfigRef: &multigresv1alpha1.PostgresConfigRef{
+				Name: "my-pg-config",
+				Key:  "postgresql.conf",
+			},
+		},
+	}
+
+	shardNoRef := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shard-no-ref",
+			Namespace: "default",
+		},
+		Spec: multigresv1alpha1.ShardSpec{},
+	}
+
+	shardDifferentRef := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shard-different-ref",
+			Namespace: "default",
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			PostgresConfigRef: &multigresv1alpha1.PostgresConfigRef{
+				Name: "other-config",
+				Key:  "postgresql.conf",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardWithRef, shardNoRef, shardDifferentRef).
+		Build()
+
+	reconciler := &ShardReconciler{
+		Client:   fakeClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-pg-config",
+			Namespace: "default",
+		},
+	}
+
+	requests := reconciler.enqueueFromPostgresConfigMap(context.Background(), cm)
+
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	if requests[0].Name != "shard-with-ref" {
+		t.Errorf("enqueued shard = %q, want %q", requests[0].Name, "shard-with-ref")
+	}
+}
+
+func TestComputePostgresConfigHash(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	t.Run("returns hash of referenced key", func(t *testing.T) {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg-config", Namespace: "default"},
+			Data:       map[string]string{"custom.conf": "shared_buffers = '8GB'"},
+		}
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				PostgresConfigRef: &multigresv1alpha1.PostgresConfigRef{
+					Name: "pg-config",
+					Key:  "custom.conf",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+		r := &ShardReconciler{Client: c}
+
+		hash, err := r.computePostgresConfigHash(context.Background(), shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if hash == "" {
+			t.Error("hash should not be empty")
+		}
+		if len(hash) != 64 {
+			t.Errorf("hash length = %d, want 64 (SHA-256 hex)", len(hash))
+		}
+
+		// Same content should produce same hash
+		hash2, _ := r.computePostgresConfigHash(context.Background(), shard)
+		if hash != hash2 {
+			t.Errorf("hash not deterministic: %q != %q", hash, hash2)
+		}
+	})
+
+	t.Run("different content produces different hash", func(t *testing.T) {
+		cm1 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg-v1", Namespace: "default"},
+			Data:       map[string]string{"pg.conf": "shared_buffers = '4GB'"},
+		}
+		cm2 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg-v2", Namespace: "default"},
+			Data:       map[string]string{"pg.conf": "shared_buffers = '8GB'"},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm1, cm2).Build()
+		r := &ShardReconciler{Client: c}
+
+		shard1 := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				PostgresConfigRef: &multigresv1alpha1.PostgresConfigRef{
+					Name: "pg-v1",
+					Key:  "pg.conf",
+				},
+			},
+		}
+		shard2 := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "s2", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				PostgresConfigRef: &multigresv1alpha1.PostgresConfigRef{
+					Name: "pg-v2",
+					Key:  "pg.conf",
+				},
+			},
+		}
+
+		h1, _ := r.computePostgresConfigHash(context.Background(), shard1)
+		h2, _ := r.computePostgresConfigHash(context.Background(), shard2)
+		if h1 == h2 {
+			t.Error("different ConfigMap content should produce different hashes")
+		}
+	})
+
+	t.Run("missing key returns error", func(t *testing.T) {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "pg-config", Namespace: "default"},
+			Data:       map[string]string{"other.conf": "value"},
+		}
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				PostgresConfigRef: &multigresv1alpha1.PostgresConfigRef{
+					Name: "pg-config",
+					Key:  "missing-key",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+		r := &ShardReconciler{Client: c}
+
+		_, err := r.computePostgresConfigHash(context.Background(), shard)
+		if err == nil {
+			t.Error("expected error for missing key")
+		}
+		if !strings.Contains(err.Error(), "missing-key") {
+			t.Errorf("error should mention missing key, got: %v", err)
+		}
+	})
+
+	t.Run("missing ConfigMap returns error", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				PostgresConfigRef: &multigresv1alpha1.PostgresConfigRef{
+					Name: "nonexistent",
+					Key:  "pg.conf",
+				},
+			},
+		}
+
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		r := &ShardReconciler{Client: c}
+
+		_, err := r.computePostgresConfigHash(context.Background(), shard)
+		if err == nil {
+			t.Error("expected error for missing ConfigMap")
+		}
+	})
+}
