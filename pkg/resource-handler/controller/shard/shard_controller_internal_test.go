@@ -4549,6 +4549,24 @@ func TestIsDrainStale(t *testing.T) {
 		}
 	})
 
+	t.Run("MissingLabels", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		// Clear labels to hit `if poolName == "" || cellName == ""`
+		pod.Labels = nil
+		if r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (missing labels)")
+		}
+	})
+
+	t.Run("MissingPoolInSpec", func(t *testing.T) {
+		pod := matchingPod(4, metadata.DrainStateRequested)
+		// Change pool to one that doesn't exist in spec
+		pod.Labels[metadata.LabelMultigresPool] = "nonexistent"
+		if r.isDrainStale(shard, pod, metadata.DrainStateRequested) {
+			t.Error("expected drain NOT to be stale (pool not in spec)")
+		}
+	})
+
 	t.Run("DoesNotCancelAcknowledgedDrain", func(t *testing.T) {
 		pod := matchingPod(4, metadata.DrainStateAcknowledged)
 		if r.isDrainStale(shard, pod, metadata.DrainStateAcknowledged) {
@@ -5378,6 +5396,127 @@ func TestComputePostgresConfigHash(t *testing.T) {
 		_, err := r.computePostgresConfigHash(context.Background(), shard)
 		if err == nil {
 			t.Error("expected error for missing ConfigMap")
+		}
+	})
+}
+
+// TestReconcilePoolPods_AdditionalErrorPaths covers the error return paths of reconcilePoolPods and its helpers
+func TestReconcilePoolPods_AdditionalErrorPaths(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "db",
+			TableGroupName: "tg",
+			ShardName:      "s1",
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"main": {
+					ReplicasPerCell: ptr.To(int32(1)),
+				},
+			},
+		},
+	}
+	poolSpec := shard.Spec.Pools["main"]
+
+	t.Run("syncDrainedLabels error", func(t *testing.T) {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      BuildPoolPodName(shard, "main", "z1", 0),
+				Namespace: "default",
+				Labels: map[string]string{
+					metadata.LabelMultigresCluster:    "test-cluster",
+					metadata.LabelMultigresDatabase:   "db",
+					metadata.LabelMultigresTableGroup: "tg",
+					metadata.LabelMultigresShard:      "test-shard",
+					metadata.LabelMultigresPool:       "main",
+					metadata.LabelMultigresCell:       "z1",
+					metadata.LabelPodRole:             "DRAINED",
+				},
+			},
+		}
+
+		baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod).Build()
+		fails := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnPatch: testutil.FailOnObjectName(pod.Name, testutil.ErrPermissionError),
+		})
+
+		r := &ShardReconciler{Client: fails, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		// Temporarily set the topology returned role to NOT DRAINED, which causes syncDrainedLabels to try and strip the label
+		// which triggers the patch failure
+		// Wait, the test uses resolvePodRole, which defaults to whatever unless mocked.
+		// Since topo is not mocked here, resolvePodRole returns "" -> not DRAINED -> tries to patch remove DRAINED -> fails
+		existingPods := map[string]*corev1.Pod{
+			pod.Name: pod,
+		}
+		err := r.syncDrainedLabels(context.Background(), shard, existingPods)
+		if err == nil || !strings.Contains(err.Error(), "failed to remove DRAINED label") {
+			t.Fatalf("expected syncDrainedLabels error, got %v", err)
+		}
+	})
+
+	t.Run("CreatePVC error", func(t *testing.T) {
+		baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard).Build()
+		pvcName := BuildPoolDataPVCName(shard, "main", "z1", 0)
+		fails := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnCreate: testutil.FailOnObjectName(pvcName, testutil.ErrPermissionError),
+		})
+
+		r := &ShardReconciler{Client: fails, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		err := r.reconcilePoolPods(context.Background(), shard, "main", "z1", poolSpec)
+		if err == nil || !strings.Contains(err.Error(), "failed to create PVC") {
+			t.Fatalf("expected PVC creation error, got %v", err)
+		}
+	})
+
+	t.Run("deletePodPVC network error", func(t *testing.T) {
+		// Mock a DRAINED pod so deletePodPVC is called during cleanupDrainedPod
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      BuildPoolPodName(shard, "main", "z1", 0),
+				Namespace: "default",
+				Labels: map[string]string{
+					metadata.LabelMultigresCluster:    "test-cluster",
+					metadata.LabelMultigresDatabase:   "db",
+					metadata.LabelMultigresTableGroup: "tg",
+					metadata.LabelMultigresShard:      "test-shard",
+					metadata.LabelMultigresPool:       "main",
+					metadata.LabelMultigresCell:       "z1",
+					metadata.LabelPodRole:             "DRAINED",
+				},
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateReadyForDeletion,
+				},
+			},
+		}
+
+		pvcName := BuildPoolDataPVCName(shard, "main", "z1", 0)
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pvcName,
+				Namespace: "default",
+			},
+		}
+
+		baseClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod, pvc).
+			Build()
+		fails := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnDelete: testutil.FailOnObjectName(pvcName, testutil.ErrPermissionError),
+		})
+
+		r := &ShardReconciler{Client: fails, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		err := r.cleanupDrainedPod(context.Background(), shard, pod, "main", poolSpec, 1)
+		if err == nil || !strings.Contains(err.Error(), "failed to delete PVC") {
+			t.Fatalf("expected PVC deletion error, got %v", err)
 		}
 	})
 }

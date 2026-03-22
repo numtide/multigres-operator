@@ -306,9 +306,13 @@ func (r *TopoServerReconciler) updateStatus(
 	}
 
 	// Update Phase
+	var totalReplicas int32
+	if sts.Spec.Replicas != nil {
+		totalReplicas = *sts.Spec.Replicas
+	}
 	result := status.ComputeWorkloadPhase(status.WorkloadPhaseInput{
 		Ready:              sts.Status.ReadyReplicas,
-		Total:              sts.Status.Replicas,
+		Total:              totalReplicas,
 		GenerationCurrent:  sts.Generation,
 		GenerationObserved: sts.Status.ObservedGeneration,
 		Pods:               podList.Items,
@@ -374,13 +378,13 @@ func (r *TopoServerReconciler) setConditions(
 		Message: fmt.Sprintf(
 			"%d/%d replicas ready",
 			sts.Status.ReadyReplicas,
-			sts.Status.Replicas,
+			*sts.Spec.Replicas,
 		),
 	}
 
 	if sts.Status.ObservedGeneration == sts.Generation &&
-		sts.Status.ReadyReplicas == sts.Status.Replicas &&
-		sts.Status.Replicas > 0 {
+		sts.Status.ReadyReplicas == *sts.Spec.Replicas &&
+		*sts.Spec.Replicas > 0 {
 		readyCondition.Status = metav1.ConditionTrue
 		readyCondition.Reason = "AllReplicasReady"
 		readyCondition.Message = fmt.Sprintf("All %d replicas are ready", sts.Status.ReadyReplicas)

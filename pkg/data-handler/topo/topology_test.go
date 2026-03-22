@@ -2,10 +2,12 @@ package topo_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
+	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 
@@ -21,6 +23,79 @@ func newMemoryStore(t *testing.T, cells ...string) topoclient.Store {
 	)
 	t.Cleanup(func() { _ = store.Close() })
 	return store
+}
+
+// mockTopologyStore allows mocking topo functions to trigger error branches.
+type mockTopologyStore struct {
+	topoclient.Store
+	createDatabaseFunc       func(ctx context.Context, dbName string, db *clustermetadatapb.Database) error
+	updateDatabaseFieldsFunc func(ctx context.Context, dbName string, updater func(*clustermetadatapb.Database) error) error
+	createCellFunc           func(ctx context.Context, cellName string, cell *clustermetadatapb.Cell) error
+	getDatabaseNamesFunc     func(ctx context.Context) ([]string, error)
+	deleteDatabaseFunc       func(ctx context.Context, dbName string, force bool) error
+	getCellNamesFunc         func(ctx context.Context) ([]string, error)
+	deleteCellFunc           func(ctx context.Context, cellName string, force bool) error
+}
+
+func (s *mockTopologyStore) CreateDatabase(
+	ctx context.Context,
+	dbName string,
+	db *clustermetadatapb.Database,
+) error {
+	if s.createDatabaseFunc != nil {
+		return s.createDatabaseFunc(ctx, dbName, db)
+	}
+	return s.Store.CreateDatabase(ctx, dbName, db)
+}
+
+func (s *mockTopologyStore) UpdateDatabaseFields(
+	ctx context.Context,
+	dbName string,
+	updater func(*clustermetadatapb.Database) error,
+) error {
+	if s.updateDatabaseFieldsFunc != nil {
+		return s.updateDatabaseFieldsFunc(ctx, dbName, updater)
+	}
+	return s.Store.UpdateDatabaseFields(ctx, dbName, updater)
+}
+
+func (s *mockTopologyStore) CreateCell(
+	ctx context.Context,
+	cellName string,
+	cell *clustermetadatapb.Cell,
+) error {
+	if s.createCellFunc != nil {
+		return s.createCellFunc(ctx, cellName, cell)
+	}
+	return s.Store.CreateCell(ctx, cellName, cell)
+}
+
+func (s *mockTopologyStore) GetDatabaseNames(ctx context.Context) ([]string, error) {
+	if s.getDatabaseNamesFunc != nil {
+		return s.getDatabaseNamesFunc(ctx)
+	}
+	return s.Store.GetDatabaseNames(ctx)
+}
+
+func (s *mockTopologyStore) DeleteDatabase(ctx context.Context, dbName string, force bool) error {
+	if s.deleteDatabaseFunc != nil {
+		return s.deleteDatabaseFunc(ctx, dbName, force)
+	}
+	return s.Store.DeleteDatabase(ctx, dbName, force)
+}
+
+func (s *mockTopologyStore) GetCellNames(ctx context.Context) ([]string, error) {
+	if s.getCellNamesFunc != nil {
+		return s.getCellNamesFunc(ctx)
+	}
+	return s.Store.GetCellNames(ctx)
+}
+
+func (s *mockTopologyStore) DeleteCell(ctx context.Context, cellName string, force bool) error {
+	if s.deleteCellFunc != nil {
+		return s.deleteCellFunc(ctx, cellName, force)
+	}
+	return s.Store.DeleteCell(ctx, cellName, force)
 }
 
 func TestRegisterDatabaseFromSpec(t *testing.T) {
@@ -183,6 +258,43 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 			t.Errorf("expected database-level policy NONE, got %s", db.DurabilityPolicy)
 		}
 	})
+
+	t.Run("returns error on CreateDatabase failure", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			createDatabaseFunc: func(ctx context.Context, dbName string, db *clustermetadatapb.Database) error {
+				return errors.New("fake create error")
+			},
+		}
+
+		err := topo.RegisterDatabaseFromSpec(
+			context.Background(), store, record.NewFakeRecorder(10), owner,
+			multigresv1alpha1.DatabaseConfig{Name: "errdb"}, []string{"cell1"}, nil, "",
+		)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("returns error on UpdateDatabaseFields failure", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			createDatabaseFunc: func(ctx context.Context, dbName string, db *clustermetadatapb.Database) error {
+				return topoclient.NewError(topoclient.NodeExists, "node exists")
+			},
+			updateDatabaseFieldsFunc: func(ctx context.Context, dbName string, updater func(*clustermetadatapb.Database) error) error {
+				return errors.New("fake update error")
+			},
+		}
+
+		err := topo.RegisterDatabaseFromSpec(
+			context.Background(), store, record.NewFakeRecorder(10), owner,
+			multigresv1alpha1.DatabaseConfig{Name: "errdb"}, []string{"cell1"}, nil, "",
+		)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
 }
 
 func TestRegisterCellFromSpec(t *testing.T) {
@@ -201,7 +313,7 @@ func TestRegisterCellFromSpec(t *testing.T) {
 		store := newMemoryStore(t, "cell1")
 		recorder := record.NewFakeRecorder(10)
 
-		cellCfg := multigresv1alpha1.CellConfig{Name: "cell1"}
+		cellCfg := multigresv1alpha1.CellConfig{Name: "cell2"} // cell2 does not exist yet!
 		err := topo.RegisterCellFromSpec(
 			context.Background(), store, recorder, owner, cellCfg, topoRef,
 		)
@@ -209,12 +321,12 @@ func TestRegisterCellFromSpec(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		cell, err := store.GetCell(context.Background(), "cell1")
+		cell, err := store.GetCell(context.Background(), "cell2")
 		if err != nil {
 			t.Fatalf("cell not found: %v", err)
 		}
-		if cell.Name != "cell1" {
-			t.Errorf("expected cell1, got %s", cell.Name)
+		if cell.Name != "cell2" {
+			t.Errorf("expected cell2, got %s", cell.Name)
 		}
 	})
 
@@ -244,6 +356,23 @@ func TestRegisterCellFromSpec(t *testing.T) {
 			topoRef,
 		); err != nil {
 			t.Fatalf("second: %v", err)
+		}
+	})
+
+	t.Run("returns error on CreateCell failure", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			createCellFunc: func(ctx context.Context, cellName string, cell *clustermetadatapb.Cell) error {
+				return errors.New("fake create error")
+			},
+		}
+
+		err := topo.RegisterCellFromSpec(
+			context.Background(), store, record.NewFakeRecorder(10), owner,
+			multigresv1alpha1.CellConfig{Name: "cell1"}, topoRef,
+		)
+		if err == nil {
+			t.Fatal("expected error, got nil")
 		}
 	})
 }
@@ -309,6 +438,72 @@ func TestPruneDatabases(t *testing.T) {
 			t.Error("db1 should still exist")
 		}
 	})
+
+	t.Run("returns error on getting database names", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			getDatabaseNamesFunc: func(ctx context.Context) ([]string, error) {
+				return nil, errors.New("fake list error")
+			},
+		}
+
+		err := topo.PruneDatabases(
+			context.Background(),
+			store,
+			record.NewFakeRecorder(10),
+			owner,
+			nil,
+		)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("skips if database delete returns NoNode", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			getDatabaseNamesFunc: func(ctx context.Context) ([]string, error) {
+				return []string{"staledb"}, nil
+			},
+			deleteDatabaseFunc: func(ctx context.Context, dbName string, force bool) error {
+				return topoclient.NewError(topoclient.NoNode, "no node")
+			},
+		}
+
+		err := topo.PruneDatabases(
+			context.Background(),
+			store,
+			record.NewFakeRecorder(10),
+			owner,
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("expected nil as NoNode is skipped, got %v", err)
+		}
+	})
+
+	t.Run("returns error on deleting database", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			getDatabaseNamesFunc: func(ctx context.Context) ([]string, error) {
+				return []string{"staledb"}, nil
+			},
+			deleteDatabaseFunc: func(ctx context.Context, dbName string, force bool) error {
+				return errors.New("fake delete error")
+			},
+		}
+
+		err := topo.PruneDatabases(
+			context.Background(),
+			store,
+			record.NewFakeRecorder(10),
+			owner,
+			nil,
+		)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
 }
 
 func TestPruneCells(t *testing.T) {
@@ -369,6 +564,54 @@ func TestPruneCells(t *testing.T) {
 
 		if _, err := store.GetCell(ctx, "cell1"); err != nil {
 			t.Error("cell1 should still exist")
+		}
+	})
+
+	t.Run("returns error on getting cell names", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			getCellNamesFunc: func(ctx context.Context) ([]string, error) {
+				return nil, errors.New("fake list error")
+			},
+		}
+
+		err := topo.PruneCells(context.Background(), store, record.NewFakeRecorder(10), owner, nil)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("skips if cell delete returns NoNode", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			getCellNamesFunc: func(ctx context.Context) ([]string, error) {
+				return []string{"stalecell"}, nil
+			},
+			deleteCellFunc: func(ctx context.Context, cellName string, force bool) error {
+				return topoclient.NewError(topoclient.NoNode, "no node")
+			},
+		}
+
+		err := topo.PruneCells(context.Background(), store, record.NewFakeRecorder(10), owner, nil)
+		if err != nil {
+			t.Fatalf("expected nil as NoNode is skipped, got %v", err)
+		}
+	})
+
+	t.Run("returns error on deleting cell", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopologyStore{
+			getCellNamesFunc: func(ctx context.Context) ([]string, error) {
+				return []string{"stalecell"}, nil
+			},
+			deleteCellFunc: func(ctx context.Context, cellName string, force bool) error {
+				return errors.New("fake delete error")
+			},
+		}
+
+		err := topo.PruneCells(context.Background(), store, record.NewFakeRecorder(10), owner, nil)
+		if err == nil {
+			t.Fatal("expected error, got nil")
 		}
 	})
 }

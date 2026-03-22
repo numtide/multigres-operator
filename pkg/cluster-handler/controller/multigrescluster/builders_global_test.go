@@ -154,6 +154,27 @@ func TestBuildMultiAdminDeployment(t *testing.T) {
 		}
 	})
 
+	t.Run("Success with Observability", func(t *testing.T) {
+		obsCluster := cluster.DeepCopy()
+		obsCluster.Spec.Observability = &multigresv1alpha1.ObservabilityConfig{
+			TracesSampler: "multigres_custom",
+			SamplingConfigRef: &multigresv1alpha1.SamplingConfigRef{
+				Name: "sample-config",
+				Key:  "sampling-config.yaml",
+			},
+		}
+		got, err := BuildMultiAdminDeployment(obsCluster, spec, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiAdminDeployment() error = %v", err)
+		}
+		if len(got.Spec.Template.Spec.Volumes) == 0 {
+			t.Errorf("Expected OTEL volume to be added")
+		}
+		if len(got.Spec.Template.Spec.Containers[0].VolumeMounts) == 0 {
+			t.Errorf("Expected OTEL volume mount to be added")
+		}
+	})
+
 	t.Run("ControllerRefError", func(t *testing.T) {
 		emptyScheme := runtime.NewScheme()
 		_, err := BuildMultiAdminDeployment(cluster, spec, emptyScheme)

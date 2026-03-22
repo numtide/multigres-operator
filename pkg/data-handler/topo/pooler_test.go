@@ -115,6 +115,32 @@ type multiCellStore struct {
 	errorCells map[string]error
 }
 
+// mockPoolerTopoStore allows mocking more functions for pooler pruning tests.
+type mockPoolerTopoStore struct {
+	topoclient.Store
+	getMultiPoolersByCellFunc func(ctx context.Context, cell string, opts *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error)
+	unregisterMultiPoolerFunc func(ctx context.Context, id *clustermetadata.ID) error
+}
+
+func (s *mockPoolerTopoStore) GetMultiPoolersByCell(
+	ctx context.Context, cell string, opts *topoclient.GetMultiPoolersByCellOptions,
+) ([]*topoclient.MultiPoolerInfo, error) {
+	if s.getMultiPoolersByCellFunc != nil {
+		return s.getMultiPoolersByCellFunc(ctx, cell, opts)
+	}
+	return nil, nil
+}
+
+func (s *mockPoolerTopoStore) UnregisterMultiPooler(
+	ctx context.Context,
+	id *clustermetadata.ID,
+) error {
+	if s.unregisterMultiPoolerFunc != nil {
+		return s.unregisterMultiPoolerFunc(ctx, id)
+	}
+	return nil
+}
+
 func (s *multiCellStore) GetMultiPoolersByCell(
 	ctx context.Context, cell string, opts *topoclient.GetMultiPoolersByCellOptions,
 ) ([]*topoclient.MultiPoolerInfo, error) {
@@ -359,6 +385,97 @@ func TestPrunePoolers(t *testing.T) {
 			t.Errorf("expected active-pod to remain, got %s", remaining[0].Id.Name)
 		}
 	})
+
+	t.Run("returns error on topology listing failure", func(t *testing.T) {
+		t.Parallel()
+		store := &errorGetPoolersStore{}
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		_, err := topo.PrunePoolers(context.Background(), store, shard, map[string]bool{})
+		if err == nil {
+			t.Error("expected error when GetMultiPoolersByCell fails")
+		}
+	})
+
+	t.Run("continues and logs error on UnregisterMultiPooler failure", func(t *testing.T) {
+		t.Parallel()
+		store := &mockPoolerTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cell string, opts *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				p := &topoclient.MultiPoolerInfo{
+					MultiPooler: &clustermetadata.MultiPooler{
+						Id:       &clustermetadata.ID{Cell: "cell1", Name: "stale-pod"},
+						Hostname: "stale-pod", Type: clustermetadata.PoolerType_REPLICA,
+						Database: "db", TableGroup: "tg", Shard: "0",
+					},
+				}
+				return []*topoclient.MultiPoolerInfo{p}, nil
+			},
+			unregisterMultiPoolerFunc: func(ctx context.Context, id *clustermetadata.ID) error {
+				return errors.New("fake unregister error")
+			},
+		}
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		pruned, err := topo.PrunePoolers(context.Background(), store, shard, map[string]bool{})
+		if err != nil {
+			t.Fatalf("expected nil error (caught and logged), got %v", err)
+		}
+		if pruned != 0 {
+			t.Errorf("expected 0 pruned due to error, got %d", pruned)
+		}
+	})
+
+	t.Run("uses Id.Name when hostname is empty during pruning", func(t *testing.T) {
+		t.Parallel()
+		store := &mockPoolerTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cell string, opts *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				p := &topoclient.MultiPoolerInfo{
+					MultiPooler: &clustermetadata.MultiPooler{
+						Id:       &clustermetadata.ID{Cell: "cell1", Name: "stale-pod-no-hostname"},
+						Hostname: "", Type: clustermetadata.PoolerType_REPLICA,
+						Database: "db", TableGroup: "tg", Shard: "0",
+					},
+				}
+				return []*topoclient.MultiPoolerInfo{p}, nil
+			},
+			unregisterMultiPoolerFunc: func(ctx context.Context, id *clustermetadata.ID) error {
+				return nil
+			},
+		}
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		pruned, err := topo.PrunePoolers(context.Background(), store, shard, map[string]bool{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pruned != 1 {
+			t.Errorf("expected 1 pruned, got %d", pruned)
+		}
+	})
 }
 
 func TestForceUnregisterPod(t *testing.T) {
@@ -408,6 +525,38 @@ func TestForceUnregisterPod(t *testing.T) {
 		poolers, _ := store.GetMultiPoolersByCell(ctx, "cell1", nil)
 		if len(poolers) != 1 {
 			t.Errorf("expected 1 pooler remaining, got %d", len(poolers))
+		}
+	})
+
+	t.Run("removes pooler that matches pod", func(t *testing.T) {
+		t.Parallel()
+		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+		store := topoclient.NewWithFactory(
+			factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+		)
+		defer func() { _ = store.Close() }()
+
+		ctx := context.Background()
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "my-pod"},
+			Hostname: "my-pod", Type: clustermetadata.PoolerType_REPLICA,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+
+		shard := &multigresv1alpha1.Shard{
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+			},
+		}
+
+		err := topo.ForceUnregisterPod(ctx, store, shard, "my-pod", "cell1")
+		if err != nil {
+			t.Errorf("expected nil error for successful unregistration, got %v", err)
+		}
+
+		poolers, _ := store.GetMultiPoolersByCell(ctx, "cell1", nil)
+		if len(poolers) != 0 {
+			t.Errorf("expected 0 poolers remaining, got %d", len(poolers))
 		}
 	})
 }
@@ -519,6 +668,40 @@ func TestGetPoolerStatus(t *testing.T) {
 		}
 		if result.Roles["drained"] != "DRAINED" {
 			t.Errorf("expected DRAINED, got %s", result.Roles["drained"])
+		}
+	})
+
+	t.Run("skips orphaned poolers gracefully", func(t *testing.T) {
+		t.Parallel()
+		_, factory := memorytopo.NewServerAndFactory(context.Background(), "cell1")
+		store := topoclient.NewWithFactory(
+			factory, "", []string{""}, topoclient.NewDefaultTopoConfig(),
+		)
+		defer func() { _ = store.Close() }()
+
+		ctx := context.Background()
+		_ = store.RegisterMultiPooler(ctx, &clustermetadata.MultiPooler{
+			Id:       &clustermetadata.ID{Cell: "cell1", Name: "orphaned-pod"},
+			Hostname: "orphaned-pod", Type: clustermetadata.PoolerType_PRIMARY,
+			Database: "db", TableGroup: "tg", Shard: "0",
+		}, false)
+
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName: "db", TableGroupName: "tg", ShardName: "0",
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"pool1": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+				},
+			},
+		}
+
+		result := topo.GetPoolerStatus(ctx, store, shard, []string{"other-pod"})
+		if !result.QuerySuccess {
+			t.Error("expected QuerySuccess=true")
+		}
+		if len(result.Roles) != 0 {
+			t.Errorf("expected no roles mapped for orphaned pod, got %v", result.Roles)
 		}
 	})
 

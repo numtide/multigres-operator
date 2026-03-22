@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/multigres/multigres/go/pb/clustermetadata"
 	corev1 "k8s.io/api/core/v1"
@@ -13,10 +14,55 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
+	"github.com/multigres/multigres/go/common/topoclient"
+	"github.com/multigres/multigres/go/pb/multipoolermanagerdata"
+	"k8s.io/client-go/tools/record"
+
 	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 	"github.com/numtide/multigres-operator/pkg/data-handler/drain"
 	"github.com/numtide/multigres-operator/pkg/util/metadata"
 )
+
+type mockTopoStore struct {
+	topoclient.Store
+	getMultiPoolersByCellFunc func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error)
+	unregisterMultiPoolerFunc func(ctx context.Context, id *clustermetadata.ID) error
+}
+
+func (m *mockTopoStore) GetMultiPoolersByCell(
+	ctx context.Context,
+	cellName string,
+	opt *topoclient.GetMultiPoolersByCellOptions,
+) ([]*topoclient.MultiPoolerInfo, error) {
+	if m.getMultiPoolersByCellFunc != nil {
+		return m.getMultiPoolersByCellFunc(ctx, cellName, opt)
+	}
+	return nil, nil
+}
+
+func (m *mockTopoStore) UnregisterMultiPooler(ctx context.Context, id *clustermetadata.ID) error {
+	if m.unregisterMultiPoolerFunc != nil {
+		return m.unregisterMultiPoolerFunc(ctx, id)
+	}
+	return nil
+}
+
+type mockMultiPoolerClient struct {
+	rpcclient.MultiPoolerClient
+	updateSynchronousStandbyListFunc func(ctx context.Context, pooler *clustermetadata.MultiPooler, req *multipoolermanagerdata.UpdateSynchronousStandbyListRequest) (*multipoolermanagerdata.UpdateSynchronousStandbyListResponse, error)
+}
+
+func (m *mockMultiPoolerClient) UpdateSynchronousStandbyList(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	req *multipoolermanagerdata.UpdateSynchronousStandbyListRequest,
+) (*multipoolermanagerdata.UpdateSynchronousStandbyListResponse, error) {
+	if m.updateSynchronousStandbyListFunc != nil {
+		return m.updateSynchronousStandbyListFunc(ctx, pooler, req)
+	}
+	return nil, nil
+}
 
 func TestUpdateDrainState_NilAnnotations(t *testing.T) {
 	t.Parallel()
@@ -280,6 +326,432 @@ func TestIsPrimaryNotReady(t *testing.T) {
 		}
 		if !drain.IsPrimaryNotReady(context.Background(), c, shard, primary) {
 			t.Error("expected true on transient error (fail-safe)")
+		}
+	})
+}
+
+func TestExecuteDrainStateMachine(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	if err := multigresv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add to scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add corev1 to scheme: %v", err)
+	}
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"default": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	t.Run("Malformed drain-requested-at annotation", func(t *testing.T) {
+		t.Parallel()
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState:       metadata.DrainStateRequested,
+					metadata.AnnotationDrainRequestedAt: "invalid-date",
+				},
+				Labels: map[string]string{metadata.LabelMultigresCell: "cell1"},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		rpc := &mockMultiPoolerClient{}
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return nil, nil // No primary found
+			},
+		}
+		recorder := record.NewFakeRecorder(10)
+
+		_, _ = drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			rpc,
+			recorder,
+			store,
+			shard,
+			pod,
+		)
+		// It shouldn't panic, it catches the parsing error and uses time.Now()
+	})
+
+	t.Run("Force unregister error", func(t *testing.T) {
+		t.Parallel()
+		// Test the branch where ForceUnregisterPod fails during timeout
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				},
+				Labels: map[string]string{metadata.LabelMultigresCell: "cell1"},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		// Avoid fakeClient Builder failing due to deletion timestamp without finalizers
+		pod.DeletionTimestamp = &metav1.Time{Time: time.Now().Add(-10 * time.Minute)}
+
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return nil, fmt.Errorf("fake topo list error")
+			},
+		}
+
+		_, err := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			nil,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if err == nil {
+			t.Errorf("expected force unregistration error")
+		}
+	})
+
+	t.Run("Topology unavailable for drain retry", func(t *testing.T) {
+		t.Parallel()
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				},
+				Labels: map[string]string{metadata.LabelMultigresCell: "cell1"},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return nil, fmt.Errorf("fake UNAVAILABLE error")
+			},
+		}
+
+		requeue, err := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			nil,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if err != nil {
+			t.Errorf("expected nil error on topo unavailable, got %v", err)
+		}
+		if !requeue {
+			t.Errorf("expected requeue=true")
+		}
+	})
+
+	t.Run("FindPrimaryPooler error Requested state", func(t *testing.T) {
+		t.Parallel()
+		podInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "test-pod"},
+				Type: clustermetadata.PoolerType_REPLICA,
+			},
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: "cell1",
+				},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		callCount := 0
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				if callCount == 0 {
+					callCount++
+					return []*topoclient.MultiPoolerInfo{podInfo}, nil
+				}
+				// Call inside FindPrimaryPooler fails
+				return nil, fmt.Errorf("fake get primary error")
+			},
+		}
+
+		requeue, err := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			nil,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if err != nil {
+			t.Errorf("expected nil error when FindPrimary fails gracefully, got %v", err)
+		}
+		if !requeue {
+			t.Errorf("expected requeue=true")
+		}
+	})
+
+	t.Run("IsPrimaryNotReady in Requested state", func(t *testing.T) {
+		t.Parallel()
+		podInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "test-pod"},
+				Type: clustermetadata.PoolerType_REPLICA,
+			},
+		}
+		primaryInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "primary-pod"},
+				Type: clustermetadata.PoolerType_PRIMARY,
+			},
+		}
+		primaryPod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-pod",
+				Namespace: "default",
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.ContainersReady, Status: corev1.ConditionFalse},
+				},
+			},
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateRequested,
+				},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: "cell1",
+				},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod, primaryPod).Build()
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return []*topoclient.MultiPoolerInfo{podInfo, primaryInfo}, nil
+			},
+		}
+		rpc := &mockMultiPoolerClient{}
+
+		requeue, _ := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			rpc,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if !requeue {
+			t.Errorf("expected requeue=true because primary is not ready")
+		}
+	})
+
+	t.Run("FindPrimaryPooler error Draining state", func(t *testing.T) {
+		t.Parallel()
+		podInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "test-pod"},
+				Type: clustermetadata.PoolerType_REPLICA,
+			},
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateDraining,
+				},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: "cell1",
+				},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		callCount := 0
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				if callCount == 0 {
+					callCount++
+					return []*topoclient.MultiPoolerInfo{podInfo}, nil
+				}
+				// Call inside FindPrimaryPooler fails
+				return nil, fmt.Errorf("fake get primary error")
+			},
+		}
+
+		requeue, err := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			nil,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if err != nil {
+			t.Errorf("expected nil error when FindPrimary fails gracefully, got %v", err)
+		}
+		if !requeue {
+			t.Errorf("expected requeue=true")
+		}
+	})
+
+	t.Run("IsPrimaryNotReady in Draining state", func(t *testing.T) {
+		t.Parallel()
+		podInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "test-pod"},
+				Type: clustermetadata.PoolerType_REPLICA,
+			},
+		}
+		primaryInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "primary-pod"},
+				Type: clustermetadata.PoolerType_PRIMARY,
+			},
+		}
+		primaryPod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "primary-pod",
+				Namespace: "default",
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.ContainersReady, Status: corev1.ConditionFalse},
+				},
+			},
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateDraining,
+				},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: "cell1",
+				},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod, primaryPod).Build()
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return []*topoclient.MultiPoolerInfo{podInfo, primaryInfo}, nil
+			},
+		}
+		rpc := &mockMultiPoolerClient{}
+
+		requeue, _ := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			rpc,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if !requeue {
+			t.Errorf("expected requeue=true because primary is not ready in Draining state")
+		}
+	})
+
+	t.Run("Error ForceUnregister in Acknowledged state", func(t *testing.T) {
+		t.Parallel()
+		podInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "test-pod"},
+				Type: clustermetadata.PoolerType_REPLICA,
+			},
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: metadata.DrainStateAcknowledged,
+				},
+				Labels: map[string]string{
+					metadata.LabelMultigresCell: "cell1",
+				},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return []*topoclient.MultiPoolerInfo{podInfo}, nil
+			},
+			unregisterMultiPoolerFunc: func(ctx context.Context, id *clustermetadata.ID) error {
+				return fmt.Errorf("fake unregister error")
+			},
+		}
+
+		_, err := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			nil,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if err == nil {
+			t.Errorf("expected force unregister error in Acknowledged state")
+		}
+	})
+
+	t.Run("Unknown or unrecognized state", func(t *testing.T) {
+		t.Parallel()
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: "default",
+				Annotations: map[string]string{
+					metadata.AnnotationDrainState: "UnknownState",
+				},
+			},
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build()
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return nil, nil // No pooler
+			},
+		}
+
+		requeue, err := drain.ExecuteDrainStateMachine(
+			context.Background(),
+			c,
+			nil,
+			nil,
+			store,
+			shard,
+			pod,
+		)
+		if requeue || err != nil {
+			t.Errorf("expected false, nil for unknown state")
 		}
 	})
 }

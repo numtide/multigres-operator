@@ -534,6 +534,53 @@ func TestMergeShardConfig(t *testing.T) {
 				},
 			},
 		},
+		"Pool Affinity Override": {
+			tpl: &multigresv1alpha1.ShardTemplate{
+				Spec: multigresv1alpha1.ShardTemplateSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"p1": {
+							Type: "read",
+							Affinity: &corev1.Affinity{
+								NodeAffinity: &corev1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+										NodeSelectorTerms: []corev1.NodeSelectorTerm{{}},
+									},
+								},
+							},
+							Tolerations: []corev1.Toleration{{Key: "foo"}},
+						},
+					},
+				},
+			},
+			overrides: &multigresv1alpha1.ShardOverrides{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"p1": {
+						Affinity: &corev1.Affinity{
+							PodAntiAffinity: &corev1.PodAntiAffinity{
+								RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+									{},
+								},
+							},
+						},
+						Tolerations: []corev1.Toleration{{Key: "bar"}},
+					},
+				},
+			},
+			wantOrch: multigresv1alpha1.MultiOrchSpec{},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p1": {
+					Type: "read",
+					Affinity: &corev1.Affinity{
+						PodAntiAffinity: &corev1.PodAntiAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+								{},
+							},
+						},
+					},
+					Tolerations: []corev1.Toleration{{Key: "bar"}},
+				},
+			},
+		},
 		"Storage Override Only Size Preserves Class And AccessModes": {
 			tpl: &multigresv1alpha1.ShardTemplate{
 				Spec: multigresv1alpha1.ShardTemplateSpec{

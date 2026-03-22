@@ -554,6 +554,119 @@ func TestTableGroupReconciler_Reconcile_Success(t *testing.T) {
 			existingObjects: []client.Object{},
 			// No validation needed if we just want to ensure it succeeds without error
 		},
+		"Success: Handle Pending Deletion (Propagate to Shards)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				if tg.Annotations == nil {
+					tg.Annotations = make(map[string]string)
+				}
+				tg.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = "2026-01-01T00:00:00Z"
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+				},
+			},
+			expectedEvents: []string{
+				"Normal PendingDeletion Marked Shard",
+			},
+			validate: func(t testing.TB, c client.Client) {
+				shardName := name.JoinWithConstraints(
+					name.DefaultConstraints,
+					clusterName,
+					dbName,
+					tgLabelName,
+					"shard-0",
+				)
+				shard := &multigresv1alpha1.Shard{}
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: shardName, Namespace: namespace},
+					shard,
+				); err != nil {
+					t.Fatalf("Shard should exist: %v", err)
+				}
+				if shard.Annotations[multigresv1alpha1.AnnotationPendingDeletion] == "" {
+					t.Error("Expected PendingDeletion annotation to be set on Shard")
+				}
+			},
+		},
+		"Success: Handle Pending Deletion (All Shards Ready For Deletion)": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				if tg.Annotations == nil {
+					tg.Annotations = make(map[string]string)
+				}
+				tg.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = "2026-01-01T00:00:00Z"
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+						Annotations: map[string]string{
+							multigresv1alpha1.AnnotationPendingDeletion: "2026-01-01T00:00:00Z",
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+					Status: multigresv1alpha1.ShardStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               multigresv1alpha1.ConditionReadyForDeletion,
+								Status:             metav1.ConditionTrue,
+								Reason:             "DrainComplete",
+								LastTransitionTime: metav1.Now(),
+							},
+						},
+					},
+				},
+			},
+			expectedEvents: []string{
+				"Normal ReadyForDeletion TableGroup test-tg marked ready for deletion",
+			},
+			validate: func(t testing.TB, c client.Client) {
+				updatedTG := &multigresv1alpha1.TableGroup{}
+				if err := c.Get(
+					t.Context(),
+					types.NamespacedName{Name: tgName, Namespace: namespace},
+					updatedTG,
+				); err != nil {
+					t.Fatalf("failed to get tablegroup: %v", err)
+				}
+				if !meta.IsStatusConditionTrue(
+					updatedTG.Status.Conditions,
+					multigresv1alpha1.ConditionReadyForDeletion,
+				) {
+					t.Error("TableGroup should be ReadyForDeletion")
+				}
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -806,6 +919,110 @@ func TestTableGroupReconciler_Reconcile_Failure(t *testing.T) {
 				OnStatusPatch: testutil.FailOnObjectName(tgName, errSimulated),
 			},
 			expectedEvents: []string{"Warning StatusError Failed to patch status"},
+		},
+		"Error: Handle Pending Deletion List Shards Failed": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				if tg.Annotations == nil {
+					tg.Annotations = make(map[string]string)
+				}
+				tg.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = "2026-01-01T00:00:00Z"
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnList: func(list client.ObjectList) error {
+					if _, ok := list.(*multigresv1alpha1.ShardList); ok {
+						return errSimulated
+					}
+					return nil
+				},
+			},
+		},
+		"Error: Handle Pending Deletion Patch Shard Failed": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				if tg.Annotations == nil {
+					tg.Annotations = make(map[string]string)
+				}
+				tg.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = "2026-01-01T00:00:00Z"
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnPatch: testutil.FailOnObjectName(
+					name.JoinWithConstraints(
+						name.DefaultConstraints,
+						clusterName,
+						dbName,
+						tgLabelName,
+						"shard-0",
+					),
+					errSimulated,
+				),
+			},
+		},
+		"Error: Handle Pending Deletion Patch Status Failed": {
+			tableGroup: baseTG.DeepCopy(),
+			preReconcileUpdate: func(t testing.TB, tg *multigresv1alpha1.TableGroup) {
+				if tg.Annotations == nil {
+					tg.Annotations = make(map[string]string)
+				}
+				tg.Annotations[multigresv1alpha1.AnnotationPendingDeletion] = "2026-01-01T00:00:00Z"
+			},
+			existingObjects: []client.Object{
+				&multigresv1alpha1.Shard{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name.JoinWithConstraints(
+							name.DefaultConstraints,
+							clusterName,
+							dbName,
+							tgLabelName,
+							"shard-0",
+						),
+						Namespace: namespace,
+						Labels: map[string]string{
+							"multigres.com/cluster":    clusterName,
+							"multigres.com/database":   dbName,
+							"multigres.com/tablegroup": tgLabelName,
+						},
+						Annotations: map[string]string{
+							multigresv1alpha1.AnnotationPendingDeletion: "2026-01-01T00:00:00Z",
+						},
+					},
+					Spec: multigresv1alpha1.ShardSpec{ShardName: "shard-0"},
+					Status: multigresv1alpha1.ShardStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               multigresv1alpha1.ConditionReadyForDeletion,
+								Status:             metav1.ConditionTrue,
+								Reason:             "DrainComplete",
+								LastTransitionTime: metav1.Now(),
+							},
+						},
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnStatusPatch: testutil.FailOnObjectName(tgName, errSimulated),
+			},
 		},
 	}
 

@@ -655,6 +655,271 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			},
 			wantWarnings: []string{"has replicasPerCell=2"},
 		},
+		"Etcd 1 replica warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{Replicas: ptr.To(int32(1))},
+					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantWarnings: []string{"etcd has 1 replica \u2014 no fault tolerance"},
+		},
+		"Resource error: etcd limits < requests": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						Etcd: &multigresv1alpha1.EtcdSpec{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("2")},
+								Limits:   corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+							},
+						},
+					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "etcd: resource cpu limit (1) must be >= request (2)",
+		},
+		"Resource error: multiadmin limits < requests": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					MultiAdmin: &multigresv1alpha1.MultiAdminConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("2")},
+								Limits:   corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+							},
+						},
+					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "multiadmin: resource cpu limit (1) must be >= request (2)",
+		},
+		"Resource error: multiadmin-web limits < requests": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					MultiAdminWeb: &multigresv1alpha1.MultiAdminWebConfig{
+						Spec: &multigresv1alpha1.StatelessSpec{
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceCPU: parseQty("2")},
+								Limits:   corev1.ResourceList{corev1.ResourceCPU: parseQty("1")},
+							},
+						},
+					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "multiadmin-web: resource cpu limit (1) must be >= request (2)",
+		},
+		"Resource error: cell multigateway limits < requests": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{
+							Name: "zone-1",
+							Spec: &multigresv1alpha1.CellInlineSpec{
+								MultiGateway: multigresv1alpha1.StatelessSpec{
+									Resources: corev1.ResourceRequirements{
+										Requests: corev1.ResourceList{
+											corev1.ResourceCPU: parseQty("2"),
+										},
+										Limits: corev1.ResourceList{
+											corev1.ResourceCPU: parseQty("1"),
+										},
+									},
+								},
+							},
+						},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "cell 'zone-1' multigateway: resource cpu limit (1) must be >= request (2)",
+		},
+		"Resource error: shard multiorch limits < requests": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+								Spec: &multigresv1alpha1.ShardInlineSpec{
+									MultiOrch: multigresv1alpha1.MultiOrchSpec{
+										StatelessSpec: multigresv1alpha1.StatelessSpec{
+											Resources: corev1.ResourceRequirements{
+												Requests: corev1.ResourceList{
+													corev1.ResourceCPU: parseQty("2"),
+												},
+												Limits: corev1.ResourceList{
+													corev1.ResourceCPU: parseQty("1"),
+												},
+											},
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "shard 's0' multiorch: resource cpu limit (1) must be >= request (2)",
+		},
+		"Resource error: shard pool postgres limits < requests": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+								Spec: &multigresv1alpha1.ShardInlineSpec{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"default": {
+											Postgres: multigresv1alpha1.ContainerConfig{
+												Resources: corev1.ResourceRequirements{
+													Requests: corev1.ResourceList{
+														corev1.ResourceCPU: parseQty("2"),
+													},
+													Limits: corev1.ResourceList{
+														corev1.ResourceCPU: parseQty("1"),
+													},
+												},
+											},
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "shard 's0' pool 'default' postgres: resource cpu limit (1) must be >= request (2)",
+		},
+		"Resource error: shard pool multipooler limits < requests": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+								Spec: &multigresv1alpha1.ShardInlineSpec{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"default": {
+											Multipooler: multigresv1alpha1.ContainerConfig{
+												Resources: corev1.ResourceRequirements{
+													Requests: corev1.ResourceList{
+														corev1.ResourceCPU: parseQty("2"),
+													},
+													Limits: corev1.ResourceList{
+														corev1.ResourceCPU: parseQty("1"),
+													},
+												},
+											},
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			wantErr: "shard 's0' pool 'default' multipooler: resource cpu limit (1) must be >= request (2)",
+		},
+		"External Topo Server Sets Effective Replicas To 0": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					GlobalTopoServer: &multigresv1alpha1.GlobalTopoServerSpec{
+						External: &multigresv1alpha1.ExternalTopoServerSpec{
+							CASecret: "my-secret",
+						},
+					},
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name: "s0", ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+		},
+		"SC check error on 2nd shard resolution": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "err-2nd", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{{Name: "zone-1"}},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+							}},
+						}},
+					}},
+				},
+			},
+			clientFailures: func() *testutil.FailureConfig {
+				var calls int
+				return &testutil.FailureConfig{
+					OnGet: func(key client.ObjectKey) error {
+						calls++
+						if calls == 2 { // first shard template resolve succeeds, second fails
+							return testutil.ErrInjected
+						}
+						return nil
+					},
+				}
+			}(),
+		},
 		// COVERAGE: filesystem backup AccessModes branch (isRWO=false path)
 		"Filesystem RWX backup suppresses replica warning": {
 			cluster: &multigresv1alpha1.MultigresCluster{
