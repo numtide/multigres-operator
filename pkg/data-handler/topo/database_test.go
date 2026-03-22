@@ -2,10 +2,12 @@ package topo_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
+	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 
@@ -29,6 +31,46 @@ func newTestShard(name string) *multigresv1alpha1.Shard {
 			},
 		},
 	}
+}
+
+type mockDatabaseTopoStore struct {
+	topoclient.Store
+	createDatabaseFunc       func(ctx context.Context, dbName string, db *clustermetadatapb.Database) error
+	updateDatabaseFieldsFunc func(ctx context.Context, dbName string, updater func(*clustermetadatapb.Database) error) error
+	deleteDatabaseFunc       func(ctx context.Context, dbName string, force bool) error
+}
+
+func (m *mockDatabaseTopoStore) CreateDatabase(
+	ctx context.Context,
+	dbName string,
+	db *clustermetadatapb.Database,
+) error {
+	if m.createDatabaseFunc != nil {
+		return m.createDatabaseFunc(ctx, dbName, db)
+	}
+	return nil
+}
+
+func (m *mockDatabaseTopoStore) UpdateDatabaseFields(
+	ctx context.Context,
+	dbName string,
+	updater func(*clustermetadatapb.Database) error,
+) error {
+	if m.updateDatabaseFieldsFunc != nil {
+		return m.updateDatabaseFieldsFunc(ctx, dbName, updater)
+	}
+	return nil
+}
+
+func (m *mockDatabaseTopoStore) DeleteDatabase(
+	ctx context.Context,
+	dbName string,
+	force bool,
+) error {
+	if m.deleteDatabaseFunc != nil {
+		return m.deleteDatabaseFunc(ctx, dbName, force)
+	}
+	return nil
 }
 
 func TestRegisterDatabase(t *testing.T) {
@@ -128,6 +170,43 @@ func TestRegisterDatabase(t *testing.T) {
 			t.Errorf("expected MULTI_CELL_AT_LEAST_2 after update, got %s", db.DurabilityPolicy)
 		}
 	})
+
+	t.Run("returns error on creation failure", func(t *testing.T) {
+		t.Parallel()
+		store := &mockDatabaseTopoStore{
+			createDatabaseFunc: func(ctx context.Context, dbName string, db *clustermetadatapb.Database) error {
+				return fmt.Errorf("fake creation error")
+			},
+		}
+
+		recorder := record.NewFakeRecorder(10)
+		shard := newTestShard("test-shard")
+
+		err := topo.RegisterDatabase(context.Background(), store, recorder, shard)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("returns error on UpdateDatabaseFields failure", func(t *testing.T) {
+		t.Parallel()
+		store := &mockDatabaseTopoStore{
+			createDatabaseFunc: func(ctx context.Context, dbName string, db *clustermetadatapb.Database) error {
+				return topoclient.NewError(topoclient.NodeExists, "node exists")
+			},
+			updateDatabaseFieldsFunc: func(ctx context.Context, dbName string, updater func(*clustermetadatapb.Database) error) error {
+				return fmt.Errorf("fake update error")
+			},
+		}
+
+		recorder := record.NewFakeRecorder(10)
+		shard := newTestShard("test-shard")
+
+		err := topo.RegisterDatabase(context.Background(), store, recorder, shard)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
 }
 
 func TestUnregisterDatabase(t *testing.T) {
@@ -176,6 +255,40 @@ func TestUnregisterDatabase(t *testing.T) {
 			shard,
 		); err != nil {
 			t.Fatalf("unregistering nonexistent database should succeed, got: %v", err)
+		}
+	})
+
+	t.Run("returns error on failure other than TopoUnavailable", func(t *testing.T) {
+		t.Parallel()
+		store := &mockDatabaseTopoStore{
+			deleteDatabaseFunc: func(ctx context.Context, dbName string, force bool) error {
+				return fmt.Errorf("some other error")
+			},
+		}
+
+		recorder := record.NewFakeRecorder(10)
+		shard := newTestShard("test-shard")
+
+		err := topo.UnregisterDatabase(context.Background(), store, recorder, shard)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("returns error on TopoUnavailable", func(t *testing.T) {
+		t.Parallel()
+		store := &mockDatabaseTopoStore{
+			deleteDatabaseFunc: func(ctx context.Context, dbName string, force bool) error {
+				return fmt.Errorf("fake UNAVAILABLE error")
+			},
+		}
+
+		recorder := record.NewFakeRecorder(10)
+		shard := newTestShard("test-shard")
+
+		err := topo.UnregisterDatabase(context.Background(), store, recorder, shard)
+		if err == nil {
+			t.Fatal("expected error, got nil")
 		}
 	})
 }

@@ -354,6 +354,45 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				)
 			},
 		},
+		"pending deletion annotation sets ReadyForDeletion status": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cell-pending-deletion",
+					Namespace: "default",
+					Annotations: map[string]string{
+						multigresv1alpha1.AnnotationPendingDeletion: "true",
+					},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-pending",
+					MultiGateway: multigresv1alpha1.StatelessSpec{
+						Replicas: ptr.To(int32(1)),
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			assertFunc: func(t *testing.T, c client.Client, cell *multigresv1alpha1.Cell) {
+				updatedCell := &multigresv1alpha1.Cell{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-cell-pending-deletion", Namespace: "default"},
+					updatedCell); err != nil {
+					t.Fatalf("Failed to get Cell: %v", err)
+				}
+
+				found := false
+				for _, cond := range updatedCell.Status.Conditions {
+					if cond.Type == multigresv1alpha1.ConditionReadyForDeletion {
+						found = true
+						if cond.Status != metav1.ConditionTrue {
+							t.Errorf("expected ReadyForDeletion=True, got %s", cond.Status)
+						}
+					}
+				}
+				if !found {
+					t.Errorf("expected ConditionReadyForDeletion to be present")
+				}
+			},
+		},
 		////----------------------------------------
 		///   Error
 		//------------------------------------------
@@ -370,6 +409,28 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 			existingObjects: []client.Object{},
 			failureConfig: &testutil.FailureConfig{
 				OnStatusPatch: testutil.FailOnObjectName("test-cell", testutil.ErrInjected),
+			},
+			wantErr: true,
+		},
+		"error on get cell status patch for pending deletion": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cell-pd-patch-err",
+					Namespace: "default",
+					Annotations: map[string]string{
+						multigresv1alpha1.AnnotationPendingDeletion: "true",
+					},
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone-pd-err",
+				},
+			},
+			existingObjects: []client.Object{},
+			failureConfig: &testutil.FailureConfig{
+				OnStatusPatch: testutil.FailOnObjectName(
+					"test-cell-pd-patch-err",
+					testutil.ErrInjected,
+				),
 			},
 			wantErr: true,
 		},
@@ -402,6 +463,40 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				// Since we switched to SSA, there are no Gets in reconcile loop.
 				// The only Get is in updateStatus.
 				OnGet: testutil.FailKeyAfterNCalls(0, testutil.ErrNetworkTimeout),
+			},
+			wantErr: true,
+		},
+		"error on List Pods in updateStatus": {
+			cell: &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cell-list-pods",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone1",
+				},
+			},
+			existingObjects: []client.Object{
+				&appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cell-list-pods-multigateway",
+						Namespace: "default",
+					},
+				},
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-cell-list-pods-multigateway",
+						Namespace: "default",
+					},
+				},
+			},
+			failureConfig: &testutil.FailureConfig{
+				OnList: func(list client.ObjectList) error {
+					if _, ok := list.(*corev1.PodList); ok {
+						return testutil.ErrNetworkTimeout
+					}
+					return nil
+				},
 			},
 			wantErr: true,
 		},

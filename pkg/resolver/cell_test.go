@@ -72,6 +72,29 @@ func TestResolver_ResolveCell(t *testing.T) {
 			},
 			wantTopo: nil, // Inline spec didn't provide one
 		},
+		"Inline External Topo": {
+			config: &multigresv1alpha1.CellConfig{ // Needs name for path generation
+				Name: "cell1",
+				Spec: &multigresv1alpha1.CellInlineSpec{
+					LocalTopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+						External: &multigresv1alpha1.ExternalTopoServerSpec{
+							CASecret: "my-secret",
+						},
+					},
+				},
+			},
+			wantGw: &multigresv1alpha1.StatelessSpec{
+				Replicas:  ptr.To(int32(1)),
+				Resources: DefaultResourcesGateway(),
+			},
+			wantTopo: &multigresv1alpha1.LocalTopoServerSpec{
+				External: &multigresv1alpha1.ExternalTopoServerSpec{
+					CASecret:       "my-secret",
+					RootPath:       "/multigres/cell1", // Expect defaulted path
+					Implementation: "etcd",
+				},
+			},
+		},
 		"Client Error": {
 			config: &multigresv1alpha1.CellConfig{CellTemplate: "any"},
 			// Will use mock client logic inside test runner

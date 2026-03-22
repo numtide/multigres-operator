@@ -1,9 +1,14 @@
 package backuphealth_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
+	"github.com/multigres/multigres/go/common/topoclient"
+	"github.com/multigres/multigres/go/pb/clustermetadata"
 	"github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -277,4 +282,150 @@ func TestEvaluateBackups_MalformedBackupID(t *testing.T) {
 	if result.LastBackupTime != nil {
 		t.Errorf("expected nil LastBackupTime, got %v", result.LastBackupTime)
 	}
+}
+
+type mockTopoStore struct {
+	topoclient.Store
+	getMultiPoolersByCellFunc func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error)
+}
+
+func (m *mockTopoStore) GetMultiPoolersByCell(
+	ctx context.Context,
+	cellName string,
+	opt *topoclient.GetMultiPoolersByCellOptions,
+) ([]*topoclient.MultiPoolerInfo, error) {
+	if m.getMultiPoolersByCellFunc != nil {
+		return m.getMultiPoolersByCellFunc(ctx, cellName, opt)
+	}
+	return nil, nil
+}
+
+type mockMultiPoolerClient struct {
+	rpcclient.MultiPoolerClient
+	getBackupsFunc func(ctx context.Context, pooler *clustermetadata.MultiPooler, in *multipoolermanagerdata.GetBackupsRequest) (*multipoolermanagerdata.GetBackupsResponse, error)
+}
+
+func (m *mockMultiPoolerClient) GetBackups(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	in *multipoolermanagerdata.GetBackupsRequest,
+) (*multipoolermanagerdata.GetBackupsResponse, error) {
+	if m.getBackupsFunc != nil {
+		return m.getBackupsFunc(ctx, pooler, in)
+	}
+	return nil, nil
+}
+
+func TestEvaluate(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-shard",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.ShardSpec{
+			Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"default": {Cells: []multigresv1alpha1.CellName{"cell1"}},
+			},
+		},
+	}
+
+	t.Run("No primary found", func(t *testing.T) {
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return nil, nil
+			},
+		}
+		rpc := &mockMultiPoolerClient{}
+
+		res, err := backuphealth.Evaluate(ctx, store, rpc, shard)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if res != nil {
+			t.Errorf("expected nil result, got %v", res)
+		}
+	})
+
+	t.Run("Primary found but GetBackups fails", func(t *testing.T) {
+		primaryInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "primary-1"},
+				Type: clustermetadata.PoolerType_PRIMARY,
+			},
+		}
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return []*topoclient.MultiPoolerInfo{primaryInfo}, nil
+			},
+		}
+		rpc := &mockMultiPoolerClient{
+			getBackupsFunc: func(ctx context.Context, pooler *clustermetadata.MultiPooler, in *multipoolermanagerdata.GetBackupsRequest) (*multipoolermanagerdata.GetBackupsResponse, error) {
+				return nil, fmt.Errorf("fake rpc error")
+			},
+		}
+
+		_, err := backuphealth.Evaluate(ctx, store, rpc, shard)
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+	})
+
+	t.Run("Primary found and EvaluateBackups runs", func(t *testing.T) {
+		primaryInfo := &topoclient.MultiPoolerInfo{
+			MultiPooler: &clustermetadata.MultiPooler{
+				Id:   &clustermetadata.ID{Name: "primary-1"},
+				Type: clustermetadata.PoolerType_PRIMARY,
+			},
+		}
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return []*topoclient.MultiPoolerInfo{primaryInfo}, nil
+			},
+		}
+
+		recentID := time.Now().Add(-1 * time.Hour).Format("20060102-150405")
+		rpc := &mockMultiPoolerClient{
+			getBackupsFunc: func(ctx context.Context, pooler *clustermetadata.MultiPooler, in *multipoolermanagerdata.GetBackupsRequest) (*multipoolermanagerdata.GetBackupsResponse, error) {
+				return &multipoolermanagerdata.GetBackupsResponse{
+					Backups: []*multipoolermanagerdata.BackupMetadata{
+						{
+							BackupId: recentID,
+							Status:   multipoolermanagerdata.BackupMetadata_COMPLETE,
+							Type:     "full",
+						},
+					},
+				}, nil
+			},
+		}
+
+		res, err := backuphealth.Evaluate(ctx, store, rpc, shard)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if res == nil {
+			t.Fatal("expected result, got nil")
+		}
+		if !res.Healthy {
+			t.Errorf("expected healthy true, got false")
+		}
+	})
+
+	t.Run("FindPrimaryPooler error", func(t *testing.T) {
+		store := &mockTopoStore{
+			getMultiPoolersByCellFunc: func(ctx context.Context, cellName string, opt *topoclient.GetMultiPoolersByCellOptions) ([]*topoclient.MultiPoolerInfo, error) {
+				return nil, fmt.Errorf("fake topo list error")
+			},
+		}
+		rpc := &mockMultiPoolerClient{}
+
+		_, err := backuphealth.Evaluate(ctx, store, rpc, shard)
+		if err == nil {
+			t.Errorf("expected find pooler error")
+		}
+	})
 }

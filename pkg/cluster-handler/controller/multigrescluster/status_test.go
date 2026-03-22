@@ -303,6 +303,40 @@ func TestUpdateStatus_Coverage(t *testing.T) {
 	if cluster.Status.Phase != multigresv1alpha1.PhaseProgressing {
 		t.Errorf("Expected PhaseProgressing, got %s", cluster.Status.Phase)
 	}
+
+	tsDegraded := &multigresv1alpha1.TopoServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ts-degraded",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Status: multigresv1alpha1.TopoServerStatus{
+			Phase: multigresv1alpha1.PhaseDegraded,
+		},
+	}
+
+	fakeClient = fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster, cell, tg, tsDegraded).
+		WithStatusSubresource(cluster, cell, tg, tsDegraded).
+		Build()
+
+	r.Client = fakeClient
+	if err := r.updateStatus(context.Background(), cluster); err != nil {
+		t.Fatalf("updateStatus failed: %v", err)
+	}
+
+	if err := fakeClient.Get(
+		context.Background(),
+		client.ObjectKeyFromObject(cluster),
+		cluster,
+	); err != nil {
+		t.Fatalf("Failed to refresh cluster: %v", err)
+	}
+
+	if cluster.Status.Phase != multigresv1alpha1.PhaseDegraded {
+		t.Errorf("Expected PhaseDegraded, got %s", cluster.Status.Phase)
+	}
 }
 
 func TestUpdateStatus_ZeroResources(t *testing.T) {

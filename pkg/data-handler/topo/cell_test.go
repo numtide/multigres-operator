@@ -2,10 +2,12 @@ package topo_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
+	"github.com/multigres/multigres/go/pb/clustermetadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 
@@ -26,6 +28,30 @@ func newTestCell(name string) *multigresv1alpha1.Cell {
 	}
 }
 
+type mockTopoStore struct {
+	topoclient.Store
+	createCellFunc func(ctx context.Context, cellName string, cell *clustermetadata.Cell) error
+	deleteCellFunc func(ctx context.Context, cellName string, force bool) error
+}
+
+func (m *mockTopoStore) CreateCell(
+	ctx context.Context,
+	cellName string,
+	cell *clustermetadata.Cell,
+) error {
+	if m.createCellFunc != nil {
+		return m.createCellFunc(ctx, cellName, cell)
+	}
+	return nil
+}
+
+func (m *mockTopoStore) DeleteCell(ctx context.Context, cellName string, force bool) error {
+	if m.deleteCellFunc != nil {
+		return m.deleteCellFunc(ctx, cellName, force)
+	}
+	return nil
+}
+
 func TestRegisterCell(t *testing.T) {
 	t.Parallel()
 
@@ -38,18 +64,36 @@ func TestRegisterCell(t *testing.T) {
 		defer func() { _ = store.Close() }()
 
 		recorder := record.NewFakeRecorder(10)
-		cell := newTestCell("cell1")
+		// Register a different cell name to ensure it's not already in topo
+		cell := newTestCell("cell2")
 
 		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		got, err := store.GetCell(context.Background(), "cell1")
+		got, err := store.GetCell(context.Background(), "cell2")
 		if err != nil {
 			t.Fatalf("cell not found in topo after registration: %v", err)
 		}
-		if got.Name != "cell1" {
-			t.Errorf("expected cell name cell1, got %s", got.Name)
+		if got.Name != "cell2" {
+			t.Errorf("expected cell name cell2, got %s", got.Name)
+		}
+	})
+
+	t.Run("returns error on failure", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopoStore{
+			createCellFunc: func(ctx context.Context, cellName string, cell *clustermetadata.Cell) error {
+				return fmt.Errorf("fake connection error")
+			},
+		}
+
+		recorder := record.NewFakeRecorder(10)
+		cell := newTestCell("cell1")
+
+		err := topo.RegisterCell(context.Background(), store, recorder, cell)
+		if err == nil {
+			t.Fatal("expected error, got nil")
 		}
 	})
 
@@ -114,6 +158,40 @@ func TestUnregisterCell(t *testing.T) {
 
 		if err := topo.UnregisterCell(context.Background(), store, recorder, cell); err != nil {
 			t.Fatalf("unregistering nonexistent cell should succeed (idempotent), got: %v", err)
+		}
+	})
+
+	t.Run("returns error on failure other than TopoUnavailable", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopoStore{
+			deleteCellFunc: func(ctx context.Context, cellName string, force bool) error {
+				return fmt.Errorf("some other error")
+			},
+		}
+
+		recorder := record.NewFakeRecorder(10)
+		cell := newTestCell("cell1")
+
+		err := topo.UnregisterCell(context.Background(), store, recorder, cell)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("returns error on TopoUnavailable", func(t *testing.T) {
+		t.Parallel()
+		store := &mockTopoStore{
+			deleteCellFunc: func(ctx context.Context, cellName string, force bool) error {
+				return fmt.Errorf("fake UNAVAILABLE error")
+			},
+		}
+
+		recorder := record.NewFakeRecorder(10)
+		cell := newTestCell("cell1")
+
+		err := topo.UnregisterCell(context.Background(), store, recorder, cell)
+		if err == nil {
+			t.Fatal("expected error, got nil")
 		}
 	})
 }

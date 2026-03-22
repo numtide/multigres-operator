@@ -1263,3 +1263,115 @@ func TestCollectTrackingLabels(t *testing.T) {
 		}
 	})
 }
+
+func TestReconciler_PatchTrackingLabelsError(t *testing.T) {
+	scheme := setupScheme()
+	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace := setupFixtures(t)
+	baseCluster.Labels = nil // trigger patch
+
+	baseClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreTpl, cellTpl, shardTpl, baseCluster).
+		Build()
+
+	failureConfig := &testutil.FailureConfig{
+		OnPatch: testutil.FailOnObjectName(clusterName, errors.New("simulated patch error")),
+	}
+	r := &MultigresClusterReconciler{
+		Client:   testutil.NewFakeClientWithFailures(baseClient, failureConfig),
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+	_, err := r.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "failed to patch tracking labels") {
+		t.Errorf("Expected patch error, got %v", err)
+	}
+}
+
+func TestReconciler_TopologyFailure(t *testing.T) {
+	scheme := setupScheme()
+	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace := setupFixtures(t)
+
+	baseClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreTpl, cellTpl, shardTpl, baseCluster).
+		WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+		Build()
+
+	r := &MultigresClusterReconciler{
+		Client:   baseClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+		CreateTopoStore: func(_ multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+			return nil, errors.New("simulated topo error")
+		},
+	}
+	_, err := r.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "failed to open topology store") {
+		t.Errorf("Expected topology reconcile error, got %v", err)
+	}
+}
+
+func TestReconciler_TopologyRequeueWhenUnavailable(t *testing.T) {
+	scheme := setupScheme()
+	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace := setupFixtures(t)
+	baseCluster.CreationTimestamp = metav1.Now() // Trigger grace period
+
+	baseClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreTpl, cellTpl, shardTpl, baseCluster).
+		WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+		Build()
+
+	r := &MultigresClusterReconciler{
+		Client:   baseClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+		CreateTopoStore: func(_ multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+			return nil, errors.New("UNAVAILABLE: topo not ready")
+		},
+	}
+	res, err := r.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}},
+	)
+	if err != nil {
+		t.Errorf("Expected nil error, got %v", err)
+	}
+	if res.RequeueAfter == 0 {
+		t.Errorf("Expected RequeueAfter > 0")
+	}
+}
+
+func TestReconciler_TopologyErrorWhenUnavailableExpired(t *testing.T) {
+	scheme := setupScheme()
+	coreTpl, cellTpl, shardTpl, baseCluster, clusterName, namespace := setupFixtures(t)
+
+	baseClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(coreTpl, cellTpl, shardTpl, baseCluster).
+		WithStatusSubresource(&multigresv1alpha1.MultigresCluster{}).
+		Build()
+
+	r := &MultigresClusterReconciler{
+		Client:   baseClient,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+		CreateTopoStore: func(_ multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+			return nil, errors.New("UNAVAILABLE: topo not ready")
+		},
+	}
+	_, err := r.Reconcile(
+		context.Background(),
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: clusterName, Namespace: namespace}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "topology server unavailable") {
+		t.Errorf("Expected topology unavailable error, got %v", err)
+	}
+}

@@ -923,6 +923,13 @@ func TestTemplateValidator_ShardTemplatePoolNames(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Expected nil for non-ShardTemplate, got %v", err)
 				}
+
+				// ShardTemplate validator with wrong object type
+				v2 := NewTemplateValidator(fakeClient, "ShardTemplate")
+				_, err2 := v2.ValidateCreate(t.Context(), &multigresv1alpha1.CellTemplate{})
+				if err2 != nil {
+					t.Fatalf("Expected nil for wrong object type, got %v", err2)
+				}
 				return
 			}
 
@@ -1135,6 +1142,216 @@ func TestValidateNoStorageShrink(t *testing.T) {
 		_, err := validateNoStorageShrink(&TrulyOnlyRuntimeObject{}, &TrulyOnlyRuntimeObject{})
 		if err != nil {
 			t.Fatalf("expected no error for wrong types, got: %v", err)
+		}
+	})
+
+	t.Run("ignores parse errors", func(t *testing.T) {
+		t.Parallel()
+		oldObj := makeCluster("invalidQty")
+		newObj := makeCluster("10Gi")
+		_, err := validateNoStorageShrink(oldObj, newObj)
+		if err != nil {
+			t.Fatalf("expected no error when parsing fails, got: %v", err)
+		}
+
+		oldObj2 := makeCluster("10Gi")
+		newObj2 := makeCluster("invalidQty")
+		_, err2 := validateNoStorageShrink(oldObj2, newObj2)
+		if err2 != nil {
+			t.Fatalf("expected no error when parsing fails, got: %v", err2)
+		}
+	})
+
+	t.Run("collects from shard overrides", func(t *testing.T) {
+		t.Parallel()
+		obj := &multigresv1alpha1.MultigresCluster{
+			Spec: multigresv1alpha1.MultigresClusterSpec{
+				Databases: []multigresv1alpha1.DatabaseConfig{{
+					Name: "db1",
+					TableGroups: []multigresv1alpha1.TableGroupConfig{{
+						Name: "tg1",
+						Shards: []multigresv1alpha1.ShardConfig{{
+							Name: "s1",
+							Overrides: &multigresv1alpha1.ShardOverrides{
+								Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+									"pool1": {Storage: multigresv1alpha1.StorageSpec{Size: "42Gi"}},
+								},
+							},
+						}},
+					}},
+				}},
+			},
+		}
+		sizes := collectPoolStorageSizes(obj)
+		if sizes["db1/tg1/s1/pool1"] != "42Gi" {
+			t.Errorf("expected 42Gi, got %v", sizes)
+		}
+	})
+}
+
+func TestValidateEtcdReplicasImmutable(t *testing.T) {
+	t.Parallel()
+
+	makeCluster := func(replicas *int32, external bool) *multigresv1alpha1.MultigresCluster {
+		c := &multigresv1alpha1.MultigresCluster{}
+		if external {
+			c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+				External: &multigresv1alpha1.ExternalTopoServerSpec{
+					Endpoints: []multigresv1alpha1.EndpointUrl{"http://etcd"},
+				},
+			}
+		} else if replicas != nil {
+			c.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{Replicas: replicas},
+			}
+		}
+		return c
+	}
+
+	t.Run("allows identical replica counts", func(t *testing.T) {
+		t.Parallel()
+		oldObj := makeCluster(ptr.To(int32(5)), false)
+		newObj := makeCluster(ptr.To(int32(5)), false)
+		_, err := validateEtcdReplicasImmutable(oldObj, newObj)
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("rejects changed replica counts", func(t *testing.T) {
+		t.Parallel()
+		oldObj := makeCluster(ptr.To(int32(3)), false)
+		newObj := makeCluster(ptr.To(int32(5)), false)
+		_, err := validateEtcdReplicasImmutable(oldObj, newObj)
+		if err == nil || !strings.Contains(err.Error(), "etcd uses static bootstrap") {
+			t.Fatalf("expected immutable error, got %v", err)
+		}
+	})
+
+	t.Run("allows transitions to or from external (0 replicas)", func(t *testing.T) {
+		t.Parallel()
+		// one is 0, one is > 0
+		oldObj := makeCluster(nil, true)
+		newObj := makeCluster(ptr.To(int32(3)), false)
+		_, err := validateEtcdReplicasImmutable(oldObj, newObj)
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("ignores wrong types", func(t *testing.T) {
+		t.Parallel()
+		_, err := validateEtcdReplicasImmutable(&TrulyOnlyRuntimeObject{}, makeCluster(nil, false))
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		_, err = validateEtcdReplicasImmutable(makeCluster(nil, false), &TrulyOnlyRuntimeObject{})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+}
+
+func TestMultigresClusterValidator_ValidateUpdate(t *testing.T) {
+	t.Parallel()
+	existing := []client.Object{
+		&multigresv1alpha1.CoreTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"},
+		},
+		&multigresv1alpha1.CellTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"},
+		},
+		&multigresv1alpha1.ShardTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"},
+		},
+		&storagev1.StorageClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "standard",
+				Annotations: map[string]string{
+					"storageclass.kubernetes.io/is-default-class": "true",
+				},
+			},
+			Provisioner: "k8s.io/fake",
+		},
+	}
+	fakeClient := fake.NewClientBuilder().WithScheme(setupScheme()).WithObjects(existing...).Build()
+	validator := NewMultigresClusterValidator(fakeClient)
+
+	baseCluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-1", Namespace: "default"},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			TemplateDefaults: multigresv1alpha1.TemplateDefaults{
+				CoreTemplate: "missing-core",
+			},
+		},
+	}
+
+	t.Run("bubbles up base validation error", func(t *testing.T) {
+		t.Parallel()
+		_, err := validator.ValidateUpdate(t.Context(), baseCluster, baseCluster)
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected validation error, got %v", err)
+		}
+	})
+
+	validCluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-1", Namespace: "default"},
+		Spec:       multigresv1alpha1.MultigresClusterSpec{},
+	}
+
+	shrunkCluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-1", Namespace: "default"},
+		Spec: multigresv1alpha1.MultigresClusterSpec{
+			Cells: []multigresv1alpha1.CellConfig{{Name: "c1"}},
+			Databases: []multigresv1alpha1.DatabaseConfig{{
+				Name: "postgres",
+				TableGroups: []multigresv1alpha1.TableGroupConfig{{
+					Name: "default",
+					Shards: []multigresv1alpha1.ShardConfig{{
+						Name: "0-inf",
+						Spec: &multigresv1alpha1.ShardInlineSpec{
+							MultiOrch: multigresv1alpha1.MultiOrchSpec{
+								Cells: []multigresv1alpha1.CellName{"c1"},
+							},
+							Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+								"main": {
+									Storage: multigresv1alpha1.StorageSpec{Size: "1Gi"},
+									Cells:   []multigresv1alpha1.CellName{"c1"},
+								}, // shrink from 10Gi
+							},
+						},
+					}},
+				}},
+			}},
+		},
+	}
+	largeCluster := shrunkCluster.DeepCopy()
+	largeCluster.Spec.Databases[0].TableGroups[0].Shards[0].Spec.Pools["main"] = multigresv1alpha1.PoolSpec{
+		Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"},
+	}
+
+	t.Run("bubbles up shrink error", func(t *testing.T) {
+		t.Parallel()
+		_, err := validator.ValidateUpdate(t.Context(), largeCluster, shrunkCluster)
+		if err == nil || !strings.Contains(err.Error(), "shrink is not supported") {
+			t.Fatalf("expected shrink error, got %v", err)
+		}
+	})
+
+	largeEtcdCluster := validCluster.DeepCopy()
+	largeEtcdCluster.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+		Etcd: &multigresv1alpha1.EtcdSpec{Replicas: ptr.To(int32(5))},
+	}
+	smallEtcdCluster := validCluster.DeepCopy()
+	smallEtcdCluster.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+		Etcd: &multigresv1alpha1.EtcdSpec{Replicas: ptr.To(int32(3))},
+	}
+
+	t.Run("bubbles up etcd error", func(t *testing.T) {
+		t.Parallel()
+		_, err := validator.ValidateUpdate(t.Context(), largeEtcdCluster, smallEtcdCluster)
+		if err == nil || !strings.Contains(err.Error(), "etcd uses static bootstrap") {
+			t.Fatalf("expected etcd error, got %v", err)
 		}
 	})
 }

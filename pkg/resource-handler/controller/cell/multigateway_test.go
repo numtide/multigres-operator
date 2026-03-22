@@ -1720,3 +1720,31 @@ func TestBuildMultiGatewayService(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildMultiGatewayDeployment_Observability(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	cellObj := &multigresv1alpha1.Cell{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-otel",
+			Namespace: "default",
+			Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+		},
+		Spec: multigresv1alpha1.CellSpec{
+			Name: "zone-otel",
+			Observability: &multigresv1alpha1.ObservabilityConfig{
+				SamplingConfigRef: &multigresv1alpha1.SamplingConfigRef{
+					Name: "otel-sampler-config",
+				},
+			},
+		},
+	}
+	deploy, err := BuildMultiGatewayDeployment(cellObj, scheme)
+	if err != nil {
+		t.Fatalf("BuildMultiGatewayDeployment failed: %v", err)
+	}
+	if len(deploy.Spec.Template.Spec.Volumes) == 0 {
+		t.Errorf("expected volumes to contain otel config")
+	}
+}

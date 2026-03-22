@@ -1,6 +1,8 @@
 package toposerver
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -447,6 +449,197 @@ func TestTopoServerReconciler_UpdateStatus(t *testing.T) {
 			if readyCondition.Status != metav1.ConditionTrue {
 				t.Errorf("Condition status = %s, want True", readyCondition.Status)
 			}
+		}
+	})
+
+	t.Run("statefulset_update_in_progress", func(t *testing.T) {
+		toposerver := &multigresv1alpha1.TopoServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "topo-update", Namespace: "default"},
+		}
+		sts := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "topo-update",
+				Namespace:  "default",
+				Generation: 2,
+			},
+			Spec: appsv1.StatefulSetSpec{Replicas: ptr.To(int32(3))},
+			Status: appsv1.StatefulSetStatus{
+				ObservedGeneration: 1, // trigger the 'else if'
+			},
+		}
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(toposerver, sts).
+			Build()
+		r := &TopoServerReconciler{
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		if err := r.updateStatus(t.Context(), toposerver); err != nil {
+			t.Fatalf("updateStatus failed: %v", err)
+		}
+		toposerverUpdated := &multigresv1alpha1.TopoServer{}
+		_ = fakeClient.Get(t.Context(), client.ObjectKeyFromObject(toposerver), toposerverUpdated)
+		if len(toposerverUpdated.Status.Conditions) > 0 &&
+			toposerverUpdated.Status.Conditions[0].Message != "StatefulSet update in progress" {
+			t.Errorf(
+				"Expected 'StatefulSet update in progress' message, got %s",
+				toposerverUpdated.Status.Conditions[0].Message,
+			)
+		}
+	})
+}
+
+func TestTopoServerReconciler_StandaloneMocks(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	t.Run("ignore_deleted", func(t *testing.T) {
+		toposerver := &multigresv1alpha1.TopoServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-deleted",
+				Namespace: "default",
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(toposerver).Build()
+		// Now delete it so DeletionTimestamp is set
+		if err := fakeClient.Delete(t.Context(), toposerver); err != nil {
+			t.Fatalf("failed to delete: %v", err)
+		}
+
+		r := &TopoServerReconciler{
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+		res, err := r.Reconcile(
+			t.Context(),
+			ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: "test-deleted", Namespace: "default"},
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.RequeueAfter != 0 {
+			t.Fatalf("expected no requeue")
+		}
+	})
+
+	t.Run("healthy_phase", func(t *testing.T) {
+		toposerver := &multigresv1alpha1.TopoServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-healthy",
+				Namespace: "default",
+			},
+			Status: multigresv1alpha1.TopoServerStatus{
+				Phase: multigresv1alpha1.PhaseHealthy,
+			},
+		}
+
+		// Build the exact STS and Pods needed so reconcile reaches healthy phase.
+		sts, err := BuildStatefulSet(toposerver, scheme)
+		if err != nil {
+			t.Fatalf("failed to build sts: %v", err)
+		}
+		sts.Generation = 1
+		sts.Status = appsv1.StatefulSetStatus{
+			Replicas:           *sts.Spec.Replicas,
+			ReadyReplicas:      *sts.Spec.Replicas,
+			ObservedGeneration: 1,
+		}
+
+		var existing []client.Object
+		existing = append(existing, toposerver, sts)
+
+		for i := int32(0); i < *sts.Spec.Replicas; i++ {
+			existing = append(existing, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("test-healthy-%d", i),
+					Namespace: "default",
+					Labels:    sts.Spec.Selector.MatchLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					},
+				},
+			})
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
+			WithStatusSubresource(&appsv1.StatefulSet{}).
+			WithObjects(existing...).
+			Build()
+		r := &TopoServerReconciler{
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		res, reconcileErr := r.Reconcile(
+			t.Context(),
+			ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: "test-healthy", Namespace: "default"},
+			},
+		)
+		if reconcileErr != nil {
+			t.Fatalf("unexpected error: %v", reconcileErr)
+		}
+
+		updatedTopo := &multigresv1alpha1.TopoServer{}
+		_ = fakeClient.Get(t.Context(), client.ObjectKeyFromObject(toposerver), updatedTopo)
+
+		if res.RequeueAfter != 0 {
+			t.Fatalf("expected no requeue, but got requeueAfter %v, phase is %s, msg is %s",
+				res.RequeueAfter, updatedTopo.Status.Phase, updatedTopo.Status.Message)
+		}
+	})
+
+	t.Run("list_error_in_updateStatus", func(t *testing.T) {
+		toposerver := &multigresv1alpha1.TopoServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-list-err",
+				Namespace: "default",
+			},
+		}
+		sts := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-list-err", Namespace: "default"},
+			Spec:       appsv1.StatefulSetSpec{Replicas: ptr.To(int32(3))},
+			Status:     appsv1.StatefulSetStatus{Replicas: 3, ReadyReplicas: 3},
+		}
+
+		baseClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(toposerver, sts).
+			Build()
+		fails := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnList: func(list client.ObjectList) error { return testutil.ErrNetworkTimeout },
+		})
+
+		r := &TopoServerReconciler{
+			Client:   fails,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
+
+		_, reconcileErr := r.Reconcile(
+			t.Context(),
+			ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: "test-list-err", Namespace: "default"},
+			},
+		)
+		if reconcileErr == nil ||
+			!strings.Contains(reconcileErr.Error(), "failed to list toposerver pods") {
+			t.Fatalf("expected list pods error, got %v", reconcileErr)
 		}
 	})
 }
