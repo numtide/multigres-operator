@@ -24,10 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 
@@ -40,13 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
 
       - name: Set up Docker for multi-platform
-        uses: docker/setup-docker-action@3fb92d6d9c634363128c8cce4bc3b2826526370a # v4.4.0
+        uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # v5.0.0
         with:
           daemon-config: |
             {
@@ -56,10 +56,10 @@ jobs:
             }
 
       - name: Setup Docker buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Log into registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -69,7 +69,7 @@ jobs:
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Build container image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
           file: Dockerfile
@@ -95,7 +95,7 @@ jobs:
       # the scanner runs in a container with a different local registry
       - name: Scan final image with grype
         id: scan
-        uses: anchore/scan-action@568b89d27fc18c60e56937bff480c91c772cd993 # v7.1.0
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         continue-on-error: true
         with:
           cache-db: true
@@ -103,7 +103,7 @@ jobs:
           output-file: grype.sarif
           severity-cutoff: high
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@16140ae1a102900babc80a33c44059580f687047 # v4.30.9
+        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4.34.1
         with:
           sarif_file: grype.sarif
       - name: Check success or failure
@@ -124,10 +124,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
 

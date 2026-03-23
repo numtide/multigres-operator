@@ -39,10 +39,10 @@ jobs:
     steps:
       # Initial setup
       - name: Check out
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: ./go.mod
           cache: false # Manual cache control below
@@ -51,7 +51,7 @@ jobs:
       # Note that this also restores "~/.cache/coverage.txt" to check the
       # coverage diff.
       - name: Restore build cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
             ~/.cache/coverage.txt
@@ -98,7 +98,7 @@ jobs:
       # change is made, the previous test reports will be minimised, leaving the
       # only relevant comment.
       - name: Check and report
-        uses: actions/github-script@v6
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         if: always() && github.event_name == 'pull_request'
         env:
           COVERAGE_THRESHOLD: ${{ inputs.COVERAGE_THRESHOLD }}
@@ -216,7 +216,7 @@ jobs:
       - name: Save cache
         if: always() &&
           github.event_name != 'pull_request'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           key: ${{ runner.os }}-go-coverage-${{ hashFiles('**/go.sum', 'Makefile') }}-${{ github.sha }}
           # Any location that we generate the test coverage report in
