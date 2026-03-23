@@ -110,7 +110,7 @@ CERT_MANAGER_VERSION ?= v1.19.2
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 # NOTE: This version should match the version defined in devshell.nix
-ENVTEST_K8S_VERSION ?= 1.33
+ENVTEST_K8S_VERSION ?= 1.35
 
 ###----------------------------------------
 ##   Comamnds
