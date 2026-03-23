@@ -82,6 +82,9 @@ OBSERVABILITY_IMAGES ?= \
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Remove target files when a recipe fails, preventing stale artifacts.
+.DELETE_ON_ERROR:
+
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
