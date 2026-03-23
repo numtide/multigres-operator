@@ -227,13 +227,12 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # Use docker-buildx target or pass --platform to docker build for multi-arch images.
 .PHONY: container
 container: ## Build container image
-	$(eval BUILT_TAG := $(VERSION_SHORT))
 	$(CONTAINER_TOOL) build \
 		--build-arg VERSION=$$(git rev-parse --short HEAD) \
 		--build-arg GIT_COMMIT=$$(git rev-parse HEAD) \
 		--build-arg BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-		-t $(IMG_PREFIX)/$(IMG_REPO):$(BUILT_TAG) .
-	@echo $(BUILT_TAG) > $(IMG_TAG_FILE)
+		-t $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT) .
+	@echo $(VERSION_SHORT) > $(IMG_TAG_FILE)
 
 .PHONY: minikube-load
 minikube-load:
