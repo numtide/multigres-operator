@@ -268,6 +268,7 @@ Since most pod spec fields are immutable after creation, the operator uses a **h
 1. At pod creation, `ComputeSpecHash` produces an FNV-1a hex string over all operator-managed fields:
    - Container images, commands, args, env vars, resources, volume mounts, security contexts
    - Pod affinity, node selector, volume definitions, termination grace period
+   - The `multigres.com/postgres-config-hash` annotation value (SHA-256 of the referenced ConfigMap key data), when a `postgresConfigRef` is set. This ensures ConfigMap content changes trigger rolling updates even though the pod spec itself is unchanged.
 2. The hash is stored as annotation `multigres.com/spec-hash` on the pod.
 3. On each reconcile, `podNeedsUpdate` builds the desired pod and computes its hash. If it doesn't match the existing pod's annotation, the pod is flagged for update.
 
@@ -415,7 +416,7 @@ All pod management code lives in `pkg/resource-handler/controller/shard/`:
 
 | File | Purpose |
 |---|---|
-| `shard_controller.go` | Main reconciler. Orchestrates pool reconciliation, sets up watches, PVC owner-reference management. |
+| `shard_controller.go` | Main reconciler. Orchestrates pool reconciliation, sets up watches (including ConfigMap watches via `enqueueFromPostgresConfigMap` for `postgresConfigRef` changes), PVC owner-reference management. |
 | `reconcile_pool_pods.go` | Core pod lifecycle: `reconcilePoolPods`, `createMissingResources`, `handleScaleDown`, `handleRollingUpdates`, `selectPodToDrain`, `cleanupDrainedPod`, `podNeedsUpdate`. |
 | `reconcile_deletion.go` | Shard deletion: `handleDeletion`, topology unregistration, child resource cleanup. |
 | `reconcile_multiorch.go` | MultiOrch deployment and service reconciliation. |

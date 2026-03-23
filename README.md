@@ -24,6 +24,8 @@ The **[Multigres](https://github.com/multigres/multigres) Operator** is a Kubern
 - **Template System**: Define configuration once (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) and reuse it across the cluster.
 - **Hierarchical Defaults**: Smart override logic allowing for global defaults, namespace defaults, and granular overrides.
 - **External Gateway Exposure**: Optional external gateway support via `spec.externalGateway` with configurable `externalIPs` and service annotations, tracked by a `GatewayExternalReady` condition.
+- **External Admin Web Exposure**: Optional external exposure for the multiadmin-web Service via `spec.externalAdminWeb`, mirroring the gateway pattern with an `AdminWebExternalReady` condition.
+- **PostgreSQL Configuration**: Reference a user-created ConfigMap with `postgresql.conf` overrides via `postgresConfigRef` on shard templates. ConfigMap content changes trigger automatic rolling updates.
 - **Integrated Cert Management**: Built-in self-signed certificate generation and rotation for validating webhooks, with optional support for `cert-manager`.
 
 ---
@@ -277,6 +279,8 @@ Please be aware of the following constraints in the current version:
 | [Operator Capability Levels](docs/operator-capability-levels.md) | Maturity assessment against the [Operator Framework capability model](https://operatorframework.io/operator-capabilities/) |
 | [Webhook Defaults & GitOps](docs/gitops-and-webhook-defaults.md) | How the webhook materialises defaults, dynamic cell resolution, and GitOps compatibility |
 | [Durability Policy](docs/durability-policy.md) | Configurable replication quorum: `AT_LEAST_2` (default) and `MULTI_CELL_AT_LEAST_2` for cross-AZ durability |
+| [External Admin Web](docs/external-admin-web.md) | External exposure for the multiadmin-web Service |
+| [PostgreSQL Configuration](docs/postgresql-configuration.md) | Custom `postgresql.conf` overrides via ConfigMap reference |
 | [Storage Management](docs/storage.md) | PVC deletion policies (Retain/Delete) and volume expansion |
 | [Configuration Reference](docs/configuration.md) | Operator flags, environment variables, and logging |
 | [Demos](demo/) | Guided walkthroughs (webhook, cert-manager, observability) |

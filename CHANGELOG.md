@@ -4,6 +4,46 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.9.0] — 2026-03-23
+
+**Previous release:** v0.8.0 (2026-03-20)
+
+Adds PostgreSQL runtime configuration via ConfigMap references, external admin web exposure, and automatic rolling updates on ConfigMap content changes. Also includes a major test coverage expansion bringing operator packages to 95–100% coverage.
+
+**16 commits, 81 files changed, ~7388 insertions.**
+
+### Features
+
+- **PostgreSQL configuration via ConfigMap:** New `postgresConfigRef` field on `ShardTemplateSpec`, `ShardOverrides`, and `ShardInlineSpec` references a user-created ConfigMap containing `postgresql.conf` overrides. The operator mounts the ConfigMap and passes `--postgres-config-template` to pgctld. When unset, pgctld uses its built-in template. Override chain: template → overrides → inline (last non-nil wins).
+- **External admin web exposure:** New `spec.externalAdminWeb` field on MultigresCluster exposes the multiadmin-web Service via `externalIPs` with optional annotations, mirroring the existing `externalGateway` pattern. Includes `AdminWebExternalReady` condition driven by Deployment ReadyReplicas and `status.adminWeb.externalEndpoint`.
+- **ConfigMap content hash rolling updates:** The operator now watches ConfigMaps referenced by `postgresConfigRef` and computes a SHA-256 hash of the referenced key data. Hash changes propagate through shard annotations → pod annotations → spec hash, triggering automatic rolling updates via the drain state machine without manual restarts.
+
+### Bug Fixes
+
+- **TopoServer status readiness:** TopoServer status computation used `sts.Status.Replicas` for readiness checks, which is unreliable with certain client implementations. Switched to `sts.Spec.Replicas` for phase computation and condition messages.
+
+### Dependencies
+
+- **Multigres image update:** Pinned default container images to `sha-d9b8ff2` (pgctld, multigres) and `sha-d7be6e4` (multiadmin-web), up from `sha-96175f5` and `sha-d1ba30a`.
+
+### Testing
+
+- **Operator test coverage expansion:** Added tests across 20 files covering multigrescluster, tablegroup, backuphealth, drain, topo, resolver, cell, shard, toposerver, and webhook handlers packages. Includes edge-case coverage for validation, error paths, DeletionTimestamp handling, crash-loop detection, and template resolution (~2,650 lines of test code).
+
+### Documentation
+
+- **External admin web guide:** New `docs/external-admin-web.md` covering configuration, status conditions, and usage patterns.
+- **PostgreSQL configuration guide:** New `docs/postgresql-configuration.md` covering ConfigMap references, rolling updates, and a warning about Go template syntax in ConfigMap comments.
+
+### Observer
+
+- **Skill optimization:** Split `exercise_cluster` SKILL.md (557→194 lines) and `diagnose_with_observer` SKILL.md (372→189 lines) by extracting protocols and scenarios into reference files. Reduces context token consumption by ~83%.
+- **Exerciser fixtures:** Added `external-adminweb` and `postgres-config-ref` fixtures with prerequisite ConfigMaps and patch scripts.
+- **Postgres config scenarios:** Added 4 exerciser scenarios for verifying, updating, removing, and validating PostgreSQL configuration settings.
+- **Fixture template fix:** Removed invalid Go template directives (`{{...}}`) from `postgres-config-ref/prerequisites.yaml` comments that caused pgctld's template rendering to fail silently.
+
+---
+
 ## [v0.8.0] — 2026-03-20
 
 **Previous release:** v0.7.1 (2026-03-19)
