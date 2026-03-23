@@ -49,7 +49,7 @@ func TestExternalAdminWeb_EnableDisableLifecycle(t *testing.T) {
 				Enabled:     true,
 				ExternalIPs: []multigresv1alpha1.IPAddress{"2001:db8::200"},
 				Annotations: map[string]string{
-					"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+					"team.example.com/owner": "platform-engineering",
 				},
 			},
 		},
@@ -72,7 +72,7 @@ func TestExternalAdminWeb_EnableDisableLifecycle(t *testing.T) {
 			Namespace: testNamespace,
 			Labels:    awLabels,
 			Annotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+				"team.example.com/owner": "platform-engineering",
 			},
 			OwnerReferences: clusterOwnerRefs(t, clusterName),
 		},

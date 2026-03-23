@@ -54,14 +54,14 @@ Adds external gateway exposure for DNS wiring and PostgreSQL initdb argument cus
 
 ### Features
 
-- **External gateway endpoint:** New `spec.externalGateway` field on MultigresCluster exposes the global multigateway Service via `ClusterIP` + `spec.externalIPs` for external access without requiring LoadBalancer Services. Includes user-defined annotations for cloud LB controller integration (e.g., AWS ALB scheme). Publishes the resolved endpoint to `status.gateway.externalEndpoint` and manages a `GatewayExternalReady` condition with deterministic transitions: `AwaitingEndpoint` → `NoReadyGateways` → `EndpointReady`. Condition is removed when disabled. (Contributed by @Verolop)
+- **External gateway endpoint:** New `spec.externalGateway` field on MultigresCluster exposes the global multigateway Service via `ClusterIP` + `spec.externalIPs` for external access without requiring LoadBalancer Services. Supports optional user-defined annotations as generic Service metadata. Publishes the resolved endpoint to `status.gateway.externalEndpoint` and manages a `GatewayExternalReady` condition with deterministic transitions: `AwaitingEndpoint` → `NoReadyGateways` → `EndpointReady`. Condition is removed when disabled. (Contributed by @Verolop)
 - **PostgreSQL initdb arguments:** New `initdbArgs` field on `ShardTemplateSpec`, `ShardOverrides`, and `ShardInlineSpec` passes extra arguments to `initdb` during PostgreSQL data directory initialization (e.g., `--locale-provider=icu --icu-locale=en_US.UTF-8`). Injected as the `POSTGRES_INITDB_ARGS` environment variable on the pgctld container. Defined at the shard level because all pods in a shard must initialize with compatible settings for replication. Override chain: template → overrides → inline.
 
 ### Improvements
 
 - **ExternalIP validation:** New `IPAddress` named type in `common_types.go` with kubebuilder `Pattern` validation for IPv4/IPv6 addresses. Applied per-item via schema validation (zero CEL cost). ExternalIPs also validated server-side via `net.ParseIP` in the admission webhook.
 - **Annotation key guardrail:** CEL `XValidation` rule on `ExternalGatewayConfig` rejects annotation keys under the `multigres.com/` prefix, preventing conflicts with operator-managed metadata.
-- **Webhook warning for missing externalIPs:** The admission webhook emits a warning when `externalGateway.enabled: true` is set without `externalIPs`, informing the user that endpoint resolution depends on an external load balancer controller.
+- **Webhook warning for missing externalIPs:** The admission webhook emits a warning when `externalGateway.enabled: true` is set without `externalIPs`, informing the user that the external endpoint will not be resolved.
 - **Stale cell generation filtering:** Gateway readiness aggregation ignores Cell CRs whose `ObservedGeneration` lags behind `Generation`, preventing false-ready outcomes during rolling updates.
 
 ### Bug Fixes

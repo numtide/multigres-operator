@@ -19,7 +19,7 @@ spec:
     externalIPs:
       - "198.51.100.10"
     annotations:
-      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+      team.example.com/owner: "platform-engineering"
       test.multigres.exerciser/fixture: "external-adminweb"
   logLevels:
     pgctld: "debug"
