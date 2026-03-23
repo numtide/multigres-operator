@@ -113,7 +113,7 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 ENVTEST_K8S_VERSION ?= 1.33
 
 ###----------------------------------------
-##   Comamnds
+##   Commands
 #------------------------------------------
 
 .PHONY: all
