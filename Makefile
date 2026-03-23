@@ -586,9 +586,9 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 .PHONY: install-certmanager
 install-certmanager: ## Install Cert-Manager into the cluster
 	@echo "==> Installing Cert-Manager $(CERT_MANAGER_VERSION)..."
-	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
 	@echo "==> Waiting for Cert-Manager to be ready..."
-	$(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
