@@ -23,7 +23,7 @@ The **[Multigres](https://github.com/multigres/multigres) Operator** is a Kubern
 - **Failover & High Availability**: Orchestrates Primary/Standby failovers across defined Cells.
 - **Template System**: Define configuration once (`CoreTemplate`, `CellTemplate`, `ShardTemplate`) and reuse it across the cluster.
 - **Hierarchical Defaults**: Smart override logic allowing for global defaults, namespace defaults, and granular overrides.
-- **External Gateway Exposure**: Optional external gateway support via `spec.externalGateway` with configurable `externalIPs` and service annotations, tracked by a `GatewayExternalReady` condition.
+- **External Gateway Exposure**: Optional external gateway support via `spec.externalGateway` with configurable `externalIPs`, tracked by a `GatewayExternalReady` condition.
 - **External Admin Web Exposure**: Optional external exposure for the multiadmin-web Service via `spec.externalAdminWeb`, mirroring the gateway pattern with an `AdminWebExternalReady` condition.
 - **PostgreSQL Configuration**: Reference a user-created ConfigMap with `postgresql.conf` overrides via `postgresConfigRef` on shard templates. ConfigMap content changes trigger automatic rolling updates.
 - **Integrated Cert Management**: Built-in self-signed certificate generation and rotation for validating webhooks, with optional support for `cert-manager`.

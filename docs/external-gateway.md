@@ -9,7 +9,7 @@ Every MultigresCluster creates a **global multigateway Service** (`<cluster>-mul
 When `spec.externalGateway` is enabled, the operator:
 
 1. Assigns `spec.externalIPs` on the global Service for external reachability
-2. Applies user-provided annotations (e.g., for cloud load balancer controllers)
+2. Applies user-provided annotations to the Service metadata
 3. Publishes the resolved endpoint to `status.gateway.externalEndpoint`
 4. Manages a `GatewayExternalReady` condition with deterministic transitions
 
@@ -27,9 +27,6 @@ spec:
     enabled: true
     externalIPs:
       - "198.51.100.10"
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-      service.beta.kubernetes.io/aws-load-balancer-type: "external"
 ```
 
 ### Fields
@@ -37,7 +34,7 @@ spec:
 | Field | Type | Required | Description |
 |:---|:---|:---|:---|
 | `enabled` | bool | Yes | Enable or disable external gateway exposure |
-| `externalIPs` | []string | No | Externally routable IPv4/IPv6 addresses assigned to the Service |
+| `externalIPs` | []string | Yes | Externally routable IPv4/IPv6 addresses assigned to the Service |
 | `annotations` | map | No | Annotations applied to the global multigateway Service |
 
 ### ExternalIPs
@@ -52,22 +49,13 @@ externalIPs:
 
 The operator validates IPs at admission time — invalid addresses are rejected.
 
+> **How `externalIPs` works:** When `spec.externalIPs` is set on a Service, `kube-proxy` on every node creates iptables/IPVS rules to NAT traffic arriving with that destination IP to the Service's backing pods. However, Kubernetes does not attract traffic to the nodes — the cluster administrator must ensure the external IP is routed to one or more cluster nodes via platform networking (e.g., Elastic IP association on AWS, MetalLB on bare metal, or manual routing).
+
 ### Annotations
 
-Annotations are applied directly to the global multigateway Service metadata. Use these for cloud provider integration:
+Annotations are applied directly to the global multigateway Service metadata. This is a generic pass-through for any metadata the user wants on the Service (e.g., monitoring labels, service mesh configuration, organizational tags).
 
-```yaml
-# AWS Network Load Balancer
-annotations:
-  service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-  service.beta.kubernetes.io/aws-load-balancer-type: "external"
-
-# GCP Internal Load Balancer
-annotations:
-  cloud.google.com/l4-rbs: "enabled"
-```
-
-Annotations under the `multigres.com/` prefix are reserved and will be rejected.
+> **Note:** Annotations under the `multigres.com/` prefix are reserved and will be rejected. Cloud load balancer annotations (e.g., `service.beta.kubernetes.io/aws-load-balancer-*`) have no effect on a `ClusterIP` Service — cloud LB controllers only act on `type: LoadBalancer` Services.
 
 ## Status and Readiness
 
@@ -77,7 +65,7 @@ The operator manages a `GatewayExternalReady` condition on the MultigresCluster 
 
 | Status | Reason | Meaning |
 |:---|:---|:---|
-| `False` | `AwaitingEndpoint` | No external endpoint provisioned yet (Service not created or no externalIPs/LB ingress) |
+| `False` | `AwaitingEndpoint` | No external endpoint provisioned yet (no externalIPs configured) |
 | `False` | `NoReadyGateways` | External endpoint assigned but no multigateway pods are ready to serve traffic |
 | `True` | `EndpointReady` | External endpoint is serving traffic |
 
@@ -98,12 +86,9 @@ status:
 
 When disabled, `status.gateway` is `nil` and the condition is removed.
 
-### Endpoint Resolution Priority
+### Endpoint Resolution
 
-The endpoint is resolved in this order:
-1. `Service.spec.externalIPs[0]` (preferred — explicitly controlled)
-2. `Service.status.loadBalancer.ingress[0].hostname` (fallback — cloud LB)
-3. `Service.status.loadBalancer.ingress[0].ip` (fallback — cloud LB)
+The endpoint is resolved from `Service.spec.externalIPs[0]`.
 
 ## Disabling
 
@@ -128,7 +113,7 @@ The `GatewayExternalReady` condition and `status.gateway.externalEndpoint` provi
 
 ## EKS / Cloud Deployment
 
-On AWS EKS, a common pattern is to use externalIPs with an AWS Network Load Balancer. The annotations configure the AWS Load Balancer Controller to provision the NLB:
+On AWS EKS, a common pattern is to use `externalIPs` with a pre-allocated Elastic IP:
 
 ```yaml
 spec:
@@ -136,18 +121,16 @@ spec:
     enabled: true
     externalIPs:
       - "10.0.1.100"  # Pre-allocated Elastic IP
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-      service.beta.kubernetes.io/aws-load-balancer-type: "external"
-      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
 ```
 
-On GKE, use the GCP load balancer annotations instead.
+The administrator must ensure the Elastic IP is routed to the cluster nodes (e.g., associated with an ENI on a node, or routed via a separately managed NLB/target group). The operator only sets `spec.externalIPs` on the Service — it does not provision any cloud infrastructure.
+
+On bare metal, tools like MetalLB can advertise the external IP via ARP (L2) or BGP (L3) to attract traffic to the correct nodes.
 
 ## Webhook Warning
 
 If `externalGateway.enabled: true` is set without any `externalIPs`, the admission webhook emits a warning:
 
-> externalGateway is enabled but no externalIPs specified; endpoint resolution depends on an external load balancer controller provisioning an ingress address on the global multigateway Service
+> externalGateway is enabled but no externalIPs specified; the external endpoint will not be resolved and the GatewayExternalReady condition will remain AwaitingEndpoint
 
-This is informational — the feature still works if an external controller (like the AWS Load Balancer Controller) provisions the LB ingress. But without explicit IPs or an LB controller, the endpoint will never be resolved and the condition will remain `AwaitingEndpoint`.
+`externalIPs` is the only mechanism for endpoint resolution on a `ClusterIP` Service.

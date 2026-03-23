@@ -344,12 +344,12 @@ func TestBuildMultiAdminWebService(t *testing.T) {
 			extAW: &multigresv1alpha1.ExternalAdminWebConfig{
 				Enabled: true,
 				Annotations: map[string]string{
-					"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+					"team.example.com/owner": "platform-engineering",
 				},
 			},
 			wantType: corev1.ServiceTypeClusterIP,
 			wantAnnotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+				"team.example.com/owner": "platform-engineering",
 			},
 		},
 		{
@@ -411,7 +411,7 @@ func TestBuildMultiAdminWebService(t *testing.T) {
 		enabledCfg := &multigresv1alpha1.ExternalAdminWebConfig{
 			Enabled: true,
 			Annotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+				"team.example.com/owner": "platform-engineering",
 			},
 		}
 		enabled, err := BuildMultiAdminWebService(cluster, enabledCfg, scheme)
@@ -419,8 +419,8 @@ func TestBuildMultiAdminWebService(t *testing.T) {
 		assert.Equal(t, corev1.ServiceTypeClusterIP, enabled.Spec.Type)
 		assert.Equal(
 			t,
-			"internet-facing",
-			enabled.Annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"],
+			"platform-engineering",
+			enabled.Annotations["team.example.com/owner"],
 		)
 
 		disabledCfg := &multigresv1alpha1.ExternalAdminWebConfig{Enabled: false}
@@ -532,14 +532,14 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 			extGw: &multigresv1alpha1.ExternalGatewayConfig{
 				Enabled: true,
 				Annotations: map[string]string{
-					"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
-					"service.beta.kubernetes.io/aws-load-balancer-type":   "external",
+					"team.example.com/owner":        "platform-engineering",
+					"monitoring.example.com/scrape": "true",
 				},
 			},
 			wantType: corev1.ServiceTypeClusterIP,
 			wantAnnotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
-				"service.beta.kubernetes.io/aws-load-balancer-type":   "external",
+				"team.example.com/owner":        "platform-engineering",
+				"monitoring.example.com/scrape": "true",
 			},
 		},
 		{
@@ -619,7 +619,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 		enabledCfg := &multigresv1alpha1.ExternalGatewayConfig{
 			Enabled: true,
 			Annotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-scheme": "internet-facing",
+				"team.example.com/owner": "platform-engineering",
 			},
 		}
 		enabled, err := BuildMultiGatewayGlobalService(cluster, enabledCfg, scheme)
@@ -627,8 +627,8 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 		assert.Equal(t, corev1.ServiceTypeClusterIP, enabled.Spec.Type)
 		assert.Equal(
 			t,
-			"internet-facing",
-			enabled.Annotations["service.beta.kubernetes.io/aws-load-balancer-scheme"],
+			"platform-engineering",
+			enabled.Annotations["team.example.com/owner"],
 		)
 
 		// Build with disabled config; previously-set gateway annotations absent

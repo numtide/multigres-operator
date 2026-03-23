@@ -255,8 +255,8 @@ kubectl patch multigrescluster <name> --type json -p '[{"op":"remove","path":"/s
    ```bash
    kubectl get svc ext-adminweb-multiadmin-web -o jsonpath='{.spec.externalIPs}'
    # Expected: ["198.51.100.10"]
-   kubectl get svc ext-adminweb-multiadmin-web -o jsonpath='{.metadata.annotations.service\.beta\.kubernetes\.io/aws-load-balancer-scheme}'
-   # Expected: internet-facing
+   kubectl get svc ext-adminweb-multiadmin-web -o jsonpath='{.metadata.annotations.team\.example\.com/owner}'
+   # Expected: platform-engineering
    ```
 4. Verify status reports the external endpoint:
    ```bash
@@ -316,11 +316,11 @@ kubectl patch multigrescluster ext-adminweb --type merge -p '{"spec":{"externalA
 
 **How to patch:**
 ```bash
-kubectl patch multigrescluster ext-adminweb --type merge -p '{"spec":{"externalAdminWeb":{"enabled":true,"externalIPs":["198.51.100.10"],"annotations":{"service.beta.kubernetes.io/aws-load-balancer-scheme":"internal","new-key":"new-value"}}}}'
+kubectl patch multigrescluster ext-adminweb --type merge -p '{"spec":{"externalAdminWeb":{"enabled":true,"externalIPs":["198.51.100.10"],"annotations":{"team.example.com/owner":"new-team","new-key":"new-value"}}}}'
 ```
 
 **What to observe:**
-- Service annotations updated (scheme changed, new key added)
+- Service annotations updated (owner changed, new key added)
 - Old annotations removed via SSA field ownership
 - `status.adminWeb` and condition unchanged (externalIPs didn't change)
 
