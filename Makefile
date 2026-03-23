@@ -82,6 +82,9 @@ OBSERVABILITY_IMAGES ?= \
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Remove target files when a recipe fails, preventing stale artifacts.
+.DELETE_ON_ERROR:
+
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
@@ -113,7 +116,7 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 ENVTEST_K8S_VERSION ?= 1.33
 
 ###----------------------------------------
-##   Comamnds
+##   Commands
 #------------------------------------------
 
 .PHONY: all
@@ -224,13 +227,12 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # Use docker-buildx target or pass --platform to docker build for multi-arch images.
 .PHONY: container
 container: ## Build container image
-	$(eval BUILT_TAG := $(VERSION_SHORT))
 	$(CONTAINER_TOOL) build \
 		--build-arg VERSION=$$(git rev-parse --short HEAD) \
 		--build-arg GIT_COMMIT=$$(git rev-parse HEAD) \
 		--build-arg BUILD_DATE=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-		-t $(IMG_PREFIX)/$(IMG_REPO):$(BUILT_TAG) .
-	@echo $(BUILT_TAG) > $(IMG_TAG_FILE)
+		-t $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT) .
+	@echo $(VERSION_SHORT) > $(IMG_TAG_FILE)
 
 .PHONY: minikube-load
 minikube-load:
@@ -352,6 +354,14 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+## Kind deployment helpers
+# Install CRDs into the kind cluster
+define kind-install-crds
+	@echo "==> Installing CRDs..."
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
+		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+endef
+
 ##@ Kind Cluster (Local Development)
 
 .PHONY: kind-up
@@ -391,8 +401,7 @@ kind-up-topology: ## Create a multi-node kind cluster with topology zone labels
 
 .PHONY: kind-deploy-topology
 kind-deploy-topology: kind-up-topology manifests kustomize kind-load kind-load-images ## Deploy operator to multi-node kind cluster with topology zones
-	@echo "==> Installing CRDs..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	$(call kind-install-crds)
 	@echo "==> Deploying operator..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
@@ -436,8 +445,7 @@ kind-load-observability-images: ## Pull and load observability stack images into
 
 .PHONY: kind-deploy
 kind-deploy: kind-up manifests kustomize kind-load kind-load-images ## Deploy operator to kind cluster using webhook with self-signed certificates
-	@echo "==> Installing CRDs..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	$(call kind-install-crds)
 	@echo "==> Deploying operator..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
@@ -448,9 +456,7 @@ kind-deploy: kind-up manifests kustomize kind-load kind-load-images ## Deploy op
 
 .PHONY: kind-deploy-certmanager
 kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-load kind-load-images ## Deploy operator to kind cluster using cert manager
-	@echo "==> Installing CRDs..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
-		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	$(call kind-install-crds)
 	@echo "==> Deploying operator (Cert-Manager Mode)..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/deploy-certmanager | \
@@ -462,8 +468,7 @@ kind-deploy-certmanager: kind-up install-certmanager manifests kustomize kind-lo
 
 .PHONY: kind-deploy-no-webhook
 kind-deploy-no-webhook: kind-up manifests kustomize kind-load kind-load-images ## Deploy controller to Kind without the webhook enabled.
-	@echo "==> Installing CRDs..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	$(call kind-install-crds)
 	@echo "==> Deploying operator..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/no-webhook | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
@@ -474,9 +479,7 @@ kind-deploy-no-webhook: kind-up manifests kustomize kind-load kind-load-images #
 
 .PHONY: kind-deploy-observability
 kind-deploy-observability: kind-up manifests kustomize kind-load kind-load-images kind-load-observability-images ## Deploy operator with full observability stack (Prometheus Operator, OTel Collector, Tempo, Grafana)
-	@echo "==> Installing CRDs..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | \
-		KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	$(call kind-install-crds)
 	@echo "==> Installing Prometheus Operator..."
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f \
 		https://github.com/prometheus-operator/prometheus-operator/releases/download/v0.80.0/bundle.yaml
@@ -514,8 +517,7 @@ kind-redeploy: container manifests kustomize ## Rebuild image, reload to kind, a
 	@echo "==> Clearing cached image from kind node..."
 	docker exec $(KIND_CLUSTER)-control-plane crictl rmi $(IMG) 2>/dev/null || true
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER)
-	@echo "==> Installing CRDs..."
-	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/crd | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side -f -
+	$(call kind-install-crds)
 	@echo "==> Deploying operator..."
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	KUBECONFIG=$(KIND_KUBECONFIG) $(KUSTOMIZE) build config/default | KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply --server-side --force-conflicts -f -
@@ -586,9 +588,9 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 .PHONY: install-certmanager
 install-certmanager: ## Install Cert-Manager into the cluster
 	@echo "==> Installing Cert-Manager $(CERT_MANAGER_VERSION)..."
-	$(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) apply -f https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
 	@echo "==> Waiting for Cert-Manager to be ready..."
-	$(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
+	KUBECONFIG=$(KIND_KUBECONFIG) $(KUBECTL) wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
@@ -605,14 +607,6 @@ mv $(1) $(1)-$(3) ;\
 } ;\
 ln -sf $$(realpath $(1)-$(3)) $(1)
 endef
-
-
-## Non kubebuilder setup
-.PHONY: check-coverage
-check-coverage:
-	go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
-	go tool cover -html=cover.out -o=cover.html
-	echo now open cover.html
 
 ##@ Backward Compatibility Aliases
 
