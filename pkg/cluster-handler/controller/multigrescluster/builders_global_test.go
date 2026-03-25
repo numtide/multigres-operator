@@ -241,7 +241,7 @@ func TestBuildMultiAdminWebDeployment(t *testing.T) {
 		wantEnv := map[string]string{
 			"MULTIADMIN_API_URL": fmt.Sprintf("http://%s-multiadmin:18000", cluster.Name),
 			"POSTGRES_HOST":      fmt.Sprintf("%s-multigateway", cluster.Name),
-			"POSTGRES_PORT":      "15432",
+			"POSTGRES_PORT":      "5432",
 			"POSTGRES_DATABASE":  "postgres",
 			"POSTGRES_USER":      "postgres",
 		}
@@ -500,7 +500,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 
 	wantPort := corev1.ServicePort{
 		Name:       "postgres",
-		Port:       15432,
+		Port:       5432,
 		TargetPort: intstr.FromString("postgres"),
 		Protocol:   corev1.ProtocolTCP,
 	}
@@ -586,7 +586,7 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 			assert.Equal(t, tc.wantType, got.Spec.Type)
 			assert.Equal(t, tc.wantExternalIPs, got.Spec.ExternalIPs)
 
-			// Port 15432 invariant
+			// Port 5432 invariant
 			require.Len(t, got.Spec.Ports, 1)
 			assert.Equal(t, wantPort, got.Spec.Ports[0])
 

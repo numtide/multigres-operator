@@ -153,7 +153,7 @@ If a bug exists on an older upstream SHA but is already fixed on `main`, report 
 
 | Component | Port | Protocol | Purpose |
 |-----------|------|----------|---------|
-| MultiGateway | 15432 | TCP | SQL proxy (client connections) |
+| MultiGateway | 5432 | TCP | SQL proxy (client connections) |
 | MultiGateway | 15100 | HTTP | Health/readiness |
 | MultiOrch | 15300 | HTTP | Health/readiness |
 | MultiOrch | 15370 | gRPC | Orchestration RPCs |

@@ -1025,7 +1025,7 @@ spec:
                   pods.
                 type: object
               postgresPort:
-                default: 15432
+                default: 5432
                 description: PostgresPort is the port for PostgreSQL protocol traffic.
                 format: int32
                 maximum: 65535

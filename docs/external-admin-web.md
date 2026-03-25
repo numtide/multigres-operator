@@ -121,7 +121,7 @@ spec:
       - "198.51.100.20"
 ```
 
-Each feature manages its own Service, status field, and condition independently. The multigateway Service exposes PostgreSQL traffic on port 15432, while the multiadmin-web Service exposes the HTTP admin UI on port 18100.
+Each feature manages its own Service, status field, and condition independently. The multigateway Service exposes PostgreSQL traffic on port 5432, while the multiadmin-web Service exposes the HTTP admin UI on port 18100.
 
 ## EKS / Cloud Deployment
 

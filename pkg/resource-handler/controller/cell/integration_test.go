@@ -123,7 +123,7 @@ func TestCellReconciliation(t *testing.T) {
 											"multigateway",
 											"--http-port", "15100",
 											"--grpc-port", "15170",
-											"--pg-port", "15432",
+											"--pg-port", "5432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone1",
@@ -132,7 +132,7 @@ func TestCellReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
-											tcpPort(t, "postgres", 15432),
+											tcpPort(t, "postgres", 5432),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -183,7 +183,7 @@ func TestCellReconciliation(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "http", 15100),
 							tcpServicePort(t, "grpc", 15170),
-							tcpServicePort(t, "postgres", 15432),
+							tcpServicePort(t, "postgres", 5432),
 						},
 						Selector: metadata.GetSelectorLabels(cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a")),
 					},
@@ -250,7 +250,7 @@ func TestCellReconciliation(t *testing.T) {
 											"multigateway",
 											"--http-port", "15100",
 											"--grpc-port", "15170",
-											"--pg-port", "15432",
+											"--pg-port", "5432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone2",
@@ -259,7 +259,7 @@ func TestCellReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
-											tcpPort(t, "postgres", 15432),
+											tcpPort(t, "postgres", 5432),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -310,7 +310,7 @@ func TestCellReconciliation(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "http", 15100),
 							tcpServicePort(t, "grpc", 15170),
-							tcpServicePort(t, "postgres", 15432),
+							tcpServicePort(t, "postgres", 5432),
 						},
 						Selector: metadata.GetSelectorLabels(cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b")),
 					},
@@ -377,7 +377,7 @@ func TestCellReconciliation(t *testing.T) {
 											"multigateway",
 											"--http-port", "15100",
 											"--grpc-port", "15170",
-											"--pg-port", "15432",
+											"--pg-port", "5432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone3",
@@ -386,7 +386,7 @@ func TestCellReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
-											tcpPort(t, "postgres", 15432),
+											tcpPort(t, "postgres", 5432),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -437,7 +437,7 @@ func TestCellReconciliation(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "http", 15100),
 							tcpServicePort(t, "grpc", 15170),
-							tcpServicePort(t, "postgres", 15432),
+							tcpServicePort(t, "postgres", 5432),
 						},
 						Selector: metadata.GetSelectorLabels(cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c")),
 					},
@@ -521,7 +521,7 @@ func TestCellReconciliation(t *testing.T) {
 											"multigateway",
 											"--http-port", "15100",
 											"--grpc-port", "15170",
-											"--pg-port", "15432",
+											"--pg-port", "5432",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone4",
@@ -530,7 +530,7 @@ func TestCellReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
-											tcpPort(t, "postgres", 15432),
+											tcpPort(t, "postgres", 5432),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -598,7 +598,7 @@ func TestCellReconciliation(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							tcpServicePort(t, "http", 15100),
 							tcpServicePort(t, "grpc", 15170),
-							tcpServicePort(t, "postgres", 15432),
+							tcpServicePort(t, "postgres", 5432),
 						},
 						Selector: metadata.GetSelectorLabels(cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d")),
 					},

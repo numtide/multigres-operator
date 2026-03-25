@@ -21,7 +21,7 @@ Each test:
 2. Starts operator in-process (via `setUpOperator`)
 3. Creates MultigresCluster CR
 4. Waits for all pods to be Ready (etcd, multipooler, multiorch, multigateway)
-5. Port-forwards to multigateway service on port 15432
+5. Port-forwards to multigateway service on port 5432
 6. Runs `SELECT 1` via psql to verify query serving
 7. Cleans up (kind cluster deleted in test cleanup)
 
@@ -54,7 +54,7 @@ func TestMinimalCluster(t *testing.T) {
 Use `kubectl exec` into a postgres pod to run psql queries against multigateway:
 ```bash
 kubectl exec -n <ns> <multipooler-pod> -c postgres -- \
-    psql -h <multigateway-svc> -p 15432 -U postgres -d postgres -tA -c "SELECT 1"
+    psql -h <multigateway-svc> -p 5432 -U postgres -d postgres -tA -c "SELECT 1"
 ```
 
 Or use port-forward + Go's `database/sql` with `lib/pq` driver.

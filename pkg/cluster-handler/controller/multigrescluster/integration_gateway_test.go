@@ -89,7 +89,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "postgres",
-					Port:       15432,
+					Port:       5432,
 					TargetPort: intstr.FromString("postgres"),
 					Protocol:   corev1.ProtocolTCP,
 				},
@@ -176,7 +176,7 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "postgres",
-					Port:       15432,
+					Port:       5432,
 					TargetPort: intstr.FromString("postgres"),
 					Protocol:   corev1.ProtocolTCP,
 				},

@@ -357,7 +357,7 @@ func WaitForEmpty[T client.ObjectList](
 // Connectivity helpers
 // ---------------------------------------------------------------------------
 
-// FindGatewayService finds the multigateway Service with postgres:15432.
+// FindGatewayService finds the multigateway Service with postgres:5432.
 func FindGatewayService(t testing.TB, c *Cluster, ns string) string {
 	t.Helper()
 	var svcName string
@@ -370,7 +370,7 @@ func FindGatewayService(t testing.TB, c *Cluster, ns string) string {
 		}
 		for _, svc := range svcs.Items {
 			for _, port := range svc.Spec.Ports {
-				if port.Name == "postgres" && port.Port == 15432 {
+				if port.Name == "postgres" && port.Port == 5432 {
 					svcName = svc.Name
 					return true, nil
 				}
@@ -416,13 +416,13 @@ func WaitForQueryServing(t testing.TB, c *Cluster, ns, gatewaySvc string) {
 			"--kubeconfig", c.Kubeconfig,
 			"exec", "-n", ns, targetPod, "-c", "postgres", "--",
 			"sh", "-c",
-			fmt.Sprintf("PGPASSWORD=postgres psql -h %s -p 15432 -U postgres -d postgres -t -A -c 'SELECT 1'", gatewaySvc),
+			fmt.Sprintf("PGPASSWORD=postgres psql -h %s -p 5432 -U postgres -d postgres -t -A -c 'SELECT 1'", gatewaySvc),
 		}
 		execCtx, execCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer execCancel()
 		out, err := exec.CommandContext(execCtx, "kubectl", args...).CombinedOutput()
 		if err != nil {
-			t.Logf("psql attempt via %s/%s → %s:15432: %v: %s", ns, targetPod, gatewaySvc, err, strings.TrimSpace(string(out)))
+			t.Logf("psql attempt via %s/%s → %s:5432: %v: %s", ns, targetPod, gatewaySvc, err, strings.TrimSpace(string(out)))
 			return false, nil
 		}
 		result := strings.TrimSpace(string(out))

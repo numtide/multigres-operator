@@ -19,7 +19,7 @@ patterns, configuration, and health checking are directly applicable to our oper
 Client (psql)
     |
     v
-Multigateway (PG protocol proxy, port 15432)
+Multigateway (PG protocol proxy, port 5432)
     | gRPC
     v
 Multipooler (connection pooling, gRPC port 16100)  <-->  pgctld (PG control daemon, gRPC port 16200)
@@ -178,7 +178,7 @@ func (s *ShardSetup) WaitForMultigatewayQueryServing(t *testing.T) {
 ```
 --http-port=15000
 --grpc-port=15100
---pg-port=15432
+--pg-port=5432
 --hostname=$(POD_IP)
 --topo-global-server-addresses=etcd:2379
 --topo-global-root=/multigres/test/global
@@ -473,7 +473,7 @@ Based on upstream test values:
 ### Connection String for Verification
 
 ```
-host=<multigateway-service> port=15432 user=postgres password=<configured-password> dbname=postgres sslmode=disable
+host=<multigateway-service> port=5432 user=postgres password=<configured-password> dbname=postgres sslmode=disable
 ```
 
 ### Key Polling Pattern
@@ -506,7 +506,7 @@ Failover testing can be a separate, more targeted test suite.
 | Topo implementation | `"etcd"` | topoclient default |
 | Global topo root (demo) | `/multigres/test/global` | demo manifests |
 | Test postgres password | `"test_password_123"` | `TestPostgresPassword` |
-| Multigateway PG port | 15432 | demo manifests |
+| Multigateway PG port | 5432 | operator defaults |
 | Multipooler HTTP port | 16000 | demo manifests |
 | Multipooler gRPC port | 16100 | demo manifests |
 | pgctld gRPC port | 16200 | demo manifests |
