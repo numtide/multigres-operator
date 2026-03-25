@@ -386,7 +386,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											{Name: "HOSTNAME", Value: "::"},
 											{Name: "MULTIADMIN_API_URL", Value: "http://" + clusterName + "-multiadmin:18000"},
 											{Name: "POSTGRES_HOST", Value: clusterName + "-multigateway"},
-											{Name: "POSTGRES_PORT", Value: "15432"},
+											{Name: "POSTGRES_PORT", Value: "5432"},
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
 										},
@@ -452,7 +452,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							{
 								Name:       "postgres",
-								Port:       15432,
+								Port:       5432,
 								TargetPort: intstr.FromString("postgres"),
 								Protocol:   corev1.ProtocolTCP,
 							},
@@ -746,7 +746,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											{Name: "HOSTNAME", Value: "::"},
 											{Name: "MULTIADMIN_API_URL", Value: "http://minimal-cluster-multiadmin:18000"},
 											{Name: "POSTGRES_HOST", Value: "minimal-cluster-multigateway"},
-											{Name: "POSTGRES_PORT", Value: "15432"},
+											{Name: "POSTGRES_PORT", Value: "5432"},
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
 										},
@@ -812,7 +812,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							{
 								Name:       "postgres",
-								Port:       15432,
+								Port:       5432,
 								TargetPort: intstr.FromString("postgres"),
 								Protocol:   corev1.ProtocolTCP,
 							},
@@ -1103,7 +1103,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 											{Name: "HOSTNAME", Value: "::"},
 											{Name: "MULTIADMIN_API_URL", Value: "http://lazy-cluster-multiadmin:18000"},
 											{Name: "POSTGRES_HOST", Value: "lazy-cluster-multigateway"},
-											{Name: "POSTGRES_PORT", Value: "15432"},
+											{Name: "POSTGRES_PORT", Value: "5432"},
 											{Name: "POSTGRES_DATABASE", Value: "postgres"},
 											{Name: "POSTGRES_USER", Value: "postgres"},
 										},
@@ -1169,7 +1169,7 @@ func TestMultigresCluster_HappyPath(t *testing.T) {
 						Ports: []corev1.ServicePort{
 							{
 								Name:       "postgres",
-								Port:       15432,
+								Port:       5432,
 								TargetPort: intstr.FromString("postgres"),
 								Protocol:   corev1.ProtocolTCP,
 							},

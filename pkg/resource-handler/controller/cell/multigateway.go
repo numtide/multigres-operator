@@ -28,8 +28,11 @@ const (
 	// MultiGatewayGRPCPort is the default port for GRPC connections
 	MultiGatewayGRPCPort int32 = 15170
 
-	// MultiGatewayPostgresPort is the default port for database connections
+	// MultiGatewayPostgresPort is the container listen port for database connections.
 	MultiGatewayPostgresPort int32 = 15432
+
+	// MultiGatewayServicePort is the Kubernetes Service port exposed to clients.
+	MultiGatewayServicePort int32 = 5432
 )
 
 // BuildMultiGatewayDeploymentName generates the Deployment name.
@@ -231,7 +234,7 @@ func BuildMultiGatewayService(
 				},
 				{
 					Name:       "postgres",
-					Port:       MultiGatewayPostgresPort,
+					Port:       MultiGatewayServicePort,
 					TargetPort: intstr.FromString("postgres"),
 					Protocol:   corev1.ProtocolTCP,
 				},

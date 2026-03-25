@@ -44,7 +44,7 @@ const (
 const (
 	PortMultiGatewayHTTP = 15100
 	PortMultiGatewayGRPC = 15170
-	PortMultiGatewayPG   = 15432
+	PortMultiGatewayPG   = 5432
 	PortMultiPoolerHTTP  = 15200
 	PortMultiPoolerGRPC  = 15270
 	PortMultiOrchHTTP    = 15300

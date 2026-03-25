@@ -1457,7 +1457,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						},
 						{
 							Name:       "postgres",
-							Port:       MultiGatewayPostgresPort,
+							Port:       MultiGatewayServicePort,
 							TargetPort: intstr.FromString("postgres"),
 							Protocol:   corev1.ProtocolTCP,
 						},
@@ -1521,7 +1521,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						},
 						{
 							Name:       "postgres",
-							Port:       MultiGatewayPostgresPort,
+							Port:       MultiGatewayServicePort,
 							TargetPort: intstr.FromString("postgres"),
 							Protocol:   corev1.ProtocolTCP,
 						},
@@ -1587,7 +1587,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						},
 						{
 							Name:       "postgres",
-							Port:       MultiGatewayPostgresPort,
+							Port:       MultiGatewayServicePort,
 							TargetPort: intstr.FromString("postgres"),
 							Protocol:   corev1.ProtocolTCP,
 						},
@@ -1653,7 +1653,7 @@ func TestBuildMultiGatewayService(t *testing.T) {
 						},
 						{
 							Name:       "postgres",
-							Port:       MultiGatewayPostgresPort,
+							Port:       MultiGatewayServicePort,
 							TargetPort: intstr.FromString("postgres"),
 							Protocol:   corev1.ProtocolTCP,
 						},

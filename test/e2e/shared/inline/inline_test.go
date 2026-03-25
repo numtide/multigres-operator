@@ -50,7 +50,7 @@ func TestInlineCluster(t *testing.T) {
 	framework.WaitForDeployment(t, c, ns, "multigateway")
 	framework.WaitForDeployment(t, c, ns, "multiorch")
 	framework.WaitForPod(t, c, ns, "postgres")
-	framework.WaitForService(t, c, ns, "postgres", 15432)
+	framework.WaitForService(t, c, ns, "postgres", 5432)
 
 	// All pods ready.
 	cluster.WaitForAllPodsReady(t, ns)

@@ -144,10 +144,10 @@ Probes all Multigres service endpoints for TCP/HTTP/gRPC/SQL connectivity.
 
 | Probe (check string) | Target | Port | Method | Severity |
 |----------------------|--------|------|--------|----------|
-| `multigateway-pg` | Service | 15432 | TCP connect | error |
+| `multigateway-pg` | Service | 5432 | TCP connect | error |
 | `multigateway-liveness` | Service | 15100 | `GET /live` | error |
 | `multigateway-readiness` | Service | 15100 | `GET /ready` | warn/error |
-| `sql-probe` | Service | 15432 | `SELECT 1` via pgx (simple protocol) | error |
+| `sql-probe` | Service | 5432 | `SELECT 1` via pgx (simple protocol) | error |
 | `multiorch-liveness` | Service | 15300 | `GET /live` | error |
 | `multiorch-readiness` | Service | 15300 | `GET /ready` | warn/error |
 | `multiorch-pooler-health` | Service | 15300 | `GET /debug/status` (HTML scrape) | error/fatal |
@@ -352,13 +352,13 @@ Connections are established directly to pod IPs (not via services) for reliabili
 
 ### Connectivity SQL Probe (`connectivity.go`)
 
-This query runs against the **MultiGateway service** (port 15432), not directly on pool pods. It validates end-to-end SQL connectivity through the routing layer.
+This query runs against the **MultiGateway service** (port 5432), not directly on pool pods. It validates end-to-end SQL connectivity through the routing layer.
 
 ```sql
 SELECT 1
 ```
 
-- **Target:** MultiGateway service on port 15432
+- **Target:** MultiGateway service on port 5432
 - **Purpose:** Validates that the full query path works (client → gateway → pooler → postgres → response)
 - **Reads:** Nothing (the constant `1` is returned by the planner without touching any table)
 - **Writes:** Nothing

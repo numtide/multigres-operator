@@ -58,7 +58,7 @@ func (o *Observer) probeMultiGatewayServices(ctx context.Context) {
 		o.probeTCP(addr, common.PortMultiGatewayPG, "multigateway-pg", svc.Name)
 
 		// HTTP health probes — only on services that expose the HTTP port.
-		// The global gateway service only exposes 15432, not 15100.
+		// The global gateway service only exposes 5432, not 15100.
 		if serviceHasPort(svc, common.PortMultiGatewayHTTP) {
 			o.probeHTTP(
 				ctx,

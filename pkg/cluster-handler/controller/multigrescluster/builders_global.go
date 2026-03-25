@@ -286,7 +286,7 @@ func BuildMultiAdminWebDeployment(
 								},
 								{
 									Name:  "POSTGRES_PORT",
-									Value: "15432",
+									Value: "5432",
 								},
 								{
 									Name:  "POSTGRES_DATABASE",
@@ -454,7 +454,7 @@ func BuildMultiGatewayGlobalService(
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "postgres",
-					Port:       15432,
+					Port:       5432,
 					TargetPort: intstr.FromString("postgres"),
 					Protocol:   corev1.ProtocolTCP,
 				},
