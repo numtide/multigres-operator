@@ -492,7 +492,7 @@ spec:
   #     - "203.0.113.10"
   #     - "203.0.113.11"
   #   annotations:
-  #     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  #     team.example.com/owner: "platform"
 
 status:
   observedGeneration: 1
