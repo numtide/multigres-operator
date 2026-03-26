@@ -4,6 +4,38 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.10.0] — 2026-03-26
+
+**Previous release:** v0.9.0 (2026-03-23)
+
+Standardizes the multigateway postgres port from 15432 to 5432, pins upstream images to sha-4bca1d5, corrects misleading external gateway documentation, and includes Makefile and CI maintenance.
+
+**21 commits, 42 files changed, ~194 insertions.**
+
+### Breaking Changes
+
+- **MultiGateway port standardized to 5432:** Both the container listen port (`--pg-port`) and Kubernetes Service port changed from 15432 to 5432. The upstream 15432 convention exists for local dev where processes share a host; in Kubernetes, pods are isolated so the standard port is simpler. Existing clients connecting on port 15432 must update their connection strings. The CRD default for `postgresPort` is also updated to 5432.
+
+### Improvements
+
+- **Makefile cleanup:** Shared CRD installation definition, consistent KUBECONFIG references, added error handling, removed unused targets and unnecessary eval, corrected versioning and typos.
+
+### Bug Fixes
+
+- **External gateway annotation docs corrected:** Cloud LB controller annotations (e.g., `aws-load-balancer-scheme`) on a ClusterIP Service are inert — controllers only provision LBs for `type: LoadBalancer`. Docs, tests, and CHANGELOG v0.8.0 entries rewritten to remove misleading LB annotation examples and clarify `externalIPs` as the sole external access mechanism.
+
+### Dependencies
+
+- **Multigres image update:** Pinned default container images to `sha-4bca1d5` (pgctld, multigres), up from `sha-d9b8ff2`. Upstream changes include multigateway failover buffering, recovery control RPCs, extended query protocol fixes, and process execution wrapper. multiadmin-web unchanged at `sha-d7be6e4`.
+- **GitHub Action pins updated:** All GitHub Action versions and SHA pins updated across CI workflows.
+- **Nix developer environment:** Updated flake inputs to latest versions; moved Nix files into `nix/` directory.
+
+### Observer
+
+- **Port constant updated:** Observer `PortMultiGatewayPG` constant and connectivity check updated from 15432 to 5432 to match operator change.
+
+---
+
 ## [v0.9.0] — 2026-03-23
 
 **Previous release:** v0.8.0 (2026-03-20)
