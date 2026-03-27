@@ -18,9 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/testutil"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 // TestReconcileMultiGatewayDeployment_InvalidScheme tests the error path when BuildMultiGatewayDeployment fails.

@@ -27,12 +27,12 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
+	"github.com/multigres/multigres-operator/pkg/util/name"
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/testutil"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
-	"github.com/numtide/multigres-operator/pkg/util/name"
 )
 
 // ============================================================================

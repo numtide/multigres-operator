@@ -5,9 +5,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
-	"github.com/numtide/multigres-operator/pkg/util/name"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
+	"github.com/multigres/multigres-operator/pkg/util/name"
 )
 
 // BuildShard constructs the desired Shard resource.

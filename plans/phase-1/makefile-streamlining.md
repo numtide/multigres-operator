@@ -121,7 +121,7 @@ VERSION ?= $(shell git describe --tags --match "v*" --always --dirty 2>/dev/null
 VERSION_SHORT ?= $(shell echo $(VERSION) | sed 's/^v//')
 
 # Image configuration
-IMG_PREFIX ?= ghcr.io/numtide
+IMG_PREFIX ?= ghcr.io/multigres
 IMG_REPO ?= multigres-operator
 IMG ?= $(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT)
 

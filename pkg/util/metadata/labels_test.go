@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 func TestBuildStandardLabels(t *testing.T) {

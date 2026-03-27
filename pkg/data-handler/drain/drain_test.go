@@ -19,9 +19,9 @@ import (
 	"github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	"k8s.io/client-go/tools/record"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/data-handler/drain"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/data-handler/drain"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 type mockTopoStore struct {

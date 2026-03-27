@@ -9,9 +9,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/resolver"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/resolver"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 // Builder function variables to allow mocking in tests

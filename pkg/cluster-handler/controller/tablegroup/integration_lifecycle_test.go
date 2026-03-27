@@ -17,10 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
-	"github.com/numtide/multigres-operator/pkg/testutil"
-	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/cluster-handler/controller/tablegroup"
+	"github.com/multigres/multigres-operator/pkg/testutil"
+	nameutil "github.com/multigres/multigres-operator/pkg/util/name"
 )
 
 func TestTableGroup_Lifecycle(t *testing.T) {

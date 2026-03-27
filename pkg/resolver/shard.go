@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 )
 
 // ResolveShard determines the final configuration for a specific Shard.

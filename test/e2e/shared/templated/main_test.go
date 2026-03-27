@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/numtide/multigres-operator/test/e2e/framework"
+	"github.com/multigres/multigres-operator/test/e2e/framework"
 )
 
 var cluster *framework.Cluster

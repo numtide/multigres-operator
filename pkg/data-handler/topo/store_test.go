@@ -6,8 +6,8 @@ import (
 
 	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/data-handler/topo"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/data-handler/topo"
 )
 
 func TestNewStoreFromShard(t *testing.T) {

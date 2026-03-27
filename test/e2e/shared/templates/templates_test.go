@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/test/e2e/framework"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/test/e2e/framework"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

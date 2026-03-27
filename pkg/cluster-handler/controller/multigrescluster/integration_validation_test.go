@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

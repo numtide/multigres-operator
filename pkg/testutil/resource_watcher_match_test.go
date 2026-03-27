@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/testutil"
 )
 
 // TestResourceWatcher_UnwatchedKinds tests error for unwatched resource kinds.

@@ -317,8 +317,8 @@ func TestDefaultOperatorPreset_Fallback(t *testing.T) {
 	t.Setenv("OPERATOR_IMG", "")
 
 	p := DefaultOperatorPreset()
-	if p.Image != "ghcr.io/numtide/multigres-operator:dev" {
-		t.Errorf("Image = %q, want fallback %q", p.Image, "ghcr.io/numtide/multigres-operator:dev")
+	if p.Image != "ghcr.io/multigres/multigres-operator:dev" {
+		t.Errorf("Image = %q, want fallback %q", p.Image, "ghcr.io/multigres/multigres-operator:dev")
 	}
 }
 

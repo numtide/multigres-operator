@@ -10,9 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/cert"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/cert"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 // reconcilePgHbaConfigMap creates or updates the pg_hba ConfigMap for a shard.

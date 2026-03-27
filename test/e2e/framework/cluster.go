@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	kind "sigs.k8s.io/e2e-framework/third_party/kind"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/testutil"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/testutil"
 )
 
 // SharedClusterName is the well-known name for the shared Kind cluster.

@@ -275,7 +275,7 @@ Beyond the common component fields (replicas, resources, serviceAccountName, aff
 
 ```bash
 # Initialize kubebuilder project
-kubebuilder init --domain multigres.com --repo github.com/numtide/multigres-operator
+kubebuilder init --domain multigres.com --repo github.com/multigres/multigres-operator
 ```
 
 Generates project structure, `Makefile` with targets (`make manifests`, `make install`, etc.), and dependencies.

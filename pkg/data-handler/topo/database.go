@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 )
 
 // RegisterDatabase registers the database metadata in the global topology.

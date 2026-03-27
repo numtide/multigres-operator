@@ -8,7 +8,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numtide/multigres-operator/test/e2e/framework"
+	"github.com/multigres/multigres-operator/test/e2e/framework"
 )
 
 // TestStatelessScaling verifies that scaling stateless components (multiadmin,

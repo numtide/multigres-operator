@@ -10,7 +10,7 @@ import (
 
 	"github.com/multigres/multigres/go/common/topoclient"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 )
 
 // NewStoreFromShard creates a topoclient.Store using the GlobalTopoServer

@@ -8,9 +8,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/tools/observer/pkg/common"
-	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/common"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/report"
 )
 
 // checkSpecCompliance verifies that running pods and PVCs match

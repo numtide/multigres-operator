@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/testutil"
 )
 
 func TestComparisonOptions(t *testing.T) {

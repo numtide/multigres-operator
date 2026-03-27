@@ -4,5 +4,5 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
 - name: controller
-  newName: ghcr.io/numtide/multigres-operator
+  newName: ghcr.io/multigres/multigres-operator
   newTag: 0.5.0-4-g3f5e5d4-dirty

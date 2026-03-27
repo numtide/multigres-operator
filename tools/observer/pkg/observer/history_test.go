@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/report"
 )
 
 func TestFindingKey(t *testing.T) {

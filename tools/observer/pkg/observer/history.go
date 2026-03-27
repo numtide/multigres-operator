@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/report"
 )
 
 // findingHistory tracks findings across observer cycles using a ring buffer.

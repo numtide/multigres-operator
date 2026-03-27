@@ -7,7 +7,7 @@ domain: multigres.com
 layout:
 - go.kubebuilder.io/v4
 projectName: multigres-operator
-repo: github.com/numtide/multigres-operator
+repo: github.com/multigres/multigres-operator
 resources:
 - api:
     crdVersion: v1
@@ -16,7 +16,7 @@ resources:
   domain: multigres.com
   group: multigres
   kind: MultiGateway
-  path: github.com/numtide/multigres-operator/api/v1alpha1
+  path: github.com/multigres/multigres-operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -24,7 +24,7 @@ resources:
   domain: multigres.com
   group: multigres
   kind: MultiPooler
-  path: github.com/numtide/multigres-operator/api/v1alpha1
+  path: github.com/multigres/multigres-operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -32,7 +32,7 @@ resources:
   domain: multigres.com
   group: multigres
   kind: Etcd
-  path: github.com/numtide/multigres-operator/api/v1alpha1
+  path: github.com/multigres/multigres-operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -40,6 +40,6 @@ resources:
   domain: multigres.com
   group: multigres
   kind: MultiOrch
-  path: github.com/numtide/multigres-operator/api/v1alpha1
+  path: github.com/multigres/multigres-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

@@ -27,10 +27,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/testutil"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
-	"github.com/numtide/multigres-operator/pkg/util/name"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
+	"github.com/multigres/multigres-operator/pkg/util/name"
 )
 
 // Helper functions moved from shard_controller_test_util_test.go

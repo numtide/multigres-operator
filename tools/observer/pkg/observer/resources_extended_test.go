@@ -8,8 +8,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/numtide/multigres-operator/tools/observer/pkg/common"
-	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/common"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/report"
 )
 
 func TestCheckPVCValidation(t *testing.T) {

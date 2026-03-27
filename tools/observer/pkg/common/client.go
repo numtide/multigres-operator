@@ -3,7 +3,7 @@ package common
 import (
 	"fmt"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"

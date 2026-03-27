@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 )
 
 // ComputePhase determines the phase of a resource based on its readiness.

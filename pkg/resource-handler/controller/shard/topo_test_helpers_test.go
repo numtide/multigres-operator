@@ -3,9 +3,9 @@ package shard
 import (
 	"context"
 
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"github.com/multigres/multigres/go/common/topoclient"
 	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
 )
 
 // newMemoryTopoFactory returns a CreateTopoStore factory backed by an

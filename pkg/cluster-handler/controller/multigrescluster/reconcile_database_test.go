@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/numtide/multigres-operator/pkg/resolver"
-	"github.com/numtide/multigres-operator/pkg/testutil"
-	"github.com/numtide/multigres-operator/pkg/util/name"
+	"github.com/multigres/multigres-operator/pkg/resolver"
+	"github.com/multigres/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/util/name"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"

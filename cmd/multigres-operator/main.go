@@ -49,19 +49,19 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	multigresclustercontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
-	tablegroupcontroller "github.com/numtide/multigres-operator/pkg/cluster-handler/controller/tablegroup"
-	"github.com/numtide/multigres-operator/pkg/resolver"
-	cellcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/cell"
-	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
-	toposervercontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/toposerver"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
-	multigreswebhook "github.com/numtide/multigres-operator/pkg/webhook"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	multigresclustercontroller "github.com/multigres/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
+	tablegroupcontroller "github.com/multigres/multigres-operator/pkg/cluster-handler/controller/tablegroup"
+	"github.com/multigres/multigres-operator/pkg/resolver"
+	cellcontroller "github.com/multigres/multigres-operator/pkg/resource-handler/controller/cell"
+	shardcontroller "github.com/multigres/multigres-operator/pkg/resource-handler/controller/shard"
+	toposervercontroller "github.com/multigres/multigres-operator/pkg/resource-handler/controller/toposerver"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
+	multigreswebhook "github.com/multigres/multigres-operator/pkg/webhook"
 
-	gencert "github.com/numtide/multigres-operator/pkg/cert"
+	gencert "github.com/multigres/multigres-operator/pkg/cert"
 
-	"github.com/numtide/multigres-operator/pkg/monitoring"
+	"github.com/multigres/multigres-operator/pkg/monitoring"
 )
 
 var (
