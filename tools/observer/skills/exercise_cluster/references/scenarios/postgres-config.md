@@ -70,7 +70,18 @@ Scenarios for testing `postgresConfigRef` — ConfigMap-based postgresql.conf ov
    KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl get pods -n default -l app.kubernetes.io/component=shard-pool -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.multigres\.com/postgres-config-hash}{"\n"}{end}'
    ```
 6. Verify all pod names differ from `PODS_BEFORE` (all pods were replaced).
-7. Run full Stability Verification Protocol.
+7. **Verify the actual PostgreSQL runtime settings changed** (this is the critical end-to-end check):
+   ```bash
+   POD=$(KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl get pods -n default -l app.kubernetes.io/component=shard-pool -o jsonpath='{.items[0].metadata.name}')
+   KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl exec -n default $POD -c postgres -- psql -h 127.0.0.1 -p 5432 -U postgres -tAc "SHOW shared_buffers"
+   # Expected: 512MB (NOT the original 256MB)
+   ```
+   Also verify the on-disk `postgresql.conf` was re-rendered from the updated template:
+   ```bash
+   KUBECONFIG=$(pwd)/kubeconfig.yaml kubectl exec -n default $POD -c postgres -- grep shared_buffers /var/lib/pooler/pg_data/postgresql.conf
+   # Expected: shared_buffers = '512MB'
+   ```
+8. Run full Stability Verification Protocol.
 
 **Success criteria:**
 - ConfigMap update triggers shard reconciliation (via ConfigMap watch)
@@ -79,8 +90,12 @@ Scenarios for testing `postgresConfigRef` — ConfigMap-based postgresql.conf ov
 - Rolling update goes through drain state machine (one pod at a time, no concurrent drains)
 - New pods have the updated volume content (ConfigMap propagation)
 - pgctld still has `--postgres-config-template` arg
+- **`SHOW shared_buffers` returns `512MB`** (verifies pgctld re-rendered the template, not just that pods restarted)
+- **On-disk `postgresql.conf` contains the updated values** (not stale values from the previous template)
 - Observer reports no persistent errors after stabilization
 - Replication re-establishes after rolling update
+
+> **Known upstream bug:** As of multigres sha-0faa227, pgctld's `LoadOrCreatePostgresServerConfig()` skips template re-rendering when `postgresql.conf` already exists on the PVC. This means steps 7's checks will **fail** — `SHOW shared_buffers` will still return `256MB`. See the upstream issue. If this is still failing, note it as a known upstream issue and proceed.
 
 **What to observe:**
 - Drain annotations should progress: `requested` -> `draining` -> `acknowledged` -> `ready-for-deletion`
