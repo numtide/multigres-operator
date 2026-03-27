@@ -1,10 +1,10 @@
-module github.com/numtide/multigres-operator/tools/observer
+module github.com/multigres/multigres-operator/tools/observer
 
 go 1.25.8
 
 require (
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/numtide/multigres-operator/api v0.0.0-20260309172043-524dbe6dbe70
+	github.com/multigres/multigres-operator/api v0.0.0-20260309172043-524dbe6dbe70
 	github.com/prometheus/client_golang v1.22.0
 	google.golang.org/grpc v1.79.3
 	k8s.io/api v0.35.0

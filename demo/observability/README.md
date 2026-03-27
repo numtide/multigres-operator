@@ -33,7 +33,7 @@ kubectl wait --for=condition=Available deployment/prometheus-operator -n default
 
 ```bash
 kubectl apply --server-side -f \
-  https://github.com/numtide/multigres-operator/releases/latest/download/install-observability.yaml
+  https://github.com/multigres/multigres-operator/releases/latest/download/install-observability.yaml
 ```
 
 ### 3. Access the dashboards

@@ -28,7 +28,7 @@ FROM alpine:3.23
 
 RUN apk add --no-cache curl
 
-LABEL org.opencontainers.image.source="https://github.com/numtide/multigres-operator"
+LABEL org.opencontainers.image.source="https://github.com/multigres/multigres-operator"
 WORKDIR /
 COPY --from=builder /workspace/multigres-observer .
 USER 65532:65532

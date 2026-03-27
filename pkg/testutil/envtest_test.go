@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
-	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/testutil"
 )
 
 func TestSetUpEnvTest(t *testing.T) {

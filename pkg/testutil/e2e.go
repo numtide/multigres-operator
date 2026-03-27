@@ -436,7 +436,7 @@ type OperatorPreset struct {
 func DefaultOperatorPreset() OperatorPreset {
 	img := os.Getenv("OPERATOR_IMG")
 	if img == "" {
-		img = "ghcr.io/numtide/multigres-operator:dev"
+		img = "ghcr.io/multigres/multigres-operator:dev"
 	}
 	return OperatorPreset{
 		Image:          img,

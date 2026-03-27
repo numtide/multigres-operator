@@ -13,9 +13,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/numtide/multigres-operator/tools/observer/pkg/common"
-	"github.com/numtide/multigres-operator/tools/observer/pkg/observer"
-	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/common"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/observer"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/report"
 )
 
 var (

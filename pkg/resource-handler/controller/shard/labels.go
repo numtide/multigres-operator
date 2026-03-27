@@ -1,8 +1,8 @@
 package shard
 
 import (
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 // buildPoolLabelsWithCell creates labels for pool resources in a specific cell.

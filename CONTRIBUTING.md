@@ -13,7 +13,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/numtide/multigres-operator.git
+git clone https://github.com/multigres/multigres-operator.git
 cd multigres-operator
 
 # Run unit tests

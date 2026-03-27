@@ -28,7 +28,7 @@ kubectl wait --for=condition=Available deployment --all -n cert-manager --timeou
 
 ```bash
 kubectl apply --server-side -f \
-  https://github.com/numtide/multigres-operator/releases/latest/download/install-certmanager.yaml
+  https://github.com/multigres/multigres-operator/releases/latest/download/install-certmanager.yaml
 ```
 
 This overlay:

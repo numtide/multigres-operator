@@ -20,11 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	shardcontroller "github.com/numtide/multigres-operator/pkg/resource-handler/controller/shard"
-	"github.com/numtide/multigres-operator/pkg/testutil"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
-	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	shardcontroller "github.com/multigres/multigres-operator/pkg/resource-handler/controller/shard"
+	"github.com/multigres/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
+	nameutil "github.com/multigres/multigres-operator/pkg/util/name"
 )
 
 func TestSetupWithManager(t *testing.T) {

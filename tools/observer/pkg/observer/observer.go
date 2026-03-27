@@ -13,8 +13,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numtide/multigres-operator/tools/observer/pkg/common"
-	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/common"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/report"
 )
 
 // checkRequest is sent from the HTTP handler to the Run goroutine for on-demand checks.

@@ -11,7 +11,7 @@ VERSION_SHORT ?= $(shell echo $(VERSION) | sed 's/^v//')
 # IMG is pinned to the last-built tag (written by the container target) when available.
 # This prevents tag drift between docker build and kind load caused by git state
 # changes (staging files, new commits) between make invocations.
-IMG_PREFIX ?= ghcr.io/numtide
+IMG_PREFIX ?= ghcr.io/multigres
 IMG_REPO ?= multigres-operator
 IMG_TAG_FILE ?= .last-built-tag
 IMG ?= $(if $(wildcard $(IMG_TAG_FILE)),$(IMG_PREFIX)/$(IMG_REPO):$(shell cat $(IMG_TAG_FILE)),$(IMG_PREFIX)/$(IMG_REPO):$(VERSION_SHORT))

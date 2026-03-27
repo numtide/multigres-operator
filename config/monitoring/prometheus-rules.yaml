@@ -21,7 +21,7 @@ spec:
             description: >-
               Controller {{ $labels.controller }} has had a non-zero reconcile
               error rate for the last 5 minutes (current: {{ $value | humanize }}/s).
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterReconcileErrors.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterReconcileErrors.md"
 
         - alert: MultigresClusterDegraded
           expr: multigres_operator_cluster_info{phase!="Healthy"} == 1
@@ -33,7 +33,7 @@ spec:
             description: >-
               Cluster {{ $labels.name }} in namespace {{ $labels.namespace }}
               has been in phase "{{ $labels.phase }}" for more than 10 minutes.
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterDegraded.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterDegraded.md"
 
         - alert: MultigresCellGatewayUnavailable
           expr: multigres_operator_cell_gateway_replicas{state="ready"} == 0
@@ -46,7 +46,7 @@ spec:
               Cell {{ $labels.cell }} in namespace {{ $labels.namespace }} has
               had zero ready MultiGateway replicas for 5 minutes. Traffic
               cannot be routed to this cell.
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresCellGatewayUnavailable.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresCellGatewayUnavailable.md"
 
         - alert: MultigresShardPoolDegraded
           expr: >-
@@ -62,7 +62,7 @@ spec:
               Pool {{ $labels.pool }} of shard {{ $labels.shard }} in namespace
               {{ $labels.namespace }} has had fewer ready replicas than desired
               for more than 10 minutes.
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresShardPoolDegraded.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresShardPoolDegraded.md"
 
         - alert: MultigresWebhookErrors
           expr: rate(multigres_operator_webhook_request_total{result="error"}[5m]) > 0
@@ -75,7 +75,7 @@ spec:
               The {{ $labels.operation }} webhook for {{ $labels.resource }}
               has had a non-zero error rate for the last 5 minutes
               (current: {{ $value | humanize }}/s).
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresWebhookErrors.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresWebhookErrors.md"
 
         # ── Backup & Drain ────────────────────────────────────────
 
@@ -90,7 +90,7 @@ spec:
               The most recent backup for shard {{ $labels.shard }} in cluster
               {{ $labels.cluster }} (namespace {{ $labels.namespace }}) is
               {{ $value | humanizeDuration }} old. Check backup job health.
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresBackupStale.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresBackupStale.md"
 
         - alert: MultigresRollingUpdateStuck
           expr: multigres_operator_rolling_update_in_progress == 1
@@ -104,7 +104,7 @@ spec:
               {{ $labels.cell }} (namespace {{ $labels.namespace }}) has been
               performing a rolling update for more than 30 minutes. Check for
               pods stuck in pending or crash-looping state.
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresRollingUpdateStuck.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresRollingUpdateStuck.md"
 
         - alert: MultigresDrainTimeout
           expr: rate(multigres_operator_drain_operations_total{result="timeout"}[5m]) > 0
@@ -117,7 +117,7 @@ spec:
               Shard {{ $labels.shard }} in cluster {{ $labels.cluster }} has
               had drain timeouts for the last 10 minutes. Pods may be stuck
               in a drain state. Check pod logs and topology server connectivity.
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresDrainTimeout.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresDrainTimeout.md"
 
         # ── Latency ───────────────────────────────────────────────
 
@@ -132,7 +132,7 @@ spec:
               Controller {{ $labels.controller }} p99 reconcile duration has
               exceeded 30 seconds for the last 5 minutes
               (current: {{ $value | humanize }}s).
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresReconcileSlow.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresReconcileSlow.md"
 
         # ── Saturation ────────────────────────────────────────────
 
@@ -147,4 +147,4 @@ spec:
               The {{ $labels.name }} controller work queue has been deeper than
               50 items for more than 10 minutes. The operator cannot keep up
               with incoming events. Consider increasing MaxConcurrentReconciles.
-            runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresControllerSaturated.md"
+            runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresControllerSaturated.md"

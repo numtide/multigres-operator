@@ -41,7 +41,7 @@ Install the operator with built-in self-signed certificate management:
 
 ```bash
 kubectl apply --server-side -f \
-  https://github.com/numtide/multigres-operator/releases/latest/download/install.yaml
+  https://github.com/multigres/multigres-operator/releases/latest/download/install.yaml
 ```
 
 This deploys the operator into the `multigres-operator` namespace with:
@@ -54,7 +54,7 @@ This deploys the operator into the `multigres-operator` namespace with:
 Once the operator is running, try a sample cluster:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/numtide/multigres-operator/main/config/samples/minimal.yaml
+kubectl apply -f https://raw.githubusercontent.com/multigres/multigres-operator/main/config/samples/minimal.yaml
 ```
 
 For more sample configurations, see the [samples directory](config/samples/README.md).

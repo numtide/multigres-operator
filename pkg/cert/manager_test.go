@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/testutil"
 )
 
 const (

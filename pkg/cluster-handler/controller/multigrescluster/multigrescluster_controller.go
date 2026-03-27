@@ -23,10 +23,10 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/monitoring"
-	"github.com/numtide/multigres-operator/pkg/resolver"
-	"github.com/numtide/multigres-operator/pkg/util/metadata"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/monitoring"
+	"github.com/multigres/multigres-operator/pkg/resolver"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 // MultigresClusterReconciler reconciles a MultigresCluster object.

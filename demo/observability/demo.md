@@ -822,7 +822,7 @@ The rules define ten alerts:
     description: >-
       Cluster {{ $labels.name }} in namespace {{ $labels.namespace }}
       has been in phase "{{ $labels.phase }}" for more than 10 minutes.
-    runbook_url: "https://github.com/numtide/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterDegraded.md"
+    runbook_url: "https://github.com/multigres/multigres-operator/blob/main/docs/monitoring/runbooks/MultigresClusterDegraded.md"
 ```
 
 ### 8.2 Checking Active Alerts

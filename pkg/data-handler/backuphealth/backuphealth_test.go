@@ -12,8 +12,8 @@ import (
 	"github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	"github.com/numtide/multigres-operator/pkg/data-handler/backuphealth"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/data-handler/backuphealth"
 )
 
 func TestEvaluateBackups_Healthy(t *testing.T) {

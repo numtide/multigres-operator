@@ -3,7 +3,7 @@ package observer
 import (
 	"sync"
 
-	"github.com/numtide/multigres-operator/tools/observer/pkg/report"
+	"github.com/multigres/multigres-operator/tools/observer/pkg/report"
 )
 
 // snapshot stores the latest cycle's status response.

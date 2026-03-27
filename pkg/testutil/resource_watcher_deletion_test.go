@@ -15,7 +15,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/numtide/multigres-operator/pkg/testutil"
+	"github.com/multigres/multigres-operator/pkg/testutil"
 )
 
 // TestObj tests the generic Obj helper function.

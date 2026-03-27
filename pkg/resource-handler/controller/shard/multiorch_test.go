@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
-	nameutil "github.com/numtide/multigres-operator/pkg/util/name"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	nameutil "github.com/multigres/multigres-operator/pkg/util/name"
 )
 
 func TestBuildMultiOrchDeployment(t *testing.T) {

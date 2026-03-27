@@ -10,7 +10,7 @@ import (
 	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	multigresv1alpha1 "github.com/numtide/multigres-operator/api/v1alpha1"
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 )
 
 // PoolerStatusResult holds the result of querying pooler roles from the topology.
