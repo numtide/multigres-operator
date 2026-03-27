@@ -62,9 +62,19 @@ All multigres images (`multigres`, `pgctld`, `multiadmin-web`) are built from th
    git log --oneline <old-sha>..<new-sha>
    git diff --stat <old-sha>..<new-sha>
    ```
-   Then selectively review the full diff for files that look relevant to the operator (e.g., changes to CLI flags, configuration, proto definitions, RPC interfaces, container entrypoints, health checks, pooler behavior, orchestrator logic, gateway behavior, backup/restore, topology management).
 
-4. If the old and new SHAs are the same for an image group, note that no changes occurred and skip the diff.
+4. **Filter: only review changes to multigres binary code.** The images we pin are Go binaries (pgctld, multipooler, multiorch, multigateway, multiadmin, multiadmin-web). Only changes that end up compiled into those binaries can affect the operator. **Ignore** changes to:
+   - `demo/` — demo manifests, k8s YAML examples. These are not compiled into any binary.
+   - `go/test/` — test-only code, test helpers, end-to-end test infrastructure.
+   - `*.md`, `docs/`, `README*` — documentation.
+   - CI/CD files, Makefiles, Dockerfiles, scripts.
+   - Any file that is not under `go/cmd/`, `go/services/`, `go/common/`, `go/provisioner/`, `go/tools/` (library code used by binaries).
+
+   When listing upstream commits, still include all of them for completeness, but mark test-only or non-binary commits as "No impact (test/docs/demo only)" and skip the detailed diff review for those.
+
+5. For the remaining binary-relevant changes, selectively review the full diff for files that affect the operator (e.g., changes to CLI flags, configuration, proto definitions, RPC interfaces, container entrypoints, health checks, pooler behavior, orchestrator logic, gateway behavior, backup/restore, topology management).
+
+6. If the old and new SHAs are the same for an image group, note that no changes occurred and skip the diff.
 
 ### 4. Cross-Reference with Operator Code
 
@@ -150,39 +160,49 @@ For each upstream change, include:
 - Table of required env vars per component vs operator container status (present/missing)
 - Any mismatches flagged as action items
 
-### 5b. Deployment Smoke Test
+### 5b. Decision Gate — Action Required vs Smoke Test
 
-**This step is mandatory.** Static analysis (steps 4, 4a, 4b) cannot catch every possible failure mode — unknown volume requirements, changed binary entrypoints, new config file expectations, port changes, etc. The only way to be certain is to **run the images and verify pods come up healthy.**
+After presenting the report in Step 5, determine the next step based on the findings:
 
-1. Apply any action-required fixes identified in Steps 4/4a/4b first.
+**If any action-required items were found:**
+- Do NOT make code changes. Do NOT run smoke tests.
+- Present the action-required items clearly and ask the user for permission to proceed with the fixes.
+- Wait for explicit user approval before editing any operator code beyond `image_defaults.go`.
+- Once the user approves and fixes are applied, proceed to the smoke test below.
 
-2. Build and deploy to kind:
+**If no action-required items were found (only no-impact / new-feature-opportunity):**
+- Proceed directly to the deployment smoke test to verify everything works end-to-end.
+
+### 5c. Deployment Smoke Test
+
+**Only run this when confident no operator code changes are needed**, or after the user has approved and all action-required fixes have been applied. This is a final verification that the new images work correctly with the operator.
+
+1. Build and deploy to kind:
    ```bash
    make kind-redeploy
    ```
    If no kind cluster exists, use `make kind-deploy`.
 
-3. Apply a sample workload:
+2. Apply a sample workload:
    ```bash
    kubectl apply -f config/samples/minimal.yaml
    ```
 
-4. Wait for pods and check health:
+3. Wait for pods and check health:
    ```bash
    # Wait up to 2 minutes for pods to stabilize
    sleep 60
    kubectl get pods
    ```
 
-5. **If any pool pods are in CrashLoopBackOff or Init:Error:**
+4. **If any pool pods are in CrashLoopBackOff or Init:Error:**
    - Check logs: `kubectl logs <pod> -c multipooler` and `kubectl logs <pod> -c postgres`
    - Diagnose the root cause (missing env var, removed flag, changed path, etc.)
-   - Fix the issue in the operator code
-   - Update tests
-   - Re-run `make kind-redeploy` and re-verify
+   - Report the issue to the user and ask for permission before applying fixes
+   - After fixes are approved and applied, re-run `make kind-redeploy` and re-verify
    - **Do NOT proceed to Step 6 until all pods are healthy.**
 
-6. **If all pods reach Running/Ready**, the upgrade is verified. Clean up:
+5. **If all pods reach Running/Ready**, the upgrade is verified. Clean up:
    ```bash
    kubectl delete multigrescluster --all
    ```
