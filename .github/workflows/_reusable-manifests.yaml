@@ -3,6 +3,9 @@ name: Generate and verify manifests
 on:
   workflow_call: {}
 
+permissions:
+  contents: read
+
 jobs:
   verify-manifests:
     name: Generate and verify manifests
