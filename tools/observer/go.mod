@@ -1,6 +1,6 @@
 module github.com/numtide/multigres-operator/tools/observer
 
-go 1.25.2
+go 1.25.8
 
 require (
 	github.com/jackc/pgx/v5 v5.8.0

@@ -1,6 +1,6 @@
 module github.com/numtide/multigres-operator
 
-go 1.25.2
+go 1.25.8
 
 require (
 	github.com/go-logr/logr v1.4.3
