@@ -143,7 +143,7 @@ kubectl patch multigrescluster my-cluster --type=merge \
 ```
 
 **Reference files:**
-- [`references/scenarios.md`](skills/exercise_cluster/references/scenarios.md) — full scenario catalog with mutation commands and success criteria
+- [`references/scenarios/index.md`](skills/exercise_cluster/references/scenarios/index.md) — full scenario catalog with mutation commands and success criteria
 - [`references/operator-knowledge.md`](skills/exercise_cluster/references/operator-knowledge.md) — operator architecture, code paths for investigation, upstream vs operator decision tree
 
 ### diagnose_with_observer — Reactive Investigation
@@ -363,7 +363,7 @@ When a pod that Kubernetes marks as Ready is showing errors, that is exactly the
 | [Skills Overview](skills/README.md) | AI agent skills for proactive testing and reactive diagnosis |
 | [Exercise Cluster Skill](skills/exercise_cluster/SKILL.md) | Proactive mutation testing with stability verification |
 | [Diagnose with Observer Skill](skills/diagnose_with_observer/SKILL.md) | Reactive investigation, triage, and root cause analysis |
-| [Scenario Catalog](skills/exercise_cluster/references/scenarios.md) | 40+ mutation scenarios with commands and success criteria |
+| [Scenario Catalog](skills/exercise_cluster/references/scenarios/index.md) | 40+ mutation scenarios with commands and success criteria |
 | [Operator Knowledge](skills/exercise_cluster/references/operator-knowledge.md) | Operator architecture and code paths for investigation |
 
 ## Project Structure

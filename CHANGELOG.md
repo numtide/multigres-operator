@@ -4,6 +4,34 @@ All notable changes to the Multigres Operator are documented in this file.
 
 ---
 
+## [v0.10.1] — 2026-03-27
+
+**Previous release:** v0.10.0 (2026-03-26)
+
+Migrates the repository to the new `multigres` GitHub organization, updates default upstream images to sha-0faa227, bumps Go to 1.25.8, and hardens CI workflows with explicit permissions, govulncheck, and improved coverage reporting.
+
+**15 commits, 197 files changed, ~893 insertions.**
+
+### Refactoring
+
+- **Organization rename numtide → multigres:** Updated Go module path from `github.com/numtide/multigres-operator` to `github.com/multigres/multigres-operator` across all packages, container image registry prefix `ghcr.io/numtide` → `ghcr.io/multigres`, Dockerfile OCI labels, Prometheus runbook URLs, and documentation references.
+
+### Dependencies
+
+- **Multigres image update:** Pinned default container images to `sha-0faa227` (pgctld, multigres), up from `sha-4bca1d5`. Upstream changes include distributed backup lease locking, consensus term file moved out of PGDATA, multigateway plan-level instrumentation, executil grouping, and etcd `--listen-metrics-urls` fix. multiadmin-web unchanged at `sha-d7be6e4`.
+- **Go 1.25.8:** Updated Go toolchain version in `go.mod` and observer Dockerfile.
+- **CI workflow improvements:** Replaced intermediate Docker image scan with dedicated `govulncheck` workflow; added explicit readonly permissions to reusable build and manifest workflows; refactored test coverage into a separate `coverage-comment.yaml` workflow with fork-safe artifact-based reporting.
+
+### Observer
+
+- **Multi-pool replication check fix:** Replication connection count was computed across all pools in a shard, producing false alerts for multi-pool shards. Now tracks expected replicas per pool so each primary is only compared against its own pool's replica count.
+- **Multi-pool primary count fix:** Primary count validation expected 1 primary per pool, but all pools in a shard share a single primary. Multi-pool shards now correctly validate exactly 1 primary across the entire shard.
+- **Exerciser postgres-config scenario:** Added `SHOW shared_buffers` verification to the update-postgres-config-content scenario to catch the upstream pgctld template re-rendering gap (multigres/multigres#781).
+- **Organization rename:** Updated observer module path and Dockerfile label to `multigres` org; updated `go.mod` to use main module pseudo-version after rename.
+- **Pin images skill:** Refined `pin_upstream_images` skill to filter to binary-relevant code only and added a decision gate before code changes.
+
+---
+
 ## [v0.10.0] — 2026-03-26
 
 **Previous release:** v0.9.0 (2026-03-23)

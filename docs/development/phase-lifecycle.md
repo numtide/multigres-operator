@@ -22,7 +22,7 @@ Phase values are defined in `api/v1alpha1/common_types.go`.
 
 ### Shard
 
-The shard controller computes its phase in `updatePoolsStatus` and `updateOrchStatus`:
+The shard controller computes its phase in `updatePoolsStatus` and `updateMultiOrchStatus`:
 
 1. **Degraded** — if any pool or multiorch pod is crash-looping (detected via `status.IsCrashLooping`).
 2. **Healthy** — when `PoolsReady == true` AND `OrchReady == true` (all pool pods and the multiorch deployment are ready).

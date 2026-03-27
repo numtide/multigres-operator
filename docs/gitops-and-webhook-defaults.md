@@ -59,7 +59,7 @@ spec:
     - name: eu-west
   databases:
     - name: postgres
-      tableGroups:
+      tablegroups:
         - name: default
           shards:
             - name: "0-inf"

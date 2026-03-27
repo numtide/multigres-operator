@@ -47,7 +47,7 @@ spec:
 
   databases:
     - name: postgres
-      tableGroups:
+      tablegroups:
         - name: default
           # Override for this specific TableGroup
           pvcDeletionPolicy:
@@ -119,7 +119,7 @@ The operator supports **in-place PVC volume expansion**. When you increase `stor
 spec:
   databases:
     - name: postgres
-      tableGroups:
+      tablegroups:
         - name: default
           shards:
             - name: "0-inf"
