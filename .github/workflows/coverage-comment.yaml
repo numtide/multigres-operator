@@ -1,0 +1,148 @@
+###========================================
+##  Coverage PR Comment (via workflow_run)
+#==========================================
+# This workflow runs after the CI workflow completes and posts the
+# test coverage report as a PR comment. It uses `workflow_run` so that
+# it always executes in the context of the base repository with write
+# permissions — this is required for fork-based PRs where the
+# GITHUB_TOKEN is read-only.
+#
+# Ref: https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#workflow_run
+
+name: Coverage comment
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Post coverage comment
+    runs-on: ubuntu-latest
+    # Only run when the triggering workflow was a PR and produced artifacts.
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download coverage artifact
+        id: download
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const fs = require('fs');
+            // List artifacts for the triggering workflow run
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            const match = artifacts.data.artifacts.find(a => a.name === 'coverage-report');
+            if (!match) {
+              core.setOutput('found', 'false');
+              console.log('No coverage-report artifact found — skipping.');
+              return;
+            }
+            const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: match.id,
+              archive_format: 'zip',
+            });
+            fs.writeFileSync('/tmp/coverage-report.zip', Buffer.from(download.data));
+            core.setOutput('found', 'true');
+
+      - name: Extract artifact
+        if: steps.download.outputs.found == 'true'
+        run: |
+          mkdir -p /tmp/coverage-artifact
+          unzip -o /tmp/coverage-report.zip -d /tmp/coverage-artifact
+
+      - name: Post PR comment
+        if: steps.download.outputs.found == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const fs = require('fs/promises')
+
+            // 1. Read artifact data
+            const prNumber = parseInt(
+              (await fs.readFile('/tmp/coverage-artifact/pr_number', 'utf8')).trim()
+            );
+            const threshold = (await fs.readFile('/tmp/coverage-artifact/threshold', 'utf8')).trim();
+            const newCovStr = (await fs.readFile('/tmp/coverage-artifact/new_coverage', 'utf8')).trim();
+            const prevCovStr = (await fs.readFile('/tmp/coverage-artifact/prev_coverage', 'utf8')).trim();
+
+            let reportContent = "No coverage report generated (Build likely failed).";
+            try {
+              reportContent = await fs.readFile('/tmp/coverage-artifact/coverage_report.txt', 'utf8');
+            } catch (e) {
+              console.log("Could not read coverage report file:", e.message);
+            }
+
+            // 2. Calculate status
+            const thresholdVal = parseFloat(threshold) || 0;
+            const newCov = parseFloat(newCovStr);
+
+            let overallStatus = "⚠️ SKIPPED (Build Failed?)";
+            if (!isNaN(newCov)) {
+              if (thresholdVal > newCov) {
+                overallStatus = `❌ FAIL: Coverage (${newCov}%) < Threshold (${thresholdVal}%)`;
+              } else {
+                overallStatus = "✅ PASS";
+              }
+            }
+
+            // 3. Build comment body
+            const comment = `### 🔬 Go Test Coverage Report
+
+            #### Summary
+
+            | Coverage Type          | Result                                 |
+            | ---------------------- | -------------------------------------- |
+            | Threshold              | ${thresholdVal}%                       |
+            | Previous Test Coverage | ${prevCovStr || 'Unknown'}%            |
+            | New Test Coverage      | ${newCovStr || 'Unknown'}%             |
+
+            #### Status
+
+            ${overallStatus}
+
+            #### Detail
+
+            <details><summary>Show New Coverage</summary>
+
+            \`\`\`
+            ${reportContent}
+            \`\`\`
+
+            </details>
+            `;
+
+            // 4. Minimize old bot comments
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: prNumber,
+            });
+            const botComments = comments.filter(c =>
+              c.user.type === 'Bot' &&
+              c.body.includes('Go Test Coverage Report')
+            );
+            for (const botComment of botComments) {
+              const query = `mutation {
+                minimizeComment(input: {classifier: OUTDATED, subjectId: "${botComment.node_id}"}) {
+                  clientMutationId
+                }
+              }`
+              await github.graphql(query)
+            }
+
+            // 5. Create new comment
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: prNumber,
+              body: comment,
+            })

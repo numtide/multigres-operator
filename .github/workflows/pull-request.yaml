@@ -30,7 +30,6 @@ jobs:
     name: Coverage
     permissions:
       contents: read
-      pull-requests: write
     uses: ./.github/workflows/_reusable-test-coverage.yaml
     with:
       COVERAGE_THRESHOLD: 70
