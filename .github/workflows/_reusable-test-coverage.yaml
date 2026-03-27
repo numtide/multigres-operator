@@ -35,7 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
     steps:
       # Initial setup
       - name: Check out
@@ -93,98 +92,30 @@ jobs:
           echo "PREV_COVERAGE=$prevCoverage" >> $GITHUB_ENV
           echo "NEW_COVERAGE=$newCoverage" >> $GITHUB_ENV
 
-      # Create a PR comment when run against PR -- this makes sure the code
-      # coverage becomes visible in the comment section, and also, whenever new
-      # change is made, the previous test reports will be minimised, leaving the
-      # only relevant comment.
-      - name: Check and report
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      # Upload coverage data as an artifact so that a separate workflow_run
+      # workflow can post the PR comment. This is required because fork PRs
+      # receive a read-only GITHUB_TOKEN and cannot create comments directly.
+      - name: Prepare coverage artifact
         if: always() && github.event_name == 'pull_request'
-        env:
-          COVERAGE_THRESHOLD: ${{ inputs.COVERAGE_THRESHOLD }}
+        run: |
+          mkdir -p /tmp/coverage-artifact
+          echo "${{ github.event.number }}" > /tmp/coverage-artifact/pr_number
+          echo "${{ inputs.COVERAGE_THRESHOLD }}" > /tmp/coverage-artifact/threshold
+          echo "${NEW_COVERAGE}" > /tmp/coverage-artifact/new_coverage
+          echo "${PREV_COVERAGE}" > /tmp/coverage-artifact/prev_coverage
+          if [[ -f /tmp/coverage.txt ]]; then
+            cp /tmp/coverage.txt /tmp/coverage-artifact/coverage_report.txt
+          else
+            echo "No coverage report generated (Build likely failed)." > /tmp/coverage-artifact/coverage_report.txt
+          fi
+
+      - name: Upload coverage artifact
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          retries: 3
-          script: |
-            const fs = require('fs/promises')
-
-            // 1. Retrieve existing bot comments
-            const { data: comments } = await github.rest.issues.listComments({
-              ...context.repo,
-              issue_number: context.issue.number,
-            });
-            const botComments = comments.filter(comment => {
-              return comment.user.type === 'Bot' &&
-                comment.body.includes('Go Test Coverage Report')
-            });
-
-            // 2. Safe Value Parsing
-            const threshold = parseFloat(process.env.COVERAGE_THRESHOLD) || 0;
-            const newCovStr = process.env.NEW_COVERAGE;
-            const prevCovStr = process.env.PREV_COVERAGE;
-
-            const newCov = parseFloat(newCovStr); // NaN if undefined/empty
-            const prevCov = parseFloat(prevCovStr) || 0;
-
-            let overallStatus = "⚠️ SKIPPED (Build Failed?)";
-
-            // Only calculate status if we actually have coverage data
-            if (!isNaN(newCov)) {
-                if (threshold > newCov) {
-                    overallStatus = `❌ FAIL: Coverage (${newCov}%) < Threshold (${threshold}%)`;
-                } else {
-                    overallStatus = "✅ PASS";
-                }
-            }
-
-            // 3. Read Report or Default Message
-            let reportContent = "No coverage report generated (Build likely failed).";
-            try {
-                reportContent = await fs.readFile('/tmp/coverage.txt', 'utf8');
-            } catch (e) {
-                console.log("Could not read coverage file:", e.message);
-            }
-
-            const comment = `### 🔬 Go Test Coverage Report
-
-            #### Summary
-
-            | Coverage Type          | Result                                 |
-            | ---------------------- | -------------------------------------- |
-            | Threshold              | ${threshold}%                          |
-            | Previous Test Coverage | ${prevCovStr || 'Unknown'}%            |
-            | New Test Coverage      | ${newCovStr || 'Unknown'}%             |
-
-            #### Status
-
-            ${overallStatus}
-
-            #### Detail
-
-            <details><summary>Show New Coverage</summary>
-
-            \`\`\`
-            ${reportContent}
-            \`\`\`
-
-            </details>
-            `;
-
-            // 4. Minimize old comments
-            for (const botComment of botComments) {
-              const query = `mutation {
-                minimizeComment(input: {classifier: OUTDATED, subjectId: "${botComment.node_id}"}) {
-                  clientMutationId
-                }
-              }`
-              await github.graphql(query)
-            }
-
-            // 5. Create new comment
-            github.rest.issues.createComment({
-              ...context.repo,
-              issue_number: context.issue.number,
-              body: comment
-            })
+          name: coverage-report
+          path: /tmp/coverage-artifact/
+          retention-days: 1
 
       # Exit with non-zero value if the test coverage has not reached the threshold.
       - name: Check coverage status
