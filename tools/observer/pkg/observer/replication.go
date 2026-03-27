@@ -102,7 +102,7 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 		return
 	}
 
-	// Get pool pods to look up IPs.
+	// Get pool pods to look up IPs and pool membership.
 	var pods corev1.PodList
 	if err := o.client.List(ctx, &pods,
 		o.listOpts(client.MatchingLabels{
@@ -114,8 +114,10 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 	}
 
 	podIPs := make(map[string]string, len(pods.Items))
+	podPool := make(map[string]string, len(pods.Items))
 	for i := range pods.Items {
 		p := &pods.Items[i]
+		podPool[p.Name] = p.Labels[common.LabelMultigresPool]
 		if p.Status.PodIP != "" && p.Status.Phase == corev1.PodRunning &&
 			p.DeletionTimestamp == nil {
 			if o.isPodInGracePeriod(p.Name) {
@@ -125,13 +127,20 @@ func (o *Observer) checkShardReplication(ctx context.Context, shard *multigresv1
 		}
 	}
 
+	// Count replicas per pool so each primary is checked against its own pool's replicas.
+	replicasPerPool := make(map[string]int)
+	for _, name := range replicaPodNames {
+		replicasPerPool[podPool[name]]++
+	}
+
 	// Check primaries: pg_stat_replication, sync state, replication lag, write probe.
 	for _, primaryName := range primaryPodNames {
 		ip, ok := podIPs[primaryName]
 		if !ok {
 			continue
 		}
-		o.probePrimaryReplication(ctx, ip, primaryName, comp, len(replicaPodNames), password)
+		expectedReplicas := replicasPerPool[podPool[primaryName]]
+		o.probePrimaryReplication(ctx, ip, primaryName, comp, expectedReplicas, password)
 	}
 
 	// Check replicas: WAL receiver status, replay paused state.
