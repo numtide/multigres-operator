@@ -82,6 +82,10 @@ func buildEtcdConfigEnv(toposerverName, serviceName, namespace string) []corev1.
 			Value: "http://[::]:2380",
 		},
 		{
+			Name:  "ETCD_LISTEN_METRICS_URLS",
+			Value: "http://[::]:2381",
+		},
+		{
 			Name: "ETCD_ADVERTISE_CLIENT_URLS",
 			Value: fmt.Sprintf(
 				"http://$(POD_NAME).%s.$(POD_NAMESPACE).svc.cluster.local:2379",

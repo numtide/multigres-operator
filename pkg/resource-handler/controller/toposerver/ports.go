@@ -13,6 +13,9 @@ const (
 
 	// PeerPort is the default port for etcd peer connections.
 	PeerPort int32 = 2380
+
+	// MetricsPort is the default port for etcd metrics and health endpoints.
+	MetricsPort int32 = 2381
 )
 
 // buildContainerPorts creates the port definitions for the etcd container.
@@ -38,6 +41,11 @@ func buildContainerPorts(toposerver *multigresv1alpha1.TopoServer) []corev1.Cont
 		{
 			Name:          "peer",
 			ContainerPort: peerPort,
+			Protocol:      corev1.ProtocolTCP,
+		},
+		{
+			Name:          "metrics",
+			ContainerPort: MetricsPort,
 			Protocol:      corev1.ProtocolTCP,
 		},
 	}
