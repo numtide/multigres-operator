@@ -108,6 +108,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "client", 2379),
 											tcpPort(t, "peer", 2380),
+											tcpPort(t, "metrics", 2381),
 										},
 										Env: []corev1.EnvVar{
 											{
@@ -286,6 +287,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 										Ports: []corev1.ContainerPort{
 											tcpPort(t, "client", 2379),
 											tcpPort(t, "peer", 2380),
+											tcpPort(t, "metrics", 2381),
 										},
 										Env: []corev1.EnvVar{
 											{
