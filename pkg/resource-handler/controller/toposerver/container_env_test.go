@@ -50,6 +50,7 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+				{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
 					Value: "http://$(POD_NAME).my-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
@@ -71,6 +72,7 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+				{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
 					Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
@@ -92,6 +94,7 @@ func TestBuildEtcdConfigEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+				{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
 					Value: "http://$(POD_NAME).very-long-toposerver-cluster-name-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
@@ -217,6 +220,7 @@ func TestBuildContainerEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+				{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
 					Value: "http://$(POD_NAME).my-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
@@ -259,6 +263,7 @@ func TestBuildContainerEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+				{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
 					Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",
@@ -303,6 +308,7 @@ func TestBuildContainerEnv(t *testing.T) {
 				{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 				{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 				{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+				{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 				{
 					Name:  "ETCD_ADVERTISE_CLIENT_URLS",
 					Value: "http://$(POD_NAME).empty-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379",

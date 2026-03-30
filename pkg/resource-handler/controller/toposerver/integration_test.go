@@ -132,6 +132,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+											{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
 											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).test-toposerver-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
 											{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
@@ -145,7 +146,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
 													Path:   "/readyz",
-													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Port:   intstr.FromInt32(toposervercontroller.MetricsPort),
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
@@ -158,7 +159,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
 													Path:   "/livez",
-													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Port:   intstr.FromInt32(toposervercontroller.MetricsPort),
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
@@ -171,7 +172,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
 													Path:   "/readyz",
-													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Port:   intstr.FromInt32(toposervercontroller.MetricsPort),
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
@@ -309,6 +310,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											{Name: "ETCD_DATA_DIR", Value: "/var/lib/etcd"},
 											{Name: "ETCD_LISTEN_CLIENT_URLS", Value: "http://[::]:2379"},
 											{Name: "ETCD_LISTEN_PEER_URLS", Value: "http://[::]:2380"},
+											{Name: "ETCD_LISTEN_METRICS_URLS", Value: "http://[::]:2381"},
 											{Name: "ETCD_ADVERTISE_CLIENT_URLS", Value: "http://$(POD_NAME).delete-policy-topo-headless.$(POD_NAMESPACE).svc.cluster.local:2379"},
 											{Name: "ETCD_INITIAL_ADVERTISE_PEER_URLS", Value: "http://$(POD_NAME).delete-policy-topo-headless.$(POD_NAMESPACE).svc.cluster.local:2380"},
 											{Name: "ETCD_INITIAL_CLUSTER_STATE", Value: "new"},
@@ -322,7 +324,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
 													Path:   "/readyz",
-													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Port:   intstr.FromInt32(toposervercontroller.MetricsPort),
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
@@ -335,7 +337,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
 													Path:   "/livez",
-													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Port:   intstr.FromInt32(toposervercontroller.MetricsPort),
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},
@@ -348,7 +350,7 @@ func TestTopoServerReconciliation(t *testing.T) {
 											ProbeHandler: corev1.ProbeHandler{
 												HTTPGet: &corev1.HTTPGetAction{
 													Path:   "/readyz",
-													Port:   intstr.FromInt32(toposervercontroller.ClientPort),
+													Port:   intstr.FromInt32(toposervercontroller.MetricsPort),
 													Scheme: corev1.URISchemeHTTP,
 												},
 											},

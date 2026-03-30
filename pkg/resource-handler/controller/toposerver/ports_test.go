@@ -35,6 +35,11 @@ func TestBuildContainerPorts(t *testing.T) {
 					ContainerPort: 2380,
 					Protocol:      corev1.ProtocolTCP,
 				},
+				{
+					Name:          "metrics",
+					ContainerPort: 2381,
+					Protocol:      corev1.ProtocolTCP,
+				},
 			},
 		},
 	}

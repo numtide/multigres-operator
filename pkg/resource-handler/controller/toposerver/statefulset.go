@@ -105,7 +105,7 @@ func BuildStatefulSet(
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path: "/readyz",
-										Port: intstr.FromInt32(ClientPort),
+										Port: intstr.FromInt32(MetricsPort),
 									},
 								},
 								PeriodSeconds:    5,
@@ -115,7 +115,7 @@ func BuildStatefulSet(
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path: "/livez",
-										Port: intstr.FromInt32(ClientPort),
+										Port: intstr.FromInt32(MetricsPort),
 									},
 								},
 								PeriodSeconds: 10,
@@ -124,7 +124,7 @@ func BuildStatefulSet(
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path: "/readyz",
-										Port: intstr.FromInt32(ClientPort),
+										Port: intstr.FromInt32(MetricsPort),
 									},
 								},
 								PeriodSeconds: 5,
