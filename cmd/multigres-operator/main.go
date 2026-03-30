@@ -77,7 +77,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(multigresv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(admissionregistrationv1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
 }
 
 func main() {
