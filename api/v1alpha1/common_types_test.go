@@ -146,8 +146,8 @@ func TestMergeBackupConfig_S3PointerBools(t *testing.T) {
 func TestBackupConfig_DeepCopyPreservesRetention(t *testing.T) {
 	t.Parallel()
 	original := &BackupConfig{
-		Type:      BackupTypeS3,
-		S3:        &S3BackupConfig{Bucket: "b", Region: "r"},
+		Type: BackupTypeS3,
+		S3:   &S3BackupConfig{Bucket: "b", Region: "r"},
 		Retention: &RetentionPolicy{
 			FullCount: ptr.To(int32(4)),
 		},
@@ -155,6 +155,9 @@ func TestBackupConfig_DeepCopyPreservesRetention(t *testing.T) {
 	copied := original.DeepCopy()
 	*copied.Retention.FullCount = 99
 	if *original.Retention.FullCount != 4 {
-		t.Errorf("DeepCopy leaked pointer: original FullCount changed to %d", *original.Retention.FullCount)
+		t.Errorf(
+			"DeepCopy leaked pointer: original FullCount changed to %d",
+			*original.Retention.FullCount,
+		)
 	}
 }

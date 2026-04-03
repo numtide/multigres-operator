@@ -141,7 +141,11 @@ func TestEvaluateBackupsExtended_IntegrityCheckFail(t *testing.T) {
 		t.Error("expected RepositoryHealthy=false when integrity check fails")
 	}
 	if result.RepositoryReason != backuphealth.ReasonIntegrityCheckFailed {
-		t.Errorf("expected reason %q, got %q", backuphealth.ReasonIntegrityCheckFailed, result.RepositoryReason)
+		t.Errorf(
+			"expected reason %q, got %q",
+			backuphealth.ReasonIntegrityCheckFailed,
+			result.RepositoryReason,
+		)
 	}
 }
 
@@ -159,7 +163,10 @@ func TestEvaluateBackupsExtended_NoIntegrityCheck_Nil(t *testing.T) {
 	result := backuphealth.EvaluateBackupsExtended(shard, backups, nil, nil)
 
 	if result.RepositoryHealthy != nil {
-		t.Errorf("expected RepositoryHealthy=nil when no integrity check, got %v", *result.RepositoryHealthy)
+		t.Errorf(
+			"expected RepositoryHealthy=nil when no integrity check, got %v",
+			*result.RepositoryHealthy,
+		)
 	}
 }
 
@@ -255,7 +262,11 @@ func TestApplyExtended_SetsConditionFalse(t *testing.T) {
 				t.Errorf("expected False, got %s", c.Status)
 			}
 			if c.Reason != backuphealth.ReasonIntegrityCheckFailed {
-				t.Errorf("expected reason %q, got %q", backuphealth.ReasonIntegrityCheckFailed, c.Reason)
+				t.Errorf(
+					"expected reason %q, got %q",
+					backuphealth.ReasonIntegrityCheckFailed,
+					c.Reason,
+				)
 			}
 			return
 		}
@@ -268,7 +279,11 @@ func TestApplyExtended_RemovesStaleCondition(t *testing.T) {
 	shard := newTestShard()
 	// Pre-set a condition
 	shard.Status.Conditions = []metav1.Condition{
-		{Type: backuphealth.ConditionRepositoryHealthy, Status: metav1.ConditionTrue, Reason: "Healthy"},
+		{
+			Type:   backuphealth.ConditionRepositoryHealthy,
+			Status: metav1.ConditionTrue,
+			Reason: "Healthy",
+		},
 		{Type: "Available", Status: metav1.ConditionTrue, Reason: "AllPodsReady"},
 	}
 
@@ -278,7 +293,9 @@ func TestApplyExtended_RemovesStaleCondition(t *testing.T) {
 
 	for _, c := range shard.Status.Conditions {
 		if c.Type == backuphealth.ConditionRepositoryHealthy {
-			t.Error("expected BackupRepositoryHealthy condition to be removed, but it's still present")
+			t.Error(
+				"expected BackupRepositoryHealthy condition to be removed, but it's still present",
+			)
 		}
 	}
 	// Other conditions should be preserved

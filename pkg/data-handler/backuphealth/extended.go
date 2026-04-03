@@ -136,7 +136,12 @@ func EvaluateBackupsExtended(
 		ext.DiffBackupCount,
 	)
 	// Always set oldest age so the gauge does not retain a stale value.
-	monitoring.SetBackupOldestRetainedAge(clusterName, shard.Name, shard.Namespace, ext.OldestBackupAge)
+	monitoring.SetBackupOldestRetainedAge(
+		clusterName,
+		shard.Name,
+		shard.Namespace,
+		ext.OldestBackupAge,
+	)
 
 	return ext
 }
