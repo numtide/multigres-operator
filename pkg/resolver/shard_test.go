@@ -1061,7 +1061,10 @@ func TestDefaultBackupConfig(t *testing.T) {
 			t.Errorf("FullCount = %d, want 10 (should not be overridden)", *cfg.Retention.FullCount)
 		}
 		if cfg.Retention.DifferentialCount == nil || *cfg.Retention.DifferentialCount != 1 {
-			t.Errorf("DifferentialCount = %v, want 1 (should be defaulted)", cfg.Retention.DifferentialCount)
+			t.Errorf(
+				"DifferentialCount = %v, want 1 (should be defaulted)",
+				cfg.Retention.DifferentialCount,
+			)
 		}
 	})
 }
