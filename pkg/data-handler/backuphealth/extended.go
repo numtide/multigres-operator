@@ -7,21 +7,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
-	multipoolermanagerdatapb "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	"github.com/multigres/multigres-operator/pkg/monitoring"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 	"github.com/multigres/multigres-operator/pkg/util/status"
+	multipoolermanagerdatapb "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 )
 
 const (
 	ConditionRepositoryHealthy = "BackupRepositoryHealthy"
 
 	ReasonHealthy               = "Healthy"
-	ReasonIntegrityCheckFailed = "IntegrityCheckFailed"
-	ReasonWALArchiveIncomplete = "WALArchiveIncomplete"
-	ReasonStaleMetadata        = "StaleMetadata"
+	ReasonIntegrityCheckFailed  = "IntegrityCheckFailed"
+	ReasonWALArchiveIncomplete  = "WALArchiveIncomplete"
+	ReasonStaleMetadata         = "StaleMetadata"
 	ReasonRepositoryUnreachable = "RepositoryUnreachable"
-	ReasonAllPodsCorrupted     = "AllPodsCorrupted"
+	ReasonAllPodsCorrupted      = "AllPodsCorrupted"
 )
 
 // IntegrityCheckResult holds the result of a pgbackrest check.
