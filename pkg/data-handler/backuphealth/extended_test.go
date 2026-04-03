@@ -34,10 +34,26 @@ func TestEvaluateBackupsExtended_BackupCounts(t *testing.T) {
 	t.Parallel()
 	shard := newTestShard()
 	backups := []*multipoolermanagerdatapb.BackupMetadata{
-		{BackupId: recentBackupID(1 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
-		{BackupId: recentBackupID(2 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
-		{BackupId: recentBackupID(30 * time.Minute), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "diff"},
-		{BackupId: recentBackupID(3 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_INCOMPLETE, Type: "full"},
+		{
+			BackupId: recentBackupID(1 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+		{
+			BackupId: recentBackupID(2 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+		{
+			BackupId: recentBackupID(30 * time.Minute),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "diff",
+		},
+		{
+			BackupId: recentBackupID(3 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_INCOMPLETE,
+			Type:     "full",
+		},
 	}
 	retention := &multigresv1alpha1.RetentionPolicy{FullCount: ptr.To(int32(4))}
 
@@ -55,8 +71,16 @@ func TestEvaluateBackupsExtended_OldestBackupAge(t *testing.T) {
 	t.Parallel()
 	shard := newTestShard()
 	backups := []*multipoolermanagerdatapb.BackupMetadata{
-		{BackupId: recentBackupID(1 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
-		{BackupId: recentBackupID(48 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
+		{
+			BackupId: recentBackupID(1 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+		{
+			BackupId: recentBackupID(48 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
 	}
 
 	result := backuphealth.EvaluateBackupsExtended(shard, backups, nil, nil)
@@ -81,7 +105,11 @@ func TestEvaluateBackupsExtended_IntegrityCheckPass(t *testing.T) {
 	t.Parallel()
 	shard := newTestShard()
 	backups := []*multipoolermanagerdatapb.BackupMetadata{
-		{BackupId: recentBackupID(1 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
+		{
+			BackupId: recentBackupID(1 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
 	}
 	check := &backuphealth.IntegrityCheckResult{Passed: true}
 
@@ -99,7 +127,11 @@ func TestEvaluateBackupsExtended_IntegrityCheckFail(t *testing.T) {
 	t.Parallel()
 	shard := newTestShard()
 	backups := []*multipoolermanagerdatapb.BackupMetadata{
-		{BackupId: recentBackupID(1 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
+		{
+			BackupId: recentBackupID(1 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
 	}
 	check := &backuphealth.IntegrityCheckResult{Passed: false, Error: "stanza mismatch"}
 
@@ -117,7 +149,11 @@ func TestEvaluateBackupsExtended_NoIntegrityCheck_Nil(t *testing.T) {
 	t.Parallel()
 	shard := newTestShard()
 	backups := []*multipoolermanagerdatapb.BackupMetadata{
-		{BackupId: recentBackupID(1 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
+		{
+			BackupId: recentBackupID(1 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
 	}
 
 	result := backuphealth.EvaluateBackupsExtended(shard, backups, nil, nil)
@@ -131,7 +167,11 @@ func TestEvaluateBackupsExtended_RetentionCountWarning(t *testing.T) {
 	t.Parallel()
 	shard := newTestShard()
 	backups := []*multipoolermanagerdatapb.BackupMetadata{
-		{BackupId: recentBackupID(1 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
+		{
+			BackupId: recentBackupID(1 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
 	}
 	retention := &multigresv1alpha1.RetentionPolicy{FullCount: ptr.To(int32(4))}
 
@@ -146,9 +186,21 @@ func TestEvaluateBackupsExtended_RetentionCountOK(t *testing.T) {
 	t.Parallel()
 	shard := newTestShard()
 	backups := []*multipoolermanagerdatapb.BackupMetadata{
-		{BackupId: recentBackupID(1 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
-		{BackupId: recentBackupID(25 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
-		{BackupId: recentBackupID(49 * time.Hour), Status: multipoolermanagerdatapb.BackupMetadata_COMPLETE, Type: "full"},
+		{
+			BackupId: recentBackupID(1 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+		{
+			BackupId: recentBackupID(25 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
+		{
+			BackupId: recentBackupID(49 * time.Hour),
+			Status:   multipoolermanagerdatapb.BackupMetadata_COMPLETE,
+			Type:     "full",
+		},
 	}
 	retention := &multigresv1alpha1.RetentionPolicy{FullCount: ptr.To(int32(3))}
 

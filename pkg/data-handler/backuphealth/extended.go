@@ -105,7 +105,10 @@ func EvaluateBackupsExtended(
 			unhealthy := false
 			ext.RepositoryHealthy = &unhealthy
 			ext.RepositoryReason = ReasonIntegrityCheckFailed
-			ext.RepositoryMessage = fmt.Sprintf("pgbackrest check failed: %s", integrityCheck.Error)
+			ext.RepositoryMessage = fmt.Sprintf(
+				"pgbackrest check failed: %s",
+				integrityCheck.Error,
+			)
 		}
 	}
 	// Check retention count bounds.
@@ -115,14 +118,23 @@ func EvaluateBackupsExtended(
 			ext.RetentionCountWarning = true
 			ext.RetentionCountMessage = fmt.Sprintf(
 				"Full backup count %d is outside expected range [%d, %d] for retention fullCount=%d",
-				ext.FullBackupCount, expected-1, expected+1, expected,
+				ext.FullBackupCount,
+				expected-1,
+				expected+1,
+				expected,
 			)
 		}
 	}
 
 	// Emit metrics.
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	monitoring.SetBackupRetainedCount(clusterName, shard.Name, shard.Namespace, ext.FullBackupCount, ext.DiffBackupCount)
+	monitoring.SetBackupRetainedCount(
+		clusterName,
+		shard.Name,
+		shard.Namespace,
+		ext.FullBackupCount,
+		ext.DiffBackupCount,
+	)
 	// Always set oldest age so the gauge does not retain a stale value.
 	monitoring.SetBackupOldestRetainedAge(clusterName, shard.Name, shard.Namespace, ext.OldestBackupAge)
 

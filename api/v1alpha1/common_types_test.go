@@ -12,12 +12,17 @@ func TestMergeBackupConfig_Retention(t *testing.T) {
 	t.Run("child overrides parent", func(t *testing.T) {
 		t.Parallel()
 		parent := &BackupConfig{
-			Type:      BackupTypeS3,
-			Retention: &RetentionPolicy{FullCount: ptr.To(int32(4)), DifferentialCount: ptr.To(int32(1))},
+			Type: BackupTypeS3,
+			Retention: &RetentionPolicy{
+				FullCount:         ptr.To(int32(4)),
+				DifferentialCount: ptr.To(int32(1)),
+			},
 		}
 		child := &BackupConfig{
-			Type:      BackupTypeS3,
-			Retention: &RetentionPolicy{FullCount: ptr.To(int32(7))},
+			Type: BackupTypeS3,
+			Retention: &RetentionPolicy{
+				FullCount: ptr.To(int32(7)),
+			},
 		}
 		merged := MergeBackupConfig(child, parent)
 		if merged.Retention == nil {
@@ -27,16 +32,22 @@ func TestMergeBackupConfig_Retention(t *testing.T) {
 			t.Errorf("FullCount = %d, want 7", *merged.Retention.FullCount)
 		}
 		if *merged.Retention.DifferentialCount != 1 {
-			t.Errorf("DifferentialCount = %d, want 1 (from parent)", *merged.Retention.DifferentialCount)
+			t.Errorf(
+				"DifferentialCount = %d, want 1 (from parent)",
+				*merged.Retention.DifferentialCount,
+			)
 		}
 	})
 
 	t.Run("parent preserved when child unset", func(t *testing.T) {
 		t.Parallel()
 		parent := &BackupConfig{
-			Type:      BackupTypeS3,
-			S3:        &S3BackupConfig{Bucket: "b", Region: "r"},
-			Retention: &RetentionPolicy{FullCount: ptr.To(int32(5)), DifferentialCount: ptr.To(int32(3))},
+			Type: BackupTypeS3,
+			S3:   &S3BackupConfig{Bucket: "b", Region: "r"},
+			Retention: &RetentionPolicy{
+				FullCount:         ptr.To(int32(5)),
+				DifferentialCount: ptr.To(int32(3)),
+			},
 		}
 		child := &BackupConfig{
 			Type: BackupTypeS3,
@@ -57,8 +68,11 @@ func TestMergeBackupConfig_Retention(t *testing.T) {
 	t.Run("nil child retention preserves parent", func(t *testing.T) {
 		t.Parallel()
 		parent := &BackupConfig{
-			Type:      BackupTypeS3,
-			Retention: &RetentionPolicy{FullCount: ptr.To(int32(4)), DifferentialCount: ptr.To(int32(2))},
+			Type: BackupTypeS3,
+			Retention: &RetentionPolicy{
+				FullCount:         ptr.To(int32(4)),
+				DifferentialCount: ptr.To(int32(2)),
+			},
 		}
 		child := &BackupConfig{
 			Type: BackupTypeS3,
@@ -134,7 +148,9 @@ func TestBackupConfig_DeepCopyPreservesRetention(t *testing.T) {
 	original := &BackupConfig{
 		Type:      BackupTypeS3,
 		S3:        &S3BackupConfig{Bucket: "b", Region: "r"},
-		Retention: &RetentionPolicy{FullCount: ptr.To(int32(4))},
+		Retention: &RetentionPolicy{
+			FullCount: ptr.To(int32(4)),
+		},
 	}
 	copied := original.DeepCopy()
 	*copied.Retention.FullCount = 99
