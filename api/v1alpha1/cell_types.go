@@ -54,6 +54,10 @@ type CellSpec struct {
 	// MultiGateway fully resolved config.
 	MultiGateway StatelessSpec `json:"multigateway"`
 
+	// MultiGatewayPlacement defines optional scheduling settings for multigateway pods.
+	// +optional
+	MultiGatewayPlacement *PodPlacementSpec `json:"multigatewayPlacement,omitempty"`
+
 	// GlobalTopoServer reference (always populated).
 	GlobalTopoServer GlobalTopoServerRef `json:"globalTopoServer"`
 

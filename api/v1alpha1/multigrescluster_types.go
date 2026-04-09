@@ -251,6 +251,10 @@ type CellOverrides struct {
 	// MultiGateway overrides.
 	// +optional
 	MultiGateway *StatelessSpec `json:"multigateway,omitempty"`
+
+	// MultiGatewayPlacement overrides.
+	// +optional
+	MultiGatewayPlacement *PodPlacementSpec `json:"multigatewayPlacement,omitempty"`
 }
 
 // CellInlineSpec defines the inline configuration for a Cell.
@@ -259,6 +263,10 @@ type CellInlineSpec struct {
 	// MultiGateway configuration.
 	// +optional
 	MultiGateway StatelessSpec `json:"multigateway,omitempty"`
+
+	// MultiGatewayPlacement defines optional scheduling settings for multigateway pods.
+	// +optional
+	MultiGatewayPlacement *PodPlacementSpec `json:"multigatewayPlacement,omitempty"`
 
 	// LocalTopoServer configuration (optional).
 	// +optional
