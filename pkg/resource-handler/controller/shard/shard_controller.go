@@ -165,6 +165,27 @@ func (r *ShardReconciler) Reconcile(
 	// Compute pool cells for shared backup PVCs (only cells with pool pods need backup storage)
 	poolCells := getPoolCells(shard)
 
+	if err := r.validateBackupStorageClassDependency(ctx, shard); err != nil {
+		if isMissingStorageClassDependency(err) {
+			logger.Info(
+				"StorageClass dependency missing for shared backup PVC; requeueing",
+				"after",
+				storageClassDependencyRequeue,
+			)
+			return ctrl.Result{RequeueAfter: storageClassDependencyRequeue}, nil
+		}
+		monitoring.RecordSpanError(span, err)
+		logger.Error(err, "Failed to validate backup StorageClass")
+		r.Recorder.Eventf(
+			shard,
+			"Warning",
+			"FailedApply",
+			"Failed to validate backup StorageClass: %v",
+			err,
+		)
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile MultiOrch - one Deployment and Service per cell
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileMultiOrch")
@@ -212,17 +233,6 @@ func (r *ShardReconciler) Reconcile(
 		for _, cell := range poolCells {
 			cellName := string(cell)
 			if err := r.reconcileSharedBackupPVC(ctx, shard, cellName); err != nil {
-				if isMissingStorageClassDependency(err) {
-					logger.Info(
-						"StorageClass dependency missing for shared backup PVC; requeueing",
-						"cell",
-						cellName,
-						"after",
-						storageClassDependencyRequeue,
-					)
-					childSpan.End()
-					return ctrl.Result{RequeueAfter: storageClassDependencyRequeue}, nil
-				}
 				monitoring.RecordSpanError(childSpan, err)
 				childSpan.End()
 				logger.Error(err, "Failed to reconcile shared backup PVC", "cell", cellName)
@@ -238,6 +248,27 @@ func (r *ShardReconciler) Reconcile(
 			}
 		}
 		childSpan.End()
+	}
+
+	if err := r.validatePoolStorageClassDependencies(ctx, shard); err != nil {
+		if isMissingStorageClassDependency(err) {
+			logger.Info(
+				"StorageClass dependency missing for pool resources; requeueing",
+				"after",
+				storageClassDependencyRequeue,
+			)
+			return ctrl.Result{RequeueAfter: storageClassDependencyRequeue}, nil
+		}
+		monitoring.RecordSpanError(span, err)
+		logger.Error(err, "Failed to validate pool StorageClass dependencies")
+		r.Recorder.Eventf(
+			shard,
+			"Warning",
+			"FailedApply",
+			"Failed to validate pool StorageClass dependencies: %v",
+			err,
+		)
+		return ctrl.Result{}, err
 	}
 
 	// Compute postgres config hash for rolling update detection.
@@ -267,17 +298,6 @@ func (r *ShardReconciler) Reconcile(
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePools")
 		for poolName, pool := range shard.Spec.Pools {
 			if err := r.reconcilePool(ctx, shard, string(poolName), pool); err != nil {
-				if isMissingStorageClassDependency(err) {
-					logger.Info(
-						"StorageClass dependency missing for pool resources; requeueing",
-						"poolName",
-						poolName,
-						"after",
-						storageClassDependencyRequeue,
-					)
-					childSpan.End()
-					return ctrl.Result{RequeueAfter: storageClassDependencyRequeue}, nil
-				}
 				monitoring.RecordSpanError(childSpan, err)
 				childSpan.End()
 				logger.Error(err, "Failed to reconcile pool", "poolName", poolName)

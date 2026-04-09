@@ -134,14 +134,6 @@ func (r *ShardReconciler) reconcileSharedBackupPVC(
 	if shard.Spec.Backup != nil && shard.Spec.Backup.Type == multigresv1alpha1.BackupTypeS3 {
 		return nil
 	}
-	if err := r.ensureStorageClassExists(
-		ctx,
-		shard,
-		backupFilesystemStorageClassName(shard),
-		"filesystem backup shared PVC",
-	); err != nil {
-		return err
-	}
 
 	desired, err := BuildSharedBackupPVC(
 		shard,
