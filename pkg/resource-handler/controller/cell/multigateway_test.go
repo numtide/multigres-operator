@@ -472,6 +472,16 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							},
 						},
 					},
+					MultiGatewayPlacement: &multigresv1alpha1.PodPlacementSpec{
+						Tolerations: []corev1.Toleration{
+							{
+								Key:      "workload",
+								Operator: corev1.TolerationOpEqual,
+								Value:    "customer-pg",
+								Effect:   corev1.TaintEffectNoSchedule,
+							},
+						},
+					},
 				},
 			},
 			scheme: scheme,
@@ -593,6 +603,14 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											},
 										},
 									},
+								},
+							},
+							Tolerations: []corev1.Toleration{
+								{
+									Key:      "workload",
+									Operator: corev1.TolerationOpEqual,
+									Value:    "customer-pg",
+									Effect:   corev1.TaintEffectNoSchedule,
 								},
 							},
 						},

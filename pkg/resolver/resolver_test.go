@@ -636,6 +636,57 @@ func TestSharedHelpers(t *testing.T) {
 			t.Error("Affinity not merged")
 		}
 	})
+
+	t.Run("mergePodPlacementSpec", func(t *testing.T) {
+		override := &multigresv1alpha1.PodPlacementSpec{
+			Tolerations: []corev1.Toleration{
+				{
+					Key:      "workload",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "customer-pg",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+			},
+		}
+
+		var base *multigresv1alpha1.PodPlacementSpec
+		mergePodPlacementSpec(&base, override)
+
+		if base == nil {
+			t.Fatal("Placement not initialized")
+		}
+		if len(base.Tolerations) != 1 {
+			t.Fatalf("Tolerations not merged, got %v", base.Tolerations)
+		}
+
+		override.Tolerations[0].Value = "changed"
+		if base.Tolerations[0].Value != "customer-pg" {
+			t.Error("Tolerations should be deep-copied during merge")
+		}
+	})
+
+	t.Run("mergePodPlacementSpec clears inherited tolerations", func(t *testing.T) {
+		base := &multigresv1alpha1.PodPlacementSpec{
+			Tolerations: []corev1.Toleration{
+				{
+					Key:      "workload",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "customer-pg",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+			},
+		}
+
+		override := &multigresv1alpha1.PodPlacementSpec{}
+		mergePodPlacementSpec(&base, override)
+
+		if base == nil {
+			t.Fatal("Placement should remain initialized")
+		}
+		if len(base.Tolerations) != 0 {
+			t.Fatalf("Expected inherited tolerations to be cleared, got %v", base.Tolerations)
+		}
+	})
 }
 
 func parseQty(s string) resource.Quantity {

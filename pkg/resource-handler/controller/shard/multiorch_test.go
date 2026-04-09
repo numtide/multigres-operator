@@ -361,6 +361,16 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 								},
 							},
 						},
+						Placement: &multigresv1alpha1.PodPlacementSpec{
+							Tolerations: []corev1.Toleration{
+								{
+									Key:      "workload",
+									Operator: corev1.TolerationOpEqual,
+									Value:    "customer-pg",
+									Effect:   corev1.TaintEffectNoSchedule,
+								},
+							},
+						},
 						Cells: []multigresv1alpha1.CellName{"zone-a"},
 					},
 				},
@@ -451,6 +461,14 @@ func TestBuildMultiOrchDeployment(t *testing.T) {
 											},
 										},
 									},
+								},
+							},
+							Tolerations: []corev1.Toleration{
+								{
+									Key:      "workload",
+									Operator: corev1.TolerationOpEqual,
+									Value:    "customer-pg",
+									Effect:   corev1.TaintEffectNoSchedule,
 								},
 							},
 						},

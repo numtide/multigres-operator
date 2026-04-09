@@ -36,6 +36,7 @@ func TestBuildCell(t *testing.T) {
 	gatewaySpec := &multigresv1alpha1.StatelessSpec{
 		Replicas: ptr.To(int32(2)),
 	}
+	noGatewayPlacement := (*multigresv1alpha1.PodPlacementSpec)(nil)
 
 	localTopoSpec := &multigresv1alpha1.LocalTopoServerSpec{} // details not critical for this test
 	globalTopoRef := multigresv1alpha1.GlobalTopoServerRef{
@@ -48,6 +49,7 @@ func TestBuildCell(t *testing.T) {
 			cluster,
 			cellCfg,
 			gatewaySpec,
+			noGatewayPlacement,
 			localTopoSpec,
 			globalTopoRef,
 			allCells,
@@ -84,6 +86,7 @@ func TestBuildCell(t *testing.T) {
 			cluster,
 			cellCfg,
 			gatewaySpec,
+			noGatewayPlacement,
 			localTopoSpec,
 			globalTopoRef,
 			allCells,
