@@ -20,138 +20,194 @@ import (
 	"k8s.io/client-go/tools/record"
 )
 
-func TestEnsureStorageClassExists(t *testing.T) {
+func TestValidateBackupStorageClassDependency(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = storagev1.AddToScheme(scheme)
 
-	baseShard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-	}
-
-	t.Run("missing storageclass sets false condition and returns dependency error", func(t *testing.T) {
+	t.Run("no explicit backup class sets true not-specified condition", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-shard", Namespace: "default"},
+		}
 		c := fake.NewClientBuilder().
 			WithScheme(scheme).
-			WithObjects(baseShard.DeepCopy()).
+			WithObjects(shard).
 			WithStatusSubresource(&multigresv1alpha1.Shard{}).
 			Build()
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 
-		err := r.ensureStorageClassExists(
-			t.Context(),
-			baseShard.DeepCopy(),
-			"missing-sc",
-			"pool primary PVC",
-		)
-		if err == nil {
-			t.Fatal("expected missing dependency error")
-		}
-		if !isMissingStorageClassDependency(err) {
-			t.Fatalf("expected missing storageclass dependency error, got: %v", err)
-		}
-
-		var updated multigresv1alpha1.Shard
-		if getErr := c.Get(t.Context(), client.ObjectKeyFromObject(baseShard), &updated); getErr != nil {
-			t.Fatalf("failed to get updated shard: %v", getErr)
-		}
-		cond := metaFindCondition(updated.Status.Conditions, conditionStorageClassValid)
-		if cond == nil {
-			t.Fatal("expected StorageClassValid condition to be set")
-		}
-		if cond.Status != metav1.ConditionFalse {
-			t.Fatalf("condition status = %s, want False", cond.Status)
-		}
-	})
-
-	t.Run("existing storageclass sets true condition", func(t *testing.T) {
-		sc := &storagev1.StorageClass{
-			ObjectMeta: metav1.ObjectMeta{Name: "fast"},
-		}
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(baseShard.DeepCopy(), sc).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
-		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-		if err := r.ensureStorageClassExists(
-			t.Context(),
-			baseShard.DeepCopy(),
-			"fast",
-			"pool primary PVC",
-		); err != nil {
+		if err := r.validateBackupStorageClassDependency(t.Context(), shard); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
 		var updated multigresv1alpha1.Shard
-		if getErr := c.Get(t.Context(), client.ObjectKeyFromObject(baseShard), &updated); getErr != nil {
-			t.Fatalf("failed to get updated shard: %v", getErr)
+		if err := c.Get(t.Context(), client.ObjectKeyFromObject(shard), &updated); err != nil {
+			t.Fatalf("failed to read shard: %v", err)
 		}
-		cond := metaFindCondition(updated.Status.Conditions, conditionStorageClassValid)
-		if cond == nil {
-			t.Fatal("expected StorageClassValid condition to be set")
+		cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
+		if cond == nil || cond.Status != metav1.ConditionTrue ||
+			cond.Reason != storageClassNotSpecifiedReason {
+			t.Fatalf("unexpected condition: %#v", cond)
 		}
-		if cond.Status != metav1.ConditionTrue {
-			t.Fatalf("condition status = %s, want True", cond.Status)
+	})
+
+	t.Run("missing backup class returns dependency error and false condition", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-shard", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				Backup: &multigresv1alpha1.BackupConfig{
+					Type: multigresv1alpha1.BackupTypeFilesystem,
+					Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+						Storage: multigresv1alpha1.StorageSpec{Class: "missing-sc"},
+					},
+				},
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		err := r.validateBackupStorageClassDependency(t.Context(), shard)
+		if err == nil || !isMissingStorageClassDependency(err) {
+			t.Fatalf("expected missing dependency error, got: %v", err)
+		}
+
+		var updated multigresv1alpha1.Shard
+		if getErr := c.Get(
+			t.Context(),
+			client.ObjectKeyFromObject(shard),
+			&updated,
+		); getErr != nil {
+			t.Fatalf("failed to read shard: %v", getErr)
+		}
+		cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
+		if cond == nil || cond.Status != metav1.ConditionFalse ||
+			cond.Reason != storageClassNotFoundReason {
+			t.Fatalf("unexpected condition: %#v", cond)
 		}
 	})
 }
 
-func TestCreateMissingResources_MissingStorageClass(t *testing.T) {
+func TestValidatePoolStorageClassDependencies(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
 	_ = storagev1.AddToScheme(scheme)
 
-	shard := &multigresv1alpha1.Shard{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-shard",
-			Namespace: "default",
-		},
-		Spec: multigresv1alpha1.ShardSpec{
-			DatabaseName:   "db",
-			TableGroupName: "tg",
-			ShardName:      "s1",
-		},
-	}
-
-	c := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(shard).
-		WithStatusSubresource(&multigresv1alpha1.Shard{}).
-		Build()
-
-	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-
-	_, _, err := r.createMissingResources(
-		t.Context(),
-		shard,
-		"primary",
-		"zone1",
-		multigresv1alpha1.PoolSpec{
-			ReplicasPerCell: ptr.To(int32(1)),
-			Cells:           []multigresv1alpha1.CellName{"zone1"},
-			Storage: multigresv1alpha1.StorageSpec{
-				Size:  "10Gi",
-				Class: "missing-sc",
+	t.Run("no explicit pool class sets true not-specified condition", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-shard", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"primary": {
+						Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"},
+					},
+				},
 			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.validatePoolStorageClassDependencies(t.Context(), shard); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var updated multigresv1alpha1.Shard
+		if err := c.Get(t.Context(), client.ObjectKeyFromObject(shard), &updated); err != nil {
+			t.Fatalf("failed to read shard: %v", err)
+		}
+		cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
+		if cond == nil || cond.Status != metav1.ConditionTrue ||
+			cond.Reason != storageClassNotSpecifiedReason {
+			t.Fatalf("unexpected condition: %#v", cond)
+		}
+	})
+
+	t.Run("all explicit pool classes present sets true found condition", func(t *testing.T) {
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-shard", Namespace: "default"},
+			Spec: multigresv1alpha1.ShardSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"primary": {
+						Storage: multigresv1alpha1.StorageSpec{Size: "10Gi", Class: "fast"},
+					},
+				},
+			},
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast"}}).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.validatePoolStorageClassDependencies(t.Context(), shard); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var updated multigresv1alpha1.Shard
+		if err := c.Get(t.Context(), client.ObjectKeyFromObject(shard), &updated); err != nil {
+			t.Fatalf("failed to read shard: %v", err)
+		}
+		cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
+		if cond == nil || cond.Status != metav1.ConditionTrue ||
+			cond.Reason != storageClassFoundReason {
+			t.Fatalf("unexpected condition: %#v", cond)
+		}
+	})
+
+	t.Run(
+		"missing explicit pool class returns dependency error and false condition",
+		func(t *testing.T) {
+			shard := &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-shard", Namespace: "default"},
+				Spec: multigresv1alpha1.ShardSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Storage: multigresv1alpha1.StorageSpec{
+								Size:  "10Gi",
+								Class: "missing-sc",
+							},
+						},
+					},
+				},
+			}
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(shard).
+				WithStatusSubresource(&multigresv1alpha1.Shard{}).
+				Build()
+			r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+			err := r.validatePoolStorageClassDependencies(t.Context(), shard)
+			if err == nil || !isMissingStorageClassDependency(err) {
+				t.Fatalf("expected missing dependency error, got: %v", err)
+			}
+
+			var updated multigresv1alpha1.Shard
+			if getErr := c.Get(
+				t.Context(),
+				client.ObjectKeyFromObject(shard),
+				&updated,
+			); getErr != nil {
+				t.Fatalf("failed to read shard: %v", getErr)
+			}
+			cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
+			if cond == nil || cond.Status != metav1.ConditionFalse ||
+				cond.Reason != storageClassNotFoundReason {
+				t.Fatalf("unexpected condition: %#v", cond)
+			}
 		},
-		map[string]*corev1.Pod{},
-		map[string]*corev1.PersistentVolumeClaim{},
-		1,
 	)
-	if err == nil {
-		t.Fatal("expected missing storageclass dependency error")
-	}
-	if !isMissingStorageClassDependency(err) {
-		t.Fatalf("expected missing storageclass dependency error, got: %v", err)
-	}
 }
 
-func TestReconcile_MissingStorageClassReturnsDependencyRequeue(t *testing.T) {
+func TestReconcile_MissingStorageClassReturnsDependencyRequeueEvenWhenPVCExists(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -184,9 +240,21 @@ func TestReconcile_MissingStorageClassReturnsDependencyRequeue(t *testing.T) {
 		},
 	}
 
+	existingPVC := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      BuildPoolDataPVCName(shard, "primary", "zone1", 0),
+			Namespace: "default",
+			Labels: buildPoolLabelsWithCell(
+				shard,
+				"primary",
+				"zone1",
+			),
+		},
+	}
+
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(shard).
+		WithObjects(shard, existingPVC).
 		WithStatusSubresource(&multigresv1alpha1.Shard{}).
 		Build()
 
@@ -205,33 +273,8 @@ func TestReconcile_MissingStorageClassReturnsDependencyRequeue(t *testing.T) {
 		t.Fatalf("expected non-error dependency requeue, got error: %v", err)
 	}
 	if result.RequeueAfter != storageClassDependencyRequeue {
-		t.Fatalf(
-			"requeueAfter = %v, want %v",
-			result.RequeueAfter,
-			storageClassDependencyRequeue,
-		)
+		t.Fatalf("requeueAfter = %v, want %v", result.RequeueAfter, storageClassDependencyRequeue)
 	}
-
-	var updated multigresv1alpha1.Shard
-	if getErr := c.Get(t.Context(), client.ObjectKeyFromObject(shard), &updated); getErr != nil {
-		t.Fatalf("failed to get updated shard: %v", getErr)
-	}
-	cond := metaFindCondition(updated.Status.Conditions, conditionStorageClassValid)
-	if cond == nil {
-		t.Fatal("expected StorageClassValid condition to be set")
-	}
-	if cond.Status != metav1.ConditionFalse {
-		t.Fatalf("condition status = %s, want False", cond.Status)
-	}
-}
-
-func metaFindCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
-	for i := range conditions {
-		if conditions[i].Type == conditionType {
-			return &conditions[i]
-		}
-	}
-	return nil
 }
 
 func TestIsMissingStorageClassDependencyWrapped(t *testing.T) {
@@ -244,4 +287,13 @@ func TestIsMissingStorageClassDependencyWrapped(t *testing.T) {
 	if !isMissingStorageClassDependency(wrapped) {
 		t.Fatal("expected true for wrapped missing dependency error")
 	}
+}
+
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+	return nil
 }

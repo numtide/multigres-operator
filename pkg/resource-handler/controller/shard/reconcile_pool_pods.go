@@ -150,14 +150,6 @@ func (r *ShardReconciler) createMissingResources(
 
 		// Create PVC if missing, or expand if storage.size increased
 		if _, exists := existingPVCs[pvcName]; !exists {
-			if err := r.ensureStorageClassExists(
-				ctx,
-				shard,
-				poolSpec.Storage.Class,
-				fmt.Sprintf("pool %s PVC", poolName),
-			); err != nil {
-				return 0, false, err
-			}
 			desiredPVC, buildErr := BuildPoolDataPVC(
 				shard,
 				poolName,
