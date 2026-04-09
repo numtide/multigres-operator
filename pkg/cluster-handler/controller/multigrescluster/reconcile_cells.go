@@ -49,7 +49,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			cellCfg.CellTemplate = cluster.Spec.TemplateDefaults.CellTemplate
 		}
 
-		gatewaySpec, localTopoSpec, err := res.ResolveCell(ctx, &cellCfg)
+		gatewaySpec, gatewayPlacement, localTopoSpec, err := res.ResolveCell(ctx, &cellCfg)
 		if err != nil {
 			r.Recorder.Event(cluster, "Warning", "TemplateMissing", err.Error())
 			return false, fmt.Errorf("failed to resolve cell '%s': %w", cellCfg.Name, err)
@@ -59,6 +59,7 @@ func (r *MultigresClusterReconciler) reconcileCells(
 			cluster,
 			&cellCfg,
 			gatewaySpec,
+			gatewayPlacement,
 			localTopoSpec,
 			globalTopoRef,
 			allCellNames,

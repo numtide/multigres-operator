@@ -15,16 +15,16 @@ import (
 func (r *Resolver) ResolveCell(
 	ctx context.Context,
 	cellSpec *multigresv1alpha1.CellConfig,
-) (*multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec, error) {
+) (*multigresv1alpha1.StatelessSpec, *multigresv1alpha1.PodPlacementSpec, *multigresv1alpha1.LocalTopoServerSpec, error) {
 	// 1. Fetch Template (Logic handles defaults)
 	templateName := cellSpec.CellTemplate
 	tpl, err := r.ResolveCellTemplate(ctx, templateName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// 2. Merge Logic
-	gateway, localTopo := mergeCellConfig(tpl, cellSpec.Overrides, cellSpec.Spec)
+	gateway, placement, localTopo := mergeCellConfig(tpl, cellSpec.Overrides, cellSpec.Spec)
 
 	// 3. Apply Deep Defaults (Level 4)
 	defaultStatelessSpec(gateway, DefaultResourcesGateway(), 1)
@@ -40,7 +40,7 @@ func (r *Resolver) ResolveCell(
 		}
 	}
 
-	return gateway, localTopo, nil
+	return gateway, placement, localTopo, nil
 }
 
 // ResolveCellTemplate fetches and resolves a CellTemplate by name.
@@ -88,9 +88,10 @@ func mergeCellConfig(
 	template *multigresv1alpha1.CellTemplate,
 	overrides *multigresv1alpha1.CellOverrides,
 	inline *multigresv1alpha1.CellInlineSpec,
-) (*multigresv1alpha1.StatelessSpec, *multigresv1alpha1.LocalTopoServerSpec) {
+) (*multigresv1alpha1.StatelessSpec, *multigresv1alpha1.PodPlacementSpec, *multigresv1alpha1.LocalTopoServerSpec) {
 	// Start with empty
 	gateway := &multigresv1alpha1.StatelessSpec{}
+	var placement *multigresv1alpha1.PodPlacementSpec
 	var localTopo *multigresv1alpha1.LocalTopoServerSpec
 
 	// 1. Apply Template (Base)
@@ -101,6 +102,7 @@ func mergeCellConfig(
 		if template.Spec.LocalTopoServer != nil {
 			localTopo = template.Spec.LocalTopoServer.DeepCopy()
 		}
+		mergePodPlacementSpec(&placement, template.Spec.MultiGatewayPlacement)
 	}
 
 	// 2. Apply Overrides (Explicit Template Modification)
@@ -108,12 +110,14 @@ func mergeCellConfig(
 		if overrides.MultiGateway != nil {
 			mergeStatelessSpec(gateway, overrides.MultiGateway)
 		}
+		mergePodPlacementSpec(&placement, overrides.MultiGatewayPlacement)
 	}
 
 	// 3. Apply Inline Spec (Primary Overlay)
 	// This merges the inline definition on top of the template+overrides.
 	if inline != nil {
 		mergeStatelessSpec(gateway, &inline.MultiGateway)
+		mergePodPlacementSpec(&placement, inline.MultiGatewayPlacement)
 
 		if inline.LocalTopoServer != nil {
 			// LocalTopo is complex (polymorphic), so we treat it as a replacement if provided
@@ -121,5 +125,5 @@ func mergeCellConfig(
 		}
 	}
 
-	return gateway, localTopo
+	return gateway, placement, localTopo
 }

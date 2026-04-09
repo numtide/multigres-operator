@@ -171,6 +171,7 @@ func BuildMultiGatewayDeployment(
 						},
 					},
 					Affinity:     cell.Spec.MultiGateway.Affinity,
+					Tolerations:  tolerationsFromPlacement(cell.Spec.MultiGatewayPlacement),
 					NodeSelector: buildCellNodeSelector(cell),
 				},
 			},

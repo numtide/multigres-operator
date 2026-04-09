@@ -175,13 +175,14 @@ func (d *MultigresClusterDefaulter) Default(ctx context.Context, obj runtime.Obj
 		isUsingTemplate := hasInline || hasGlobalCell || hasImplicitCell
 
 		if !isUsingTemplate {
-			gatewaySpec, localTopoSpec, err := scopedResolver.ResolveCell(ctx, cell)
+			gatewaySpec, gatewayPlacement, localTopoSpec, err := scopedResolver.ResolveCell(ctx, cell)
 			if err != nil {
 				return fmt.Errorf("failed to resolve cell '%s': %w", cell.Name, err)
 			}
 			cell.Spec = &multigresv1alpha1.CellInlineSpec{
-				MultiGateway:    *gatewaySpec,
-				LocalTopoServer: localTopoSpec,
+				MultiGateway:          *gatewaySpec,
+				MultiGatewayPlacement: gatewayPlacement,
+				LocalTopoServer:       localTopoSpec,
 			}
 		}
 	}
