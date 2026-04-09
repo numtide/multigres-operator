@@ -57,6 +57,15 @@ type StatelessSpec struct {
 	PodLabels map[string]string `json:"podLabels,omitempty"`
 }
 
+// PodPlacementSpec contains pod scheduling knobs that are intentionally exposed
+// only for components that need them today. It is separate from StatelessSpec
+// so unrelated stateless components do not automatically inherit these fields.
+type PodPlacementSpec struct {
+	// Tolerations defines the pod tolerations for scheduling onto tainted nodes.
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+}
+
 // StorageSpec defines the storage configuration.
 type StorageSpec struct {
 	// Size of the persistent volume.
@@ -328,10 +337,27 @@ const (
 	// drains all pods and sets ConditionReadyForDeletion when complete.
 	AnnotationPendingDeletion = "multigres.com/pending-deletion"
 
+	// FinalizerClusterCleanup is the finalizer added to MultigresCluster
+	// resources to ensure the controller can coordinate graceful child
+	// teardown (PendingDeletion → ReadyForDeletion → Delete) before the
+	// parent is removed from the API server.
+	FinalizerClusterCleanup = "multigres.com/cluster-cleanup"
+
 	// ConditionReadyForDeletion is set to True on a Shard once all pods have
 	// been drained. The TableGroup controller waits for this condition before
 	// calling Delete on the Shard CR.
 	ConditionReadyForDeletion = "ReadyForDeletion"
+
+	// ConditionDeletionBlocked is set on a parent resource when a child with
+	// PendingDeletion has not set ReadyForDeletion within the escalation
+	// timeout. The parent emits a Warning event but does not force-delete;
+	// operator intervention is required.
+	ConditionDeletionBlocked = "DeletionBlocked"
+
+	// ConditionTerminalError is set when a controller encounters a permanent
+	// failure (invalid config, auth failure). The condition includes a config
+	// hash so the controller can detect when the user changes the configuration.
+	ConditionTerminalError = "TerminalError"
 )
 
 // MergePVCDeletionPolicy merges child and parent policies with child taking precedence.

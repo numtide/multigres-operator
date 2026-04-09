@@ -31,6 +31,10 @@ type CellTemplateSpec struct {
 	// +optional
 	MultiGateway *StatelessSpec `json:"multigateway,omitempty"`
 
+	// MultiGatewayPlacement defines optional scheduling settings for multigateway pods.
+	// +optional
+	MultiGatewayPlacement *PodPlacementSpec `json:"multigatewayPlacement,omitempty"`
+
 	// LocalTopoServer configuration (optional).
 	// +optional
 	LocalTopoServer *LocalTopoServerSpec `json:"localTopoServer,omitempty"`

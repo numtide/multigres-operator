@@ -47,6 +47,10 @@ import (
 type MultiOrchSpec struct {
 	StatelessSpec `json:",inline"`
 
+	// Placement defines optional scheduling settings for multiorch pods.
+	// +optional
+	Placement *PodPlacementSpec `json:"placement,omitempty"`
+
 	// Cells defines the list of cells where this MultiOrch should be deployed.
 	// If empty, it defaults to all cells where pools are defined.
 	// +optional
