@@ -25,11 +25,12 @@ func TestResolver_ResolveCell(t *testing.T) {
 	_, cellTpl, _, ns := setupFixtures(t)
 
 	tests := map[string]struct {
-		config   *multigresv1alpha1.CellConfig
-		objects  []client.Object
-		wantGw   *multigresv1alpha1.StatelessSpec
-		wantTopo *multigresv1alpha1.LocalTopoServerSpec
-		wantErr  bool
+		config        *multigresv1alpha1.CellConfig
+		objects       []client.Object
+		wantGw        *multigresv1alpha1.StatelessSpec
+		wantPlacement *multigresv1alpha1.PodPlacementSpec
+		wantTopo      *multigresv1alpha1.LocalTopoServerSpec
+		wantErr       bool
 	}{
 		"Template Found": {
 			config: &multigresv1alpha1.CellConfig{
@@ -119,7 +120,7 @@ func TestResolver_ResolveCell(t *testing.T) {
 			}
 			r := NewResolver(c, ns)
 
-			gw, topo, err := r.ResolveCell(t.Context(), tc.config)
+			gw, placement, topo, err := r.ResolveCell(t.Context(), tc.config)
 			if tc.wantErr {
 				if err == nil {
 					t.Error("Expected error")
@@ -137,6 +138,9 @@ func TestResolver_ResolveCell(t *testing.T) {
 				cmpopts.EquateEmpty(),
 			); diff != "" {
 				t.Errorf("Gateway Diff (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantPlacement, placement, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Placement Diff (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(
 				tc.wantTopo,
@@ -246,11 +250,12 @@ func TestMergeCellConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		tpl       *multigresv1alpha1.CellTemplate
-		overrides *multigresv1alpha1.CellOverrides
-		inline    *multigresv1alpha1.CellInlineSpec
-		wantGw    *multigresv1alpha1.StatelessSpec
-		wantTopo  *multigresv1alpha1.LocalTopoServerSpec
+		tpl           *multigresv1alpha1.CellTemplate
+		overrides     *multigresv1alpha1.CellOverrides
+		inline        *multigresv1alpha1.CellInlineSpec
+		wantGw        *multigresv1alpha1.StatelessSpec
+		wantPlacement *multigresv1alpha1.PodPlacementSpec
+		wantTopo      *multigresv1alpha1.LocalTopoServerSpec
 	}{
 		"Full Merge With Resources and Affinity Overrides": {
 			tpl: &multigresv1alpha1.CellTemplate{
@@ -366,12 +371,72 @@ func TestMergeCellConfig(t *testing.T) {
 			wantGw:   &multigresv1alpha1.StatelessSpec{},
 			wantTopo: nil,
 		},
+		"Placement Merge": {
+			tpl: &multigresv1alpha1.CellTemplate{
+				Spec: multigresv1alpha1.CellTemplateSpec{
+					MultiGatewayPlacement: &multigresv1alpha1.PodPlacementSpec{
+						Tolerations: []corev1.Toleration{
+							{
+								Key:      "workload",
+								Operator: corev1.TolerationOpEqual,
+								Value:    "customer-pg",
+								Effect:   corev1.TaintEffectNoSchedule,
+							},
+						},
+					},
+				},
+			},
+			inline: &multigresv1alpha1.CellInlineSpec{
+				MultiGatewayPlacement: &multigresv1alpha1.PodPlacementSpec{
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "dedicated",
+							Operator: corev1.TolerationOpEqual,
+							Value:    "multigres",
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
+					},
+				},
+			},
+			wantGw: &multigresv1alpha1.StatelessSpec{},
+			wantPlacement: &multigresv1alpha1.PodPlacementSpec{
+				Tolerations: []corev1.Toleration{
+					{
+						Key:      "dedicated",
+						Operator: corev1.TolerationOpEqual,
+						Value:    "multigres",
+						Effect:   corev1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		},
+		"Placement Clear": {
+			tpl: &multigresv1alpha1.CellTemplate{
+				Spec: multigresv1alpha1.CellTemplateSpec{
+					MultiGatewayPlacement: &multigresv1alpha1.PodPlacementSpec{
+						Tolerations: []corev1.Toleration{
+							{
+								Key:      "workload",
+								Operator: corev1.TolerationOpEqual,
+								Value:    "customer-pg",
+								Effect:   corev1.TaintEffectNoSchedule,
+							},
+						},
+					},
+				},
+			},
+			inline: &multigresv1alpha1.CellInlineSpec{
+				MultiGatewayPlacement: &multigresv1alpha1.PodPlacementSpec{},
+			},
+			wantGw:        &multigresv1alpha1.StatelessSpec{},
+			wantPlacement: &multigresv1alpha1.PodPlacementSpec{},
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			gw, topo := mergeCellConfig(tc.tpl, tc.overrides, tc.inline)
+			gw, placement, topo := mergeCellConfig(tc.tpl, tc.overrides, tc.inline)
 
 			if diff := cmp.Diff(
 				tc.wantGw,
@@ -380,6 +445,9 @@ func TestMergeCellConfig(t *testing.T) {
 				cmpopts.EquateEmpty(),
 			); diff != "" {
 				t.Errorf("Gateway mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantPlacement, placement, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Placement mismatch (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.wantTopo, topo); diff != "" {
 				t.Errorf("Topo mismatch (-want +got):\n%s", diff)
