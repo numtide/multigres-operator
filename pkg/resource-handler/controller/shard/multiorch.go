@@ -59,6 +59,7 @@ func BuildMultiOrchDeployment(
 					},
 					NodeSelector: shard.Spec.CellTopologyLabels[multigresv1alpha1.CellName(cellName)],
 					Affinity:     shard.Spec.MultiOrch.Affinity,
+					Tolerations:  tolerationsFromPlacement(shard.Spec.MultiOrch.Placement),
 				},
 			},
 		},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -214,6 +215,7 @@ func mergeMultiOrchSpec(
 	override *multigresv1alpha1.MultiOrchSpec,
 ) {
 	mergeStatelessSpec(&base.StatelessSpec, &override.StatelessSpec)
+	mergePodPlacementSpec(&base.Placement, override.Placement)
 	if len(override.Cells) > 0 {
 		base.Cells = override.Cells
 	}
@@ -253,7 +255,7 @@ func mergePoolSpec(
 		out.Affinity = override.Affinity.DeepCopy()
 	}
 	if len(override.Tolerations) > 0 {
-		out.Tolerations = override.Tolerations
+		out.Tolerations = append([]corev1.Toleration(nil), override.Tolerations...)
 	}
 	if override.PVCDeletionPolicy != nil {
 		out.PVCDeletionPolicy = override.PVCDeletionPolicy
