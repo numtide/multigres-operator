@@ -133,6 +133,20 @@ func buildPoolPodSecurityContext(poolSpec multigresv1alpha1.PoolSpec) *corev1.Po
 	}
 }
 
+// buildContainerSecurityContext returns a non-root SecurityContext. When fsGroup
+// is set, RunAsUser and RunAsGroup are pinned to that value so all containers
+// in the pod share the same filesystem identity on shared volumes.
+func buildContainerSecurityContext(fsGroup *int64) *corev1.SecurityContext {
+	sc := &corev1.SecurityContext{
+		RunAsNonRoot: ptr.To(true),
+	}
+	if fsGroup != nil {
+		sc.RunAsUser = fsGroup
+		sc.RunAsGroup = fsGroup
+	}
+	return sc
+}
+
 // buildHeadlessServiceName constructs the headless service name for DNS
 // resolution. Matches the naming used by pool_service.go.
 func buildHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName, cellName string) string {
