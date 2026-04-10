@@ -216,8 +216,6 @@ func buildPgctldContainer(
 		Resources: pool.Postgres.Resources,
 		Env:       env,
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(999)),
-			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
 		},
 		VolumeMounts: volumeMounts,
@@ -312,8 +310,6 @@ func buildMultiPoolerSidecar(
 		Resources:     pool.Multipooler.Resources,
 		RestartPolicy: &sidecarRestartPolicy,
 		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(999)), // Must match postgres UID to access pg_data directory
-			RunAsGroup:   ptr.To(int64(999)),
 			RunAsNonRoot: ptr.To(true),
 		},
 		StartupProbe: &corev1.Probe{

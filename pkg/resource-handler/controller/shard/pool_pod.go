@@ -89,9 +89,7 @@ func BuildPoolPod(
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			SecurityContext: &corev1.PodSecurityContext{
-				FSGroup: ptr.To(int64(999)), // postgres group in postgres:17 image
-			},
+			SecurityContext:               buildPoolPodSecurityContext(poolSpec),
 			TerminationGracePeriodSeconds: ptr.To(defaultTerminationGracePeriod),
 			InitContainers: []corev1.Container{
 				buildMultiPoolerSidecar(shard, poolSpec, poolName, cellName, serviceID),
@@ -122,6 +120,17 @@ func BuildPoolPod(
 	}
 
 	return pod, nil
+}
+
+func buildPoolPodSecurityContext(poolSpec multigresv1alpha1.PoolSpec) *corev1.PodSecurityContext {
+	if poolSpec.FSGroup == nil {
+		return nil
+	}
+
+	fsGroup := *poolSpec.FSGroup
+	return &corev1.PodSecurityContext{
+		FSGroup: &fsGroup,
+	}
 }
 
 // buildHeadlessServiceName constructs the headless service name for DNS
@@ -187,6 +196,12 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 	if spec.ServiceAccountName != "" {
 		_, _ = fmt.Fprintf(h, "sa=%s", spec.ServiceAccountName)
+	}
+
+	if spec.SecurityContext != nil {
+		if b, err := json.Marshal(spec.SecurityContext); err == nil {
+			_, _ = fmt.Fprintf(h, "podsc=%s", b)
+		}
 	}
 
 	if v := pod.Annotations[metadata.AnnotationPostgresConfigHash]; v != "" {

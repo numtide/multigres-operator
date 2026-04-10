@@ -73,8 +73,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				Resources:     corev1.ResourceRequirements{},
 				RestartPolicy: &sidecarRestartPolicy,
 				SecurityContext: &corev1.SecurityContext{
-					RunAsUser:    ptr.To(int64(999)),
-					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
 				},
 				StartupProbe: &corev1.Probe{
@@ -178,8 +176,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				Resources:     corev1.ResourceRequirements{},
 				RestartPolicy: &sidecarRestartPolicy,
 				SecurityContext: &corev1.SecurityContext{
-					RunAsUser:    ptr.To(int64(999)),
-					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
 				},
 				StartupProbe: &corev1.Probe{
@@ -301,8 +297,6 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				},
 				RestartPolicy: &sidecarRestartPolicy,
 				SecurityContext: &corev1.SecurityContext{
-					RunAsUser:    ptr.To(int64(999)),
-					RunAsGroup:   ptr.To(int64(999)),
 					RunAsNonRoot: ptr.To(true),
 				},
 				StartupProbe: &corev1.Probe{

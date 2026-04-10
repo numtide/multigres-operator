@@ -103,6 +103,12 @@ type PoolSpec struct {
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
+	// FSGroup sets the pod-level fsGroup for shared volume and socket access across
+	// pool containers. When unset, runtime defaults apply.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	FSGroup *int64 `json:"fsGroup,omitempty"`
+
 	// PVCDeletionPolicy controls PVC lifecycle for this pool.
 	// Overrides Shard, TableGroup, and MultigresCluster settings.
 	// +optional
