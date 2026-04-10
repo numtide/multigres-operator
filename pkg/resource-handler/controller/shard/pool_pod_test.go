@@ -153,7 +153,10 @@ func TestBuildPoolPod_SecurityContext(t *testing.T) {
 	}
 
 	if pod.Spec.SecurityContext != nil {
-		t.Errorf("pod security context = %v, want nil when fsGroup is not configured", pod.Spec.SecurityContext)
+		t.Errorf(
+			"pod security context = %v, want nil when fsGroup is not configured",
+			pod.Spec.SecurityContext,
+		)
 	}
 
 	if pod.Spec.TerminationGracePeriodSeconds == nil ||
