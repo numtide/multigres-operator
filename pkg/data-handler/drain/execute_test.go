@@ -291,6 +291,14 @@ func (m *mockRPCClient) UpdateSynchronousStandbyList(
 	return &multipoolermanagerdatapb.UpdateSynchronousStandbyListResponse{}, nil
 }
 
+func (m *mockRPCClient) ExpireBackups(
+	ctx context.Context,
+	pooler *clustermetadata.MultiPooler,
+	request *multipoolermanagerdatapb.ExpireBackupsRequest,
+) (*multipoolermanagerdatapb.ExpireBackupsResponse, error) {
+	return nil, nil
+}
+
 func TestReplicaDrainFlow(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)

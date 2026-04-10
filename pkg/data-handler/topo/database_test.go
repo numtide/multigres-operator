@@ -153,8 +153,8 @@ func TestRegisterDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("database not found: %v", err)
 		}
-		if db.DurabilityPolicy != "AT_LEAST_2" {
-			t.Errorf("expected AT_LEAST_2 after first registration, got %s", db.DurabilityPolicy)
+		if db.BootstrapDurabilityPolicy.GetPolicyName() != "AT_LEAST_2" {
+			t.Errorf("expected AT_LEAST_2 after first registration, got %s", db.BootstrapDurabilityPolicy.GetPolicyName())
 		}
 
 		// Change to MULTI_CELL_AT_LEAST_2 and re-register.
@@ -166,8 +166,8 @@ func TestRegisterDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("database not found after update: %v", err)
 		}
-		if db.DurabilityPolicy != "MULTI_CELL_AT_LEAST_2" {
-			t.Errorf("expected MULTI_CELL_AT_LEAST_2 after update, got %s", db.DurabilityPolicy)
+		if db.BootstrapDurabilityPolicy.GetPolicyName() != "MULTI_CELL_AT_LEAST_2" {
+			t.Errorf("expected MULTI_CELL_AT_LEAST_2 after update, got %s", db.BootstrapDurabilityPolicy.GetPolicyName())
 		}
 	})
 
@@ -300,8 +300,8 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		t.Parallel()
 		shard := newTestShard("test-shard")
 		got := topo.GetDurabilityPolicy(shard)
-		if got != "AT_LEAST_2" {
-			t.Errorf("expected AT_LEAST_2, got %s", got)
+		if got.GetPolicyName() != "AT_LEAST_2" {
+			t.Errorf("expected AT_LEAST_2, got %s", got.GetPolicyName())
 		}
 	})
 
@@ -310,8 +310,8 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		shard := newTestShard("test-shard")
 		shard.Spec.DurabilityPolicy = "AT_LEAST_2"
 		got := topo.GetDurabilityPolicy(shard)
-		if got != "AT_LEAST_2" {
-			t.Errorf("expected AT_LEAST_2, got %s", got)
+		if got.GetPolicyName() != "AT_LEAST_2" {
+			t.Errorf("expected AT_LEAST_2, got %s", got.GetPolicyName())
 		}
 	})
 
@@ -320,8 +320,8 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		shard := newTestShard("test-shard")
 		shard.Spec.DurabilityPolicy = "MULTI_CELL_AT_LEAST_2"
 		got := topo.GetDurabilityPolicy(shard)
-		if got != "MULTI_CELL_AT_LEAST_2" {
-			t.Errorf("expected MULTI_CELL_AT_LEAST_2, got %s", got)
+		if got.GetPolicyName() != "MULTI_CELL_AT_LEAST_2" {
+			t.Errorf("expected MULTI_CELL_AT_LEAST_2, got %s", got.GetPolicyName())
 		}
 	})
 }
