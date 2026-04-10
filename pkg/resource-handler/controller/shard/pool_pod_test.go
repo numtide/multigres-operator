@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -183,6 +184,29 @@ func TestBuildPoolPod_SecurityContextWithFSGroup(t *testing.T) {
 	if pod.Spec.SecurityContext.FSGroup == nil || *pod.Spec.SecurityContext.FSGroup != 1234 {
 		t.Errorf("FSGroup = %v, want 1234", pod.Spec.SecurityContext.FSGroup)
 	}
+}
+
+func TestBuildContainerSecurityContext(t *testing.T) {
+	t.Run("nil fsGroup", func(t *testing.T) {
+		sc := buildContainerSecurityContext(nil)
+		assert.True(t, *sc.RunAsNonRoot)
+		assert.Nil(t, sc.RunAsUser)
+		assert.Nil(t, sc.RunAsGroup)
+	})
+
+	t.Run("with fsGroup", func(t *testing.T) {
+		sc := buildContainerSecurityContext(ptr.To(int64(999)))
+		assert.True(t, *sc.RunAsNonRoot)
+		assert.Equal(t, int64(999), *sc.RunAsUser)
+		assert.Equal(t, int64(999), *sc.RunAsGroup)
+	})
+
+	t.Run("alpine fsGroup", func(t *testing.T) {
+		sc := buildContainerSecurityContext(ptr.To(int64(70)))
+		assert.True(t, *sc.RunAsNonRoot)
+		assert.Equal(t, int64(70), *sc.RunAsUser)
+		assert.Equal(t, int64(70), *sc.RunAsGroup)
+	})
 }
 
 func TestBuildPoolPod_SpecHash(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	nameutil "github.com/multigres/multigres-operator/pkg/util/name"
@@ -215,9 +214,7 @@ func buildPgctldContainer(
 		Args:      args,
 		Resources: pool.Postgres.Resources,
 		Env:       env,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: ptr.To(true),
-		},
+		SecurityContext: buildContainerSecurityContext(pool.FSGroup),
 		VolumeMounts: volumeMounts,
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -307,11 +304,9 @@ func buildMultiPoolerSidecar(
 		Image:         image,
 		Args:          args,
 		Ports:         buildMultiPoolerContainerPorts(),
-		Resources:     pool.Multipooler.Resources,
-		RestartPolicy: &sidecarRestartPolicy,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: ptr.To(true),
-		},
+		Resources:        pool.Multipooler.Resources,
+		RestartPolicy:    &sidecarRestartPolicy,
+		SecurityContext:  buildContainerSecurityContext(pool.FSGroup),
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -667,3 +662,5 @@ func s3EnvVars(backup *multigresv1alpha1.BackupConfig) []corev1.EnvVar {
 
 	return envs
 }
+
+
