@@ -257,6 +257,9 @@ func mergePoolSpec(
 	if len(override.Tolerations) > 0 {
 		out.Tolerations = append([]corev1.Toleration(nil), override.Tolerations...)
 	}
+	if override.FSGroup != nil {
+		out.FSGroup = override.FSGroup
+	}
 	if override.PVCDeletionPolicy != nil {
 		out.PVCDeletionPolicy = override.PVCDeletionPolicy
 	}

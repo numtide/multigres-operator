@@ -1111,6 +1111,11 @@ func (in *PoolSpec) DeepCopyInto(out *PoolSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.FSGroup != nil {
+		in, out := &in.FSGroup, &out.FSGroup
+		*out = new(int64)
+		**out = **in
+	}
 	if in.PVCDeletionPolicy != nil {
 		in, out := &in.PVCDeletionPolicy, &out.PVCDeletionPolicy
 		*out = new(PVCDeletionPolicy)

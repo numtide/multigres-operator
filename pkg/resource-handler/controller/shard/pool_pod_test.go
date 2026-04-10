@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
@@ -151,11 +152,8 @@ func TestBuildPoolPod_SecurityContext(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if pod.Spec.SecurityContext == nil {
-		t.Fatal("pod security context is nil")
-	}
-	if pod.Spec.SecurityContext.FSGroup == nil || *pod.Spec.SecurityContext.FSGroup != 999 {
-		t.Error("FSGroup should be 999 (postgres group)")
+	if pod.Spec.SecurityContext != nil {
+		t.Errorf("pod security context = %v, want nil when fsGroup is not configured", pod.Spec.SecurityContext)
 	}
 
 	if pod.Spec.TerminationGracePeriodSeconds == nil ||
@@ -164,6 +162,23 @@ func TestBuildPoolPod_SecurityContext(t *testing.T) {
 			"terminationGracePeriodSeconds = %v, want 30",
 			pod.Spec.TerminationGracePeriodSeconds,
 		)
+	}
+}
+
+func TestBuildPoolPod_SecurityContextWithFSGroup(t *testing.T) {
+	pool := newTestPoolSpec()
+	pool.FSGroup = ptr.To(int64(1234))
+
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", pool, 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if pod.Spec.SecurityContext == nil {
+		t.Fatal("pod security context is nil")
+	}
+	if pod.Spec.SecurityContext.FSGroup == nil || *pod.Spec.SecurityContext.FSGroup != 1234 {
+		t.Errorf("FSGroup = %v, want 1234", pod.Spec.SecurityContext.FSGroup)
 	}
 }
 
@@ -271,6 +286,22 @@ func TestComputeSpecHash_ChangesOnTolerations(t *testing.T) {
 
 	if hash1 == hash2 {
 		t.Error("spec hash should differ when tolerations change")
+	}
+}
+
+func TestComputeSpecHash_ChangesOnFSGroup(t *testing.T) {
+	pool1 := newTestPoolSpec()
+	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", pool1, 0, testScheme())
+
+	pool2 := newTestPoolSpec()
+	pool2.FSGroup = ptr.To(int64(1234))
+	pod2, _ := BuildPoolPod(newTestShard(), "main", "z1", pool2, 0, testScheme())
+
+	hash1 := ComputeSpecHash(pod1)
+	hash2 := ComputeSpecHash(pod2)
+
+	if hash1 == hash2 {
+		t.Error("spec hash should differ when fsGroup changes")
 	}
 }
 

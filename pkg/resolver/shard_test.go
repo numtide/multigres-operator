@@ -93,6 +93,39 @@ func TestResolver_ResolveShard(t *testing.T) {
 				},
 			},
 		},
+		"Inline Pool FSGroup": {
+			config: &multigresv1alpha1.ShardConfig{
+				Spec: &multigresv1alpha1.ShardInlineSpec{
+					MultiOrch: multigresv1alpha1.MultiOrchSpec{
+						StatelessSpec: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
+					},
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"p": {FSGroup: ptr.To(int64(1234))},
+					},
+				},
+			},
+			wantOrch: &multigresv1alpha1.MultiOrchSpec{
+				StatelessSpec: multigresv1alpha1.StatelessSpec{
+					Replicas:  ptr.To(int32(1)),
+					Resources: DefaultResourcesOrch(),
+				},
+			},
+			wantPools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+				"p": {
+					ReplicasPerCell: ptr.To(int32(3)),
+					FSGroup:         ptr.To(int64(1234)),
+					Storage: multigresv1alpha1.StorageSpec{
+						Size: DefaultEtcdStorageSize,
+					},
+					Postgres: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPostgres(),
+					},
+					Multipooler: multigresv1alpha1.ContainerConfig{
+						Resources: DefaultResourcesPooler(),
+					},
+				},
+			},
+		},
 		"Dynamic Cell Injection": {
 			config: &multigresv1alpha1.ShardConfig{
 				Spec: &multigresv1alpha1.ShardInlineSpec{

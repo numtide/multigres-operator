@@ -5128,6 +5128,14 @@ spec:
                                             - message: Cells cannot be removed from
                                                 a pool (Append-Only)
                                               rule: oldSelf.all(c, c in self)
+                                          fsGroup:
+                                            description: |-
+                                              FSGroup sets the pod-level fsGroup for shared volume and socket access across
+                                              pool containers. When unset, the operator does not set pod fsGroup and runtime
+                                              defaults apply.
+                                            format: int64
+                                            minimum: 1
+                                            type: integer
                                           multipooler:
                                             description: Multipooler container configuration.
                                             properties:
@@ -7567,6 +7575,14 @@ spec:
                                             - message: Cells cannot be removed from
                                                 a pool (Append-Only)
                                               rule: oldSelf.all(c, c in self)
+                                          fsGroup:
+                                            description: |-
+                                              FSGroup sets the pod-level fsGroup for shared volume and socket access across
+                                              pool containers. When unset, the operator does not set pod fsGroup and runtime
+                                              defaults apply.
+                                            format: int64
+                                            minimum: 1
+                                            type: integer
                                           multipooler:
                                             description: Multipooler container configuration.
                                             properties:
