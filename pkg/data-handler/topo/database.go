@@ -27,10 +27,10 @@ func RegisterDatabase(
 	cells := CollectCells(shard)
 
 	dbMetadata := &clustermetadatapb.Database{
-		Name:             dbName,
-		BackupLocation:   GetBackupLocation(shard),
-		DurabilityPolicy: GetDurabilityPolicy(shard),
-		Cells:            cells,
+		Name:                      dbName,
+		BackupLocation:            GetBackupLocation(shard),
+		BootstrapDurabilityPolicy: GetDurabilityPolicy(shard),
+		Cells:                     cells,
 	}
 
 	if err := store.CreateDatabase(ctx, dbName, dbMetadata); err != nil {
@@ -42,7 +42,7 @@ func RegisterDatabase(
 				func(existing *clustermetadatapb.Database) error {
 					existing.BackupLocation = dbMetadata.BackupLocation
 					existing.Cells = dbMetadata.Cells
-					existing.DurabilityPolicy = dbMetadata.DurabilityPolicy
+					existing.BootstrapDurabilityPolicy = dbMetadata.BootstrapDurabilityPolicy
 					return nil
 				},
 			); err != nil {
@@ -150,9 +150,12 @@ func GetBackupLocation(shard *multigresv1alpha1.Shard) *clustermetadatapb.Backup
 
 // GetDurabilityPolicy extracts the durability policy from the shard config.
 // Falls back to "AT_LEAST_2" if not set (the default materialized by the webhook resolver).
-func GetDurabilityPolicy(shard *multigresv1alpha1.Shard) string {
+func GetDurabilityPolicy(shard *multigresv1alpha1.Shard) *clustermetadatapb.DurabilityPolicy {
+	name := "AT_LEAST_2"
 	if shard.Spec.DurabilityPolicy != "" {
-		return shard.Spec.DurabilityPolicy
+		name = shard.Spec.DurabilityPolicy
 	}
-	return "AT_LEAST_2"
+	return &clustermetadatapb.DurabilityPolicy{
+		PolicyName: name,
+	}
 }

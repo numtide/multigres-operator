@@ -40,9 +40,11 @@ func RegisterDatabaseFromSpec(
 	}
 
 	dbMetadata := &clustermetadatapb.Database{
-		Name:             dbName,
-		DurabilityPolicy: durabilityPolicy,
-		Cells:            allCellNames,
+		Name:  dbName,
+		Cells: allCellNames,
+		BootstrapDurabilityPolicy: &clustermetadatapb.DurabilityPolicy{
+			PolicyName: durabilityPolicy,
+		},
 	}
 
 	if backup != nil && backup.Type == multigresv1alpha1.BackupTypeS3 && backup.S3 != nil {
@@ -81,7 +83,7 @@ func RegisterDatabaseFromSpec(
 				func(existing *clustermetadatapb.Database) error {
 					existing.BackupLocation = dbMetadata.BackupLocation
 					existing.Cells = dbMetadata.Cells
-					existing.DurabilityPolicy = dbMetadata.DurabilityPolicy
+					existing.BootstrapDurabilityPolicy = dbMetadata.BootstrapDurabilityPolicy
 					return nil
 				},
 			); err != nil {
