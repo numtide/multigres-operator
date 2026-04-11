@@ -154,7 +154,10 @@ func TestRegisterDatabase(t *testing.T) {
 			t.Fatalf("database not found: %v", err)
 		}
 		if db.BootstrapDurabilityPolicy.GetPolicyName() != "AT_LEAST_2" {
-			t.Errorf("expected AT_LEAST_2 after first registration, got %s", db.BootstrapDurabilityPolicy.GetPolicyName())
+			t.Errorf(
+				"expected AT_LEAST_2 after first registration, got %s",
+				db.BootstrapDurabilityPolicy.GetPolicyName(),
+			)
 		}
 
 		// Change to MULTI_CELL_AT_LEAST_2 and re-register.
@@ -167,7 +170,10 @@ func TestRegisterDatabase(t *testing.T) {
 			t.Fatalf("database not found after update: %v", err)
 		}
 		if db.BootstrapDurabilityPolicy.GetPolicyName() != "MULTI_CELL_AT_LEAST_2" {
-			t.Errorf("expected MULTI_CELL_AT_LEAST_2 after update, got %s", db.BootstrapDurabilityPolicy.GetPolicyName())
+			t.Errorf(
+				"expected MULTI_CELL_AT_LEAST_2 after update, got %s",
+				db.BootstrapDurabilityPolicy.GetPolicyName(),
+			)
 		}
 	})
 
