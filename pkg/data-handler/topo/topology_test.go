@@ -127,7 +127,10 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 			t.Fatalf("database not found: %v", err)
 		}
 		if db.BootstrapDurabilityPolicy.GetPolicyName() != "AT_LEAST_2" {
-			t.Errorf("expected default durability AT_LEAST_2, got %s", db.BootstrapDurabilityPolicy.GetPolicyName())
+			t.Errorf(
+				"expected default durability AT_LEAST_2, got %s",
+				db.BootstrapDurabilityPolicy.GetPolicyName(),
+			)
 		}
 		fs := db.BackupLocation.GetFilesystem()
 		if fs == nil || fs.Path != "/backups" {
@@ -228,7 +231,10 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 			t.Errorf("expected 2 cells, got %d", len(db.Cells))
 		}
 		if db.BootstrapDurabilityPolicy.GetPolicyName() != "MULTI_CELL_AT_LEAST_2" {
-			t.Errorf("expected MULTI_CELL_AT_LEAST_2, got %s", db.BootstrapDurabilityPolicy.GetPolicyName())
+			t.Errorf(
+				"expected MULTI_CELL_AT_LEAST_2, got %s",
+				db.BootstrapDurabilityPolicy.GetPolicyName(),
+			)
 		}
 	})
 
@@ -255,7 +261,10 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 			t.Fatalf("database not found: %v", err)
 		}
 		if db.BootstrapDurabilityPolicy.GetPolicyName() != "NONE" {
-			t.Errorf("expected database-level policy NONE, got %s", db.BootstrapDurabilityPolicy.GetPolicyName())
+			t.Errorf(
+				"expected database-level policy NONE, got %s",
+				db.BootstrapDurabilityPolicy.GetPolicyName(),
+			)
 		}
 	})
 
