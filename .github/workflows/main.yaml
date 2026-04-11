@@ -22,6 +22,57 @@ jobs:
     uses: ./.github/workflows/build-and-release.yaml
     with:
       push-container-image: true
+      additional-tags: "current latest"
+      generate-manifests: true
+      manifest-image-ref: "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+
+  update-current-release:
+    needs: run
+    runs-on: ubuntu-latest
+    concurrency:
+      group: current-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Download install manifests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: install-manifests
+          path: dist
+
+      - name: Create or update current pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          BODY="## Current Build
+
+          **Commit:** \`${{ github.sha }}\`
+          **Updated:** \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`
+
+          This is a rolling pre-release that tracks the latest successful build from \`main\`.
+          Install manifests below use the SHA-tagged container image for this commit.
+
+          ### Quick Install
+
+          \`\`\`
+          curl -LO https://github.com/${{ github.repository }}/releases/download/current/install.yaml
+          kubectl apply -f install.yaml
+          \`\`\`"
+
+          # Delete existing release and tag, then recreate pointing at the new
+          # commit. This is the standard pattern used by neovim, goreleaser, etc.
+          # for rolling prereleases. The brief gap between delete and create is
+          # acceptable — if create fails, the next main push recreates it.
+          gh release delete current --yes --cleanup-tag 2>/dev/null || true
+
+          gh release create current \
+            --prerelease \
+            --title "Current (latest main)" \
+            --notes "$BODY" \
+            --target "${{ github.sha }}" \
+            dist/install*.yaml
 
   coverage:
     name: Coverage
