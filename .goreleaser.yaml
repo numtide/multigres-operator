@@ -1,0 +1,34 @@
+version: 2
+
+builds:
+  - skip: true # Operator is distributed as a container image, not binaries
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: "Features"
+      regexp: '^feat(\(.+\))?:'
+    - title: "Bug Fixes"
+      regexp: '^fix(\(.+\))?:'
+    - title: "Performance"
+      regexp: '^perf(\(.+\))?:'
+    - title: "Refactoring"
+      regexp: '^refactor(\(.+\))?:'
+    - title: "Documentation"
+      regexp: '^docs(\(.+\))?:'
+    - title: "CI/Build"
+      regexp: '^(ci|build|chore)(\(.+\))?:'
+    - title: "Other"
+      order: 999
+  filters:
+    exclude:
+      - '^test(\(.+\))?:'
+
+release:
+  github:
+    owner: multigres
+    name: multigres-operator
+  extra_files:
+    - glob: dist/install*.yaml
+  prerelease: auto
