@@ -13,6 +13,21 @@ on:
         default: false
         required: false
         type: boolean
+      additional-tags:
+        description: Space-separated list of additional tags to apply via imagetools (e.g. "current latest v1.2.3")
+        default: ""
+        required: false
+        type: string
+      generate-manifests:
+        description: Whether to generate and upload install manifests as workflow artifacts
+        default: false
+        required: false
+        type: boolean
+      manifest-image-ref:
+        description: The image reference to embed in manifests (e.g. ghcr.io/.../multigres-operator:abc123)
+        default: ""
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -112,12 +127,15 @@ jobs:
           jq '.runs[0].results | map(select(.level == "error"))' grype.sarif
           exit 1
 
-      - name: Push to registry (latest)
-        if: ${{ inputs.push-container-image }}
+      - name: Apply additional tags
+        if: ${{ inputs.additional-tags != '' }}
         run: |
           IMAGE="ghcr.io/${{ github.repository }}"
-          docker tag "$IMAGE:${{ github.sha }}" "$IMAGE:latest"
-          docker push "$IMAGE:latest"
+          for TAG in ${{ inputs.additional-tags }}; do
+            docker buildx imagetools create \
+              --tag "$IMAGE:$TAG" \
+              "$IMAGE:${{ github.sha }}"
+          done
 
   validate-installer:
     needs: [ test-go ]
@@ -133,3 +151,28 @@ jobs:
 
       - name: Validate install manifests
         run: make build-installer
+
+  generate-manifests:
+    if: ${{ inputs.generate-manifests }}
+    needs: [ build-scan-push-container ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - name: Generate install manifests
+        run: make build-installer IMG=${{ inputs.manifest-image-ref }}
+
+      - name: Upload install manifests
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: install-manifests
+          path: |
+            dist/install.yaml
+            dist/install-certmanager.yaml
+            dist/install-observability.yaml
