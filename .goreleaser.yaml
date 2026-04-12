@@ -7,23 +7,24 @@ changelog:
   use: github
   sort: asc
   groups:
-    - title: "Features"
+    - title: "🚀 Features"
       regexp: '^feat(\(.+\))?:'
-    - title: "Bug Fixes"
+    - title: "🐛 Bug Fixes"
       regexp: '^fix(\(.+\))?:'
-    - title: "Performance"
+    - title: "⚡ Performance"
       regexp: '^perf(\(.+\))?:'
-    - title: "Refactoring"
+    - title: "♻️ Refactoring"
       regexp: '^refactor(\(.+\))?:'
-    - title: "Documentation"
+    - title: "📚 Documentation"
       regexp: '^docs(\(.+\))?:'
-    - title: "CI/Build"
-      regexp: '^(ci|build|chore)(\(.+\))?:'
-    - title: "Other"
+    - title: "🔧 Other"
       order: 999
   filters:
     exclude:
       - '^test(\(.+\))?:'
+      - '^chore(\(.+\))?:'
+      - '^ci(\(.+\))?:'
+      - '^build(\(.+\))?:'
 
 release:
   github:
@@ -32,3 +33,6 @@ release:
   extra_files:
     - glob: dist/install*.yaml
   prerelease: auto
+  footer: |
+    ---
+    ✨ **Thanks to all contributors who made this release possible!**
