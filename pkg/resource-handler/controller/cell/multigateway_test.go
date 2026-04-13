@@ -1803,7 +1803,10 @@ func TestBuildMultiGatewayDeployment_TLS(t *testing.T) {
 				if v.Secret == nil {
 					t.Error("TLS volume should use a Secret source")
 				} else if v.Secret.SecretName != CertSecretName {
-					t.Errorf("TLS volume secretName = %q, want %q", v.Secret.SecretName, CertSecretName)
+					t.Errorf(
+						"TLS volume secretName = %q, want %q",
+						v.Secret.SecretName, CertSecretName,
+					)
 				}
 			}
 		}

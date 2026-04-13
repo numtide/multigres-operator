@@ -205,11 +205,14 @@ func BuildMultiGatewayDeployment(
 				},
 			},
 		})
-		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      tlsVolumeName,
-			MountPath: tlsMountPath,
-			ReadOnly:  true,
-		})
+		podSpec.Containers[0].VolumeMounts = append(
+			podSpec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      tlsVolumeName,
+				MountPath: tlsMountPath,
+				ReadOnly:  true,
+			},
+		)
 		podSpec.Containers[0].Args = append(podSpec.Containers[0].Args,
 			"--pg-tls-cert-file", tlsCertFile,
 			"--pg-tls-key-file", tlsKeyFile,
