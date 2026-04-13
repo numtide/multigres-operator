@@ -30,6 +30,7 @@ import (
 // +kubebuilder:rbac:groups=multigres.com,resources=cells/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch
 
 // ============================================================================
 // Cell Spec (Read-only API)
@@ -84,6 +85,13 @@ type CellSpec struct {
 	// Inherited from MultigresCluster.Spec.LogLevels.
 	// +optional
 	LogLevels ComponentLogLevels `json:"logLevels,omitempty"`
+
+	// CertCommonName is the DNS name for the multigateway TLS certificate.
+	// When set, the cell controller creates a cert-manager Certificate and
+	// mounts the TLS secret into multigateway pods.
+	// Inherited from MultigresCluster.Spec.CertCommonName.
+	// +optional
+	CertCommonName string `json:"certCommonName,omitempty"`
 }
 
 // CellImages defines the images required for a Cell.

@@ -64,6 +64,13 @@ spec:
                 maxItems: 50
                 type: array
                 x-kubernetes-list-type: set
+              certCommonName:
+                description: |-
+                  CertCommonName is the DNS name for the multigateway TLS certificate.
+                  When set, the cell controller creates a cert-manager Certificate and
+                  mounts the TLS secret into multigateway pods.
+                  Inherited from MultigresCluster.Spec.CertCommonName.
+                type: string
               globalTopoServer:
                 description: GlobalTopoServer reference (always populated).
                 properties:

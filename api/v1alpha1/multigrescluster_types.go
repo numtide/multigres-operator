@@ -133,6 +133,14 @@ type MultigresClusterSpec struct {
 	// Defaults to "AT_LEAST_2" if not set.
 	// +optional
 	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
+
+	// CertCommonName is the DNS name used as the Common Name and SAN for the
+	// multigateway TLS certificate (e.g., "db.abc123.supabase.red").
+	// When set, the cell controller creates a cert-manager Certificate resource
+	// and mounts the resulting TLS secret into the multigateway pods.
+	// When empty, the multigateway runs without TLS.
+	// +optional
+	CertCommonName string `json:"certCommonName,omitempty"`
 }
 
 // ============================================================================

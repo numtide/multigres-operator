@@ -2556,6 +2556,14 @@ spec:
                 x-kubernetes-validations:
                 - message: Cells cannot be removed or renamed (Append-Only)
                   rule: oldSelf.all(c, c.name in self.map(x, x.name))
+              certCommonName:
+                description: |-
+                  CertCommonName is the DNS name used as the Common Name and SAN for the
+                  multigateway TLS certificate (e.g., "db.abc123.supabase.red").
+                  When set, the cell controller creates a cert-manager Certificate resource
+                  and mounts the resulting TLS secret into the multigateway pods.
+                  When empty, the multigateway runs without TLS.
+                type: string
               databases:
                 description: Databases defines the logical databases, table groups,
                   and sharding.
