@@ -15,15 +15,14 @@ import (
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 )
 
-func certScheme() *runtime.Scheme {
-	s := setupScheme()
-	// Register cert-manager Certificate as an unstructured type so the
-	// fake client can store and retrieve it.
+// registerCertManagerTypes registers cert-manager Certificate as an
+// unstructured type so the fake client can store, retrieve, and list
+// it without mutating the scheme at runtime.
+func registerCertManagerTypes(s *runtime.Scheme) {
 	s.AddKnownTypeWithName(certGVK, &unstructured.Unstructured{})
 	listGVK := certGVK
 	listGVK.Kind += "List"
 	s.AddKnownTypeWithName(listGVK, &unstructured.UnstructuredList{})
-	return s
 }
 
 func TestBuildCertificate(t *testing.T) {
@@ -79,7 +78,7 @@ func TestBuildCertificate(t *testing.T) {
 		},
 	}
 
-	scheme := certScheme()
+	scheme := setupScheme()
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -136,7 +135,7 @@ func TestBuildCertificate(t *testing.T) {
 }
 
 func TestReconcileCertificate(t *testing.T) {
-	scheme := certScheme()
+	scheme := setupScheme()
 
 	t.Run("no-op when CertCommonName is empty and no prior cert", func(t *testing.T) {
 		fc := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -368,6 +367,130 @@ func TestReconcileCertificate(t *testing.T) {
 				Name: "db.other.supabase.red", Namespace: "default",
 			}, got); err != nil {
 				t.Fatal("Certificate owned by another cluster should survive")
+			}
+		},
+	)
+
+	t.Run(
+		"two clusters in same namespace get independent certs",
+		func(t *testing.T) {
+			// Regression: the original cell-level architecture had
+			// multiple cells fighting over the same Certificate with
+			// ownerRef flipping. Moving to the cluster controller
+			// eliminates that. This test verifies two clusters in the
+			// same namespace each own their own Certificate with no
+			// interference.
+			fc := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			clusterA := &multigresv1alpha1.MultigresCluster{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "multigres.com/v1alpha1",
+					Kind:       "MultigresCluster",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster-a", Namespace: "default", UID: "uid-a",
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					CertCommonName: "db.projA.supabase.red",
+				},
+			}
+			clusterB := &multigresv1alpha1.MultigresCluster{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "multigres.com/v1alpha1",
+					Kind:       "MultigresCluster",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster-b", Namespace: "default", UID: "uid-b",
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					CertCommonName: "db.projB.supabase.red",
+				},
+			}
+
+			rA := &MultigresClusterReconciler{
+				Client: fc, Scheme: scheme,
+				Recorder: record.NewFakeRecorder(10),
+			}
+			rB := &MultigresClusterReconciler{
+				Client: fc, Scheme: scheme,
+				Recorder: record.NewFakeRecorder(10),
+			}
+
+			if err := rA.reconcileCertificate(
+				t.Context(), clusterA,
+			); err != nil {
+				t.Fatalf("cluster-a reconcile: %v", err)
+			}
+			if err := rB.reconcileCertificate(
+				t.Context(), clusterB,
+			); err != nil {
+				t.Fatalf("cluster-b reconcile: %v", err)
+			}
+
+			// Both certs exist
+			for _, name := range []string{
+				"db.projA.supabase.red",
+				"db.projB.supabase.red",
+			} {
+				got := &unstructured.Unstructured{}
+				got.SetGroupVersionKind(certGVK)
+				if err := fc.Get(t.Context(), types.NamespacedName{
+					Name: name, Namespace: "default",
+				}, got); err != nil {
+					t.Errorf("Certificate %q should exist: %v", name, err)
+				}
+			}
+
+			// Each cert is owned by the correct cluster
+			certA := &unstructured.Unstructured{}
+			certA.SetGroupVersionKind(certGVK)
+			_ = fc.Get(t.Context(), types.NamespacedName{
+				Name: "db.projA.supabase.red", Namespace: "default",
+			}, certA)
+			if certA.GetOwnerReferences()[0].UID != "uid-a" {
+				t.Errorf(
+					"certA owner UID = %q, want uid-a",
+					certA.GetOwnerReferences()[0].UID,
+				)
+			}
+
+			certB := &unstructured.Unstructured{}
+			certB.SetGroupVersionKind(certGVK)
+			_ = fc.Get(t.Context(), types.NamespacedName{
+				Name: "db.projB.supabase.red", Namespace: "default",
+			}, certB)
+			if certB.GetOwnerReferences()[0].UID != "uid-b" {
+				t.Errorf(
+					"certB owner UID = %q, want uid-b",
+					certB.GetOwnerReferences()[0].UID,
+				)
+			}
+
+			// Unsetting CN on cluster-a only deletes its cert
+			clusterA.Spec.CertCommonName = ""
+			if err := rA.reconcileCertificate(
+				t.Context(), clusterA,
+			); err != nil {
+				t.Fatalf("cluster-a cleanup: %v", err)
+			}
+
+			gone := &unstructured.Unstructured{}
+			gone.SetGroupVersionKind(certGVK)
+			if err := fc.Get(t.Context(), types.NamespacedName{
+				Name: "db.projA.supabase.red", Namespace: "default",
+			}, gone); err == nil {
+				t.Error("cluster-a cert should be deleted")
+			}
+
+			// cluster-b cert is untouched
+			still := &unstructured.Unstructured{}
+			still.SetGroupVersionKind(certGVK)
+			if err := fc.Get(t.Context(), types.NamespacedName{
+				Name: "db.projB.supabase.red", Namespace: "default",
+			}, still); err != nil {
+				t.Errorf(
+					"cluster-b cert should survive: %v", err,
+				)
 			}
 		},
 	)
