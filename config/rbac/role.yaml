@@ -73,6 +73,7 @@ rules:
   - certificates
   verbs:
   - create
+  - delete
   - get
   - list
   - patch

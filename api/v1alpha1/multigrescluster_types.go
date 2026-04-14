@@ -34,6 +34,7 @@ import (
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // -- Certificate Manager Permissions (ADDED) --
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update;patch
