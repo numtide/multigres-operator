@@ -30,7 +30,6 @@ import (
 // +kubebuilder:rbac:groups=multigres.com,resources=cells/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch
 
 // ============================================================================
 // Cell Spec (Read-only API)

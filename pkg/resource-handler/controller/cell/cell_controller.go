@@ -107,25 +107,6 @@ func (r *CellReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	// Reconcile TLS Certificate (if CertCommonName is set)
-	{
-		ctx, childSpan := monitoring.StartChildSpan(ctx, "Cell.ReconcileCertificate")
-		if err := r.reconcileCertificate(ctx, cell); err != nil {
-			monitoring.RecordSpanError(childSpan, err)
-			childSpan.End()
-			logger.Error(err, "Failed to reconcile TLS Certificate")
-			r.Recorder.Eventf(
-				cell,
-				"Warning",
-				"FailedApply",
-				"Failed to sync TLS Certificate: %v",
-				err,
-			)
-			return ctrl.Result{}, err
-		}
-		childSpan.End()
-	}
-
 	// Reconcile MultiGateway Deployment
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Cell.ReconcileDeployment")

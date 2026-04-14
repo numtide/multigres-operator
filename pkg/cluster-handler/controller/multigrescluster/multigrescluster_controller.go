@@ -49,6 +49,7 @@ type MultigresClusterReconciler struct {
 // +kubebuilder:rbac:groups=multigres.com,resources=cells;tablegroups;toposervers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=multigres.com,resources=shards,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 func (r *MultigresClusterReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
@@ -208,6 +209,27 @@ func (r *MultigresClusterReconciler) Reconcile(
 		if result.RequeueAfter > 0 {
 			return result, nil
 		}
+	}
+
+	{
+		ctx, childSpan := monitoring.StartChildSpan(
+			ctx,
+			"MultigresCluster.ReconcileCertificate",
+		)
+		if err := r.reconcileCertificate(ctx, cluster); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			l.Error(err, "Failed to reconcile TLS Certificate")
+			r.Recorder.Eventf(
+				cluster,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile TLS Certificate: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
 	}
 
 	var pendingCells, pendingDBs bool

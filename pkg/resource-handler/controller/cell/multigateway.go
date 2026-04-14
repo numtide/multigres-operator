@@ -33,10 +33,11 @@ const (
 	MultiGatewayPostgresPort int32 = 5432
 
 	// TLS volume/mount constants for the multigateway cert-manager certificate.
-	tlsVolumeName = "tls-certs"
-	tlsMountPath  = "/etc/multigateway/tls"
-	tlsCertFile   = tlsMountPath + "/tls.crt"
-	tlsKeyFile    = tlsMountPath + "/tls.key"
+	tlsVolumeName  = "tls-certs"
+	tlsMountPath   = "/etc/multigateway/tls"
+	tlsCertFile    = tlsMountPath + "/tls.crt"
+	tlsKeyFile     = tlsMountPath + "/tls.key"
+	CertSecretName = "generated-certs"
 )
 
 // BuildMultiGatewayDeploymentName generates the Deployment name.
