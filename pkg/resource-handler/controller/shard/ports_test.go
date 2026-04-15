@@ -267,3 +267,58 @@ func TestBuildMultiOrchServicePorts(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildPostgresExporterContainerPorts(t *testing.T) {
+	tests := []struct {
+		name string
+		want []corev1.ContainerPort
+	}{
+		{
+			name: "returns exporter metrics port",
+			want: []corev1.ContainerPort{
+				{
+					Name:          "metrics",
+					ContainerPort: DefaultPostgresExporterPort,
+					Protocol:      corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildPostgresExporterContainerPorts()
+
+			if len(got) != len(tt.want) {
+				t.Errorf(
+					"buildPostgresExporterContainerPorts() length = %d, want %d",
+					len(got),
+					len(tt.want),
+				)
+				return
+			}
+
+			for i, port := range got {
+				if port.Name != tt.want[i].Name {
+					t.Errorf("port[%d].Name = %s, want %s", i, port.Name, tt.want[i].Name)
+				}
+				if port.ContainerPort != tt.want[i].ContainerPort {
+					t.Errorf(
+						"port[%d].ContainerPort = %d, want %d",
+						i,
+						port.ContainerPort,
+						tt.want[i].ContainerPort,
+					)
+				}
+				if port.Protocol != tt.want[i].Protocol {
+					t.Errorf(
+						"port[%d].Protocol = %s, want %s",
+						i,
+						port.Protocol,
+						tt.want[i].Protocol,
+					)
+				}
+			}
+		})
+	}
+}

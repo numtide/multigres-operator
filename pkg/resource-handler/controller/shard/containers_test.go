@@ -365,6 +365,52 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 	}
 }
 
+func TestBuildPostgresExporterContainer(t *testing.T) {
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+	}
+	pool := multigresv1alpha1.PoolSpec{}
+
+	got := buildPostgresExporterContainer(shard, pool)
+
+	want := corev1.Container{
+		Name:  "postgres-exporter",
+		Image: multigresv1alpha1.DefaultPostgresExporterImage,
+		Args: []string{
+			"--web.listen-address=:9187",
+		},
+		Ports: buildPostgresExporterContainerPorts(),
+		Env: []corev1.EnvVar{
+			{
+				Name:  "DATA_SOURCE_URI",
+				Value: "localhost:5432/postgres?sslmode=disable",
+			},
+			{
+				Name:  "DATA_SOURCE_USER",
+				Value: "postgres",
+			},
+			{
+				Name: "DATA_SOURCE_PASS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: PostgresPasswordSecretName("test-shard"),
+						},
+						Key: PostgresPasswordSecretKey,
+					},
+				},
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsNonRoot: ptr.To(true),
+		},
+	}
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("buildPostgresExporterContainer() mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestBuildMultiOrchContainer(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard

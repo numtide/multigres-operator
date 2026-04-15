@@ -247,6 +247,43 @@ func buildPgctldContainer(
 	}
 }
 
+// buildPostgresExporterContainer creates the postgres_exporter sidecar for scraping local postgres metrics.
+func buildPostgresExporterContainer(
+	shard *multigresv1alpha1.Shard,
+	pool multigresv1alpha1.PoolSpec,
+) corev1.Container {
+	return corev1.Container{
+		Name:  "postgres-exporter",
+		Image: multigresv1alpha1.DefaultPostgresExporterImage,
+		Args: []string{
+			"--web.listen-address=:9187",
+		},
+		Ports: buildPostgresExporterContainerPorts(),
+		Env: []corev1.EnvVar{
+			{
+				Name:  "DATA_SOURCE_URI",
+				Value: "localhost:5432/postgres?sslmode=disable",
+			},
+			{
+				Name:  "DATA_SOURCE_USER",
+				Value: "postgres",
+			},
+			{
+				Name: "DATA_SOURCE_PASS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: PostgresPasswordSecretName(shard.Name),
+						},
+						Key: PostgresPasswordSecretKey,
+					},
+				},
+			},
+		},
+		SecurityContext: buildContainerSecurityContext(pool.FSGroup),
+	}
+}
+
 // BuildPoolServiceID generates a short, deterministic service ID for a
 // multipooler from its pod name. The pod name is already guaranteed unique
 // (via JoinWithConstraints), so hashing it produces a collision-free short ID.

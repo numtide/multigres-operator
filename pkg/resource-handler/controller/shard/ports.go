@@ -18,6 +18,9 @@ const (
 	// DefaultPgctldHTTPPort is the default port for pgctld HTTP traffic.
 	DefaultPgctldHTTPPort int32 = 15400
 
+	// DefaultPostgresExporterPort is the default port for postgres_exporter metrics.
+	DefaultPostgresExporterPort int32 = 9187
+
 	// DefaultMultiOrchHTTPPort is the default port for MultiOrch HTTP traffic.
 	DefaultMultiOrchHTTPPort int32 = 15300
 
@@ -84,6 +87,17 @@ func buildMultiOrchContainerPorts() []corev1.ContainerPort {
 		{
 			Name:          "grpc",
 			ContainerPort: DefaultMultiOrchGRPCPort,
+			Protocol:      corev1.ProtocolTCP,
+		},
+	}
+}
+
+// buildPostgresExporterContainerPorts creates the port definition for postgres_exporter metrics.
+func buildPostgresExporterContainerPorts() []corev1.ContainerPort {
+	return []corev1.ContainerPort{
+		{
+			Name:          "metrics",
+			ContainerPort: DefaultPostgresExporterPort,
 			Protocol:      corev1.ProtocolTCP,
 		},
 	}
