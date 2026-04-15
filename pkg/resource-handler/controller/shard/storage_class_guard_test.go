@@ -15,10 +15,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"k8s.io/client-go/tools/record"
+
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"github.com/multigres/multigres-operator/pkg/testutil"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
-	"k8s.io/client-go/tools/record"
 )
 
 func TestValidateBackupStorageClassDependency(t *testing.T) {
@@ -390,7 +391,10 @@ func TestShardReconciler_FieldOwnershipIsolation(t *testing.T) {
 
 		for _, c := range patchShard.Status.Conditions {
 			if c.Type == conditionStorageClassValid {
-				t.Fatalf("updateStatus patch must not contain %s condition", conditionStorageClassValid)
+				t.Fatalf(
+					"updateStatus patch must not contain %s condition",
+					conditionStorageClassValid,
+				)
 			}
 		}
 		availCond := findCondition(patchShard.Status.Conditions, "Available")
@@ -399,77 +403,87 @@ func TestShardReconciler_FieldOwnershipIsolation(t *testing.T) {
 		}
 	})
 
-	t.Run("guard patch contains only StorageClassValid condition and no other status fields", func(t *testing.T) {
-		t.Parallel()
+	t.Run(
+		"guard patch contains only StorageClassValid condition and no other status fields",
+		func(t *testing.T) {
+			t.Parallel()
 
-		shard := &multigresv1alpha1.Shard{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-field-owner-2",
-				Namespace: "default",
-			},
-			Spec: multigresv1alpha1.ShardSpec{
-				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-					"primary": {
-						Storage: multigresv1alpha1.StorageSpec{
-							Size:  "10Gi",
-							Class: "fast-ssd",
+			shard := &multigresv1alpha1.Shard{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-field-owner-2",
+					Namespace: "default",
+				},
+				Spec: multigresv1alpha1.ShardSpec{
+					Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+						"primary": {
+							Storage: multigresv1alpha1.StorageSpec{
+								Size:  "10Gi",
+								Class: "fast-ssd",
+							},
 						},
 					},
 				},
-			},
-		}
-		sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast-ssd"}}
+			}
+			sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast-ssd"}}
 
-		baseClient := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(shard, sc).
-			WithStatusSubresource(&multigresv1alpha1.Shard{}).
-			Build()
+			baseClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(shard, sc).
+				WithStatusSubresource(&multigresv1alpha1.Shard{}).
+				Build()
 
-		var capturedPatchObj client.Object
-		fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-			OnStatusPatch: func(obj client.Object) error {
-				capturedPatchObj = obj
-				return nil
-			},
-		})
+			var capturedPatchObj client.Object
+			fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+				OnStatusPatch: func(obj client.Object) error {
+					capturedPatchObj = obj
+					return nil
+				},
+			})
 
-		r := &ShardReconciler{Client: fakeClient, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+			r := &ShardReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
+			}
 
-		if err := r.validatePoolStorageClassDependencies(t.Context(), shard); err != nil {
-			t.Fatalf("guard: %v", err)
-		}
+			if err := r.validatePoolStorageClassDependencies(t.Context(), shard); err != nil {
+				t.Fatalf("guard: %v", err)
+			}
 
-		patchShard, ok := capturedPatchObj.(*multigresv1alpha1.Shard)
-		if !ok {
-			t.Fatalf("expected *Shard patch, got %T", capturedPatchObj)
-		}
+			patchShard, ok := capturedPatchObj.(*multigresv1alpha1.Shard)
+			if !ok {
+				t.Fatalf("expected *Shard patch, got %T", capturedPatchObj)
+			}
 
-		// Exactly one condition: StorageClassValid.
-		if len(patchShard.Status.Conditions) != 1 {
-			t.Fatalf("guard patch must contain exactly 1 condition, got %d: %v",
-				len(patchShard.Status.Conditions), patchShard.Status.Conditions)
-		}
-		scCond := &patchShard.Status.Conditions[0]
-		if scCond.Type != conditionStorageClassValid {
-			t.Fatalf("expected %s condition, got %s", conditionStorageClassValid, scCond.Type)
-		}
-		if scCond.Status != metav1.ConditionTrue || scCond.Reason != storageClassFoundReason {
-			t.Fatalf("unexpected condition: status=%s reason=%s", scCond.Status, scCond.Reason)
-		}
+			// Exactly one condition: StorageClassValid.
+			if len(patchShard.Status.Conditions) != 1 {
+				t.Fatalf("guard patch must contain exactly 1 condition, got %d: %v",
+					len(patchShard.Status.Conditions), patchShard.Status.Conditions)
+			}
+			scCond := &patchShard.Status.Conditions[0]
+			if scCond.Type != conditionStorageClassValid {
+				t.Fatalf("expected %s condition, got %s", conditionStorageClassValid, scCond.Type)
+			}
+			if scCond.Status != metav1.ConditionTrue || scCond.Reason != storageClassFoundReason {
+				t.Fatalf("unexpected condition: status=%s reason=%s", scCond.Status, scCond.Reason)
+			}
 
-		// No other status fields should be set in the guard patch.
-		if patchShard.Status.Phase != "" {
-			t.Fatalf("guard patch must not set Phase, got %q", patchShard.Status.Phase)
-		}
-		if patchShard.Status.Message != "" {
-			t.Fatalf("guard patch must not set Message, got %q", patchShard.Status.Message)
-		}
-		if patchShard.Status.PodRoles != nil {
-			t.Fatal("guard patch must not set PodRoles")
-		}
-		if patchShard.Status.ReadyReplicas != 0 {
-			t.Fatalf("guard patch must not set ReadyReplicas, got %d", patchShard.Status.ReadyReplicas)
-		}
-	})
+			// No other status fields should be set in the guard patch.
+			if patchShard.Status.Phase != "" {
+				t.Fatalf("guard patch must not set Phase, got %q", patchShard.Status.Phase)
+			}
+			if patchShard.Status.Message != "" {
+				t.Fatalf("guard patch must not set Message, got %q", patchShard.Status.Message)
+			}
+			if patchShard.Status.PodRoles != nil {
+				t.Fatal("guard patch must not set PodRoles")
+			}
+			if patchShard.Status.ReadyReplicas != 0 {
+				t.Fatalf(
+					"guard patch must not set ReadyReplicas, got %d",
+					patchShard.Status.ReadyReplicas,
+				)
+			}
+		},
+	)
 }

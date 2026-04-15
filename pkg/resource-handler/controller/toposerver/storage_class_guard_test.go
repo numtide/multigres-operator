@@ -83,38 +83,49 @@ func TestValidateEtcdStorageClassDependency(t *testing.T) {
 		}
 	})
 
-	t.Run("missing storage class sets False/NotFound condition and returns dependency error", func(t *testing.T) {
-		t.Parallel()
-		ts := &multigresv1alpha1.TopoServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-ts", Namespace: "default"},
-			Spec: multigresv1alpha1.TopoServerSpec{
-				Etcd: &multigresv1alpha1.EtcdSpec{
-					Storage: multigresv1alpha1.StorageSpec{Class: "missing-sc"},
+	t.Run(
+		"missing storage class sets False/NotFound condition and returns dependency error",
+		func(t *testing.T) {
+			t.Parallel()
+			ts := &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-ts", Namespace: "default"},
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						Storage: multigresv1alpha1.StorageSpec{Class: "missing-sc"},
+					},
 				},
-			},
-		}
-		c := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(ts).
-			WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
-			Build()
-		r := &TopoServerReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+			}
+			c := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(ts).
+				WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
+				Build()
+			r := &TopoServerReconciler{
+				Client:   c,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
+			}
 
-		err := r.validateEtcdStorageClassDependency(t.Context(), ts)
-		if err == nil || !isMissingStorageClassDependency(err) {
-			t.Fatalf("expected missing dependency error, got: %v", err)
-		}
+			err := r.validateEtcdStorageClassDependency(t.Context(), ts)
+			if err == nil || !isMissingStorageClassDependency(err) {
+				t.Fatalf("expected missing dependency error, got: %v", err)
+			}
 
-		var updated multigresv1alpha1.TopoServer
-		if getErr := c.Get(t.Context(), client.ObjectKeyFromObject(ts), &updated); getErr != nil {
-			t.Fatalf("failed to read toposerver: %v", getErr)
-		}
-		cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
-		if cond == nil || cond.Status != metav1.ConditionFalse ||
-			cond.Reason != storageClassNotFoundReason {
-			t.Fatalf("unexpected condition: %#v", cond)
-		}
-	})
+			var updated multigresv1alpha1.TopoServer
+			if getErr := c.Get(
+				t.Context(),
+				client.ObjectKeyFromObject(ts),
+				&updated,
+			); getErr != nil {
+				t.Fatalf("failed to read toposerver: %v", getErr)
+			}
+			cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
+			if cond == nil || cond.Status != metav1.ConditionFalse ||
+				cond.Reason != storageClassNotFoundReason {
+				t.Fatalf("unexpected condition: %#v", cond)
+			}
+		},
+	)
 
 	t.Run("API error propagates without setting condition", func(t *testing.T) {
 		t.Parallel()
@@ -134,7 +145,11 @@ func TestValidateEtcdStorageClassDependency(t *testing.T) {
 		fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
 			OnGet: testutil.FailOnKeyName("some-sc", testutil.ErrNetworkTimeout),
 		})
-		r := &TopoServerReconciler{Client: fakeClient, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &TopoServerReconciler{
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
 
 		err := r.validateEtcdStorageClassDependency(t.Context(), ts)
 		if err == nil {
@@ -145,7 +160,11 @@ func TestValidateEtcdStorageClassDependency(t *testing.T) {
 		}
 
 		var updated multigresv1alpha1.TopoServer
-		if getErr := baseClient.Get(t.Context(), client.ObjectKeyFromObject(ts), &updated); getErr != nil {
+		if getErr := baseClient.Get(
+			t.Context(),
+			client.ObjectKeyFromObject(ts),
+			&updated,
+		); getErr != nil {
 			t.Fatalf("failed to read toposerver: %v", getErr)
 		}
 		cond := findCondition(updated.Status.Conditions, conditionStorageClassValid)
