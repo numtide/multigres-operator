@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/testutil"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 	"k8s.io/client-go/tools/record"
 )
@@ -296,4 +297,179 @@ func findCondition(conditions []metav1.Condition, conditionType string) *metav1.
 		}
 	}
 	return nil
+}
+
+func TestShardReconciler_FieldOwnershipIsolation(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
+
+	t.Run("updateStatus patch contains only Available condition", func(t *testing.T) {
+		t.Parallel()
+
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-field-owner",
+				Namespace: "default",
+				Labels: map[string]string{
+					metadata.LabelMultigresCluster: "test-cluster",
+				},
+			},
+			Spec: multigresv1alpha1.ShardSpec{
+				DatabaseName:   "testdb",
+				TableGroupName: "default",
+				MultiOrch: multigresv1alpha1.MultiOrchSpec{
+					Cells: []multigresv1alpha1.CellName{"zone1"},
+				},
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"primary": {
+						Cells:           []multigresv1alpha1.CellName{"zone1"},
+						Type:            "readWrite",
+						Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
+						ReplicasPerCell: ptr.To(int32(1)),
+					},
+				},
+			},
+		}
+
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      BuildPoolPodName(shard, "primary", "zone1", 0),
+				Namespace: "default",
+				Labels: metadata.GetSelectorLabels(
+					buildPoolLabelsWithCell(shard, "primary", "zone1"),
+				),
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				},
+			},
+		}
+
+		moName := buildHashedMultiOrchName(shard, "zone1")
+		mo := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: moName, Namespace: "default"},
+			Spec:       appsv1.DeploymentSpec{Replicas: ptr.To(int32(1))},
+			Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+		}
+
+		baseClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, pod, mo).
+			WithStatusSubresource(shard, pod, mo).
+			Build()
+
+		var capturedPatchObj client.Object
+		fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnStatusPatch: func(obj client.Object) error {
+				capturedPatchObj = obj
+				return nil
+			},
+		})
+
+		r := &ShardReconciler{
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(100),
+		}
+
+		if err := r.updateStatus(t.Context(), shard); err != nil {
+			t.Fatalf("updateStatus: %v", err)
+		}
+
+		patchShard, ok := capturedPatchObj.(*multigresv1alpha1.Shard)
+		if !ok {
+			t.Fatalf("expected *Shard patch, got %T", capturedPatchObj)
+		}
+
+		for _, c := range patchShard.Status.Conditions {
+			if c.Type == conditionStorageClassValid {
+				t.Fatalf("updateStatus patch must not contain %s condition", conditionStorageClassValid)
+			}
+		}
+		availCond := findCondition(patchShard.Status.Conditions, "Available")
+		if availCond == nil {
+			t.Fatal("updateStatus patch must contain Available condition")
+		}
+	})
+
+	t.Run("guard patch contains only StorageClassValid condition and no other status fields", func(t *testing.T) {
+		t.Parallel()
+
+		shard := &multigresv1alpha1.Shard{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-field-owner-2",
+				Namespace: "default",
+			},
+			Spec: multigresv1alpha1.ShardSpec{
+				Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+					"primary": {
+						Storage: multigresv1alpha1.StorageSpec{
+							Size:  "10Gi",
+							Class: "fast-ssd",
+						},
+					},
+				},
+			},
+		}
+		sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast-ssd"}}
+
+		baseClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(shard, sc).
+			WithStatusSubresource(&multigresv1alpha1.Shard{}).
+			Build()
+
+		var capturedPatchObj client.Object
+		fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnStatusPatch: func(obj client.Object) error {
+				capturedPatchObj = obj
+				return nil
+			},
+		})
+
+		r := &ShardReconciler{Client: fakeClient, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.validatePoolStorageClassDependencies(t.Context(), shard); err != nil {
+			t.Fatalf("guard: %v", err)
+		}
+
+		patchShard, ok := capturedPatchObj.(*multigresv1alpha1.Shard)
+		if !ok {
+			t.Fatalf("expected *Shard patch, got %T", capturedPatchObj)
+		}
+
+		// Exactly one condition: StorageClassValid.
+		if len(patchShard.Status.Conditions) != 1 {
+			t.Fatalf("guard patch must contain exactly 1 condition, got %d: %v",
+				len(patchShard.Status.Conditions), patchShard.Status.Conditions)
+		}
+		scCond := &patchShard.Status.Conditions[0]
+		if scCond.Type != conditionStorageClassValid {
+			t.Fatalf("expected %s condition, got %s", conditionStorageClassValid, scCond.Type)
+		}
+		if scCond.Status != metav1.ConditionTrue || scCond.Reason != storageClassFoundReason {
+			t.Fatalf("unexpected condition: status=%s reason=%s", scCond.Status, scCond.Reason)
+		}
+
+		// No other status fields should be set in the guard patch.
+		if patchShard.Status.Phase != "" {
+			t.Fatalf("guard patch must not set Phase, got %q", patchShard.Status.Phase)
+		}
+		if patchShard.Status.Message != "" {
+			t.Fatalf("guard patch must not set Message, got %q", patchShard.Status.Message)
+		}
+		if patchShard.Status.PodRoles != nil {
+			t.Fatal("guard patch must not set PodRoles")
+		}
+		if patchShard.Status.ReadyReplicas != 0 {
+			t.Fatalf("guard patch must not set ReadyReplicas, got %d", patchShard.Status.ReadyReplicas)
+		}
+	})
 }

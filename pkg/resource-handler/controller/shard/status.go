@@ -73,7 +73,16 @@ func (r *ShardReconciler) updateStatus(
 
 	shard.Status.ObservedGeneration = shard.Generation
 
-	// 1. Construct the Patch Object
+	// Filter conditions for the SSA patch. Each condition type must belong to
+	// exactly one SSA field manager
+	var patchConditions []metav1.Condition
+	for i := range shard.Status.Conditions {
+		if shard.Status.Conditions[i].Type == conditionStorageClassValid {
+			continue
+		}
+		patchConditions = append(patchConditions, shard.Status.Conditions[i])
+	}
+
 	patchObj := &multigresv1alpha1.Shard{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: multigresv1alpha1.GroupVersion.String(),
@@ -83,7 +92,19 @@ func (r *ShardReconciler) updateStatus(
 			Name:      shard.Name,
 			Namespace: shard.Namespace,
 		},
-		Status: shard.Status,
+		Status: multigresv1alpha1.ShardStatus{
+			Phase:              shard.Status.Phase,
+			Message:            shard.Status.Message,
+			ObservedGeneration: shard.Status.ObservedGeneration,
+			PoolsReady:         shard.Status.PoolsReady,
+			OrchReady:          shard.Status.OrchReady,
+			ReadyReplicas:      shard.Status.ReadyReplicas,
+			Cells:              shard.Status.Cells,
+			Conditions:         patchConditions,
+			LastBackupTime:     shard.Status.LastBackupTime,
+			LastBackupType:     shard.Status.LastBackupType,
+			PodRoles:           shard.Status.PodRoles,
+		},
 	}
 
 	// 2. Apply the Patch

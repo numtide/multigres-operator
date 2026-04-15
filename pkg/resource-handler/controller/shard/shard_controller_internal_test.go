@@ -645,6 +645,7 @@ func TestReconcile_PostgresSecretError(t *testing.T) {
 	baseClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(shard).
+		WithStatusSubresource(&multigresv1alpha1.Shard{}).
 		Build()
 
 	// Fail on the second Patch (1st=pg_hba ConfigMap, 2nd=postgres-password Secret).

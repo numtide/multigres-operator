@@ -30,6 +30,7 @@ import (
 // +kubebuilder:rbac:groups=multigres.com,resources=toposervers/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get
 
 // ============================================================================
 // TopoServer Spec (Read-only API)

@@ -75,6 +75,18 @@ func (r *TopoServerReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
+	// Validate StorageClass dependency before StatefulSet apply
+	if err := r.validateEtcdStorageClassDependency(ctx, toposerver); err != nil {
+		if isMissingStorageClassDependency(err) {
+			logger.Info("StorageClass dependency missing; requeueing",
+				"after", storageClassDependencyRequeue)
+			return ctrl.Result{RequeueAfter: storageClassDependencyRequeue}, nil
+		}
+		monitoring.RecordSpanError(span, err)
+		logger.Error(err, "Failed to validate etcd StorageClass")
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile StatefulSet
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "TopoServer.ReconcileStatefulSet")
@@ -323,7 +335,15 @@ func (r *TopoServerReconciler) updateStatus(
 
 	toposerver.Status.ObservedGeneration = toposerver.Generation
 
-	// 1. Construct the Patch Object
+	// 1. Construct the Patch Object — include only the fields this owner manages.
+	// The StorageClassValid condition is owned by "multigres-operator-guard" and
+	// must NOT appear here, otherwise SSA would fight over it.
+	readyCond := meta.FindStatusCondition(toposerver.Status.Conditions, "Ready")
+	var patchConditions []metav1.Condition
+	if readyCond != nil {
+		patchConditions = []metav1.Condition{*readyCond}
+	}
+
 	patchObj := &multigresv1alpha1.TopoServer{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: multigresv1alpha1.GroupVersion.String(),
@@ -333,7 +353,14 @@ func (r *TopoServerReconciler) updateStatus(
 			Name:      toposerver.Name,
 			Namespace: toposerver.Namespace,
 		},
-		Status: toposerver.Status,
+		Status: multigresv1alpha1.TopoServerStatus{
+			Phase:              toposerver.Status.Phase,
+			Message:            toposerver.Status.Message,
+			ObservedGeneration: toposerver.Status.ObservedGeneration,
+			ClientService:      toposerver.Status.ClientService,
+			PeerService:        toposerver.Status.PeerService,
+			Conditions:         patchConditions,
+		},
 	}
 
 	// 2. Apply the Patch
