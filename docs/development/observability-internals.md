@@ -74,7 +74,8 @@ The operator ecosystem uses **two different metric collection models** simultane
 | Component | Model | Transport | Why |
 |:---|:---|:---|:---|
 | **Operator** | **Pull** (Prometheus scrape) | HTTP `/metrics` on `:8443` | controller-runtime uses `prometheus/client_golang` natively |
-| **Data plane** (multiorch, multipooler, multigateway) | **Push** (OTLP) | gRPC/HTTP to OTLP endpoint | Multigres binaries use the OpenTelemetry SDK with `autoexport` |
+| **Data plane runtimes** (multiorch, multipooler, multigateway) | **Push** (OTLP) | gRPC/HTTP to OTLP endpoint | Multigres binaries use the OpenTelemetry SDK with `autoexport` |
+| **Postgres engine metrics** (`postgres_exporter` sidecar on shard pool pods) | **Pull** (Prometheus scrape) | HTTP `/metrics` on pool headless Service `metrics` port | Scraped by ServiceMonitor targeting `app.kubernetes.io/component=shard-pool` |
 
 ### Why the Operator Uses Pull
 

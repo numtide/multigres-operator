@@ -89,7 +89,8 @@ This deploys the operator with tracing enabled and opens port-forwards to:
 | Component | Metric Model | How it works |
 | :--- | :--- | :--- |
 | **Operator** | **Pull** (Prometheus scrape) | Prometheus scrapes the operator's `/metrics` endpoint via controller-runtime's built-in Prometheus integration |
-| **Data plane** (multiorch, multipooler, etc.) | **Push** (OTLP) | Multigres binaries push metrics via OpenTelemetry to the configured OTLP endpoint |
+| **Data plane runtimes** (multiorch, multipooler, multigateway, etc.) | **Push** (OTLP) | Multigres binaries push metrics via OpenTelemetry to the configured OTLP endpoint |
+| **Postgres engine metrics** (`postgres_exporter` sidecar on shard pool pods) | **Pull** (Prometheus scrape) | Prometheus scrapes the `metrics` port on shard-pool headless Services via ServiceMonitor |
 
 The OTel Collector receives all pushed OTLP signals from the data plane and routes them: **traces → Tempo**, **metrics → Prometheus** (via its OTLP receiver). This is necessary because multigres components send all signals to a single OTLP endpoint and cannot split them by signal type.
 

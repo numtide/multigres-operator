@@ -108,7 +108,10 @@ func TestBuildPoolPod_Containers(t *testing.T) {
 	}
 
 	if len(pod.Spec.Containers) != 2 {
-		t.Fatalf("expected 2 containers (postgres + postgres-exporter), got %d", len(pod.Spec.Containers))
+		t.Fatalf(
+			"expected 2 containers (postgres + postgres-exporter), got %d",
+			len(pod.Spec.Containers),
+		)
 	}
 	if pod.Spec.Containers[0].Name != "postgres" {
 		t.Errorf("container name = %q, want %q", pod.Spec.Containers[0].Name, "postgres")
