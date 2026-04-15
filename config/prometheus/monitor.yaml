@@ -18,3 +18,22 @@ spec:
     matchLabels:
       control-plane: controller-manager
       app.kubernetes.io/name: multigres-operator
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: shard-pool-postgres-exporter
+  labels:
+    app.kubernetes.io/name: multigres-operator
+    app.kubernetes.io/component: monitoring
+spec:
+  namespaceSelector:
+    any: true
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: multigres
+      app.kubernetes.io/component: shard-pool
+  endpoints:
+    - port: metrics
+      scheme: http
+      path: /metrics

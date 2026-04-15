@@ -90,6 +90,25 @@ spec:
         insecureSkipVerify: true
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
 ---
+# ServiceMonitor: Scrape postgres_exporter metrics from shard pool headless Services.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: shard-pool-postgres-exporter
+  labels:
+    app.kubernetes.io/name: multigres-operator
+spec:
+  namespaceSelector:
+    any: true
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: multigres
+      app.kubernetes.io/component: shard-pool
+  endpoints:
+    - port: metrics
+      scheme: http
+      path: /metrics
+---
 # Service: ClusterIP service for the managed Prometheus pods.
 # The operator creates a headless "prometheus-operated" service; this provides
 # a stable ClusterIP for port-forwarding and inter-service communication.
