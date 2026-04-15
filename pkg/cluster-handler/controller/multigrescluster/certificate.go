@@ -2,10 +2,12 @@ package multigrescluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -17,10 +19,6 @@ import (
 )
 
 const (
-	// CertSecretName is the secret name for the multigateway TLS certificate,
-	// matching the convention used by non-HA projects.
-	CertSecretName = "generated-certs"
-
 	// CertIssuerName is the cert-manager ClusterIssuer used for TLS certificates.
 	CertIssuerName = "supabase-issuer"
 
@@ -65,7 +63,7 @@ func buildCertificate(
 	}
 
 	cert.Object["spec"] = map[string]any{
-		"secretName":     CertSecretName,
+		"secretName":     multigresv1alpha1.CertSecretName,
 		"dnsNames":       dnsNames,
 		"duration":       CertDuration,
 		"literalSubject": fmt.Sprintf(CertLiteralSubjectTemplate, cn),
@@ -148,7 +146,7 @@ func (r *MultigresClusterReconciler) deleteOwnedCertificates(
 		certList,
 		client.InNamespace(cluster.Namespace),
 	); err != nil {
-		if errors.IsNotFound(err) || isNoMatchError(err) {
+		if apierrors.IsNotFound(err) || isNoMatchError(err) {
 			return nil
 		}
 		return fmt.Errorf(
@@ -165,7 +163,7 @@ func (r *MultigresClusterReconciler) deleteOwnedCertificates(
 			continue
 		}
 		if err := r.Delete(ctx, cert); err != nil &&
-			!errors.IsNotFound(err) {
+			!apierrors.IsNotFound(err) {
 			return fmt.Errorf(
 				"failed to delete cert-manager Certificate %q: %w",
 				cert.GetName(), err,
@@ -197,9 +195,6 @@ func isOwnedBy(
 // isNoMatchError returns true when the API server has no resource mapping
 // for the requested GVK (e.g. cert-manager CRD not installed).
 func isNoMatchError(err error) bool {
-	// meta.NoKindMatchError and discovery errors surface as
-	// *errors.StatusError with reason NotFound, but some client
-	// implementations return a plain NoMatchError. Check the string
-	// as a catch-all.
-	return strings.Contains(err.Error(), "no matches for kind")
+	noMatch := &apimeta.NoKindMatchError{}
+	return errors.As(err, &noMatch)
 }

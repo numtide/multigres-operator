@@ -86,8 +86,8 @@ type CellSpec struct {
 	LogLevels ComponentLogLevels `json:"logLevels,omitempty"`
 
 	// CertCommonName is the DNS name for the multigateway TLS certificate.
-	// When set, the cell controller creates a cert-manager Certificate and
-	// mounts the TLS secret into multigateway pods.
+	// When set, the cluster controller creates a cert-manager Certificate and
+	// the cell controller mounts the TLS secret into multigateway pods.
 	// Inherited from MultigresCluster.Spec.CertCommonName.
 	// +optional
 	CertCommonName string `json:"certCommonName,omitempty"`

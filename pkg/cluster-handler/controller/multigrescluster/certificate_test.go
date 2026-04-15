@@ -54,7 +54,7 @@ func TestBuildCertificate(t *testing.T) {
 				"abc123.supabase.red",
 			},
 			wantSubject:    "C=US, ST=Delware, L=New Castle,O=Supabase Inc, CN=db.abc123.supabase.red",
-			wantSecretName: CertSecretName,
+			wantSecretName: multigresv1alpha1.CertSecretName,
 		},
 		"certCommonName without db prefix": {
 			cluster: &multigresv1alpha1.MultigresCluster{
@@ -74,7 +74,7 @@ func TestBuildCertificate(t *testing.T) {
 			wantName:       "custom.example.com",
 			wantDNSNames:   []any{"custom.example.com"},
 			wantSubject:    "C=US, ST=Delware, L=New Castle,O=Supabase Inc, CN=custom.example.com",
-			wantSecretName: CertSecretName,
+			wantSecretName: multigresv1alpha1.CertSecretName,
 		},
 	}
 
@@ -342,7 +342,7 @@ func TestReconcileCertificate(t *testing.T) {
 				},
 			})
 			other.Object["spec"] = map[string]any{
-				"secretName": CertSecretName,
+				"secretName": multigresv1alpha1.CertSecretName,
 			}
 			if err := fc.Create(t.Context(), other); err != nil {
 				t.Fatalf("failed to create other cert: %v", err)
@@ -442,9 +442,11 @@ func TestReconcileCertificate(t *testing.T) {
 			// Each cert is owned by the correct cluster
 			certA := &unstructured.Unstructured{}
 			certA.SetGroupVersionKind(certGVK)
-			_ = fc.Get(t.Context(), types.NamespacedName{
+			if err := fc.Get(t.Context(), types.NamespacedName{
 				Name: "db.projA.supabase.red", Namespace: "default",
-			}, certA)
+			}, certA); err != nil {
+				t.Fatalf("failed to get certA: %v", err)
+			}
 			if certA.GetOwnerReferences()[0].UID != "uid-a" {
 				t.Errorf(
 					"certA owner UID = %q, want uid-a",
@@ -454,9 +456,11 @@ func TestReconcileCertificate(t *testing.T) {
 
 			certB := &unstructured.Unstructured{}
 			certB.SetGroupVersionKind(certGVK)
-			_ = fc.Get(t.Context(), types.NamespacedName{
+			if err := fc.Get(t.Context(), types.NamespacedName{
 				Name: "db.projB.supabase.red", Namespace: "default",
-			}, certB)
+			}, certB); err != nil {
+				t.Fatalf("failed to get certB: %v", err)
+			}
 			if certB.GetOwnerReferences()[0].UID != "uid-b" {
 				t.Errorf(
 					"certB owner UID = %q, want uid-b",

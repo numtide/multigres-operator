@@ -33,11 +33,10 @@ const (
 	MultiGatewayPostgresPort int32 = 5432
 
 	// TLS volume/mount constants for the multigateway cert-manager certificate.
-	tlsVolumeName  = "tls-certs"
-	tlsMountPath   = "/etc/multigateway/tls"
-	tlsCertFile    = tlsMountPath + "/tls.crt"
-	tlsKeyFile     = tlsMountPath + "/tls.key"
-	CertSecretName = "generated-certs"
+	tlsVolumeName = "tls-certs"
+	tlsMountPath  = "/etc/multigateway/tls"
+	tlsCertFile   = tlsMountPath + "/tls.crt"
+	tlsKeyFile    = tlsMountPath + "/tls.key"
 )
 
 // BuildMultiGatewayDeploymentName generates the Deployment name.
@@ -201,7 +200,7 @@ func BuildMultiGatewayDeployment(
 			Name: tlsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  CertSecretName,
+					SecretName:  multigresv1alpha1.CertSecretName,
 					DefaultMode: &defaultMode,
 				},
 			},

@@ -1802,10 +1802,10 @@ func TestBuildMultiGatewayDeployment_TLS(t *testing.T) {
 				foundVol = true
 				if v.Secret == nil {
 					t.Error("TLS volume should use a Secret source")
-				} else if v.Secret.SecretName != CertSecretName {
+				} else if v.Secret.SecretName != multigresv1alpha1.CertSecretName {
 					t.Errorf(
 						"TLS volume secretName = %q, want %q",
-						v.Secret.SecretName, CertSecretName,
+						v.Secret.SecretName, multigresv1alpha1.CertSecretName,
 					)
 				}
 			}
