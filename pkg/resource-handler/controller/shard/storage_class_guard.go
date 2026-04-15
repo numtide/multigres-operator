@@ -159,29 +159,75 @@ func (r *ShardReconciler) validatePoolStorageClassDependencies(
 	return r.setStorageClassCondition(ctx, shard, metav1.ConditionTrue, reason, message)
 }
 
+// setStorageClassCondition patches the StorageClassValid condition using SSA.
+// Uses FieldOwner("multigres-resource-handler-guard") to avoid ownership conflicts
+// with updateStatus which uses FieldOwner("multigres-resource-handler").
+//
+// Reads the latest condition from the API server (not the in-memory shard) to
+// avoid false skips when the in-memory object is stale.
+// TODO: This stale-safe condition skip logic is mirrored in the TopoServer
+// guard; extract a shared helper to reduce duplication.
 func (r *ShardReconciler) setStorageClassCondition(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
-	status metav1.ConditionStatus,
+	condStatus metav1.ConditionStatus,
 	reason string,
 	message string,
 ) error {
+	// Read the latest from the API server so the skip-if-unchanged check
+	// compares against the real persisted state, not a potentially stale
+	// in-memory copy.
 	latest := &multigresv1alpha1.Shard{}
-	key := client.ObjectKeyFromObject(shard)
-	if err := r.Get(ctx, key, latest); err != nil {
-		return fmt.Errorf("failed to get Shard for StorageClass condition patch: %w", err)
+	if err := r.Get(ctx, client.ObjectKeyFromObject(shard), latest); err != nil {
+		return fmt.Errorf("failed to get Shard for StorageClass condition check: %w", err)
 	}
 
-	base := latest.DeepCopy()
-	meta.SetStatusCondition(&latest.Status.Conditions, metav1.Condition{
-		Type:               conditionStorageClassValid,
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: latest.Generation,
-	})
+	existing := meta.FindStatusCondition(latest.Status.Conditions, conditionStorageClassValid)
+	if existing != nil &&
+		existing.Status == condStatus &&
+		existing.Reason == reason &&
+		existing.Message == message &&
+		existing.ObservedGeneration == latest.Generation {
+		return nil
+	}
 
-	if err := r.Status().Patch(ctx, latest, client.MergeFrom(base)); err != nil {
+	// Preserve LastTransitionTime when the status hasn't transitioned,
+	// matching the behaviour of meta.SetStatusCondition.
+	now := metav1.Now()
+	if existing != nil && existing.Status == condStatus {
+		now = existing.LastTransitionTime
+	}
+
+	patchObj := &multigresv1alpha1.Shard{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: multigresv1alpha1.GroupVersion.String(),
+			Kind:       "Shard",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      shard.Name,
+			Namespace: shard.Namespace,
+		},
+		Status: multigresv1alpha1.ShardStatus{
+			Conditions: []metav1.Condition{
+				{
+					Type:               conditionStorageClassValid,
+					Status:             condStatus,
+					Reason:             reason,
+					Message:            message,
+					ObservedGeneration: latest.Generation,
+					LastTransitionTime: now,
+				},
+			},
+		},
+	}
+
+	if err := r.Status().Patch(
+		ctx,
+		patchObj,
+		client.Apply,
+		client.FieldOwner("multigres-resource-handler-guard"),
+		client.ForceOwnership,
+	); err != nil {
 		return fmt.Errorf("failed to patch Shard StorageClass condition: %w", err)
 	}
 

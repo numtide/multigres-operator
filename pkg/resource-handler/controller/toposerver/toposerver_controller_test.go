@@ -7,6 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,6 +28,7 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
 
 	tests := map[string]struct {
 		toposerver      *multigresv1alpha1.TopoServer
@@ -148,6 +150,62 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 						"StatefulSet image = %s, want quay.io/coreos/etcd:v3.5.15",
 						sts.Spec.Template.Spec.Containers[0].Image,
 					)
+				}
+			},
+		},
+
+		////----------------------------------------
+		///   StorageClass Guard
+		//------------------------------------------
+		"missing StorageClass returns RequeueAfter=10s and no StatefulSet": {
+			toposerver: &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-missing-sc",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						Storage: multigresv1alpha1.StorageSpec{Class: "nonexistent-sc"},
+					},
+				},
+			},
+			existingObjects: []client.Object{},
+			wantRequeue:     true,
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				// StatefulSet should not have been created.
+				sts := &appsv1.StatefulSet{}
+				err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-missing-sc", Namespace: "default"},
+					sts)
+				if err == nil {
+					t.Error("StatefulSet should not exist when StorageClass is missing")
+				}
+			},
+		},
+		"existing StorageClass proceeds normally and creates StatefulSet": {
+			toposerver: &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-existing-sc",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+				},
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						Storage: multigresv1alpha1.StorageSpec{Class: "fast-ssd"},
+					},
+				},
+			},
+			existingObjects: []client.Object{
+				&storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast-ssd"}},
+			},
+			wantRequeue: true,
+			assertFunc: func(t *testing.T, c client.Client, toposerver *multigresv1alpha1.TopoServer) {
+				sts := &appsv1.StatefulSet{}
+				if err := c.Get(t.Context(),
+					types.NamespacedName{Name: "test-existing-sc", Namespace: "default"},
+					sts); err != nil {
+					t.Errorf("StatefulSet should exist when StorageClass is present: %v", err)
 				}
 			},
 		},
@@ -351,6 +409,7 @@ func TestTopoServerReconciler_ReconcileNotFound(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -384,6 +443,7 @@ func TestTopoServerReconciler_UpdateStatus(t *testing.T) {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
 
 	t.Run("all_replicas_ready_status", func(t *testing.T) {
 		toposerver := &multigresv1alpha1.TopoServer{
@@ -492,11 +552,160 @@ func TestTopoServerReconciler_UpdateStatus(t *testing.T) {
 	})
 }
 
+func TestTopoServerReconciler_FieldOwnershipIsolation(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
+
+	t.Run("updateStatus patch contains exactly one condition (Ready)", func(t *testing.T) {
+		t.Parallel()
+
+		ts := &multigresv1alpha1.TopoServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-field-owner",
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+			},
+			Spec: multigresv1alpha1.TopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Replicas: ptr.To(int32(3)),
+				},
+			},
+		}
+		sts := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-field-owner",
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+			},
+			Spec: appsv1.StatefulSetSpec{Replicas: ptr.To(int32(3))},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:      3,
+				ReadyReplicas: 3,
+			},
+		}
+
+		baseClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(ts, sts).
+			WithStatusSubresource(&multigresv1alpha1.TopoServer{}, sts).
+			Build()
+
+		// Intercept the status patch to inspect the patch object.
+		var capturedPatchObj client.Object
+		fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnStatusPatch: func(obj client.Object) error {
+				capturedPatchObj = obj
+				return nil
+			},
+		})
+
+		r := &TopoServerReconciler{Client: fakeClient, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.updateStatus(t.Context(), ts); err != nil {
+			t.Fatalf("updateStatus: %v", err)
+		}
+
+		patchTS, ok := capturedPatchObj.(*multigresv1alpha1.TopoServer)
+		if !ok {
+			t.Fatalf("expected *TopoServer patch, got %T", capturedPatchObj)
+		}
+
+		// Exactly one condition: Ready.
+		if len(patchTS.Status.Conditions) != 1 {
+			t.Fatalf("updateStatus patch must contain exactly 1 condition, got %d: %v",
+				len(patchTS.Status.Conditions), patchTS.Status.Conditions)
+		}
+		if patchTS.Status.Conditions[0].Type != "Ready" {
+			t.Fatalf("expected Ready condition, got %s", patchTS.Status.Conditions[0].Type)
+		}
+	})
+
+	t.Run("guard patch contains exactly one condition (StorageClassValid) and no other status fields", func(t *testing.T) {
+		t.Parallel()
+
+		ts := &multigresv1alpha1.TopoServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-field-owner-2",
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+			},
+			Spec: multigresv1alpha1.TopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{
+					Storage: multigresv1alpha1.StorageSpec{Class: "fast-ssd"},
+				},
+			},
+		}
+		sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast-ssd"}}
+
+		baseClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(ts, sc).
+			WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
+			Build()
+
+		// Intercept the status patch to inspect the patch object.
+		var capturedPatchObj client.Object
+		fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnStatusPatch: func(obj client.Object) error {
+				capturedPatchObj = obj
+				return nil
+			},
+		})
+
+		r := &TopoServerReconciler{Client: fakeClient, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+
+		if err := r.validateEtcdStorageClassDependency(t.Context(), ts); err != nil {
+			t.Fatalf("guard: %v", err)
+		}
+
+		patchTS, ok := capturedPatchObj.(*multigresv1alpha1.TopoServer)
+		if !ok {
+			t.Fatalf("expected *TopoServer patch, got %T", capturedPatchObj)
+		}
+
+		// Exactly one condition: StorageClassValid.
+		if len(patchTS.Status.Conditions) != 1 {
+			t.Fatalf("guard patch must contain exactly 1 condition, got %d: %v",
+				len(patchTS.Status.Conditions), patchTS.Status.Conditions)
+		}
+		scCond := &patchTS.Status.Conditions[0]
+		if scCond.Type != conditionStorageClassValid {
+			t.Fatalf("expected %s condition, got %s", conditionStorageClassValid, scCond.Type)
+		}
+		if scCond.Status != metav1.ConditionTrue || scCond.Reason != storageClassFoundReason {
+			t.Fatalf("unexpected condition: status=%s reason=%s", scCond.Status, scCond.Reason)
+		}
+
+		// No other status fields should be set in the guard patch.
+		if patchTS.Status.Phase != "" {
+			t.Fatalf("guard patch must not set Phase, got %q", patchTS.Status.Phase)
+		}
+		if patchTS.Status.Message != "" {
+			t.Fatalf("guard patch must not set Message, got %q", patchTS.Status.Message)
+		}
+		if patchTS.Status.ClientService != "" {
+			t.Fatalf("guard patch must not set ClientService, got %q", patchTS.Status.ClientService)
+		}
+		if patchTS.Status.PeerService != "" {
+			t.Fatalf("guard patch must not set PeerService, got %q", patchTS.Status.PeerService)
+		}
+		if patchTS.Status.ObservedGeneration != 0 {
+			t.Fatalf("guard patch must not set ObservedGeneration, got %d", patchTS.Status.ObservedGeneration)
+		}
+	})
+}
+
 func TestTopoServerReconciler_StandaloneMocks(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = storagev1.AddToScheme(scheme)
 
 	t.Run("ignore_deleted", func(t *testing.T) {
 		toposerver := &multigresv1alpha1.TopoServer{
@@ -620,6 +829,7 @@ func TestTopoServerReconciler_StandaloneMocks(t *testing.T) {
 		baseClient := fake.NewClientBuilder().
 			WithScheme(scheme).
 			WithObjects(toposerver, sts).
+			WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
 			Build()
 		fails := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
 			OnList: func(list client.ObjectList) error { return testutil.ErrNetworkTimeout },
