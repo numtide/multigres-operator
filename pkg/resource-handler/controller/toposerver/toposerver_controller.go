@@ -335,9 +335,7 @@ func (r *TopoServerReconciler) updateStatus(
 
 	toposerver.Status.ObservedGeneration = toposerver.Generation
 
-	// 1. Construct the Patch Object — include only the fields this owner manages.
-	// The StorageClassValid condition is owned by "multigres-operator-guard" and
-	// must NOT appear here, otherwise SSA would fight over it.
+	// 1. Construct the Patch Object
 	readyCond := meta.FindStatusCondition(toposerver.Status.Conditions, "Ready")
 	var patchConditions []metav1.Condition
 	if readyCond != nil {

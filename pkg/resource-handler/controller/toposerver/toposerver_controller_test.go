@@ -604,7 +604,11 @@ func TestTopoServerReconciler_FieldOwnershipIsolation(t *testing.T) {
 			},
 		})
 
-		r := &TopoServerReconciler{Client: fakeClient, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		r := &TopoServerReconciler{
+			Client:   fakeClient,
+			Scheme:   scheme,
+			Recorder: record.NewFakeRecorder(10),
+		}
 
 		if err := r.updateStatus(t.Context(), ts); err != nil {
 			t.Fatalf("updateStatus: %v", err)
@@ -625,79 +629,92 @@ func TestTopoServerReconciler_FieldOwnershipIsolation(t *testing.T) {
 		}
 	})
 
-	t.Run("guard patch contains exactly one condition (StorageClassValid) and no other status fields", func(t *testing.T) {
-		t.Parallel()
+	t.Run(
+		"guard patch contains exactly one condition (StorageClassValid) and no other status fields",
+		func(t *testing.T) {
+			t.Parallel()
 
-		ts := &multigresv1alpha1.TopoServer{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-field-owner-2",
-				Namespace: "default",
-				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
-			},
-			Spec: multigresv1alpha1.TopoServerSpec{
-				Etcd: &multigresv1alpha1.EtcdSpec{
-					Storage: multigresv1alpha1.StorageSpec{Class: "fast-ssd"},
+			ts := &multigresv1alpha1.TopoServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-field-owner-2",
+					Namespace: "default",
+					Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
 				},
-			},
-		}
-		sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast-ssd"}}
+				Spec: multigresv1alpha1.TopoServerSpec{
+					Etcd: &multigresv1alpha1.EtcdSpec{
+						Storage: multigresv1alpha1.StorageSpec{Class: "fast-ssd"},
+					},
+				},
+			}
+			sc := &storagev1.StorageClass{ObjectMeta: metav1.ObjectMeta{Name: "fast-ssd"}}
 
-		baseClient := fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(ts, sc).
-			WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
-			Build()
+			baseClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(ts, sc).
+				WithStatusSubresource(&multigresv1alpha1.TopoServer{}).
+				Build()
 
-		// Intercept the status patch to inspect the patch object.
-		var capturedPatchObj client.Object
-		fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
-			OnStatusPatch: func(obj client.Object) error {
-				capturedPatchObj = obj
-				return nil
-			},
-		})
+			// Intercept the status patch to inspect the patch object.
+			var capturedPatchObj client.Object
+			fakeClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+				OnStatusPatch: func(obj client.Object) error {
+					capturedPatchObj = obj
+					return nil
+				},
+			})
 
-		r := &TopoServerReconciler{Client: fakeClient, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+			r := &TopoServerReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
+			}
 
-		if err := r.validateEtcdStorageClassDependency(t.Context(), ts); err != nil {
-			t.Fatalf("guard: %v", err)
-		}
+			if err := r.validateEtcdStorageClassDependency(t.Context(), ts); err != nil {
+				t.Fatalf("guard: %v", err)
+			}
 
-		patchTS, ok := capturedPatchObj.(*multigresv1alpha1.TopoServer)
-		if !ok {
-			t.Fatalf("expected *TopoServer patch, got %T", capturedPatchObj)
-		}
+			patchTS, ok := capturedPatchObj.(*multigresv1alpha1.TopoServer)
+			if !ok {
+				t.Fatalf("expected *TopoServer patch, got %T", capturedPatchObj)
+			}
 
-		// Exactly one condition: StorageClassValid.
-		if len(patchTS.Status.Conditions) != 1 {
-			t.Fatalf("guard patch must contain exactly 1 condition, got %d: %v",
-				len(patchTS.Status.Conditions), patchTS.Status.Conditions)
-		}
-		scCond := &patchTS.Status.Conditions[0]
-		if scCond.Type != conditionStorageClassValid {
-			t.Fatalf("expected %s condition, got %s", conditionStorageClassValid, scCond.Type)
-		}
-		if scCond.Status != metav1.ConditionTrue || scCond.Reason != storageClassFoundReason {
-			t.Fatalf("unexpected condition: status=%s reason=%s", scCond.Status, scCond.Reason)
-		}
+			// Exactly one condition: StorageClassValid.
+			if len(patchTS.Status.Conditions) != 1 {
+				t.Fatalf("guard patch must contain exactly 1 condition, got %d: %v",
+					len(patchTS.Status.Conditions), patchTS.Status.Conditions)
+			}
+			scCond := &patchTS.Status.Conditions[0]
+			if scCond.Type != conditionStorageClassValid {
+				t.Fatalf("expected %s condition, got %s", conditionStorageClassValid, scCond.Type)
+			}
+			if scCond.Status != metav1.ConditionTrue || scCond.Reason != storageClassFoundReason {
+				t.Fatalf("unexpected condition: status=%s reason=%s", scCond.Status, scCond.Reason)
+			}
 
-		// No other status fields should be set in the guard patch.
-		if patchTS.Status.Phase != "" {
-			t.Fatalf("guard patch must not set Phase, got %q", patchTS.Status.Phase)
-		}
-		if patchTS.Status.Message != "" {
-			t.Fatalf("guard patch must not set Message, got %q", patchTS.Status.Message)
-		}
-		if patchTS.Status.ClientService != "" {
-			t.Fatalf("guard patch must not set ClientService, got %q", patchTS.Status.ClientService)
-		}
-		if patchTS.Status.PeerService != "" {
-			t.Fatalf("guard patch must not set PeerService, got %q", patchTS.Status.PeerService)
-		}
-		if patchTS.Status.ObservedGeneration != 0 {
-			t.Fatalf("guard patch must not set ObservedGeneration, got %d", patchTS.Status.ObservedGeneration)
-		}
-	})
+			// No other status fields should be set in the guard patch.
+			if patchTS.Status.Phase != "" {
+				t.Fatalf("guard patch must not set Phase, got %q", patchTS.Status.Phase)
+			}
+			if patchTS.Status.Message != "" {
+				t.Fatalf("guard patch must not set Message, got %q", patchTS.Status.Message)
+			}
+			if patchTS.Status.ClientService != "" {
+				t.Fatalf(
+					"guard patch must not set ClientService, got %q",
+					patchTS.Status.ClientService,
+				)
+			}
+			if patchTS.Status.PeerService != "" {
+				t.Fatalf("guard patch must not set PeerService, got %q", patchTS.Status.PeerService)
+			}
+			if patchTS.Status.ObservedGeneration != 0 {
+				t.Fatalf(
+					"guard patch must not set ObservedGeneration, got %d",
+					patchTS.Status.ObservedGeneration,
+				)
+			}
+		},
+	)
 }
 
 func TestTopoServerReconciler_StandaloneMocks(t *testing.T) {
