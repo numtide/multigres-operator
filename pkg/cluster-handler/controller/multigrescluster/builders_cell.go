@@ -50,8 +50,9 @@ func BuildCell(
 				RegisterCell: true,
 				PrunePoolers: isPruningEnabled(cluster),
 			},
-			Observability: cluster.Spec.Observability,
-			LogLevels:     cluster.Spec.LogLevels,
+			Observability:  cluster.Spec.Observability,
+			LogLevels:      cluster.Spec.LogLevels,
+			CertCommonName: cluster.Spec.CertCommonName,
 		},
 	}
 

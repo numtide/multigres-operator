@@ -219,6 +219,9 @@ func setupScheme() *runtime.Scheme {
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	// Register cert-manager Certificate so the fake client does not
+	// mutate the scheme at runtime (which panics under parallel tests).
+	registerCertManagerTypes(scheme)
 	return scheme
 }
 

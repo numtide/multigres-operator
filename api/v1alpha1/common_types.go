@@ -217,6 +217,13 @@ type PgBackRestTLSConfig struct {
 	SecretName string `json:"secretName,omitempty"`
 }
 
+const (
+	// CertSecretName is the Secret name used by cert-manager for the
+	// multigateway TLS certificate, matching the non-HA project convention.
+	// Referenced by both the Certificate spec and the Deployment volume.
+	CertSecretName = "generated-certs"
+)
+
 // ============================================================================
 // Domain Specific Types (Strong Typing)
 // ============================================================================

@@ -1766,3 +1766,124 @@ func TestBuildMultiGatewayDeployment_Observability(t *testing.T) {
 		t.Errorf("expected volumes to contain otel config")
 	}
 }
+
+func TestBuildMultiGatewayDeployment_TLS(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	t.Run("TLS enabled with certCommonName", func(t *testing.T) {
+		cellObj := &multigresv1alpha1.Cell{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-tls",
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+			},
+			Spec: multigresv1alpha1.CellSpec{
+				Name:           "zone-tls",
+				CertCommonName: "db.abc123.supabase.red",
+				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+					Address:  "global-topo:2379",
+					RootPath: "/multigres/global",
+				},
+				LogLevels: multigresv1alpha1.ComponentLogLevels{
+					Multigateway: "info",
+				},
+			},
+		}
+		deploy, err := BuildMultiGatewayDeployment(cellObj, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiGatewayDeployment failed: %v", err)
+		}
+
+		// Verify TLS volume exists
+		var foundVol bool
+		for _, v := range deploy.Spec.Template.Spec.Volumes {
+			if v.Name == tlsVolumeName {
+				foundVol = true
+				if v.Secret == nil {
+					t.Error("TLS volume should use a Secret source")
+				} else if v.Secret.SecretName != multigresv1alpha1.CertSecretName {
+					t.Errorf(
+						"TLS volume secretName = %q, want %q",
+						v.Secret.SecretName, multigresv1alpha1.CertSecretName,
+					)
+				}
+			}
+		}
+		if !foundVol {
+			t.Errorf("expected TLS volume %q in pod spec", tlsVolumeName)
+		}
+
+		// Verify TLS volumeMount exists
+		container := deploy.Spec.Template.Spec.Containers[0]
+		var foundMount bool
+		for _, m := range container.VolumeMounts {
+			if m.Name == tlsVolumeName {
+				foundMount = true
+				if m.MountPath != tlsMountPath {
+					t.Errorf("TLS mount path = %q, want %q", m.MountPath, tlsMountPath)
+				}
+				if !m.ReadOnly {
+					t.Error("TLS mount should be readOnly")
+				}
+			}
+		}
+		if !foundMount {
+			t.Errorf("expected TLS volumeMount %q in container", tlsVolumeName)
+		}
+
+		// Verify TLS args are appended
+		args := container.Args
+		wantArgs := []string{
+			"--pg-tls-cert-file", tlsCertFile,
+			"--pg-tls-key-file", tlsKeyFile,
+		}
+		// The TLS args should be the last 4 args
+		if len(args) < 4 {
+			t.Fatalf("expected at least 4 args, got %d", len(args))
+		}
+		tailArgs := args[len(args)-4:]
+		if diff := cmp.Diff(wantArgs, tailArgs); diff != "" {
+			t.Errorf("TLS args mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("TLS disabled without certCommonName", func(t *testing.T) {
+		cellObj := &multigresv1alpha1.Cell{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-no-tls",
+				Namespace: "default",
+				Labels:    map[string]string{"multigres.com/cluster": "test-cluster"},
+			},
+			Spec: multigresv1alpha1.CellSpec{
+				Name: "zone-no-tls",
+				GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+					Address:  "global-topo:2379",
+					RootPath: "/multigres/global",
+				},
+				LogLevels: multigresv1alpha1.ComponentLogLevels{
+					Multigateway: "info",
+				},
+			},
+		}
+		deploy, err := BuildMultiGatewayDeployment(cellObj, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiGatewayDeployment failed: %v", err)
+		}
+
+		// No TLS volume should exist
+		for _, v := range deploy.Spec.Template.Spec.Volumes {
+			if v.Name == tlsVolumeName {
+				t.Error("TLS volume should not be present when CertCommonName is empty")
+			}
+		}
+
+		// No TLS args should be present
+		container := deploy.Spec.Template.Spec.Containers[0]
+		for _, arg := range container.Args {
+			if arg == "--pg-tls-cert-file" || arg == "--pg-tls-key-file" {
+				t.Errorf("TLS arg %q should not be present when CertCommonName is empty", arg)
+			}
+		}
+	})
+}

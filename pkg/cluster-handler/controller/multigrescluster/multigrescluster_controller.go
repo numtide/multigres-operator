@@ -210,6 +210,27 @@ func (r *MultigresClusterReconciler) Reconcile(
 		}
 	}
 
+	{
+		ctx, childSpan := monitoring.StartChildSpan(
+			ctx,
+			"MultigresCluster.ReconcileCertificate",
+		)
+		if err := r.reconcileCertificate(ctx, cluster); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			l.Error(err, "Failed to reconcile TLS Certificate")
+			r.Recorder.Eventf(
+				cluster,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile TLS Certificate: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+		childSpan.End()
+	}
+
 	var pendingCells, pendingDBs bool
 
 	{

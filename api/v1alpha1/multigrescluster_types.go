@@ -34,6 +34,7 @@ import (
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // -- Certificate Manager Permissions (ADDED) --
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update;patch
@@ -133,6 +134,14 @@ type MultigresClusterSpec struct {
 	// Defaults to "AT_LEAST_2" if not set.
 	// +optional
 	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
+
+	// CertCommonName is the DNS name used as the Common Name and SAN for the
+	// multigateway TLS certificate (e.g., "db.abc123.supabase.red").
+	// When set, the cluster controller creates a cert-manager Certificate resource
+	// and the cell controller mounts the resulting TLS secret into the multigateway pods.
+	// When empty, the multigateway runs without TLS.
+	// +optional
+	CertCommonName string `json:"certCommonName,omitempty"`
 }
 
 // ============================================================================

@@ -31,6 +31,12 @@ const (
 	// MultiGatewayPostgresPort is the port for database connections,
 	// used by both the container and the Kubernetes Service.
 	MultiGatewayPostgresPort int32 = 5432
+
+	// TLS volume/mount constants for the multigateway cert-manager certificate.
+	tlsVolumeName = "tls-certs"
+	tlsMountPath  = "/etc/multigateway/tls"
+	tlsCertFile   = tlsMountPath + "/tls.crt"
+	tlsKeyFile    = tlsMountPath + "/tls.key"
 )
 
 // BuildMultiGatewayDeploymentName generates the Deployment name.
@@ -184,6 +190,33 @@ func BuildMultiGatewayDeployment(
 		podSpec := &deployment.Spec.Template.Spec
 		podSpec.Volumes = append(podSpec.Volumes, *otelVol)
 		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, *otelMount)
+	}
+
+	// Mount TLS certificate and add flags when CertCommonName is configured.
+	if cell.Spec.CertCommonName != "" {
+		podSpec := &deployment.Spec.Template.Spec
+		defaultMode := int32(0o440)
+		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+			Name: tlsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  multigresv1alpha1.CertSecretName,
+					DefaultMode: &defaultMode,
+				},
+			},
+		})
+		podSpec.Containers[0].VolumeMounts = append(
+			podSpec.Containers[0].VolumeMounts,
+			corev1.VolumeMount{
+				Name:      tlsVolumeName,
+				MountPath: tlsMountPath,
+				ReadOnly:  true,
+			},
+		)
+		podSpec.Containers[0].Args = append(podSpec.Containers[0].Args,
+			"--pg-tls-cert-file", tlsCertFile,
+			"--pg-tls-key-file", tlsKeyFile,
+		)
 	}
 
 	if err := ctrl.SetControllerReference(cell, deployment, scheme); err != nil {
