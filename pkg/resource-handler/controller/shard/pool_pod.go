@@ -96,6 +96,7 @@ func BuildPoolPod(
 			},
 			Containers: []corev1.Container{
 				buildPgctldContainer(shard, poolSpec),
+				buildPostgresExporterContainer(shard, poolSpec),
 			},
 			Volumes:      volumes,
 			Affinity:     poolSpec.Affinity,

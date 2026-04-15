@@ -24,4 +24,7 @@ const (
 
 	// DefaultMultiGatewayImage is the default container image for the MultiGateway component.
 	DefaultMultiGatewayImage = "ghcr.io/multigres/multigres:sha-cbc77e3"
+
+	// DefaultPostgresExporterImage is the default container image for postgres_exporter sidecars.
+	DefaultPostgresExporterImage = "quay.io/prometheuscommunity/postgres-exporter:v0.18.1"
 )
