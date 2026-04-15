@@ -259,16 +259,14 @@ func TestReconcileCertificate(t *testing.T) {
 			t.Fatalf("new Certificate should exist: %v", err)
 		}
 
-		// Old cert is still around (ownerRef GC handles it in a real
-		// cluster, but the fake client doesn't simulate GC).
+		// Old cert should be deleted by reconcileCertificate
 		old := &unstructured.Unstructured{}
 		old.SetGroupVersionKind(certGVK)
-		err := fc.Get(t.Context(), types.NamespacedName{
+		if err := fc.Get(t.Context(), types.NamespacedName{
 			Name: "db.old.supabase.red", Namespace: "default",
-		}, old)
-		// Not asserting deletion here — Kubernetes GC handles orphan
-		// cleanup via ownerReferences in a live cluster.
-		_ = err
+		}, old); err == nil {
+			t.Error("old Certificate should be deleted on CN change")
+		}
 	})
 
 	t.Run("CN unset cleans up Certificate", func(t *testing.T) {

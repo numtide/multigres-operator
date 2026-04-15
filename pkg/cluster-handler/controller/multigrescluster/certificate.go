@@ -97,33 +97,50 @@ func (r *MultigresClusterReconciler) reconcileCertificate(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) error {
-	logger := log.FromContext(ctx)
+	// Clean up stale Certificates owned by this cluster. When the CN
+	// changes the old Certificate (named after the previous CN) would
+	// otherwise linger and conflict on the same generated-certs secret.
+	// When the CN is empty this removes all our Certificates.
+	if err := r.deleteOwnedCertificates(
+		ctx, cluster, cluster.Spec.CertCommonName,
+	); err != nil {
+		return err
+	}
 
-	if cluster.Spec.CertCommonName != "" {
-		desired, err := buildCertificate(cluster, r.Scheme)
-		if err != nil {
-			return fmt.Errorf(
-				"failed to build cert-manager Certificate: %w", err,
-			)
-		}
-		if err := r.Patch(
-			ctx,
-			desired,
-			client.Apply,
-			client.ForceOwnership,
-			client.FieldOwner("multigres-operator"),
-		); err != nil {
-			return fmt.Errorf(
-				"failed to apply cert-manager Certificate: %w", err,
-			)
-		}
+	if cluster.Spec.CertCommonName == "" {
 		return nil
 	}
 
-	// CertCommonName is empty — clean up any Certificate whose secret is
-	// generated-certs and that we own (ownerRef points to this cluster).
-	// We list rather than Get-by-name because the old CN (which was the
-	// resource name) is no longer in the spec.
+	desired, err := buildCertificate(cluster, r.Scheme)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to build cert-manager Certificate: %w", err,
+		)
+	}
+	if err := r.Patch(
+		ctx,
+		desired,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf(
+			"failed to apply cert-manager Certificate: %w", err,
+		)
+	}
+	return nil
+}
+
+// deleteOwnedCertificates removes cert-manager Certificates owned by this
+// cluster whose name does not match keepName. Pass "" for keepName to delete
+// all Certificates owned by this cluster (used when TLS is disabled).
+func (r *MultigresClusterReconciler) deleteOwnedCertificates(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+	keepName string,
+) error {
+	logger := log.FromContext(ctx)
+
 	certList := &unstructured.UnstructuredList{}
 	certList.SetGroupVersionKind(certGVK)
 	if err := r.List(
@@ -131,7 +148,6 @@ func (r *MultigresClusterReconciler) reconcileCertificate(
 		certList,
 		client.InNamespace(cluster.Namespace),
 	); err != nil {
-		// If the CRD doesn't exist (cert-manager not installed), skip cleanup.
 		if errors.IsNotFound(err) || isNoMatchError(err) {
 			return nil
 		}
@@ -145,14 +161,18 @@ func (r *MultigresClusterReconciler) reconcileCertificate(
 		if !isOwnedBy(cert, cluster) {
 			continue
 		}
-		if err := r.Delete(ctx, cert); err != nil && !errors.IsNotFound(err) {
+		if cert.GetName() == keepName {
+			continue
+		}
+		if err := r.Delete(ctx, cert); err != nil &&
+			!errors.IsNotFound(err) {
 			return fmt.Errorf(
 				"failed to delete cert-manager Certificate %q: %w",
 				cert.GetName(), err,
 			)
 		}
 		logger.Info(
-			"Deleted orphaned TLS Certificate",
+			"Deleted stale TLS Certificate",
 			"certificate", cert.GetName(),
 		)
 	}
