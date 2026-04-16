@@ -101,6 +101,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone1",
@@ -121,6 +122,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -237,6 +243,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone2",
@@ -257,6 +264,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -373,6 +385,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone3",
@@ -393,6 +406,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -535,6 +553,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone4",
@@ -555,6 +574,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -705,6 +729,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone5",
@@ -734,6 +759,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -865,6 +895,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone-labels",
@@ -885,6 +916,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -1006,6 +1042,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone-override",
@@ -1026,6 +1063,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -1142,6 +1184,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "zone-topo",
@@ -1162,6 +1205,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},
@@ -1281,6 +1329,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										"--http-port", "15100",
 										"--grpc-port", "15170",
 										"--pg-port", "5432",
+										"--pg-replica-port", "5433",
 										"--topo-global-server-addresses", "global-topo:2379",
 										"--topo-global-root", "/multigres/global",
 										"--cell", "region-cell",
@@ -1301,6 +1350,11 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 										{
 											Name:          "postgres",
 											ContainerPort: MultiGatewayPostgresPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+										{
+											Name:          "postgres-replica",
+											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
 									},

@@ -32,6 +32,9 @@ const (
 	// used by both the container and the Kubernetes Service.
 	MultiGatewayPostgresPort int32 = 5432
 
+	// MultiGatewayPostgresReplicaPort is the default port for replica-read database connections.
+	MultiGatewayPostgresReplicaPort int32 = 5433
+
 	// TLS volume/mount constants for the multigateway cert-manager certificate.
 	tlsVolumeName = "tls-certs"
 	tlsMountPath  = "/etc/multigateway/tls"
@@ -118,6 +121,8 @@ func BuildMultiGatewayDeployment(
 								fmt.Sprintf("%d", MultiGatewayGRPCPort),
 								"--pg-port",
 								fmt.Sprintf("%d", MultiGatewayPostgresPort),
+								"--pg-replica-port",
+								fmt.Sprintf("%d", MultiGatewayPostgresReplicaPort),
 								"--topo-global-server-addresses",
 								cell.Spec.GlobalTopoServer.Address,
 								"--topo-global-root",
@@ -143,6 +148,11 @@ func BuildMultiGatewayDeployment(
 								{
 									Name:          "postgres",
 									ContainerPort: MultiGatewayPostgresPort,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "postgres-replica",
+									ContainerPort: MultiGatewayPostgresReplicaPort,
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
