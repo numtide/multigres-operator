@@ -124,6 +124,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--http-port", "15100",
 											"--grpc-port", "15170",
 											"--pg-port", "5432",
+											"--pg-replica-port", "5433",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone1",
@@ -133,6 +134,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
+											tcpPort(t, "postgres-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -251,6 +253,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--http-port", "15100",
 											"--grpc-port", "15170",
 											"--pg-port", "5432",
+											"--pg-replica-port", "5433",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone2",
@@ -260,6 +263,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
+											tcpPort(t, "postgres-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -378,6 +382,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--http-port", "15100",
 											"--grpc-port", "15170",
 											"--pg-port", "5432",
+											"--pg-replica-port", "5433",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone3",
@@ -387,6 +392,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
+											tcpPort(t, "postgres-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -522,6 +528,7 @@ func TestCellReconciliation(t *testing.T) {
 											"--http-port", "15100",
 											"--grpc-port", "15170",
 											"--pg-port", "5432",
+											"--pg-replica-port", "5433",
 											"--topo-global-server-addresses", "global-topo:2379",
 											"--topo-global-root", "/multigres/global",
 											"--cell", "zone4",
@@ -531,6 +538,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
+											tcpPort(t, "postgres-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
