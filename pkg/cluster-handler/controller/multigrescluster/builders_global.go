@@ -17,7 +17,7 @@ import (
 
 const (
 	globalMultiGatewayReplicaPort       int32 = 5433
-	globalMultiGatewayReplicaTargetPort       = "postgres-replica"
+	globalMultiGatewayReplicaTargetPort       = "pg-replica"
 )
 
 // BuildGlobalTopoServer constructs the desired TopoServer for the global topology.
@@ -499,7 +499,7 @@ func BuildMultiGatewayGlobalReplicaService(
 			Type:     corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "postgres-replica",
+					Name:       "pg-replica",
 					Port:       globalMultiGatewayReplicaPort,
 					TargetPort: intstr.FromString(globalMultiGatewayReplicaTargetPort),
 					Protocol:   corev1.ProtocolTCP,

@@ -125,7 +125,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -267,7 +267,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -409,7 +409,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -577,7 +577,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -762,7 +762,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -919,7 +919,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -1066,7 +1066,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -1208,7 +1208,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},
@@ -1353,7 +1353,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 											Protocol:      corev1.ProtocolTCP,
 										},
 										{
-											Name:          "postgres-replica",
+											Name:          "pg-replica",
 											ContainerPort: MultiGatewayPostgresReplicaPort,
 											Protocol:      corev1.ProtocolTCP,
 										},

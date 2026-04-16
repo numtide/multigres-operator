@@ -668,9 +668,9 @@ func TestBuildMultiGatewayGlobalReplicaService(t *testing.T) {
 
 	require.Len(t, got.Spec.Ports, 1)
 	assert.Equal(t, corev1.ServicePort{
-		Name:       "postgres-replica",
+		Name:       "pg-replica",
 		Port:       5433,
-		TargetPort: intstr.FromString("postgres-replica"),
+		TargetPort: intstr.FromString("pg-replica"),
 		Protocol:   corev1.ProtocolTCP,
 	}, got.Spec.Ports[0])
 

@@ -112,9 +112,9 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "postgres-replica",
+					Name:       "pg-replica",
 					Port:       5433,
-					TargetPort: intstr.FromString("postgres-replica"),
+					TargetPort: intstr.FromString("pg-replica"),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
@@ -225,9 +225,9 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "postgres-replica",
+					Name:       "pg-replica",
 					Port:       5433,
-					TargetPort: intstr.FromString("postgres-replica"),
+					TargetPort: intstr.FromString("pg-replica"),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},

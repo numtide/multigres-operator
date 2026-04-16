@@ -134,7 +134,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
-											tcpPort(t, "postgres-replica", 5433),
+											tcpPort(t, "pg-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -263,7 +263,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
-											tcpPort(t, "postgres-replica", 5433),
+											tcpPort(t, "pg-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -392,7 +392,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
-											tcpPort(t, "postgres-replica", 5433),
+											tcpPort(t, "pg-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
@@ -538,7 +538,7 @@ func TestCellReconciliation(t *testing.T) {
 											tcpPort(t, "http", 15100),
 											tcpPort(t, "grpc", 15170),
 											tcpPort(t, "postgres", 5432),
-											tcpPort(t, "postgres-replica", 5433),
+											tcpPort(t, "pg-replica", 5433),
 										},
 										StartupProbe: &corev1.Probe{
 											ProbeHandler: corev1.ProbeHandler{
