@@ -554,7 +554,10 @@ func TestReconcile_Global(t *testing.T) {
 				gwReplicaSvc := &corev1.Service{}
 				if err := c.Get(
 					ctx,
-					types.NamespacedName{Name: clusterName + "-multigateway-replica", Namespace: namespace},
+					types.NamespacedName{
+						Name:      clusterName + "-multigateway-replica",
+						Namespace: namespace,
+					},
 					gwReplicaSvc,
 				); err != nil {
 					t.Fatalf("Expected global multigateway replica Service to exist: %v", err)
@@ -562,7 +565,10 @@ func TestReconcile_Global(t *testing.T) {
 				if len(gwReplicaSvc.Spec.Ports) != 1 ||
 					gwReplicaSvc.Spec.Ports[0].Port != 5433 ||
 					gwReplicaSvc.Spec.Ports[0].TargetPort != intstr.FromString("postgres-replica") {
-					t.Errorf("Global multigateway replica Service ports mismatch: %+v", gwReplicaSvc.Spec.Ports)
+					t.Errorf(
+						"Global multigateway replica Service ports mismatch: %+v",
+						gwReplicaSvc.Spec.Ports,
+					)
 				}
 			},
 		},
