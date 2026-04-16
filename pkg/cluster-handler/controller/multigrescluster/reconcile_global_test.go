@@ -564,7 +564,7 @@ func TestReconcile_Global(t *testing.T) {
 				}
 				if len(gwReplicaSvc.Spec.Ports) != 1 ||
 					gwReplicaSvc.Spec.Ports[0].Port != 5433 ||
-					gwReplicaSvc.Spec.Ports[0].TargetPort != intstr.FromString("postgres-replica") {
+					gwReplicaSvc.Spec.Ports[0].TargetPort != intstr.FromString("pg-replica") {
 					t.Errorf(
 						"Global multigateway replica Service ports mismatch: %+v",
 						gwReplicaSvc.Spec.Ports,
