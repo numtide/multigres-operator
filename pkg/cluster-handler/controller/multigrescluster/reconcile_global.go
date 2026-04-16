@@ -16,10 +16,11 @@ import (
 
 // Builder function variables to allow mocking in tests
 var (
-	buildMultiAdminService         = BuildMultiAdminService
-	buildMultiAdminWebDeployment   = BuildMultiAdminWebDeployment
-	buildMultiAdminWebService      = BuildMultiAdminWebService
-	buildMultiGatewayGlobalService = BuildMultiGatewayGlobalService
+	buildMultiAdminService                = BuildMultiAdminService
+	buildMultiAdminWebDeployment          = BuildMultiAdminWebDeployment
+	buildMultiAdminWebService             = BuildMultiAdminWebService
+	buildMultiGatewayGlobalService        = BuildMultiGatewayGlobalService
+	buildMultiGatewayGlobalReplicaService = BuildMultiGatewayGlobalReplicaService
 )
 
 func (r *MultigresClusterReconciler) reconcileGlobalComponents(
@@ -267,6 +268,23 @@ func (r *MultigresClusterReconciler) reconcileMultiAdminWeb(
 		client.FieldOwner("multigres-operator"),
 	); err != nil {
 		return fmt.Errorf("failed to apply global multigateway service: %w", err)
+	}
+
+	// 4. Reconcile global replica-read multigateway Service
+	desiredReplicaGwSvc, err := buildMultiGatewayGlobalReplicaService(cluster, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to build global replica multigateway service: %w", err)
+	}
+
+	desiredReplicaGwSvc.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := r.Patch(
+		ctx,
+		desiredReplicaGwSvc,
+		client.Apply,
+		client.ForceOwnership,
+		client.FieldOwner("multigres-operator"),
+	); err != nil {
+		return fmt.Errorf("failed to apply global replica multigateway service: %w", err)
 	}
 
 	return nil
