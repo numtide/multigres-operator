@@ -15,6 +15,11 @@ import (
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
+const (
+	globalMultiGatewayReplicaPort       int32 = 5433
+	globalMultiGatewayReplicaTargetPort       = "postgres-replica"
+)
+
 // BuildGlobalTopoServer constructs the desired TopoServer for the global topology.
 // Note: We do NOT use safe hashing here because GlobalTopo is a singleton resource
 // per cluster with a predictable name pattern that is unlikely to exceed length limits.
@@ -456,6 +461,47 @@ func BuildMultiGatewayGlobalService(
 					Name:       "postgres",
 					Port:       5432,
 					TargetPort: intstr.FromString("postgres"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, svc, scheme); err != nil {
+		return nil, err
+	}
+
+	return svc, nil
+}
+
+// BuildMultiGatewayGlobalReplicaService constructs a cluster-level Service that
+// selects all multigateway pods across all cells and exposes the replica-read endpoint.
+func BuildMultiGatewayGlobalReplicaService(
+	cluster *multigresv1alpha1.MultigresCluster,
+	scheme *runtime.Scheme,
+) (*corev1.Service, error) {
+	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentMultiGateway)
+	metadata.AddClusterLabel(labels, cluster.Name)
+
+	selector := map[string]string{
+		metadata.LabelAppComponent: metadata.ComponentMultiGateway,
+		metadata.LabelAppInstance:  cluster.Name,
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-multigateway-replica", cluster.Name),
+			Namespace: cluster.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: selector,
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "postgres-replica",
+					Port:       globalMultiGatewayReplicaPort,
+					TargetPort: intstr.FromString(globalMultiGatewayReplicaTargetPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},

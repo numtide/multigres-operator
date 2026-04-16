@@ -645,3 +645,46 @@ func TestBuildMultiGatewayGlobalService(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestBuildMultiGatewayGlobalReplicaService(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: "default",
+			UID:       "cluster-uid",
+		},
+	}
+
+	got, err := BuildMultiGatewayGlobalReplicaService(cluster, scheme)
+	require.NoError(t, err)
+
+	assert.Equal(t, "my-cluster-multigateway-replica", got.Name)
+	assert.Equal(t, "default", got.Namespace)
+	assert.Equal(t, corev1.ServiceTypeClusterIP, got.Spec.Type)
+
+	require.Len(t, got.Spec.Ports, 1)
+	assert.Equal(t, corev1.ServicePort{
+		Name:       "postgres-replica",
+		Port:       5433,
+		TargetPort: intstr.FromString("postgres-replica"),
+		Protocol:   corev1.ProtocolTCP,
+	}, got.Spec.Ports[0])
+
+	assert.Equal(t, map[string]string{
+		"app.kubernetes.io/component": "multigateway",
+		"app.kubernetes.io/instance":  "my-cluster",
+	}, got.Spec.Selector)
+
+	require.Len(t, got.OwnerReferences, 1)
+	assert.Equal(t, "my-cluster", got.OwnerReferences[0].Name)
+
+	t.Run("ControllerRefError", func(t *testing.T) {
+		emptyScheme := runtime.NewScheme()
+		_, err := BuildMultiGatewayGlobalReplicaService(cluster, emptyScheme)
+		assert.Error(t, err)
+	})
+}
