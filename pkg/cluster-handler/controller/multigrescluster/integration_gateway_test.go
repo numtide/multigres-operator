@@ -97,8 +97,34 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 		},
 	}
 
+	expectedReplicaGwSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            clusterName + "-multigateway-replica",
+			Namespace:       testNamespace,
+			Labels:          gwLabels,
+			OwnerReferences: clusterOwnerRefs(t, clusterName),
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				metadata.LabelAppComponent: metadata.ComponentMultiGateway,
+				metadata.LabelAppInstance:  clusterName,
+			},
+			Type: corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "postgres-replica",
+					Port:       5433,
+					TargetPort: intstr.FromString("postgres-replica"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
 	require.NoError(t, watcher.WaitForMatch(expectedGwSvc),
 		"global multigateway Service should be ClusterIP with externalIPs and annotations")
+	require.NoError(t, watcher.WaitForMatch(expectedReplicaGwSvc),
+		"global multigateway replica Service should be ClusterIP")
 
 	// Step 3: Verify initial condition is NoReadyGateways (endpoint assigned via externalIP, 0 ready gateways).
 	assert.Eventually(t, func() bool {
@@ -184,8 +210,34 @@ func TestExternalGateway_EnableDisableLifecycle(t *testing.T) {
 		},
 	}
 
+	expectedReplicaClusterIPSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            clusterName + "-multigateway-replica",
+			Namespace:       testNamespace,
+			Labels:          gwLabels,
+			OwnerReferences: clusterOwnerRefs(t, clusterName),
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				metadata.LabelAppComponent: metadata.ComponentMultiGateway,
+				metadata.LabelAppInstance:  clusterName,
+			},
+			Type: corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "postgres-replica",
+					Port:       5433,
+					TargetPort: intstr.FromString("postgres-replica"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
 	require.NoError(t, watcher.WaitForMatch(expectedClusterIPSvc),
 		"global multigateway Service should revert to ClusterIP after disabling")
+	require.NoError(t, watcher.WaitForMatch(expectedReplicaClusterIPSvc),
+		"global multigateway replica Service should remain ClusterIP")
 
 	// Step 8: Verify gateway status is nil and condition is removed.
 	assert.Eventually(t, func() bool {
