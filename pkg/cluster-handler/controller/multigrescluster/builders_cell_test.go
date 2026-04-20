@@ -9,6 +9,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 	"github.com/multigres/multigres-operator/pkg/util/name"
 )
 
@@ -94,6 +95,36 @@ func TestBuildCell(t *testing.T) {
 		)
 		if err == nil {
 			t.Error("Expected error due to missing scheme types, got nil")
+		}
+	})
+
+	t.Run("Propagates explicit project ref annotation", func(t *testing.T) {
+		clusterWithProjectRef := cluster.DeepCopy()
+		clusterWithProjectRef.Annotations = map[string]string{
+			metadata.AnnotationProjectRef: "proj_123",
+		}
+
+		got, err := BuildCell(
+			clusterWithProjectRef,
+			cellCfg,
+			gatewaySpec,
+			noGatewayPlacement,
+			localTopoSpec,
+			globalTopoRef,
+			allCells,
+			scheme,
+		)
+		if err != nil {
+			t.Fatalf("BuildCell() error = %v", err)
+		}
+
+		if got.Annotations[metadata.AnnotationProjectRef] != "proj_123" {
+			t.Fatalf(
+				"annotation %q = %q, want %q",
+				metadata.AnnotationProjectRef,
+				got.Annotations[metadata.AnnotationProjectRef],
+				"proj_123",
+			)
 		}
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 	"github.com/multigres/multigres-operator/pkg/util/name"
 )
 
@@ -121,6 +122,27 @@ func TestBuildShard(t *testing.T) {
 		_, err := BuildShard(tg, shardSpec, emptyScheme)
 		if err == nil {
 			t.Error("Expected error due to missing scheme types, got nil")
+		}
+	})
+
+	t.Run("Propagates explicit project ref annotation", func(t *testing.T) {
+		tgWithProjectRef := tg.DeepCopy()
+		tgWithProjectRef.Annotations = map[string]string{
+			metadata.AnnotationProjectRef: "proj_123",
+		}
+
+		got, err := BuildShard(tgWithProjectRef, shardSpec, scheme)
+		if err != nil {
+			t.Fatalf("BuildShard() error = %v", err)
+		}
+
+		if got.Annotations[metadata.AnnotationProjectRef] != "proj_123" {
+			t.Fatalf(
+				"annotation %q = %q, want %q",
+				metadata.AnnotationProjectRef,
+				got.Annotations[metadata.AnnotationProjectRef],
+				"proj_123",
+			)
 		}
 	})
 }
