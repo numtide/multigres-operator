@@ -30,12 +30,19 @@ func BuildTableGroup(
 	metadata.AddClusterLabel(labels, cluster.Name)
 	metadata.AddDatabaseLabel(labels, dbCfg.Name)
 	metadata.AddTableGroupLabel(labels, tgCfg.Name)
+	var annotations map[string]string
+	if projectRef := cluster.Annotations[metadata.AnnotationProjectRef]; projectRef != "" {
+		annotations = map[string]string{
+			metadata.AnnotationProjectRef: projectRef,
+		}
+	}
 
 	tgCR := &multigresv1alpha1.TableGroup{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tgNameHash,
-			Namespace: cluster.Namespace,
-			Labels:    labels,
+			Name:        tgNameHash,
+			Namespace:   cluster.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: multigresv1alpha1.TableGroupSpec{
 			DatabaseName:   dbCfg.Name,

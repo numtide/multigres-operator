@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -137,6 +138,36 @@ func TestBuildTableGroup(t *testing.T) {
 		)
 		if err == nil {
 			t.Error("Expected error due to missing scheme types, got nil")
+		}
+	})
+
+	t.Run("Propagates explicit project ref annotation", func(t *testing.T) {
+		clusterWithProjectRef := cluster.DeepCopy()
+		clusterWithProjectRef.Annotations = map[string]string{
+			metadata.AnnotationProjectRef: "proj_123",
+		}
+		tgCfg := &multigresv1alpha1.TableGroupConfig{Name: "tg-with-project-ref"}
+		resolvedShards := []multigresv1alpha1.ShardResolvedSpec{{Name: "shard-0"}}
+
+		got, err := BuildTableGroup(
+			clusterWithProjectRef,
+			dbCfg,
+			tgCfg,
+			resolvedShards,
+			globalTopoRef,
+			scheme,
+		)
+		if err != nil {
+			t.Fatalf("BuildTableGroup() error = %v", err)
+		}
+
+		if got.Annotations[metadata.AnnotationProjectRef] != "proj_123" {
+			t.Fatalf(
+				"annotation %q = %q, want %q",
+				metadata.AnnotationProjectRef,
+				got.Annotations[metadata.AnnotationProjectRef],
+				"proj_123",
+			)
 		}
 	})
 }

@@ -33,12 +33,19 @@ func BuildShard(
 	metadata.AddDatabaseLabel(labels, tg.Spec.DatabaseName)
 	metadata.AddTableGroupLabel(labels, tg.Spec.TableGroupName)
 	metadata.AddShardLabel(labels, multigresv1alpha1.ShardName(shardSpec.Name))
+	var annotations map[string]string
+	if projectRef := tg.Annotations[metadata.AnnotationProjectRef]; projectRef != "" {
+		annotations = map[string]string{
+			metadata.AnnotationProjectRef: projectRef,
+		}
+	}
 
 	shardCR := &multigresv1alpha1.Shard{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      shardNameFull,
-			Namespace: tg.Namespace,
-			Labels:    labels,
+			Name:        shardNameFull,
+			Namespace:   tg.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: multigresv1alpha1.ShardSpec{
 			DatabaseName:      tg.Spec.DatabaseName,

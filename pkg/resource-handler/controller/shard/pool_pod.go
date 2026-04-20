@@ -58,6 +58,7 @@ func BuildPoolPod(
 	scheme *runtime.Scheme,
 ) (*corev1.Pod, error) {
 	podName := BuildPoolPodName(shard, poolName, cellName, index)
+	clusterName := shard.Labels["multigres.com/cluster"]
 	labels := buildPoolLabelsWithCell(shard, poolName, cellName)
 
 	// Construct volumes: reuse shared volumes and prepend the per-pod data PVC.
@@ -76,6 +77,10 @@ func BuildPoolPod(
 
 	annotations := map[string]string{
 		metadata.AnnotationSpecHash: "", // placeholder, computed below
+		metadata.AnnotationProjectRef: metadata.ResolveProjectRef(
+			shard.Annotations,
+			clusterName,
+		),
 	}
 	if h := shard.Annotations[metadata.AnnotationPostgresConfigHash]; h != "" {
 		annotations[metadata.AnnotationPostgresConfigHash] = h

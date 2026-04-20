@@ -6,6 +6,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
 	github.com/multigres/multigres v0.0.0-20260410093709-cbc77e3b0997
+	pgregory.net/rapid v1.2.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/stretchr/testify v1.11.1

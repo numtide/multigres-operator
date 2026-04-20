@@ -24,13 +24,20 @@ func BuildCell(
 	labels := metadata.BuildStandardLabels(cluster.Name, metadata.ComponentCell)
 	metadata.AddClusterLabel(labels, cluster.Name)
 	metadata.AddCellLabel(labels, cellCfg.Name)
+	var annotations map[string]string
+	if projectRef := cluster.Annotations[metadata.AnnotationProjectRef]; projectRef != "" {
+		annotations = map[string]string{
+			metadata.AnnotationProjectRef: projectRef,
+		}
+	}
 
 	cellCR := &multigresv1alpha1.Cell{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name.JoinWithConstraints(
 				name.DefaultConstraints, cluster.Name, string(cellCfg.Name)),
-			Namespace: cluster.Namespace,
-			Labels:    labels,
+			Namespace:   cluster.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Spec: multigresv1alpha1.CellSpec{
 			Name:   cellCfg.Name,

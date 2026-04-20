@@ -13,6 +13,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 	"github.com/multigres/multigres-operator/pkg/util/name"
 )
 
@@ -1443,6 +1444,13 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 					tc.want.Spec.Template.Labels["app.kubernetes.io/instance"] = tc.cell.Labels["multigres.com/cluster"]
 					tc.want.Spec.Template.Labels["multigres.com/cell"] = string(tc.cell.Spec.Name)
 				}
+				if tc.want.Spec.Template.Annotations == nil {
+					tc.want.Spec.Template.Annotations = map[string]string{}
+				}
+				tc.want.Spec.Template.Annotations[metadata.AnnotationProjectRef] = metadata.ResolveProjectRef(
+					tc.cell.Annotations,
+					tc.cell.Labels[metadata.LabelMultigresCluster],
+				)
 			}
 
 			got, err := BuildMultiGatewayDeployment(tc.cell, tc.scheme)
@@ -1458,6 +1466,75 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("BuildMultiGatewayDeployment() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestBuildMultiGatewayDeployment_ProjectRefAnnotation(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	tests := map[string]struct {
+		annotations map[string]string
+		want        string
+	}{
+		"falls back to cluster name": {
+			want: "test-cluster",
+		},
+		"uses explicit project ref": {
+			annotations: map[string]string{
+				metadata.AnnotationProjectRef: "proj_123",
+			},
+			want: "proj_123",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cell := &multigresv1alpha1.Cell{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-cell",
+					Namespace:   "default",
+					UID:         "test-uid",
+					Labels:      map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+					Annotations: tc.annotations,
+				},
+				Spec: multigresv1alpha1.CellSpec{
+					Name: "zone1",
+					GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+						Address:        "global-topo:2379",
+						RootPath:       "/multigres/global",
+						Implementation: "etcd",
+					},
+					LogLevels: multigresv1alpha1.ComponentLogLevels{
+						Pgctld:       "info",
+						Multipooler:  "info",
+						Multiorch:    "info",
+						Multiadmin:   "info",
+						Multigateway: "info",
+					},
+				},
+			}
+
+			deploy, err := BuildMultiGatewayDeployment(cell, scheme)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got := deploy.Spec.Template.Annotations[metadata.AnnotationProjectRef]; got != tc.want {
+				t.Fatalf("annotation %q = %q, want %q", metadata.AnnotationProjectRef, got, tc.want)
+			}
+
+			assertedLabels := map[string]string{
+				metadata.LabelAppInstance:  "test-cluster",
+				metadata.LabelAppComponent: MultiGatewayComponentName,
+				metadata.LabelAppManagedBy: metadata.ManagedByMultigres,
+			}
+			for key, want := range assertedLabels {
+				if got := deploy.Spec.Template.Labels[key]; got != want {
+					t.Fatalf("label %q = %q, want %q", key, got, want)
+				}
 			}
 		})
 	}

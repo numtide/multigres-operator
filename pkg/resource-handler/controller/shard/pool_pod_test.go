@@ -71,6 +71,7 @@ func TestBuildPoolPod_BasicStructure(t *testing.T) {
 
 	// Verify labels
 	expectedLabels := map[string]string{
+		"app.kubernetes.io/instance":   "test-cluster",
 		"app.kubernetes.io/component":  PoolComponentName,
 		"app.kubernetes.io/managed-by": "multigres-operator",
 		"multigres.com/cluster":        "test-cluster",
@@ -84,6 +85,43 @@ func TestBuildPoolPod_BasicStructure(t *testing.T) {
 		if got := pod.Labels[k]; got != want {
 			t.Errorf("label %q = %q, want %q", k, got, want)
 		}
+	}
+
+	if got := pod.Annotations[metadata.AnnotationProjectRef]; got != "test-cluster" {
+		t.Errorf("annotation %q = %q, want %q", metadata.AnnotationProjectRef, got, "test-cluster")
+	}
+}
+
+func TestBuildPoolPod_ProjectRefAnnotation(t *testing.T) {
+	tests := map[string]struct {
+		annotations map[string]string
+		want        string
+	}{
+		"falls back to cluster name": {
+			want: "test-cluster",
+		},
+		"uses explicit project ref": {
+			annotations: map[string]string{
+				metadata.AnnotationProjectRef: "proj_123",
+			},
+			want: "proj_123",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			shard := newTestShard()
+			shard.Annotations = tc.annotations
+
+			pod, err := BuildPoolPod(shard, "main", "z1", newTestPoolSpec(), 0, testScheme())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if got := pod.Annotations[metadata.AnnotationProjectRef]; got != tc.want {
+				t.Fatalf("annotation %q = %q, want %q", metadata.AnnotationProjectRef, got, tc.want)
+			}
+		})
 	}
 }
 

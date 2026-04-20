@@ -2,6 +2,7 @@ package shard
 
 import (
 	"fmt"
+	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +36,16 @@ func BuildMultiOrchDeployment(
 
 	// Use DefaultConstraints (253 chars) for Deployments => Long, Readable Names
 	name := buildMultiOrchNameWithCell(shard, cellName, nameutil.DefaultConstraints)
+	clusterName := shard.Labels["multigres.com/cluster"]
 	labels := buildMultiOrchLabelsWithCell(shard, cellName)
+	annotations := maps.Clone(shard.Spec.MultiOrch.PodAnnotations)
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[metadata.AnnotationProjectRef] = metadata.ResolveProjectRef(
+		shard.Annotations,
+		clusterName,
+	)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -51,7 +61,7 @@ func BuildMultiOrchDeployment(
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      metadata.MergeLabels(labels, shard.Spec.MultiOrch.PodLabels),
-					Annotations: shard.Spec.MultiOrch.PodAnnotations,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{

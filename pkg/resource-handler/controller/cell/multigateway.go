@@ -2,6 +2,7 @@ package cell
 
 import (
 	"fmt"
+	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -84,6 +85,14 @@ func BuildMultiGatewayDeployment(
 	name := BuildMultiGatewayDeploymentName(cell)
 	clusterName := cell.Labels["multigres.com/cluster"]
 	labels := metadata.BuildStandardLabels(clusterName, MultiGatewayComponentName)
+	annotations := maps.Clone(cell.Spec.MultiGateway.PodAnnotations)
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[metadata.AnnotationProjectRef] = metadata.ResolveProjectRef(
+		cell.Annotations,
+		clusterName,
+	)
 	metadata.AddCellLabel(labels, cell.Spec.Name)
 	if cell.Spec.Zone != "" {
 		metadata.AddZoneLabel(labels, cell.Spec.Zone)
@@ -106,7 +115,7 @@ func BuildMultiGatewayDeployment(
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      metadata.MergeLabels(labels, cell.Spec.MultiGateway.PodLabels),
-					Annotations: cell.Spec.MultiGateway.PodAnnotations,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
