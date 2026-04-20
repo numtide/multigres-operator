@@ -5139,8 +5139,7 @@ spec:
                                           fsGroup:
                                             description: |-
                                               FSGroup sets the pod-level fsGroup for shared volume and socket access across
-                                              pool containers. When unset, the operator does not set pod fsGroup and runtime
-                                              defaults apply.
+                                              pool containers. When unset, runtime defaults apply.
                                             format: int64
                                             minimum: 1
                                             type: integer
@@ -7586,8 +7585,7 @@ spec:
                                           fsGroup:
                                             description: |-
                                               FSGroup sets the pod-level fsGroup for shared volume and socket access across
-                                              pool containers. When unset, the operator does not set pod fsGroup and runtime
-                                              defaults apply.
+                                              pool containers. When unset, runtime defaults apply.
                                             format: int64
                                             minimum: 1
                                             type: integer

@@ -74,6 +74,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				RestartPolicy: &sidecarRestartPolicy,
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: ptr.To(true),
+					RunAsUser:    ptr.To(defaultMultiPoolerRunAsUserUID),
+					RunAsGroup:   ptr.To(defaultMultiPoolerRunAsUserUID),
 				},
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -177,6 +179,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				RestartPolicy: &sidecarRestartPolicy,
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: ptr.To(true),
+					RunAsUser:    ptr.To(defaultMultiPoolerRunAsUserUID),
+					RunAsGroup:   ptr.To(defaultMultiPoolerRunAsUserUID),
 				},
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -298,6 +302,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				RestartPolicy: &sidecarRestartPolicy,
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot: ptr.To(true),
+					RunAsUser:    ptr.To(defaultMultiPoolerRunAsUserUID),
+					RunAsGroup:   ptr.To(defaultMultiPoolerRunAsUserUID),
 				},
 				StartupProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
@@ -403,6 +409,8 @@ func TestBuildPostgresExporterContainer(t *testing.T) {
 		},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: ptr.To(true),
+			RunAsUser:    ptr.To(defaultPostgresExporterRunAsUserUID),
+			RunAsGroup:   ptr.To(defaultPostgresExporterRunAsUserUID),
 		},
 	}
 
