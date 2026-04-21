@@ -81,6 +81,9 @@ func BuildPoolPod(
 			shard.Annotations,
 			clusterName,
 		),
+		metadata.AnnotationPrometheusScrape: "true",
+		metadata.AnnotationPrometheusPort:   "9187",
+		metadata.AnnotationPrometheusPath:   "/metrics",
 	}
 	if h := shard.Annotations[metadata.AnnotationPostgresConfigHash]; h != "" {
 		annotations[metadata.AnnotationPostgresConfigHash] = h

@@ -125,6 +125,24 @@ func TestBuildPoolPod_ProjectRefAnnotation(t *testing.T) {
 	}
 }
 
+func TestBuildPoolPod_PrometheusScrapeAnnotations(t *testing.T) {
+	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantAnnotations := map[string]string{
+		metadata.AnnotationPrometheusScrape: "true",
+		metadata.AnnotationPrometheusPort:   "9187",
+		metadata.AnnotationPrometheusPath:   "/metrics",
+	}
+	for key, want := range wantAnnotations {
+		if got := pod.Annotations[key]; got != want {
+			t.Fatalf("annotation %q = %q, want %q", key, got, want)
+		}
+	}
+}
+
 func TestBuildPoolPod_Containers(t *testing.T) {
 	pod, err := BuildPoolPod(newTestShard(), "main", "z1", newTestPoolSpec(), 0, testScheme())
 	if err != nil {
