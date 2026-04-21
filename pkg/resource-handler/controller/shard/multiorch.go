@@ -42,6 +42,9 @@ func BuildMultiOrchDeployment(
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
+	delete(annotations, metadata.AnnotationPrometheusScrape)
+	delete(annotations, metadata.AnnotationPrometheusPort)
+	delete(annotations, metadata.AnnotationPrometheusPath)
 	annotations[metadata.AnnotationProjectRef] = metadata.ResolveProjectRef(
 		shard.Annotations,
 		clusterName,

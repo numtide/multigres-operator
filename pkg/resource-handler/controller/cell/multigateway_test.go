@@ -832,8 +832,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 							"sidecar-inject": "true",
 						},
 						PodAnnotations: map[string]string{
-							"prometheus.io/scrape": "true",
-							"prometheus.io/port":   "15100",
+							"custom-annotation": "keep-me",
 						},
 					},
 				},
@@ -882,8 +881,7 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 								"sidecar-inject":               "true",
 							},
 							Annotations: map[string]string{
-								"prometheus.io/scrape": "true",
-								"prometheus.io/port":   "15100",
+								"custom-annotation": "keep-me",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -1537,6 +1535,61 @@ func TestBuildMultiGatewayDeployment_ProjectRefAnnotation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildMultiGatewayDeployment_OmitsPrometheusScrapeAnnotations(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = multigresv1alpha1.AddToScheme(scheme)
+
+	cell := &multigresv1alpha1.Cell{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cell",
+			Namespace: "default",
+			UID:       "test-uid",
+			Labels:    map[string]string{metadata.LabelMultigresCluster: "test-cluster"},
+		},
+		Spec: multigresv1alpha1.CellSpec{
+			Name: "zone1",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        "global-topo:2379",
+				RootPath:       "/multigres/global",
+				Implementation: "etcd",
+			},
+			LogLevels: multigresv1alpha1.ComponentLogLevels{
+				Pgctld:       "info",
+				Multipooler:  "info",
+				Multiorch:    "info",
+				Multiadmin:   "info",
+				Multigateway: "info",
+			},
+			MultiGateway: multigresv1alpha1.StatelessSpec{
+				PodAnnotations: map[string]string{
+					metadata.AnnotationPrometheusScrape: "true",
+					metadata.AnnotationPrometheusPort:   "15100",
+					metadata.AnnotationPrometheusPath:   "/metrics",
+					"custom-annotation":                 "keep-me",
+				},
+			},
+		},
+	}
+
+	deploy, err := BuildMultiGatewayDeployment(cell, scheme)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, ok := deploy.Spec.Template.Annotations[metadata.AnnotationPrometheusScrape]; ok {
+		t.Fatalf("annotation %q should be omitted", metadata.AnnotationPrometheusScrape)
+	}
+	if _, ok := deploy.Spec.Template.Annotations[metadata.AnnotationPrometheusPort]; ok {
+		t.Fatalf("annotation %q should be omitted", metadata.AnnotationPrometheusPort)
+	}
+	if _, ok := deploy.Spec.Template.Annotations[metadata.AnnotationPrometheusPath]; ok {
+		t.Fatalf("annotation %q should be omitted", metadata.AnnotationPrometheusPath)
+	}
+	if got := deploy.Spec.Template.Annotations["custom-annotation"]; got != "keep-me" {
+		t.Fatalf("custom annotation = %q, want %q", got, "keep-me")
 	}
 }
 
