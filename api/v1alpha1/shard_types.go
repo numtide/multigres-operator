@@ -186,6 +186,12 @@ type ShardSpec struct {
 	// +optional
 	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
 
+	// PostgresSuperuser is the resolved Postgres superuser name propagated from
+	// MultigresCluster. Used to populate POSTGRES_USER on pgctld and multipooler.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	PostgresSuperuser string `json:"postgresSuperuser,omitempty"`
+
 	// CellTopologyLabels maps cell names to their topology nodeSelector labels.
 	// Each entry is a map like {"topology.kubernetes.io/zone": "us-east-1a"}.
 	// Propagated from the cluster's cell configs so the shard controller

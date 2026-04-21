@@ -61,6 +61,7 @@ func BuildShard(
 			Backup:             shardSpec.Backup,
 			TopologyPruning:    tg.Spec.TopologyPruning,
 			DurabilityPolicy:   tg.Spec.DurabilityPolicy,
+			PostgresSuperuser:  tg.Spec.PostgresSuperuser,
 			CellTopologyLabels: tg.Spec.CellTopologyLabels,
 		},
 	}

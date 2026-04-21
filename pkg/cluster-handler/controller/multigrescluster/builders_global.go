@@ -298,8 +298,10 @@ func BuildMultiAdminWebDeployment(
 									Value: "postgres",
 								},
 								{
-									Name:  "POSTGRES_USER",
-									Value: "postgres",
+									Name: "POSTGRES_USER",
+									Value: postgresSuperuserOrDefault(
+										cluster.Spec.PostgresSuperuser,
+									),
 								},
 							},
 							Ports: []corev1.ContainerPort{
@@ -513,4 +515,13 @@ func BuildMultiGatewayGlobalReplicaService(
 	}
 
 	return svc, nil
+}
+
+// postgresSuperuserOrDefault returns the configured superuser name, or the
+// upstream default "postgres" when unset.
+func postgresSuperuserOrDefault(name string) string {
+	if name == "" {
+		return "postgres"
+	}
+	return name
 }

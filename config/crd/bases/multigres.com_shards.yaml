@@ -2428,8 +2428,7 @@ spec:
                     fsGroup:
                       description: |-
                         FSGroup sets the pod-level fsGroup for shared volume and socket access across
-                        pool containers. When unset, the operator does not set pod fsGroup and runtime
-                        defaults apply.
+                        pool containers. When unset, runtime defaults apply.
                       format: int64
                       minimum: 1
                       type: integer
@@ -2696,6 +2695,12 @@ spec:
                 - key
                 - name
                 type: object
+              postgresSuperuser:
+                description: |-
+                  PostgresSuperuser is the resolved Postgres superuser name propagated from
+                  MultigresCluster. Used to populate POSTGRES_USER on pgctld and multipooler.
+                maxLength: 63
+                type: string
               pvcDeletionPolicy:
                 description: |-
                   PVCDeletionPolicy controls PVC lifecycle for this shard's pools.

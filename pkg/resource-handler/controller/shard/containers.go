@@ -155,6 +155,7 @@ func buildPgctldContainer(
 			Name:  "PGDATA",
 			Value: PgDataPath,
 		},
+		pgUserEnvVar(shard.Spec.PostgresSuperuser),
 		pgPasswordEnvVar(shard.Name),
 	}
 	if shard.Spec.InitdbArgs != "" {
@@ -379,6 +380,8 @@ func buildMultiPoolerSidecar(
 			Name:  "PGDATA",
 			Value: PgDataPath,
 		},
+		pgUserEnvVar(shard.Spec.PostgresSuperuser),
+		pgPasswordEnvVar(shard.Name),
 	}
 	env = append(env, s3EnvVars(shard.Spec.Backup)...)
 	if otelVars := multigresv1alpha1.BuildOTELEnvVars(shard.Spec.Observability); len(otelVars) > 0 {
@@ -652,6 +655,16 @@ func pgPasswordEnvVar(shardName string) corev1.EnvVar {
 			},
 		},
 	}
+}
+
+// pgUserEnvVar returns a POSTGRES_USER env var. pgctld uses it during initdb
+// to set the superuser name; multipooler uses it to authenticate as admin.
+// Defaults to "postgres" when unset, matching upstream pgctld.
+func pgUserEnvVar(user string) corev1.EnvVar {
+	if user == "" {
+		user = "postgres"
+	}
+	return corev1.EnvVar{Name: "POSTGRES_USER", Value: user}
 }
 
 // s3EnvVars returns the AWS environment variables needed for S3 backup.

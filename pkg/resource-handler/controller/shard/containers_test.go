@@ -105,6 +105,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				},
 				Env: []corev1.EnvVar{
 					{Name: "PGDATA", Value: PgDataPath},
+					{Name: "POSTGRES_USER", Value: "postgres"},
+					pgPasswordEnvVar("test-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -208,6 +210,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				},
 				Env: []corev1.EnvVar{
 					{Name: "PGDATA", Value: PgDataPath},
+					{Name: "POSTGRES_USER", Value: "postgres"},
+					pgPasswordEnvVar("custom-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
@@ -329,6 +333,8 @@ func TestBuildMultiPoolerSidecar(t *testing.T) {
 				},
 				Env: []corev1.EnvVar{
 					{Name: "PGDATA", Value: PgDataPath},
+					{Name: "POSTGRES_USER", Value: "postgres"},
+					pgPasswordEnvVar("resource-shard"),
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{

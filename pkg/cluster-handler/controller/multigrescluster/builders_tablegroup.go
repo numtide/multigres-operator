@@ -68,6 +68,7 @@ func BuildTableGroup(
 				dbCfg.DurabilityPolicy,
 				cluster.Spec.DurabilityPolicy,
 			),
+			PostgresSuperuser: cluster.Spec.PostgresSuperuser,
 		},
 	}
 

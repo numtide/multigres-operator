@@ -92,6 +92,12 @@ type TableGroupSpec struct {
 	// Inherited from MultigresCluster → Database.
 	// +optional
 	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
+
+	// PostgresSuperuser is the resolved Postgres superuser name.
+	// Inherited from MultigresCluster.Spec.PostgresSuperuser.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	PostgresSuperuser string `json:"postgresSuperuser,omitempty"`
 }
 
 // ShardResolvedSpec represents the fully calculated spec for a shard,
