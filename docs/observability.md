@@ -122,6 +122,15 @@ The endpoint must speak **OTLP** (HTTP or gRPC) — this can be an OpenTelemetry
 
 The operator uses structured JSON logging (`zap` via controller-runtime). When tracing is enabled, every log line within a traced operation automatically includes `trace_id` and `span_id` fields, enabling **log-trace correlation** — click a log line in Grafana Loki to jump directly to the associated trace.
 
+### Runtime Log Shipping References
+
+The operator does not deploy a log collector for you, but it now provides the
+metadata needed for backend-agnostic runtime log shipping. Reference examples:
+
+- [Vector DaemonSet Example](observability/vector-daemonset.yaml)
+- [Log Collector RBAC Example](observability/log-collector-rbac.yaml)
+- [Runtime Log Schema](observability/log-schema.md)
+
 **Log level configuration:** The operator accepts standard controller-runtime zap flags on its command line:
 
 | Flag | Default | Description |

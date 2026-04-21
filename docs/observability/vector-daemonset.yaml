@@ -1,0 +1,96 @@
+#
+# Reference example only.
+# This manifest is NOT managed by the Multigres operator.
+#
+# Replace the placeholder image, namespace, and sink configuration to match
+# your environment and log backend.
+#
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector
+  namespace: observability
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vector
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vector
+    spec:
+      serviceAccountName: vector
+      containers:
+        - name: vector
+          image: timberio/vector:0.40.1-alpine
+          args:
+            - --config
+            - /etc/vector/vector.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: vector-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-config
+  namespace: observability
+data:
+  vector.yaml: |
+    sources:
+      kubernetes_logs:
+        type: kubernetes_logs
+        extra_label_selector: "app.kubernetes.io/managed-by=multigres-operator"
+        auto_partial_merge: true
+
+    transforms:
+      enrich_logs:
+        type: remap
+        inputs:
+          - kubernetes_logs
+        source: |
+          .project = get(., ["kubernetes", "pod_annotations", "multigres.com/project-ref"]) ??
+                     get(., ["kubernetes", "pod_labels", "app.kubernetes.io/instance"]) ??
+                     "unknown"
+
+          raw_component = get(., ["kubernetes", "pod_labels", "app.kubernetes.io/component"]) ?? "unknown"
+          if raw_component == "shard-pool" {
+            .component = .kubernetes.container_name ?? raw_component
+          } else {
+            .component = raw_component
+          }
+
+          .cluster = get(., ["kubernetes", "pod_labels", "app.kubernetes.io/instance"]) ?? "unknown"
+          .namespace = .kubernetes.pod_namespace
+          .pod_name = .kubernetes.pod_name
+          .node_name = .kubernetes.pod_node_name
+
+          del(.kubernetes)
+          del(.file)
+          del(.source_type)
+
+    sinks:
+      # Replace this console sink with your real backend.
+      # Common choices: Loki, S3, Elasticsearch, or an HTTP endpoint.
+      log_sink:
+        type: console
+        inputs:
+          - enrich_logs
+        encoding:
+          codec: json
