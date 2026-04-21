@@ -3,37 +3,46 @@ package metadata_test
 import (
 	"testing"
 
-	"pgregory.net/rapid"
-
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
-func TestResolveProjectRef_Property(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		clusterName := rapid.String().Draw(t, "cluster_name")
-		projectRef := rapid.String().Draw(t, "project_ref")
-		hasAnnotation := rapid.Bool().Draw(t, "has_annotation")
-		useNilMap := rapid.Bool().Draw(t, "use_nil_map")
+func TestResolveProjectRef(t *testing.T) {
+	tests := map[string]struct {
+		annotations map[string]string
+		clusterName string
+		want        string
+	}{
+		"uses explicit project ref": {
+			annotations: map[string]string{
+				metadata.AnnotationProjectRef: "proj_123",
+			},
+			clusterName: "cluster-a",
+			want:        "proj_123",
+		},
+		"falls back when annotation missing": {
+			annotations: map[string]string{},
+			clusterName: "cluster-b",
+			want:        "cluster-b",
+		},
+		"falls back when annotations are nil": {
+			clusterName: "cluster-c",
+			want:        "cluster-c",
+		},
+		"falls back when annotation empty": {
+			annotations: map[string]string{
+				metadata.AnnotationProjectRef: "",
+			},
+			clusterName: "cluster-d",
+			want:        "cluster-d",
+		},
+	}
 
-		var annotations map[string]string
-		if !useNilMap {
-			annotations = map[string]string{}
-		}
-		if hasAnnotation {
-			if annotations == nil {
-				annotations = map[string]string{}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := metadata.ResolveProjectRef(tc.annotations, tc.clusterName)
+			if got != tc.want {
+				t.Fatalf("ResolveProjectRef() = %q, want %q", got, tc.want)
 			}
-			annotations[metadata.AnnotationProjectRef] = projectRef
-		}
-
-		want := clusterName
-		if hasAnnotation && projectRef != "" {
-			want = projectRef
-		}
-
-		got := metadata.ResolveProjectRef(annotations, clusterName)
-		if got != want {
-			t.Fatalf("ResolveProjectRef() = %q, want %q", got, want)
-		}
-	})
+		})
+	}
 }
