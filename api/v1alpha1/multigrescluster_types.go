@@ -135,6 +135,14 @@ type MultigresClusterSpec struct {
 	// +optional
 	DurabilityPolicy string `json:"durabilityPolicy,omitempty"`
 
+	// PostgresSuperuser is the name of the Postgres superuser role used by pgctld
+	// (during initdb) and by multipooler/multiadmin when connecting as admin.
+	// Defaults to "postgres".
+	// +optional
+	// +kubebuilder:default="postgres"
+	// +kubebuilder:validation:MaxLength=63
+	PostgresSuperuser string `json:"postgresSuperuser,omitempty"`
+
 	// CertCommonName is the DNS name used as the Common Name and SAN for the
 	// multigateway TLS certificate (e.g., "db.abc123.supabase.red").
 	// When set, the cluster controller creates a cert-manager Certificate resource
