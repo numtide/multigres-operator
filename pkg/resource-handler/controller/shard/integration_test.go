@@ -131,6 +131,9 @@ func TestShardReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: shardLabels(t, "test-shard-multiorch-zone-a", "multiorch", "zone-a"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -218,6 +221,9 @@ func TestShardReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: shardLabels(t, "test-shard-multiorch-zone-b", "multiorch", "zone-b"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -380,6 +386,9 @@ func TestShardReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: shardLabels(t, "delete-policy-shard-multiorch-zone-a", "multiorch", "zone-a"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -538,6 +547,9 @@ func TestShardReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: shardLabels(t, "multi-cell-shard-multiorch-zone1", "multiorch", "zone1"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -625,6 +637,9 @@ func TestShardReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: shardLabels(t, "multi-cell-shard-multiorch-zone2", "multiorch", "zone2"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
