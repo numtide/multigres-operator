@@ -113,6 +113,9 @@ func TestCellReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: cellLabels(t, "test-cell-multigateway", "multigateway", "zone1", "us-west-1a"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -242,6 +245,9 @@ func TestCellReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: cellLabels(t, "custom-replicas-cell-multigateway", "multigateway", "zone2", "us-west-1b"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -371,6 +377,9 @@ func TestCellReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: cellLabels(t, "custom-images-cell-multigateway", "multigateway", "zone3", "us-west-1c"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
@@ -517,6 +526,9 @@ func TestCellReconciliation(t *testing.T) {
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
 								Labels: cellLabels(t, "affinity-cell-multigateway", "multigateway", "zone4", "us-west-1d"),
+								Annotations: map[string]string{
+									"multigres.com/project-ref": "test-cluster",
+								},
 							},
 							Spec: corev1.PodSpec{
 								Containers: []corev1.Container{
