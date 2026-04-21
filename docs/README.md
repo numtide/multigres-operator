@@ -7,6 +7,7 @@
 | [README](../README.md) | Installation, configuration, resource hierarchy, and constraints |
 | [Backup & Restore](backup-restore.md) | pgBackRest integration, S3 and filesystem backends, TLS certificates |
 | [Observability](observability.md) | Metrics, alerts, dashboards, distributed tracing, structured logging |
+| [Runtime Log Schema](observability/log-schema.md) | Field definitions for enriched Multigres runtime logs |
 | [Durability Policy](durability-policy.md) | Durability policies, cross-AZ quorum, per-database overrides |
 | [Storage Management](storage.md) | PVC deletion policies and volume expansion |
 | [External Gateway](external-gateway.md) | External multigateway exposure, DNS wiring, GatewayExternalReady condition |
