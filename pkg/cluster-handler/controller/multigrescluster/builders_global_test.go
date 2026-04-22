@@ -279,6 +279,28 @@ func TestBuildMultiAdminWebDeployment(t *testing.T) {
 		}
 	})
 
+	t.Run("CustomPostgresSuperuser", func(t *testing.T) {
+		c := *cluster
+		c.Spec.PostgresSuperuser = "admin"
+		got, err := BuildMultiAdminWebDeployment(&c, spec, scheme)
+		if err != nil {
+			t.Fatalf("BuildMultiAdminWebDeployment() error = %v", err)
+		}
+		found := false
+		for _, ev := range got.Spec.Template.Spec.Containers[0].Env {
+			if ev.Name == "POSTGRES_USER" {
+				found = true
+				if ev.Value != "admin" {
+					t.Errorf("POSTGRES_USER = %q, want %q", ev.Value, "admin")
+				}
+				break
+			}
+		}
+		if !found {
+			t.Fatal("Missing env var POSTGRES_USER")
+		}
+	})
+
 	t.Run("ControllerRefError", func(t *testing.T) {
 		emptyScheme := runtime.NewScheme()
 		_, err := BuildMultiAdminWebDeployment(cluster, spec, emptyScheme)

@@ -61,6 +61,23 @@ func TestBuildTableGroup(t *testing.T) {
 		}
 	})
 
+	t.Run("CustomPostgresSuperuser", func(t *testing.T) {
+		c := *cluster
+		c.Spec.PostgresSuperuser = "admin"
+		tgCfg := &multigresv1alpha1.TableGroupConfig{Name: "tg-superuser"}
+		got, err := BuildTableGroup(&c, dbCfg, tgCfg, nil, globalTopoRef, scheme)
+		if err != nil {
+			t.Fatalf("BuildTableGroup() error = %v", err)
+		}
+		if got.Spec.PostgresSuperuser != "admin" {
+			t.Errorf(
+				"PostgresSuperuser = %q, want %q",
+				got.Spec.PostgresSuperuser,
+				"admin",
+			)
+		}
+	})
+
 	t.Run("Name Truncation", func(t *testing.T) {
 		longName := strings.Repeat("a", 250) // Very long name
 		tgCfg := &multigresv1alpha1.TableGroupConfig{
