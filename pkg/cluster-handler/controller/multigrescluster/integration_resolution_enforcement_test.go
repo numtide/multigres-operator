@@ -366,8 +366,9 @@ func TestMultigresCluster_ResolutionLogic(t *testing.T) {
 					Type:       multigresv1alpha1.BackupTypeFilesystem,
 					Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: resolver.DefaultBackupPath, Storage: multigresv1alpha1.StorageSpec{Size: resolver.DefaultBackupStorageSize}},
 				},
-				TopologyPruning:  &multigresv1alpha1.TopologyPruningConfig{Enabled: ptr.To(true)},
-				DurabilityPolicy: "AT_LEAST_2",
+				TopologyPruning:   &multigresv1alpha1.TopologyPruningConfig{Enabled: ptr.To(true)},
+				DurabilityPolicy:  "AT_LEAST_2",
+				PostgresSuperuser: "postgres",
 			},
 		}
 
@@ -663,8 +664,9 @@ func TestMultigresCluster_TemplateOverrides(t *testing.T) {
 				Type:       multigresv1alpha1.BackupTypeFilesystem,
 				Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: resolver.DefaultBackupPath, Storage: multigresv1alpha1.StorageSpec{Size: resolver.DefaultBackupStorageSize}},
 			},
-			TopologyPruning:  &multigresv1alpha1.TopologyPruningConfig{Enabled: ptr.To(true)},
-			DurabilityPolicy: "AT_LEAST_2",
+			TopologyPruning:   &multigresv1alpha1.TopologyPruningConfig{Enabled: ptr.To(true)},
+			DurabilityPolicy:  "AT_LEAST_2",
+			PostgresSuperuser: "postgres",
 		},
 	}
 
