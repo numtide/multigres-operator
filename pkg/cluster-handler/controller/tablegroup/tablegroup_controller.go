@@ -14,11 +14,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"github.com/multigres/multigres-operator/pkg/monitoring"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 // TableGroupReconciler reconciles a TableGroup object.
@@ -424,8 +426,40 @@ func (r *TableGroupReconciler) SetupWithManager(
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&multigresv1alpha1.TableGroup{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&multigresv1alpha1.TableGroup{},
+			builder.WithPredicates(projectRefOrGenerationChangedPredicate()),
+		).
 		Owns(&multigresv1alpha1.Shard{}).
 		WithOptions(controllerOpts).
 		Complete(r)
+}
+
+// projectRefOrGenerationChangedPredicate requeues when desired shard state can
+// change due to either spec updates or project-ref annotation updates.
+func projectRefOrGenerationChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(event.DeleteEvent) bool {
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld == nil || e.ObjectNew == nil {
+				return false
+			}
+
+			if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+				return true
+			}
+
+			oldAnnotations := e.ObjectOld.GetAnnotations()
+			newAnnotations := e.ObjectNew.GetAnnotations()
+			return oldAnnotations[metadata.AnnotationProjectRef] !=
+				newAnnotations[metadata.AnnotationProjectRef]
+		},
+		GenericFunc: func(event.GenericEvent) bool {
+			return true
+		},
+	}
 }
