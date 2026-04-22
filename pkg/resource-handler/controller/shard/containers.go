@@ -267,7 +267,7 @@ func buildPostgresExporterContainer(
 			},
 			{
 				Name:  "DATA_SOURCE_USER",
-				Value: "postgres",
+				Value: postgresSuperuserOrDefault(shard.Spec.PostgresSuperuser),
 			},
 			{
 				Name: "DATA_SOURCE_PASS",
@@ -659,12 +659,17 @@ func pgPasswordEnvVar(shardName string) corev1.EnvVar {
 
 // pgUserEnvVar returns a POSTGRES_USER env var. pgctld uses it during initdb
 // to set the superuser name; multipooler uses it to authenticate as admin.
-// Defaults to "postgres" when unset, matching upstream pgctld.
 func pgUserEnvVar(user string) corev1.EnvVar {
+	return corev1.EnvVar{Name: "POSTGRES_USER", Value: postgresSuperuserOrDefault(user)}
+}
+
+// postgresSuperuserOrDefault returns the configured superuser name, or the
+// upstream default "postgres" when unset.
+func postgresSuperuserOrDefault(user string) string {
 	if user == "" {
-		user = "postgres"
+		return "postgres"
 	}
-	return corev1.EnvVar{Name: "POSTGRES_USER", Value: user}
+	return user
 }
 
 // s3EnvVars returns the AWS environment variables needed for S3 backup.
