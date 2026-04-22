@@ -417,6 +417,50 @@ func TestBuildPostgresExporterContainer(t *testing.T) {
 	}
 }
 
+func TestPoolContainers_CustomPostgresSuperuser(t *testing.T) {
+	const customSuperuser = "admin"
+
+	shard := &multigresv1alpha1.Shard{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-shard"},
+		Spec: multigresv1alpha1.ShardSpec{
+			DatabaseName:   "testdb",
+			TableGroupName: "default",
+			ShardName:      "0",
+			GlobalTopoServer: multigresv1alpha1.GlobalTopoServerRef{
+				Address:        "global-topo:2379",
+				RootPath:       "/multigres/global",
+				Implementation: "etcd",
+			},
+			LogLevels: multigresv1alpha1.ComponentLogLevels{
+				Pgctld:       "info",
+				Multipooler:  "info",
+				Multiorch:    "info",
+				Multiadmin:   "info",
+				Multigateway: "info",
+			},
+			PostgresSuperuser: customSuperuser,
+		},
+	}
+	pool := multigresv1alpha1.PoolSpec{
+		Cells: []multigresv1alpha1.CellName{"zone1"},
+	}
+
+	t.Run("pgctld", func(t *testing.T) {
+		c := buildPgctldContainer(shard, pool)
+		assertEnvVarValue(t, c.Env, "POSTGRES_USER", customSuperuser)
+	})
+
+	t.Run("multipooler", func(t *testing.T) {
+		c := buildMultiPoolerSidecar(shard, pool, "primary", "zone1", "p-test-id")
+		assertEnvVarValue(t, c.Env, "POSTGRES_USER", customSuperuser)
+	})
+
+	t.Run("postgres-exporter", func(t *testing.T) {
+		c := buildPostgresExporterContainer(shard, pool)
+		assertEnvVarValue(t, c.Env, "DATA_SOURCE_USER", customSuperuser)
+	})
+}
+
 func TestBuildMultiOrchContainer(t *testing.T) {
 	tests := map[string]struct {
 		shard    *multigresv1alpha1.Shard
@@ -900,6 +944,19 @@ func assertContainsEnvVar(t *testing.T, envVars []corev1.EnvVar, name string) {
 	t.Helper()
 	for _, e := range envVars {
 		if e.Name == name {
+			return
+		}
+	}
+	t.Errorf("expected env var %q, got none", name)
+}
+
+func assertEnvVarValue(t *testing.T, envVars []corev1.EnvVar, name, want string) {
+	t.Helper()
+	for _, e := range envVars {
+		if e.Name == name {
+			if e.Value != want {
+				t.Errorf("env var %q = %q, want %q", name, e.Value, want)
+			}
 			return
 		}
 	}
