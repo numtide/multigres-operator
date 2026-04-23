@@ -21,7 +21,7 @@ const (
 	MultiGatewayComponentName = metadata.ComponentMultiGateway
 
 	// DefaultMultiGatewayReplicas is the default number of MultiGateway replicas
-	DefaultMultiGatewayReplicas int32 = 2
+	DefaultMultiGatewayReplicas int32 = 1
 
 	// MultiGatewayHTTPPort is the default port for HTTP connections
 	MultiGatewayHTTPPort int32 = 15100

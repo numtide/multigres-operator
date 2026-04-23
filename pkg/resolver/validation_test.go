@@ -224,6 +224,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 	tests := map[string]struct {
 		cluster        *multigresv1alpha1.MultigresCluster
 		wantWarnings   []string
+		wantNoWarnings bool
 		wantErr        string
 		customClient   client.Client
 		clientFailures *testutil.FailureConfig
@@ -601,8 +602,36 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 				},
 			},
 			wantWarnings: []string{
-				"replicasPerCell=2; pools need at least 3",
+				"replicasPerCell=2 across 1 cell(s) (2 total)",
 			},
+		},
+		"No Quorum Warning: three cells with 1 replica per cell": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "zone-1"},
+						{Name: "zone-2"},
+						{Name: "zone-3"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{{
+							Shards: []multigresv1alpha1.ShardConfig{{
+								Name:          "s0",
+								ShardTemplate: "prod-shard",
+								Overrides: &multigresv1alpha1.ShardOverrides{
+									Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+										"default": {
+											ReplicasPerCell: ptr.To(int32(1)),
+										},
+									},
+								},
+							}},
+						}},
+					}},
+				},
+			},
+			wantNoWarnings: true,
 		},
 		"No Quorum Warning: readWrite pool with 3 replicas": {
 			cluster: &multigresv1alpha1.MultigresCluster{
@@ -653,7 +682,7 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 					}},
 				},
 			},
-			wantWarnings: []string{"has replicasPerCell=2"},
+			wantWarnings: []string{"has replicasPerCell=2 across 1 cell(s) (2 total)"},
 		},
 		"Etcd 1 replica warning": {
 			cluster: &multigresv1alpha1.MultigresCluster{
@@ -1254,6 +1283,9 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 						t.Errorf("Expected warning containing '%s', got %v", want, warnings)
 					}
 				}
+			}
+			if tc.wantNoWarnings && len(warnings) > 0 {
+				t.Errorf("Expected no warnings, got %v", warnings)
 			}
 		})
 	}
