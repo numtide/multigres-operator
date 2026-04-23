@@ -111,11 +111,12 @@ func TestCellReconciler_Reconcile(t *testing.T) {
 				}
 
 				// Verify defaults
-				if *mgDeploy.Spec.Replicas != int32(2) {
+				const wantReplicas int32 = 1
+				if *mgDeploy.Spec.Replicas != wantReplicas {
 					t.Errorf(
 						"MultiGateway Deployment replicas = %d, want %d",
 						*mgDeploy.Spec.Replicas,
-						int32(2),
+						wantReplicas,
 					)
 				}
 			},

@@ -453,21 +453,25 @@ func (r *Resolver) ValidateClusterLogic(
 				}
 
 				// ------------------------------------------------------------------
-				// 3. Quorum Warning for pools with insufficient replicas
+				// 3. Quorum Warning for pools with insufficient total replicas
 				// ------------------------------------------------------------------
 				for poolName, pool := range pools {
 					replicas := int32(3) // default
 					if pool.ReplicasPerCell != nil {
 						replicas = *pool.ReplicasPerCell
 					}
-					if replicas < 3 {
+					cellCount := len(pool.Cells)
+					totalReplicas := int(replicas) * cellCount
+					if totalReplicas < 3 {
 						warnings = append(warnings, fmt.Sprintf(
-							"pool '%s' in shard '%s' has replicasPerCell=%d; pools need at least 3 "+
-								"for zero-downtime rolling upgrades (AT_LEAST_2 durability requires 1 primary + 2 standbys "+
-								"to maintain quorum while draining a replica)",
+							"pool '%s' in shard '%s' has replicasPerCell=%d across %d cell(s) (%d total); "+
+								"The HA baseline for AT_LEAST_2 is at least 3 total pods (1 primary + 2 standbys). "+
+								"For zero-downtime rolling upgrades within a single cell, use at least 3 replicas in that cell.",
 							poolName,
 							shard.Name,
 							replicas,
+							cellCount,
+							totalReplicas,
 						))
 					}
 				}
