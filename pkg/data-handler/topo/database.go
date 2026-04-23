@@ -151,11 +151,26 @@ func GetBackupLocation(shard *multigresv1alpha1.Shard) *clustermetadatapb.Backup
 // GetDurabilityPolicy extracts the durability policy from the shard config.
 // Falls back to "AT_LEAST_2" if not set (the default materialized by the webhook resolver).
 func GetDurabilityPolicy(shard *multigresv1alpha1.Shard) *clustermetadatapb.DurabilityPolicy {
-	name := "AT_LEAST_2"
-	if shard.Spec.DurabilityPolicy != "" {
-		name = shard.Spec.DurabilityPolicy
+	return buildDurabilityPolicy(shard.Spec.DurabilityPolicy)
+}
+
+// buildDurabilityPolicy constructs a fully populated DurabilityPolicy proto from
+// a policy name. Upstream multigres' consensus code routes on QuorumType, so
+// leaving it at the proto3 zero value (QUORUM_TYPE_UNKNOWN) would cause
+// "unsupported quorum type" failures in multiorch's analyzers. Falls back to
+// "AT_LEAST_2" when name is empty.
+func buildDurabilityPolicy(name string) *clustermetadatapb.DurabilityPolicy {
+	if name == "" {
+		name = "AT_LEAST_2"
 	}
-	return &clustermetadatapb.DurabilityPolicy{
-		PolicyName: name,
+	policy := &clustermetadatapb.DurabilityPolicy{PolicyName: name}
+	switch name {
+	case "AT_LEAST_2":
+		policy.QuorumType = clustermetadatapb.QuorumType_QUORUM_TYPE_AT_LEAST_N
+		policy.RequiredCount = 2
+	case "MULTI_CELL_AT_LEAST_2":
+		policy.QuorumType = clustermetadatapb.QuorumType_QUORUM_TYPE_MULTI_CELL_AT_LEAST_N
+		policy.RequiredCount = 2
 	}
+	return policy
 }

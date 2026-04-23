@@ -35,16 +35,11 @@ func RegisterDatabaseFromSpec(
 	if durabilityPolicy == "" {
 		durabilityPolicy = clusterDurabilityPolicy
 	}
-	if durabilityPolicy == "" {
-		durabilityPolicy = "AT_LEAST_2"
-	}
 
 	dbMetadata := &clustermetadatapb.Database{
-		Name:  dbName,
-		Cells: allCellNames,
-		BootstrapDurabilityPolicy: &clustermetadatapb.DurabilityPolicy{
-			PolicyName: durabilityPolicy,
-		},
+		Name:                      dbName,
+		Cells:                     allCellNames,
+		BootstrapDurabilityPolicy: buildDurabilityPolicy(durabilityPolicy),
 	}
 
 	if backup != nil && backup.Type == multigresv1alpha1.BackupTypeS3 && backup.S3 != nil {
