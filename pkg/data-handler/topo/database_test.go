@@ -309,6 +309,12 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		if got.GetPolicyName() != "AT_LEAST_2" {
 			t.Errorf("expected AT_LEAST_2, got %s", got.GetPolicyName())
 		}
+		if got.GetQuorumType() != clustermetadatapb.QuorumType_QUORUM_TYPE_AT_LEAST_N {
+			t.Errorf("expected QUORUM_TYPE_AT_LEAST_N, got %s", got.GetQuorumType())
+		}
+		if got.GetRequiredCount() != 2 {
+			t.Errorf("expected RequiredCount 2, got %d", got.GetRequiredCount())
+		}
 	})
 
 	t.Run("returns explicit AT_LEAST_2", func(t *testing.T) {
@@ -318,6 +324,12 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		got := topo.GetDurabilityPolicy(shard)
 		if got.GetPolicyName() != "AT_LEAST_2" {
 			t.Errorf("expected AT_LEAST_2, got %s", got.GetPolicyName())
+		}
+		if got.GetQuorumType() != clustermetadatapb.QuorumType_QUORUM_TYPE_AT_LEAST_N {
+			t.Errorf("expected QUORUM_TYPE_AT_LEAST_N, got %s", got.GetQuorumType())
+		}
+		if got.GetRequiredCount() != 2 {
+			t.Errorf("expected RequiredCount 2, got %d", got.GetRequiredCount())
 		}
 	})
 
@@ -329,7 +341,32 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		if got.GetPolicyName() != "MULTI_CELL_AT_LEAST_2" {
 			t.Errorf("expected MULTI_CELL_AT_LEAST_2, got %s", got.GetPolicyName())
 		}
+		if got.GetQuorumType() != clustermetadatapb.QuorumType_QUORUM_TYPE_MULTI_CELL_AT_LEAST_N {
+			t.Errorf("expected QUORUM_TYPE_MULTI_CELL_AT_LEAST_N, got %s", got.GetQuorumType())
+		}
+		if got.GetRequiredCount() != 2 {
+			t.Errorf("expected RequiredCount 2, got %d", got.GetRequiredCount())
+		}
 	})
+
+	t.Run(
+		"unknown policy sets PolicyName but leaves QuorumType and RequiredCount at zero",
+		func(t *testing.T) {
+			t.Parallel()
+			shard := newTestShard("test-shard")
+			shard.Spec.DurabilityPolicy = "CUSTOM"
+			got := topo.GetDurabilityPolicy(shard)
+			if got.GetPolicyName() != "CUSTOM" {
+				t.Errorf("expected CUSTOM, got %s", got.GetPolicyName())
+			}
+			if got.GetQuorumType() != 0 {
+				t.Errorf("expected zero QuorumType, got %s", got.GetQuorumType())
+			}
+			if got.GetRequiredCount() != 0 {
+				t.Errorf("expected zero RequiredCount, got %d", got.GetRequiredCount())
+			}
+		},
+	)
 }
 
 func TestGetBackupLocation(t *testing.T) {
