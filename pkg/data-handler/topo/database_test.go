@@ -3,6 +3,7 @@ package topo_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/multigres/multigres/go/common/topoclient"
@@ -305,7 +306,10 @@ func TestGetDurabilityPolicy(t *testing.T) {
 	t.Run("defaults to AT_LEAST_2 when empty", func(t *testing.T) {
 		t.Parallel()
 		shard := newTestShard("test-shard")
-		got := topo.GetDurabilityPolicy(shard)
+		got, err := topo.GetDurabilityPolicy(shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if got.GetPolicyName() != "AT_LEAST_2" {
 			t.Errorf("expected AT_LEAST_2, got %s", got.GetPolicyName())
 		}
@@ -321,7 +325,10 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		t.Parallel()
 		shard := newTestShard("test-shard")
 		shard.Spec.DurabilityPolicy = "AT_LEAST_2"
-		got := topo.GetDurabilityPolicy(shard)
+		got, err := topo.GetDurabilityPolicy(shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if got.GetPolicyName() != "AT_LEAST_2" {
 			t.Errorf("expected AT_LEAST_2, got %s", got.GetPolicyName())
 		}
@@ -337,7 +344,10 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		t.Parallel()
 		shard := newTestShard("test-shard")
 		shard.Spec.DurabilityPolicy = "MULTI_CELL_AT_LEAST_2"
-		got := topo.GetDurabilityPolicy(shard)
+		got, err := topo.GetDurabilityPolicy(shard)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if got.GetPolicyName() != "MULTI_CELL_AT_LEAST_2" {
 			t.Errorf("expected MULTI_CELL_AT_LEAST_2, got %s", got.GetPolicyName())
 		}
@@ -349,24 +359,24 @@ func TestGetDurabilityPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run(
-		"unknown policy sets PolicyName but leaves QuorumType and RequiredCount at zero",
-		func(t *testing.T) {
-			t.Parallel()
-			shard := newTestShard("test-shard")
-			shard.Spec.DurabilityPolicy = "CUSTOM"
-			got := topo.GetDurabilityPolicy(shard)
-			if got.GetPolicyName() != "CUSTOM" {
-				t.Errorf("expected CUSTOM, got %s", got.GetPolicyName())
+	t.Run("unknown policy returns error", func(t *testing.T) {
+		t.Parallel()
+		shard := newTestShard("test-shard")
+		shard.Spec.DurabilityPolicy = "CUSTOM"
+		got, err := topo.GetDurabilityPolicy(shard)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if got != nil {
+			t.Errorf("expected nil policy on error, got %+v", got)
+		}
+		msg := err.Error()
+		for _, want := range []string{"CUSTOM", "AT_LEAST_2", "MULTI_CELL_AT_LEAST_2"} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("expected error message to contain %q, got %q", want, msg)
 			}
-			if got.GetQuorumType() != 0 {
-				t.Errorf("expected zero QuorumType, got %s", got.GetQuorumType())
-			}
-			if got.GetRequiredCount() != 0 {
-				t.Errorf("expected zero RequiredCount, got %d", got.GetRequiredCount())
-			}
-		},
-	)
+		}
+	})
 }
 
 func TestGetBackupLocation(t *testing.T) {
