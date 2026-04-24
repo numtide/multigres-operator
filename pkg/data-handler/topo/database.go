@@ -26,10 +26,22 @@ func RegisterDatabase(
 	dbName := string(shard.Spec.DatabaseName)
 	cells := CollectCells(shard)
 
+	durabilityPolicy, err := GetDurabilityPolicy(shard)
+	if err != nil {
+		recorder.Eventf(
+			shard,
+			"Warning",
+			"RegistrationFailed",
+			"Failed to register database in topology: %v",
+			err,
+		)
+		return fmt.Errorf("failed to register database %s in topology: %w", dbName, err)
+	}
+
 	dbMetadata := &clustermetadatapb.Database{
 		Name:                      dbName,
 		BackupLocation:            GetBackupLocation(shard),
-		BootstrapDurabilityPolicy: GetDurabilityPolicy(shard),
+		BootstrapDurabilityPolicy: durabilityPolicy,
 		Cells:                     cells,
 	}
 
@@ -150,7 +162,9 @@ func GetBackupLocation(shard *multigresv1alpha1.Shard) *clustermetadatapb.Backup
 
 // GetDurabilityPolicy extracts the durability policy from the shard config.
 // Falls back to "AT_LEAST_2" if not set (the default materialized by the webhook resolver).
-func GetDurabilityPolicy(shard *multigresv1alpha1.Shard) *clustermetadatapb.DurabilityPolicy {
+func GetDurabilityPolicy(
+	shard *multigresv1alpha1.Shard,
+) (*clustermetadatapb.DurabilityPolicy, error) {
 	return buildDurabilityPolicy(shard.Spec.DurabilityPolicy)
 }
 
@@ -159,7 +173,7 @@ func GetDurabilityPolicy(shard *multigresv1alpha1.Shard) *clustermetadatapb.Dura
 // leaving it at the proto3 zero value (QUORUM_TYPE_UNKNOWN) would cause
 // "unsupported quorum type" failures in multiorch's analyzers. Falls back to
 // "AT_LEAST_2" when name is empty.
-func buildDurabilityPolicy(name string) *clustermetadatapb.DurabilityPolicy {
+func buildDurabilityPolicy(name string) (*clustermetadatapb.DurabilityPolicy, error) {
 	if name == "" {
 		name = "AT_LEAST_2"
 	}
@@ -171,6 +185,11 @@ func buildDurabilityPolicy(name string) *clustermetadatapb.DurabilityPolicy {
 	case "MULTI_CELL_AT_LEAST_2":
 		policy.QuorumType = clustermetadatapb.QuorumType_QUORUM_TYPE_MULTI_CELL_AT_LEAST_N
 		policy.RequiredCount = 2
+	default:
+		return nil, fmt.Errorf(
+			"unsupported durability policy %q (supported: AT_LEAST_2, MULTI_CELL_AT_LEAST_2)",
+			name,
+		)
 	}
-	return policy
+	return policy, nil
 }

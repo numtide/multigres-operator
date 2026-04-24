@@ -245,7 +245,7 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 
 		dbConfig := multigresv1alpha1.DatabaseConfig{
 			Name:             "durdb",
-			DurabilityPolicy: "NONE",
+			DurabilityPolicy: "MULTI_CELL_AT_LEAST_2",
 		}
 
 		err := topo.RegisterDatabaseFromSpec(
@@ -260,9 +260,9 @@ func TestRegisterDatabaseFromSpec(t *testing.T) {
 		if err != nil {
 			t.Fatalf("database not found: %v", err)
 		}
-		if db.BootstrapDurabilityPolicy.GetPolicyName() != "NONE" {
+		if db.BootstrapDurabilityPolicy.GetPolicyName() != "MULTI_CELL_AT_LEAST_2" {
 			t.Errorf(
-				"expected database-level policy NONE, got %s",
+				"expected database-level policy MULTI_CELL_AT_LEAST_2, got %s",
 				db.BootstrapDurabilityPolicy.GetPolicyName(),
 			)
 		}
