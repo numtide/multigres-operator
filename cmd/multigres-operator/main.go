@@ -438,7 +438,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	rpcClient := rpcclient.NewMultiPoolerClient(100, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	rpcClient := rpcclient.NewMultiPoolerClient(
+		100,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	defer rpcClient.Close()
 
 	if err = (&toposervercontroller.TopoServerReconciler{
