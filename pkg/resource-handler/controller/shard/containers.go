@@ -71,6 +71,13 @@ const (
 
 	// PgBackRestPort is the port for the pgBackRest TLS server
 	PgBackRestPort = 8432
+
+	// DefaultMultiPoolerConnPoolGlobalCapacity keeps multipooler below pgctld's
+	// small default max_connections so admin and internal connections have headroom.
+	DefaultMultiPoolerConnPoolGlobalCapacity = 40
+
+	// DefaultMultiPoolerConnPoolAdminCapacity matches the upstream multipooler default.
+	DefaultMultiPoolerConnPoolAdminCapacity = 5
 )
 
 // PgHbaConfigMapName returns the per-shard ConfigMap name for the pg_hba template.
@@ -326,6 +333,14 @@ func buildMultiPoolerSidecar(
 		"--service-id=" + serviceID,
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
+		fmt.Sprintf(
+			"--connpool-global-capacity=%d",
+			DefaultMultiPoolerConnPoolGlobalCapacity,
+		),
+		fmt.Sprintf(
+			"--connpool-admin-capacity=%d",
+			DefaultMultiPoolerConnPoolAdminCapacity,
+		),
 		"--log-level=" + string(shard.Spec.LogLevels.Multipooler),
 	}
 
