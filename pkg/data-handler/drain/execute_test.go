@@ -63,14 +63,6 @@ func (m *mockRPCClient) CanReachPrimary(
 	return nil, nil
 }
 
-func (m *mockRPCClient) InitializeEmptyPrimary(
-	ctx context.Context,
-	pooler *clustermetadata.MultiPooler,
-	request *multipoolermanagerdatapb.InitializeEmptyPrimaryRequest,
-) (*multipoolermanagerdatapb.InitializeEmptyPrimaryResponse, error) {
-	return nil, nil
-}
-
 func (m *mockRPCClient) State(
 	ctx context.Context,
 	pooler *clustermetadata.MultiPooler,
@@ -263,11 +255,11 @@ func (m *mockRPCClient) RewindToSource(
 	return nil, nil
 }
 
-func (m *mockRPCClient) SetMonitor(
+func (m *mockRPCClient) SetPostgresRestartsEnabled(
 	ctx context.Context,
 	pooler *clustermetadata.MultiPooler,
-	request *multipoolermanagerdatapb.SetMonitorRequest,
-) (*multipoolermanagerdatapb.SetMonitorResponse, error) {
+	request *multipoolermanagerdatapb.SetPostgresRestartsEnabledRequest,
+) (*multipoolermanagerdatapb.SetPostgresRestartsEnabledResponse, error) {
 	return nil, nil
 }
 func (m *mockRPCClient) Close()                                          {}

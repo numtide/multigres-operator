@@ -32,6 +32,8 @@ import (
 	"github.com/multigres/multigres/go/common/rpcclient"
 	_ "github.com/multigres/multigres/go/common/topoclient/etcdtopo"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -436,7 +438,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rpcClient := rpcclient.NewMultiPoolerClient(100)
+	rpcClient := rpcclient.NewMultiPoolerClient(100, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	defer rpcClient.Close()
 
 	if err = (&toposervercontroller.TopoServerReconciler{
