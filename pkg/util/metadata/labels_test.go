@@ -335,6 +335,16 @@ func TestAddExtraLabels(t *testing.T) {
 			},
 		},
 		{
+			name:    "AddZoneIDLabel",
+			initial: map[string]string{},
+			addFunc: func(m map[string]string) {
+				metadata.AddZoneIDLabel(m, "use1-az1")
+			},
+			expected: map[string]string{
+				"multigres.com/zone-id": "use1-az1",
+			},
+		},
+		{
 			name:    "AddRegionLabel",
 			initial: map[string]string{},
 			addFunc: func(m map[string]string) {

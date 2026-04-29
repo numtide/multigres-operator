@@ -73,6 +73,7 @@ func TestCEL_MultigresCluster(t *testing.T) {
 					Cells: []multigresv1alpha1.CellConfig{
 						{
 							Name: "invalid-cell",
+							Zone: "us-east-1a",
 							Spec: &multigresv1alpha1.CellInlineSpec{
 								MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
 							},
@@ -96,6 +97,7 @@ func TestCEL_MultigresCluster(t *testing.T) {
 					Cells: []multigresv1alpha1.CellConfig{
 						{
 							Name:         "invalid-cell-template",
+							Zone:         "us-east-1a",
 							CellTemplate: "some-template",
 							Spec: &multigresv1alpha1.CellInlineSpec{
 								MultiGateway: multigresv1alpha1.StatelessSpec{Replicas: ptr.To(int32(1))},
@@ -105,6 +107,40 @@ func TestCEL_MultigresCluster(t *testing.T) {
 				},
 			},
 			expectError: "cannot specify both 'spec' and 'cellTemplate'",
+		},
+		{
+			name: "Invalid Cell: Neither Zone, ZoneID, nor Region",
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cel-cell-no-zone",
+					Namespace: testNamespace,
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "no-zone-cell"},
+					},
+				},
+			},
+			expectError: "at least one of 'zone', 'zoneId', or 'region' must be specified",
+		},
+		{
+			name: "Invalid Cell: Both Zone and ZoneID",
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cel-cell-zone-zoneid-conflict",
+					Namespace: testNamespace,
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{
+							Name:   "invalid-location",
+							Zone:   "us-east-1a",
+							ZoneID: "use1-az1",
+						},
+					},
+				},
+			},
+			expectError: "cannot specify both 'zone' and 'zoneId'",
 		},
 		{
 			name: "Invalid Cell: Both Zone and Region",
@@ -123,7 +159,26 @@ func TestCEL_MultigresCluster(t *testing.T) {
 					},
 				},
 			},
-			expectError: "cannot specify both 'zone' and 'region'",
+			expectError: "cannot specify 'region' with either 'zone' or 'zoneId'",
+		},
+		{
+			name: "Invalid Cell: Both ZoneID and Region",
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cel-cell-zoneid-region-conflict",
+					Namespace: testNamespace,
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{
+							Name:   "invalid-location",
+							ZoneID: "use1-az1",
+							Region: "us-east-1",
+						},
+					},
+				},
+			},
+			expectError: "cannot specify 'region' with either 'zone' or 'zoneId'",
 		},
 		{
 			name: "Invalid Shard: Both Spec and Overrides",

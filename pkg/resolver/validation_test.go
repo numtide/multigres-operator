@@ -208,6 +208,12 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			Labels: map[string]string{"topology.kubernetes.io/region": "us-east-1"},
 		},
 	}
+	nodeZoneID := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-zone-id",
+			Labels: map[string]string{"topology.k8s.aws/zone-id": "use1-az1"},
+		},
+	}
 	withZoneAClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(shardTpl, badPoolTpl, defaultSC, nodeZoneA).
@@ -215,6 +221,10 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 	withRegionClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(shardTpl, badPoolTpl, defaultSC, nodeRegionEast).
+		Build()
+	withZoneIDClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(shardTpl, badPoolTpl, defaultSC, nodeZoneID).
 		Build()
 	noMatchingNodeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -574,6 +584,49 @@ func TestResolver_ValidateClusterLogic(t *testing.T) {
 			customClient: noMatchingNodeClient,
 			wantWarnings: []string{
 				"no nodes currently match topology.kubernetes.io/region=eu-west-1",
+			},
+		},
+		"Cell ZoneID matches node - no topology warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "az-a", ZoneID: "use1-az1"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Shards: []multigresv1alpha1.ShardConfig{
+									{Name: "s0", ShardTemplate: "prod-shard"},
+								},
+							},
+						},
+					}},
+				},
+			},
+			customClient: withZoneIDClient,
+		},
+		"Cell ZoneID no matching node - topology warning": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "valid", Namespace: "default"},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					Cells: []multigresv1alpha1.CellConfig{
+						{Name: "az-b", ZoneID: "use1-az2"},
+					},
+					Databases: []multigresv1alpha1.DatabaseConfig{{
+						TableGroups: []multigresv1alpha1.TableGroupConfig{
+							{
+								Shards: []multigresv1alpha1.ShardConfig{
+									{Name: "s0", ShardTemplate: "prod-shard"},
+								},
+							},
+						},
+					}},
+				},
+			},
+			customClient: noMatchingNodeClient,
+			wantWarnings: []string{
+				"no nodes currently match topology.k8s.aws/zone-id=use1-az2",
 			},
 		},
 		// COVERAGE: quorum warning for readWrite pools with low replica count

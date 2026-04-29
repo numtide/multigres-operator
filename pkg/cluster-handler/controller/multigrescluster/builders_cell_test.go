@@ -81,6 +81,29 @@ func TestBuildCell(t *testing.T) {
 		}
 	})
 
+	t.Run("Propagates ZoneID", func(t *testing.T) {
+		cellCfgWithZoneID := &multigresv1alpha1.CellConfig{
+			Name:   "zone-a",
+			ZoneID: "use1-az1",
+		}
+		got, err := BuildCell(
+			cluster,
+			cellCfgWithZoneID,
+			gatewaySpec,
+			noGatewayPlacement,
+			localTopoSpec,
+			globalTopoRef,
+			allCells,
+			scheme,
+		)
+		if err != nil {
+			t.Fatalf("BuildCell() error = %v", err)
+		}
+		if got.Spec.ZoneID != "use1-az1" {
+			t.Errorf("ZoneID = %v, want use1-az1", got.Spec.ZoneID)
+		}
+	})
+
 	t.Run("ControllerRefError", func(t *testing.T) {
 		emptyScheme := runtime.NewScheme()
 		_, err := BuildCell(
