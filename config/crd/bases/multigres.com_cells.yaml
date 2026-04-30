@@ -1547,7 +1547,16 @@ spec:
                 - registerCell
                 type: object
               zone:
-                description: Zone indicates the physical availability zone.
+                description: Zone indicates the physical availability zone name (e.g.
+                  us-east-1a).
+                maxLength: 63
+                minLength: 1
+                type: string
+              zoneId:
+                description: |-
+                  ZoneID indicates the physical availability zone ID (e.g. use1-az1).
+                  Zone IDs are consistent across AWS accounts, unlike zone names.
+                  When both zone and zoneId are specified, zoneId takes precedence.
                 maxLength: 63
                 minLength: 1
                 type: string
@@ -1558,8 +1567,12 @@ spec:
             - name
             type: object
             x-kubernetes-validations:
-            - message: cannot specify both 'zone' and 'region'
-              rule: '!(has(self.zone) && has(self.region))'
+            - message: cannot specify both 'zone' and 'zoneId'
+              rule: '!(has(self.zone) && has(self.zoneId))'
+            - message: cannot specify 'region' with either 'zone' or 'zoneId'
+              rule: '!(has(self.region) && (has(self.zone) || has(self.zoneId)))'
+            - message: at least one of 'zone', 'zoneId', or 'region' must be specified
+              rule: has(self.zone) || has(self.zoneId) || has(self.region)
           status:
             description: CellStatus defines the observed state of Cell.
             properties:

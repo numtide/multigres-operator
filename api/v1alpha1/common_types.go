@@ -288,6 +288,12 @@ type IPAddress string
 // +kubebuilder:validation:MaxLength=63
 type Zone string
 
+// ZoneID is the cloud provider availability zone ID (e.g. use1-az1).
+// Unlike zone names, zone IDs are consistent across AWS accounts.
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=63
+type ZoneID string
+
 // Region is the cloud provider region identifier.
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=63

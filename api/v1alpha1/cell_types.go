@@ -38,12 +38,20 @@ import (
 // Cell is a child CR managed by MultigresCluster.
 
 // CellSpec defines the desired state of Cell.
-// +kubebuilder:validation:XValidation:rule="!(has(self.zone) && has(self.region))",message="cannot specify both 'zone' and 'region'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.zone) && has(self.zoneId))",message="cannot specify both 'zone' and 'zoneId'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.region) && (has(self.zone) || has(self.zoneId)))",message="cannot specify 'region' with either 'zone' or 'zoneId'"
+// +kubebuilder:validation:XValidation:rule="has(self.zone) || has(self.zoneId) || has(self.region)",message="at least one of 'zone', 'zoneId', or 'region' must be specified"
 type CellSpec struct {
 	// Name is the logical name of the cell.
 	Name CellName `json:"name"`
-	// Zone indicates the physical availability zone.
+	// Zone indicates the physical availability zone name (e.g. us-east-1a).
+	// +optional
 	Zone Zone `json:"zone,omitempty"`
+	// ZoneID indicates the physical availability zone ID (e.g. use1-az1).
+	// Zone IDs are consistent across AWS accounts, unlike zone names.
+	// When both zone and zoneId are specified, zoneId takes precedence.
+	// +optional
+	ZoneID ZoneID `json:"zoneId,omitempty"`
 	// Region indicates the physical region.
 	// +optional
 	Region Region `json:"region,omitempty"`

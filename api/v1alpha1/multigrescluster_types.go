@@ -238,15 +238,22 @@ type MultiAdminWebConfig struct {
 // CellConfig defines a cell in the cluster.
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.cellTemplate))",message="cannot specify both 'spec' and 'cellTemplate'"
 // +kubebuilder:validation:XValidation:rule="!(has(self.spec) && has(self.overrides))",message="cannot specify both 'spec' and 'overrides'"
-// +kubebuilder:validation:XValidation:rule="!(has(self.zone) && has(self.region))",message="cannot specify both 'zone' and 'region'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.zone) && has(self.zoneId))",message="cannot specify both 'zone' and 'zoneId'"
+// +kubebuilder:validation:XValidation:rule="!(has(self.region) && (has(self.zone) || has(self.zoneId)))",message="cannot specify 'region' with either 'zone' or 'zoneId'"
+// +kubebuilder:validation:XValidation:rule="has(self.zone) || has(self.zoneId) || has(self.region)",message="at least one of 'zone', 'zoneId', or 'region' must be specified"
 type CellConfig struct {
 	// Name is the logical name of the cell.
 	Name CellName `json:"name"`
 
-	// Zone indicates the physical availability zone.
+	// Zone indicates the physical availability zone name (e.g. us-east-1a).
 	// +optional
 	Zone Zone `json:"zone,omitempty"`
-	// Region indicates the physical region (mutually exclusive with zone via CEL validation).
+	// ZoneID indicates the physical availability zone ID (e.g. use1-az1).
+	// Zone IDs are consistent across AWS accounts, unlike zone names.
+	// When both zone and zoneId are specified, zoneId takes precedence.
+	// +optional
+	ZoneID ZoneID `json:"zoneId,omitempty"`
+	// Region indicates the physical region (mutually exclusive with zone and zoneId via CEL validation).
 	// +optional
 	Region Region `json:"region,omitempty"`
 

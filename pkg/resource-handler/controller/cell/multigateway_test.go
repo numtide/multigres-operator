@@ -1469,6 +1469,42 @@ func TestBuildMultiGatewayDeployment(t *testing.T) {
 	}
 }
 
+func TestBuildCellNodeSelector(t *testing.T) {
+	tests := map[string]struct {
+		spec multigresv1alpha1.CellSpec
+		want map[string]string
+	}{
+		"zone only": {
+			spec: multigresv1alpha1.CellSpec{Zone: "us-east-1a"},
+			want: map[string]string{"topology.kubernetes.io/zone": "us-east-1a"},
+		},
+		"zoneId only": {
+			spec: multigresv1alpha1.CellSpec{ZoneID: "use1-az1"},
+			want: map[string]string{"topology.k8s.aws/zone-id": "use1-az1"},
+		},
+		"zoneId takes precedence over zone": {
+			spec: multigresv1alpha1.CellSpec{Zone: "us-east-1a", ZoneID: "use1-az1"},
+			want: map[string]string{"topology.k8s.aws/zone-id": "use1-az1"},
+		},
+		"region": {
+			spec: multigresv1alpha1.CellSpec{Region: "us-west-2"},
+			want: map[string]string{"topology.kubernetes.io/region": "us-west-2"},
+		},
+		"none": {
+			spec: multigresv1alpha1.CellSpec{},
+			want: nil,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cell := &multigresv1alpha1.Cell{Spec: tc.spec}
+			if diff := cmp.Diff(tc.want, buildCellNodeSelector(cell)); diff != "" {
+				t.Errorf("buildCellNodeSelector() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestBuildMultiGatewayDeployment_ProjectRefAnnotation(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
