@@ -344,6 +344,71 @@ func parseQty(s string) resource.Quantity {
 	return resource.MustParse(s)
 }
 
+type poolerClientCacheFunc func(types.NamespacedName)
+
+func (poolerClientCacheFunc) ActivateCluster(types.NamespacedName) {}
+
+func (f poolerClientCacheFunc) ForgetCluster(key types.NamespacedName) {
+	f(key)
+}
+
+func TestHandleDeletionReleasesPoolerClient(t *testing.T) {
+	clusterKey := types.NamespacedName{Name: "test-cluster", Namespace: "test-ns"}
+	deletionTimestamp := metav1.Now()
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              clusterKey.Name,
+			Namespace:         clusterKey.Namespace,
+			DeletionTimestamp: &deletionTimestamp,
+		},
+	}
+
+	t.Run("after successful cleanup", func(t *testing.T) {
+		forgotten := make(chan types.NamespacedName, 1)
+		r := &MultigresClusterReconciler{
+			Client:   fake.NewClientBuilder().WithScheme(setupScheme()).Build(),
+			Recorder: record.NewFakeRecorder(1),
+			PoolerClientCache: poolerClientCacheFunc(func(key types.NamespacedName) {
+				forgotten <- key
+			}),
+		}
+
+		if _, err := r.handleDeletion(t.Context(), cluster.DeepCopy()); err != nil {
+			t.Fatalf("handleDeletion() error = %v", err)
+		}
+		select {
+		case got := <-forgotten:
+			if got != clusterKey {
+				t.Fatalf("forgot cluster %v, want %v", got, clusterKey)
+			}
+		default:
+			t.Fatal("pooler client cache was not notified")
+		}
+	})
+
+	t.Run("not when cleanup fails", func(t *testing.T) {
+		baseClient := fake.NewClientBuilder().WithScheme(setupScheme()).Build()
+		failingClient := testutil.NewFakeClientWithFailures(baseClient, &testutil.FailureConfig{
+			OnList: testutil.FailObjListAfterNCalls(0, errors.New("list failed")),
+		})
+		forgotten := false
+		r := &MultigresClusterReconciler{
+			Client:   failingClient,
+			Recorder: record.NewFakeRecorder(1),
+			PoolerClientCache: poolerClientCacheFunc(func(types.NamespacedName) {
+				forgotten = true
+			}),
+		}
+
+		if _, err := r.handleDeletion(t.Context(), cluster.DeepCopy()); err == nil {
+			t.Fatal("handleDeletion() error = nil, want cleanup error")
+		}
+		if forgotten {
+			t.Fatal("pooler client cache notified after failed cleanup")
+		}
+	})
+}
+
 // ============================================================================
 // Main Controller Logic & Lifecycle Tests
 // ============================================================================

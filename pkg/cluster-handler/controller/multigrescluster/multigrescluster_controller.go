@@ -12,6 +12,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -32,11 +33,22 @@ import (
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
+// PoolerClientCache tracks which clusters may own cluster-scoped RPC clients
+// and releases those clients after cluster deletion.
+type PoolerClientCache interface {
+	ActivateCluster(types.NamespacedName)
+	ForgetCluster(types.NamespacedName)
+}
+
 // MultigresClusterReconciler reconciles a MultigresCluster object.
 type MultigresClusterReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	// PoolerClientCache releases cluster-scoped RPC clients after cluster
+	// deletion. It is optional so controller tests and embedders that do not
+	// construct pooler clients need no special setup.
+	PoolerClientCache PoolerClientCache
 
 	// APIReader is an uncached client that reads directly from the API server.
 	// The cached client only sees tenant-namespace Secrets carrying the
@@ -123,6 +135,9 @@ func (r *MultigresClusterReconciler) Reconcile(
 
 	if !cluster.DeletionTimestamp.IsZero() {
 		return r.handleDeletion(ctx, cluster)
+	}
+	if r.PoolerClientCache != nil {
+		r.PoolerClientCache.ActivateCluster(req.NamespacedName)
 	}
 	if err := r.ensureClusterFinalizer(ctx, cluster); err != nil {
 		return ctrl.Result{}, err
@@ -462,6 +477,13 @@ func (r *MultigresClusterReconciler) handleDeletion(
 				err,
 			)
 		}
+	}
+
+	if r.PoolerClientCache != nil {
+		r.PoolerClientCache.ForgetCluster(types.NamespacedName{
+			Namespace: cluster.Namespace,
+			Name:      cluster.Name,
+		})
 	}
 
 	l.Info("Cluster cleanup complete")

@@ -54,6 +54,7 @@ import (
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	multigresclustercontroller "github.com/multigres/multigres-operator/pkg/cluster-handler/controller/multigrescluster"
 	tablegroupcontroller "github.com/multigres/multigres-operator/pkg/cluster-handler/controller/tablegroup"
+	"github.com/multigres/multigres-operator/pkg/data-handler/poolerclient"
 	"github.com/multigres/multigres-operator/pkg/images"
 	"github.com/multigres/multigres-operator/pkg/resolver"
 	cellcontroller "github.com/multigres/multigres-operator/pkg/resource-handler/controller/cell"
@@ -186,7 +187,6 @@ func main() {
 		"multigres-operator-webhook-service",
 		"Name of the Kubernetes Service for the webhook",
 	)
-
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -448,13 +448,32 @@ func main() {
 		mgr.GetClient(),
 		webhookServiceNamespace,
 	)
+	rpcClient := rpcclient.NewMultipoolerClient(
+		100,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	defer rpcClient.Close()
+
+	poolerClients, err := poolerclient.NewOperatorCertResolver(
+		mgr.GetAPIReader(),
+		poolerclient.Options{
+			Capacity: 100,
+			Insecure: rpcClient,
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create multipooler client resolver")
+		os.Exit(1)
+	}
+	defer poolerClients.Close()
 
 	if err = (&multigresclustercontroller.MultigresClusterReconciler{
-		Client:    mgr.GetClient(),
-		APIReader: mgr.GetAPIReader(),
-		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor("multigrescluster-controller"),
-		Images:    imagesConfig,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          mgr.GetEventRecorderFor("multigrescluster-controller"),
+		APIReader:         mgr.GetAPIReader(),
+		Images:            imagesConfig,
+		PoolerClientCache: poolerClients,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MultigresCluster")
 		os.Exit(1)
@@ -478,12 +497,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	rpcClient := rpcclient.NewMultipoolerClient(
-		100,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	defer rpcClient.Close()
-
 	if err = (&toposervercontroller.TopoServerReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
@@ -494,11 +507,11 @@ func main() {
 	}
 
 	if err = (&shardcontroller.ShardReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Recorder:  mgr.GetEventRecorderFor("shard-controller"),
-		APIReader: mgr.GetAPIReader(),
-		RPCClient: rpcClient,
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		Recorder:      mgr.GetEventRecorderFor("shard-controller"),
+		APIReader:     mgr.GetAPIReader(),
+		PoolerClients: poolerClients,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Shard")
 		os.Exit(1)

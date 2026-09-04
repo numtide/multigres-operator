@@ -29,6 +29,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/data-handler/posture"
 	"github.com/multigres/multigres-operator/pkg/testutil"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 	"github.com/multigres/multigres-operator/pkg/util/name"
@@ -4796,7 +4797,6 @@ func TestUpdateStatus_HealthyPhase(t *testing.T) {
 			Phase: multigresv1alpha1.PhaseProgressing,
 		},
 	}
-
 	labels := buildPoolLabelsWithCell(shard, "primary", "zone1")
 	podName := BuildPoolPodName(shard, "primary", "zone1", 0)
 	pod := &corev1.Pod{
@@ -5145,6 +5145,11 @@ func TestUpdatePoolsStatus_DegradedOnCrashLoop(t *testing.T) {
 			},
 		},
 	}
+	shard.Status.Conditions = []metav1.Condition{{
+		Type:   posture.ConditionConsistent,
+		Status: metav1.ConditionUnknown,
+		Reason: "PoolerClientUnavailable",
+	}}
 
 	labels := buildPoolLabelsWithCell(shard, "primary", "zone1")
 	podName := BuildPoolPodName(shard, "primary", "zone1", 0)

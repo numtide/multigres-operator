@@ -86,7 +86,7 @@ func buildInternalCertificates(
 		multigresv1alpha1.ComponentMultiOrchTLS,
 		multigresv1alpha1.ComponentMultiPoolerTLS,
 	}
-	built := make([]*unstructured.Unstructured, 0, len(components))
+	built := make([]*unstructured.Unstructured, 0, len(components)+1)
 	for _, component := range components {
 		cn := multigresv1alpha1.ComponentCertCommonName(
 			component,
@@ -125,6 +125,36 @@ func buildInternalCertificates(
 		}
 		built = append(built, cert)
 	}
+
+	// The operator gets a dedicated per-cluster client identity. Keeping it
+	// cluster-owned gives it the same issuer and lifecycle as the servers it
+	// calls, while allowing the client to verify the exact multipooler SAN.
+	operatorName := multigresv1alpha1.ComponentCertCommonName(
+		multigresv1alpha1.ComponentOperatorTLS,
+		cluster.Name,
+		cluster.Namespace,
+	)
+	operatorCert, err := buildCertificateFromSpec(cluster, scheme, certSpec{
+		name: operatorName,
+		secretName: multigresv1alpha1.ComponentCertSecretName(
+			multigresv1alpha1.ComponentOperatorTLS,
+			cluster.Name,
+			cluster.Namespace,
+		),
+		// The server currently authorizes this certificate by its issuer chain;
+		// keep the client subject stable and below the X.509 64-byte CN limit.
+		commonName: multigresv1alpha1.ComponentOperatorTLS,
+		dnsNames:   []any{},
+		usages: []any{
+			"digital signature",
+			"key encipherment",
+			"client auth",
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	built = append(built, operatorCert)
 	return built, nil
 }
 
@@ -235,7 +265,7 @@ func (r *MultigresClusterReconciler) reconcileCertificate(
 		return err
 	}
 
-	desiredCerts := make([]*unstructured.Unstructured, 0, 6)
+	desiredCerts := make([]*unstructured.Unstructured, 0, 7)
 	if cluster.Spec.InternalTLS.IsEnabled() {
 		internalCerts, err := buildInternalCertificates(cluster, r.Scheme)
 		if err != nil {
