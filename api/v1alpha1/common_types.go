@@ -359,13 +359,16 @@ const (
 	// Component certificate names used for internal gRPC TLS/mTLS.
 	ComponentMultiAdminTLS   = "multiadmin"
 	ComponentMultiGatewayTLS = "multigateway"
+	ComponentMultiOrchTLS    = "multiorch"
+	ComponentMultiPoolerTLS  = "multipooler"
+	// ComponentOperatorTLS identifies the per-cluster client credential used by
+	// the operator when it calls that cluster's multipoolers.
+	ComponentOperatorTLS = "multigres-operator"
 
 	// InternalTLSIdentityDomain is the logical DNS suffix used for internal
 	// component identities. These names are verified through an explicit gRPC
 	// server-name override and are not expected to resolve through cluster DNS.
 	InternalTLSIdentityDomain = "multigres.internal"
-	ComponentMultiOrchTLS     = "multiorch"
-	ComponentMultiPoolerTLS   = "multipooler"
 )
 
 // ComponentCertSecretName returns the cert-manager Secret name for an internal

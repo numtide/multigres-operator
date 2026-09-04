@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
 	"github.com/multigres/multigres/go/common/topoclient"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -50,11 +52,42 @@ func (r *ShardReconciler) reconcileDataPlane(
 		childSpan.End()
 	}
 
+	// Resolve the pooler RPC client once for every RPC phase. A
+	// resolution failure (e.g. operator client cert not issued yet) is not a
+	// reconcile error: skip RPC phases, continue topology maintenance, and retry
+	// shortly.
+	var rpcClient rpcclient.MultipoolerClient
+	poolerClientUnavailable := false
+	if r.PoolerClients != nil {
+		var err error
+		rpcClient, err = r.PoolerClients.ClientFor(ctx, shard)
+		if err != nil {
+			// A resolver error breaks the sequence of posture observations. It must
+			// not let a strike from before the transport outage combine with the
+			// first unsettled observation after recovery.
+			r.recordPostureObservation(shard, false)
+
+			// A partial observation cannot clear a confirmed posture failure. Keep a
+			// split-brain shard Degraded while the RPC client is unavailable; for all
+			// other prior states, report that posture cannot currently be observed.
+			rpcClient = nil
+			poolerClientUnavailable = true
+			setPostureUnknownUnlessFalse(
+				shard,
+				"PoolerClientUnavailable",
+				fmt.Sprintf("Failed to build multipooler RPC client: %v", err),
+			)
+			logger.Error(err, "Failed to resolve multipooler RPC client")
+			r.Recorder.Eventf(shard, "Warning", "PoolerClientUnavailable",
+				"Failed to build multipooler RPC client: %v", err)
+		}
+	}
+
 	postureRequeue := false
-	if r.RPCClient != nil {
+	if rpcClient != nil {
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePosture")
 		var err error
-		postureRequeue, err = r.reconcilePosture(ctx, store, shard)
+		postureRequeue, err = r.reconcilePosture(ctx, store, shard, rpcClient)
 		if err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
@@ -62,18 +95,26 @@ func (r *ShardReconciler) reconcileDataPlane(
 		}
 		childSpan.End()
 
-		// Publish posture, condition, and phase in one status update.
-		if err := r.updateStatus(ctx, shard, rendered); err != nil {
-			return ctrl.Result{}, fmt.Errorf("update status after posture observation: %w", err)
-		}
+	}
+
+	// Publish the topology-derived pod roles even when the RPC client is not
+	// available yet. When posture ran, this also publishes its observation,
+	// condition, and resulting phase in the same status update.
+	if err := r.updateStatus(ctx, shard, rendered); err != nil {
+		return ctrl.Result{}, fmt.Errorf("update status after data-plane observation: %w", err)
 	}
 
 	// Requeue when the shard is Healthy but topology hasn't elected a primary
 	// yet. This closes a race where the reconciliation burst settles before
 	// multiorch writes the primary type to etcd.
-	if shard.Status.Phase == multigresv1alpha1.PhaseHealthy && !hasPrimary(shard.Status.PodRoles) {
+	if shard.Status.Phase == multigresv1alpha1.PhaseHealthy &&
+		!hasPrimary(shard.Status.PodRoles) {
 		logger.Info("No primary in podRoles, requeueing to re-read topology")
-		return withPostureRequeue(ctrl.Result{RequeueAfter: 10 * time.Second}, postureRequeue), nil
+		return withDataPlaneRequeue(
+			ctrl.Result{RequeueAfter: 10 * time.Second},
+			postureRequeue,
+			poolerClientUnavailable,
+		), nil
 	}
 
 	// Phase: Prune stale pooler entries from topology
@@ -97,9 +138,10 @@ func (r *ShardReconciler) reconcileDataPlane(
 		}
 		childSpan.End()
 		if acted {
-			return withPostureRequeue(
+			return withDataPlaneRequeue(
 				ctrl.Result{RequeueAfter: quarantineRemediationRequeue},
 				postureRequeue,
+				poolerClientUnavailable,
 			), nil
 		}
 	}
@@ -115,17 +157,18 @@ func (r *ShardReconciler) reconcileDataPlane(
 		}
 		childSpan.End()
 		if requeue {
-			return withPostureRequeue(
+			return withDataPlaneRequeue(
 				ctrl.Result{RequeueAfter: 2 * time.Second},
 				postureRequeue,
+				poolerClientUnavailable,
 			), nil
 		}
 	}
 
 	// Phase: Evaluate backup health
-	if r.RPCClient != nil {
+	if rpcClient != nil {
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileBackupHealth")
-		result, err := backuphealth.Evaluate(ctx, store, r.RPCClient, shard)
+		result, err := backuphealth.Evaluate(ctx, store, rpcClient, shard)
 		if err != nil {
 			monitoring.RecordSpanError(childSpan, err)
 			childSpan.End()
@@ -167,18 +210,26 @@ func (r *ShardReconciler) reconcileDataPlane(
 	// so a reload-only postgresql.conf change converges without recreating pods.
 	{
 		_, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcileReloadState")
-		wait, err := r.reconcileReloadState(ctx, store, shard, rendered)
+		wait, err := r.reconcileReloadState(ctx, store, shard, rendered, rpcClient)
 		childSpan.End()
 		if err != nil {
 			logger.Error(err, "Failed to reconcile config reload state")
 			return ctrl.Result{}, err
 		}
 		if wait > 0 {
-			return withPostureRequeue(ctrl.Result{RequeueAfter: wait}, postureRequeue), nil
+			return withDataPlaneRequeue(
+				ctrl.Result{RequeueAfter: wait},
+				postureRequeue,
+				poolerClientUnavailable,
+			), nil
 		}
 	}
 
-	return withPostureRequeue(ctrl.Result{}, postureRequeue), nil
+	return withDataPlaneRequeue(
+		ctrl.Result{},
+		postureRequeue,
+		poolerClientUnavailable,
+	), nil
 }
 
 // reconcilePodRoles queries the topology for pooler status and updates
@@ -247,12 +298,16 @@ func (r *ShardReconciler) reconcilePodRoles(
 const (
 	postureStrikeThreshold      = 2
 	postureDebounceRequeueDelay = 5 * time.Second
+	// poolerClientRetryDelay is the requeue delay when the multipooler RPC
+	// client cannot be built yet (e.g. operator client cert not issued).
+	poolerClientRetryDelay = 10 * time.Second
 )
 
 func (r *ShardReconciler) reconcilePosture(
 	ctx context.Context,
 	store topoclient.Store,
 	shard *multigresv1alpha1.Shard,
+	rpcClient rpcclient.MultipoolerClient,
 ) (bool, error) {
 	lbls := map[string]string{
 		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
@@ -272,14 +327,23 @@ func (r *ShardReconciler) reconcilePosture(
 		podNames[i] = podList.Items[i].Name
 	}
 
-	result, err := posture.Evaluate(ctx, store, r.RPCClient, shard, podNames)
+	result, err := posture.Evaluate(ctx, store, rpcClient, shard, podNames)
 	if err != nil {
 		r.Recorder.Eventf(shard, "Warning", "PostureCheckFailed",
 			"Failed to check postgres posture consistency: %v", err)
 		return false, fmt.Errorf("evaluate posture consistency: %w", err)
 	}
 	if result == nil {
-		return false, nil
+		// An empty topology is expected during bootstrap, but it is not a settled
+		// posture observation. Keep polling until poolers register rather than
+		// leaving a previous transport condition stuck until the periodic resync.
+		r.recordPostureObservation(shard, false)
+		setPostureUnknownUnlessFalse(
+			shard,
+			"AwaitingPoolerRegistration",
+			"Waiting for multipoolers to register in topology",
+		)
+		return true, nil
 	}
 
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]
@@ -306,6 +370,22 @@ func (r *ShardReconciler) reconcilePosture(
 		posture.Apply(shard, result)
 	} else {
 		shard.Status.PodPostures = result.Postures
+		// Once RPCs recover, do not retain a transport-specific condition reason
+		// during the debounce cycle. The observation is available but still needs
+		// confirmation before it may change the shard's health.
+		if condition := postureCondition(
+			shard.Status.Conditions,
+		); condition != nil &&
+			condition.Reason == "PoolerClientUnavailable" {
+			status.SetCondition(&shard.Status.Conditions, metav1.Condition{
+				Type:               posture.ConditionConsistent,
+				Status:             metav1.ConditionUnknown,
+				ObservedGeneration: shard.Generation,
+				LastTransitionTime: metav1.Now(),
+				Reason:             "ObservationPending",
+				Message:            result.Message,
+			})
+		}
 	}
 
 	if !prevFalse && status.IsConditionFalse(shard.Status.Conditions, posture.ConditionConsistent) {
@@ -319,9 +399,45 @@ func (r *ShardReconciler) reconcilePosture(
 	return unsettled && strikes < postureStrikeThreshold, nil
 }
 
-func withPostureRequeue(result ctrl.Result, pending bool) ctrl.Result {
-	if pending && (result.RequeueAfter == 0 || result.RequeueAfter > postureDebounceRequeueDelay) {
+func postureCondition(conditions []metav1.Condition) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == posture.ConditionConsistent {
+			return &conditions[i]
+		}
+	}
+	return nil
+}
+
+func setPostureUnknownUnlessFalse(
+	shard *multigresv1alpha1.Shard,
+	reason string,
+	message string,
+) {
+	if status.IsConditionFalse(shard.Status.Conditions, posture.ConditionConsistent) {
+		return
+	}
+	status.SetCondition(&shard.Status.Conditions, metav1.Condition{
+		Type:               posture.ConditionConsistent,
+		Status:             metav1.ConditionUnknown,
+		ObservedGeneration: shard.Generation,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	})
+}
+
+func withDataPlaneRequeue(
+	result ctrl.Result,
+	posturePending bool,
+	poolerClientUnavailable bool,
+) ctrl.Result {
+	if posturePending &&
+		(result.RequeueAfter == 0 || result.RequeueAfter > postureDebounceRequeueDelay) {
 		result.RequeueAfter = postureDebounceRequeueDelay
+	}
+	if poolerClientUnavailable &&
+		(result.RequeueAfter == 0 || result.RequeueAfter > poolerClientRetryDelay) {
+		result.RequeueAfter = poolerClientRetryDelay
 	}
 	return result
 }

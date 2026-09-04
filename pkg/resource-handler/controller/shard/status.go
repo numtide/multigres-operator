@@ -73,9 +73,6 @@ func (r *ShardReconciler) updateStatus(
 	case status.IsConditionFalse(shard.Status.Conditions, posture.ConditionConsistent):
 		shard.Status.Phase = multigresv1alpha1.PhaseDegraded
 		shard.Status.Message = "Postgres posture inconsistent with topology roles (possible split brain)"
-	case postureCondition != nil && postureCondition.Status == metav1.ConditionUnknown:
-		shard.Status.Phase = multigresv1alpha1.PhaseProgressing
-		shard.Status.Message = "Postgres posture check incomplete"
 	case pools.poolDegraded || orchDegraded:
 		shard.Status.Phase = multigresv1alpha1.PhaseDegraded
 		if pools.poolDegraded {
@@ -83,6 +80,9 @@ func (r *ShardReconciler) updateStatus(
 		} else {
 			shard.Status.Message = "One or more Multiorch pods are crash-looping"
 		}
+	case postureCondition != nil && postureCondition.Status == metav1.ConditionUnknown:
+		shard.Status.Phase = multigresv1alpha1.PhaseProgressing
+		shard.Status.Message = "Postgres posture check incomplete"
 	case shard.Status.PoolsReady && shard.Status.OrchReady:
 		shard.Status.Phase = multigresv1alpha1.PhaseHealthy
 		shard.Status.Message = "Ready"

@@ -227,6 +227,11 @@ func TestBuildInternalCertificates(t *testing.T) {
 			cluster.Name,
 			cluster.Namespace,
 		),
+		"multigres-operator.test-cluster.supabase.multigres.internal": multigresv1alpha1.ComponentCertSecretName(
+			multigresv1alpha1.ComponentOperatorTLS,
+			cluster.Name,
+			cluster.Namespace,
+		),
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d certs, want %d", len(got), len(want))
@@ -243,7 +248,11 @@ func TestBuildInternalCertificates(t *testing.T) {
 		if diff := cmp.Diff(secretName, spec["secretName"]); diff != "" {
 			t.Errorf("secretName mismatch for %s (-want +got):\n%s", cert.GetName(), diff)
 		}
-		wantSubject := "C=US, ST=Delware, L=New Castle,O=Supabase Inc, CN=" + cert.GetName()
+		wantCommonName := cert.GetName()
+		if cert.GetName() == "multigres-operator.test-cluster.supabase.multigres.internal" {
+			wantCommonName = multigresv1alpha1.ComponentOperatorTLS
+		}
+		wantSubject := "C=US, ST=Delware, L=New Castle,O=Supabase Inc, CN=" + wantCommonName
 		if diff := cmp.Diff(wantSubject, spec["literalSubject"]); diff != "" {
 			t.Errorf("literalSubject mismatch for %s (-want +got):\n%s", cert.GetName(), diff)
 		}
@@ -253,10 +262,20 @@ func TestBuildInternalCertificates(t *testing.T) {
 			"server auth",
 			"client auth",
 		}
+		if cert.GetName() == "multigres-operator.test-cluster.supabase.multigres.internal" {
+			wantUsages = []any{
+				"digital signature",
+				"key encipherment",
+				"client auth",
+			}
+		}
 		if diff := cmp.Diff(wantUsages, spec["usages"]); diff != "" {
 			t.Errorf("usages mismatch for %s (-want +got):\n%s", cert.GetName(), diff)
 		}
 		wantDNSNames := []any{cert.GetName()}
+		if cert.GetName() == "multigres-operator.test-cluster.supabase.multigres.internal" {
+			wantDNSNames = []any{}
+		}
 		if cert.GetName() == "multigateway.test-cluster.supabase.multigres.internal" {
 			// multigateway's cert also needs to verify against the logical
 			// MultiPooler identity used for gateway-to-gateway cancel forwarding.
@@ -363,12 +382,13 @@ func TestReconcileCertificate(t *testing.T) {
 	wantInternalCertificates := func(
 		cluster *multigresv1alpha1.MultigresCluster,
 	) map[string]string {
-		want := make(map[string]string, 4)
+		want := make(map[string]string, 5)
 		for _, component := range []string{
 			multigresv1alpha1.ComponentMultiAdminTLS,
 			multigresv1alpha1.ComponentMultiGatewayTLS,
 			multigresv1alpha1.ComponentMultiOrchTLS,
 			multigresv1alpha1.ComponentMultiPoolerTLS,
+			multigresv1alpha1.ComponentOperatorTLS,
 		} {
 			name := multigresv1alpha1.ComponentCertCommonName(
 				component,
@@ -652,8 +672,8 @@ func TestReconcileCertificate(t *testing.T) {
 		if err := r.reconcileCertificate(t.Context(), cluster); err != nil {
 			t.Fatalf("first reconcile: %v", err)
 		}
-		if patchCount != 5 {
-			t.Fatalf("patchCount after first reconcile = %d, want 5", patchCount)
+		if patchCount != 6 {
+			t.Fatalf("patchCount after first reconcile = %d, want 6", patchCount)
 		}
 
 		// Reconciling again with the same spec should not re-patch any
@@ -661,9 +681,9 @@ func TestReconcileCertificate(t *testing.T) {
 		if err := r.reconcileCertificate(t.Context(), cluster); err != nil {
 			t.Fatalf("second reconcile: %v", err)
 		}
-		if patchCount != 5 {
+		if patchCount != 6 {
 			t.Errorf(
-				"patchCount after second reconcile = %d, want 5 (no new patches)",
+				"patchCount after second reconcile = %d, want 6 (no new patches)",
 				patchCount,
 			)
 		}
