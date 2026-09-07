@@ -144,14 +144,13 @@ func (r *OperatorCertResolver) ClientFor(
 	if err != nil {
 		return nil, err
 	}
+	if err := r.ensureClusterActive(ctx, clusterKey); err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
 		return nil, fmt.Errorf("operator internal TLS resolver is closed")
-	}
-	if _, active := r.active[clusterKey]; !active {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("cluster %s is not active", clusterKey)
 	}
 	state := r.states[clusterKey]
 	if state == nil {
@@ -283,6 +282,41 @@ func (r *OperatorCertResolver) ClientFor(
 		state.lastErr = nil
 		return state.tlsClient, nil
 	}
+}
+
+// ensureClusterActive validates an inactive cluster directly against the API.
+// Controller startup ordering is not guaranteed, so a shard may reconcile
+// before the cluster controller has populated the lifecycle registry.
+func (r *OperatorCertResolver) ensureClusterActive(
+	ctx context.Context,
+	key types.NamespacedName,
+) error {
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return fmt.Errorf("operator internal TLS resolver is closed")
+	}
+	_, active := r.active[key]
+	r.mu.Unlock()
+	if active {
+		return nil
+	}
+
+	cluster := &multigresv1alpha1.MultigresCluster{}
+	if err := r.reader.Get(ctx, key, cluster); err != nil {
+		return fmt.Errorf("validating MultigresCluster %s: %w", key, err)
+	}
+	if !cluster.DeletionTimestamp.IsZero() {
+		return fmt.Errorf("MultigresCluster %s is being deleted", key)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return fmt.Errorf("operator internal TLS resolver is closed")
+	}
+	r.active[key] = struct{}{}
+	return nil
 }
 
 func clusterKeyForShard(shard *multigresv1alpha1.Shard) (types.NamespacedName, error) {

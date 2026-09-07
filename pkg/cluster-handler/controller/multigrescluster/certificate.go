@@ -141,9 +141,9 @@ func buildInternalCertificates(
 			cluster.Name,
 			cluster.Namespace,
 		),
-		// The server currently authorizes this certificate by its issuer chain;
-		// keep the client subject stable and below the X.509 64-byte CN limit.
-		commonName: multigresv1alpha1.ComponentOperatorTLS,
+		// Keep the client identity cluster-specific so subject authorization can
+		// be enabled later. certs.Build safely hash-truncates long common names.
+		commonName: operatorName,
 		dnsNames:   []any{},
 		usages: []any{
 			"digital signature",

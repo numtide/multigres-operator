@@ -34,6 +34,9 @@ func testScheme(t *testing.T) *runtime.Scheme {
 	if err := clientgoscheme.AddToScheme(s); err != nil {
 		t.Fatalf("add scheme: %v", err)
 	}
+	if err := multigresv1alpha1.AddToScheme(s); err != nil {
+		t.Fatalf("add Multigres scheme: %v", err)
+	}
 	return s
 }
 
@@ -783,8 +786,8 @@ func TestForgetClusterBlocksStaleShardUntilReactivated(t *testing.T) {
 
 	r.ForgetCluster(key)
 	if _, err := r.ClientFor(t.Context(), shard); err == nil ||
-		!strings.Contains(err.Error(), "not active") {
-		t.Fatalf("stale shard ClientFor() error = %v, want inactive cluster", err)
+		!strings.Contains(err.Error(), "not found") {
+		t.Fatalf("stale shard ClientFor() error = %v, want missing cluster", err)
 	}
 	r.mu.Lock()
 	_, stateRecreated := r.states[key]
@@ -810,6 +813,28 @@ func TestForgetClusterBlocksStaleShardUntilReactivated(t *testing.T) {
 	}
 	if after == first {
 		t.Fatal("reactivated cluster reused the forgotten client")
+	}
+}
+
+func TestClientForValidatesLiveClusterBeforeClusterControllerReconciles(t *testing.T) {
+	ca := newTestCA(t)
+	cluster := &multigresv1alpha1.MultigresCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns"},
+	}
+	r, insecure, _ := newResolver(t, cluster, operatorSecret(t, ca, "ns", "c", "1"))
+
+	got, err := r.ClientFor(t.Context(), testShard("s", "ns", "c", true))
+	if err != nil {
+		t.Fatalf("ClientFor() before cluster reconcile error = %v", err)
+	}
+	if got == nil || got == insecure {
+		t.Fatal("ClientFor() before cluster reconcile did not build an mTLS client")
+	}
+	r.mu.Lock()
+	_, active := r.active[types.NamespacedName{Namespace: "ns", Name: "c"}]
+	r.mu.Unlock()
+	if !active {
+		t.Fatal("live cluster was not added to lifecycle registry")
 	}
 }
 

@@ -249,9 +249,6 @@ func TestBuildInternalCertificates(t *testing.T) {
 			t.Errorf("secretName mismatch for %s (-want +got):\n%s", cert.GetName(), diff)
 		}
 		wantCommonName := cert.GetName()
-		if cert.GetName() == "multigres-operator.test-cluster.supabase.multigres.internal" {
-			wantCommonName = multigresv1alpha1.ComponentOperatorTLS
-		}
 		wantSubject := "C=US, ST=Delware, L=New Castle,O=Supabase Inc, CN=" + wantCommonName
 		if diff := cmp.Diff(wantSubject, spec["literalSubject"]); diff != "" {
 			t.Errorf("literalSubject mismatch for %s (-want +got):\n%s", cert.GetName(), diff)
