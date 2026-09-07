@@ -1708,11 +1708,12 @@ func setInlineConfig(t *testing.T, ctx context.Context, c client.Client, shardNa
 		if err := c.Get(ctx, types.NamespacedName{Name: shardName, Namespace: "default"}, s); err != nil {
 			return err
 		}
+		base := s.DeepCopy()
 		if s.Spec.PostgresConfig == nil {
 			s.Spec.PostgresConfig = map[string]string{}
 		}
 		s.Spec.PostgresConfig[key] = val
-		return c.Update(ctx, s)
+		return c.Patch(ctx, s, client.MergeFrom(base))
 	}); err != nil {
 		t.Fatalf("update shard inline config %s=%s: %v", key, val, err)
 	}
