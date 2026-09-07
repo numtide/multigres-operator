@@ -149,13 +149,6 @@ const (
 	// PostgresExporterQueriesFilePath is the full path passed to the exporter
 	// via --extend.query-path.
 	PostgresExporterQueriesFilePath = PostgresExporterQueriesMountPath + "/" + PostgresExporterQueriesConfigMapKey
-
-	// DefaultMultipoolerConnPoolGlobalCapacity keeps multipooler below pgctld's
-	// small default max_connections so admin and internal connections have headroom.
-	DefaultMultipoolerConnPoolGlobalCapacity = 40
-
-	// DefaultMultipoolerConnPoolAdminCapacity matches the upstream multipooler default.
-	DefaultMultipoolerConnPoolAdminCapacity = 5
 )
 
 // PgHbaConfigMapName returns the per-shard ConfigMap name for the pg_hba template.
@@ -548,14 +541,6 @@ func buildMultipoolerContainer(
 		"--service-id=" + serviceID,
 		"--pgctld-addr=localhost:15470",
 		"--pg-port=5432",
-		fmt.Sprintf(
-			"--connpool-global-capacity=%d",
-			DefaultMultipoolerConnPoolGlobalCapacity,
-		),
-		fmt.Sprintf(
-			"--connpool-admin-capacity=%d",
-			DefaultMultipoolerConnPoolAdminCapacity,
-		),
 		"--log-level=" + string(shard.Spec.LogLevels.Multipooler),
 		// Without this flag, multipooler's default gRPC keepalive enforcement policy
 		// rejects pings sent with no active RPC stream, and tears down the connection
