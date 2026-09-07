@@ -1931,6 +1931,7 @@ func setInlineConfig(
 		); err != nil {
 			return err
 		}
+		base := s.DeepCopy()
 		if s.Spec.PostgresConfig == nil {
 			s.Spec.PostgresConfig = map[string]string{}
 		}
