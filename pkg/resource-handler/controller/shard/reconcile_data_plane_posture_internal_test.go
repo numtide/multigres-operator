@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/data-handler/backuphealth"
 	"github.com/multigres/multigres-operator/pkg/data-handler/poolerclient"
 	"github.com/multigres/multigres-operator/pkg/data-handler/posture"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
@@ -32,6 +33,19 @@ type countingPoolerResolver struct {
 	client rpcclient.MultipoolerClient
 	err    error
 	calls  int
+}
+
+type backupErrorClient struct {
+	rpcclient.MultipoolerClient
+	err error
+}
+
+func (c backupErrorClient) GetBackups(
+	context.Context,
+	*clustermetadata.Multipooler,
+	*multipoolermanagerdatapb.GetBackupsRequest,
+) (*multipoolermanagerdatapb.GetBackupsResponse, error) {
+	return nil, c.err
 }
 
 func (r *countingPoolerResolver) ClientFor(
@@ -208,16 +222,16 @@ func TestReconcilePostureDebouncesFirstInconsistency(t *testing.T) {
 	})
 	r, _ := postureTestReconciler(t, shard, rpc, postureTestPod())
 
-	pending, err := r.reconcilePosture(t.Context(), store, shard, rpc)
+	retryAfter, err := r.reconcilePosture(t.Context(), store, shard, rpc)
 	if err != nil {
 		t.Fatalf("first reconcilePosture() error = %v", err)
 	}
-	if !pending {
+	if retryAfter != postureDebounceRequeueDelay {
 		t.Error("first inconsistent posture observation did not request a requeue")
 	}
 	if got := withDataPlaneRequeue(
 		ctrl.Result{},
-		pending,
+		retryAfter,
 		false,
 	).RequeueAfter; got != postureDebounceRequeueDelay {
 		t.Errorf("first requeue delay = %v, want %v", got, postureDebounceRequeueDelay)
@@ -226,11 +240,11 @@ func TestReconcilePostureDebouncesFirstInconsistency(t *testing.T) {
 		t.Errorf("conditions = %#v, want no failure on first observation", shard.Status.Conditions)
 	}
 
-	pending, err = r.reconcilePosture(t.Context(), store, shard, rpc)
+	retryAfter, err = r.reconcilePosture(t.Context(), store, shard, rpc)
 	if err != nil {
 		t.Fatalf("second reconcilePosture() error = %v", err)
 	}
-	if pending {
+	if retryAfter != 0 {
 		t.Error("second inconsistent posture observation requested another debounce requeue")
 	}
 	if !conditionIsFalse(shard.Status.Conditions, posture.ConditionConsistent) {
@@ -257,16 +271,16 @@ func TestReconcilePostureDebouncesFirstIncompleteObservation(t *testing.T) {
 	rpc.Errors[poolerID] = errors.New("connection error: EOF")
 	r, _ := postureTestReconciler(t, shard, rpc, postureTestPod())
 
-	pending, err := r.reconcilePosture(t.Context(), store, shard, rpc)
+	retryAfter, err := r.reconcilePosture(t.Context(), store, shard, rpc)
 	if err != nil {
 		t.Fatalf("first reconcilePosture() error = %v", err)
 	}
-	if !pending {
+	if retryAfter != postureDebounceRequeueDelay {
 		t.Error("first incomplete posture observation did not request a requeue")
 	}
 	if got := withDataPlaneRequeue(
 		ctrl.Result{},
-		pending,
+		retryAfter,
 		false,
 	).RequeueAfter; got != postureDebounceRequeueDelay {
 		t.Errorf("first requeue delay = %v, want %v", got, postureDebounceRequeueDelay)
@@ -278,11 +292,11 @@ func TestReconcilePostureDebouncesFirstIncompleteObservation(t *testing.T) {
 		)
 	}
 
-	pending, err = r.reconcilePosture(t.Context(), store, shard, rpc)
+	retryAfter, err = r.reconcilePosture(t.Context(), store, shard, rpc)
 	if err != nil {
 		t.Fatalf("second reconcilePosture() error = %v", err)
 	}
-	if pending {
+	if retryAfter != 0 {
 		t.Error("second incomplete posture observation requested another debounce requeue")
 	}
 	for _, condition := range shard.Status.Conditions {
@@ -344,11 +358,20 @@ func TestReconcileDataPlaneRequeuesFirstPostureStrike(t *testing.T) {
 
 func TestReconcileDataPlaneContinuesWithoutPoolerClient(t *testing.T) {
 	shard := postureTestShard()
+	lastBackup := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	shard.Status.LastBackupTime = &lastBackup
+	shard.Status.LastBackupType = "full"
 	shard.Status.Conditions = []metav1.Condition{{
 		Type:               posture.ConditionConsistent,
 		Status:             metav1.ConditionTrue,
 		Reason:             "Consistent",
 		Message:            "postures consistent with topology roles",
+		LastTransitionTime: metav1.Now(),
+	}, {
+		Type:               backuphealth.ConditionHealthy,
+		Status:             metav1.ConditionTrue,
+		Reason:             "BackupRecent",
+		Message:            "backup is recent",
 		LastTransitionTime: metav1.Now(),
 	}}
 	store, _ := postureTestStore(t)
@@ -411,15 +434,57 @@ func TestReconcileDataPlaneContinuesWithoutPoolerClient(t *testing.T) {
 	if calls := rpc.GetCallLog(); len(calls) != 0 {
 		t.Errorf("RPC phases ran with resolver error, call log = %v", calls)
 	}
+	backupCondition := findPostureCondition(got.Status.Conditions, backuphealth.ConditionHealthy)
+	if backupCondition == nil || backupCondition.Status != metav1.ConditionUnknown ||
+		backupCondition.Reason != reasonBackupCheckUnavailable {
+		t.Errorf(
+			"backup condition = %#v, want Unknown/%s",
+			backupCondition,
+			reasonBackupCheckUnavailable,
+		)
+	}
+	if got.Status.LastBackupTime == nil || !got.Status.LastBackupTime.Equal(&lastBackup) ||
+		got.Status.LastBackupType != "full" {
+		t.Errorf(
+			"last backup fields changed during outage: time=%v type=%q",
+			got.Status.LastBackupTime,
+			got.Status.LastBackupType,
+		)
+	}
 
 	recorder := r.Recorder.(*record.FakeRecorder)
-	select {
-	case event := <-recorder.Events:
-		if !strings.Contains(event, "PoolerClientUnavailable") {
-			t.Errorf("event = %q, want PoolerClientUnavailable", event)
-		}
-	default:
+	if !containsEventWithReason(drainEvents(recorder), "PoolerClientUnavailable") {
 		t.Error("expected PoolerClientUnavailable event")
+	}
+
+	secondStore, _ := postureTestStore(t)
+	r.CreateTopoStore = func(*multigresv1alpha1.Shard) (topoclient.Store, error) {
+		return secondStore, nil
+	}
+	if _, err := r.reconcileDataPlane(t.Context(), got, renderedConfig{}); err != nil {
+		t.Fatalf("second reconcileDataPlane() error = %v", err)
+	}
+	if events := drainEvents(recorder); containsEventWithReason(events, "PoolerClientUnavailable") {
+		t.Errorf(
+			"repeated resolver failure re-emitted PoolerClientUnavailable, events = %v",
+			events,
+		)
+	}
+}
+
+func TestSetBackupUnknownPreservesConfirmedFailure(t *testing.T) {
+	shard := postureTestShard()
+	shard.Status.Conditions = []metav1.Condition{{
+		Type:               backuphealth.ConditionHealthy,
+		Status:             metav1.ConditionFalse,
+		Reason:             "BackupStale",
+		LastTransitionTime: metav1.Now(),
+	}}
+	setBackupUnknownUnlessFalse(shard, "RPC unavailable")
+	condition := findPostureCondition(shard.Status.Conditions, backuphealth.ConditionHealthy)
+	if condition == nil || condition.Status != metav1.ConditionFalse ||
+		condition.Reason != "BackupStale" {
+		t.Errorf("backup condition = %#v, want preserved False/BackupStale", condition)
 	}
 }
 
@@ -475,15 +540,71 @@ func TestReconcileDataPlaneResolverFailurePreservesConfirmedPostureFailure(t *te
 	}
 }
 
-func TestReconcilePostureClearsUnavailableReasonDuringDebounce(t *testing.T) {
+func TestReconcileDataPlaneMarksBackupUnknownOnRPCFailure(t *testing.T) {
 	shard := postureTestShard()
+	lastBackup := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	shard.Status.LastBackupTime = &lastBackup
+	shard.Status.LastBackupType = "full"
 	shard.Status.Conditions = []metav1.Condition{{
-		Type:               posture.ConditionConsistent,
-		Status:             metav1.ConditionUnknown,
-		Reason:             "PoolerClientUnavailable",
-		Message:            "certificate not issued",
+		Type:               backuphealth.ConditionHealthy,
+		Status:             metav1.ConditionTrue,
+		Reason:             "BackupRecent",
 		LastTransitionTime: metav1.Now(),
 	}}
+	store, poolerID := postureTestStore(t)
+	if _, err := store.UpdateMultipoolerFields(
+		t.Context(),
+		&clustermetadata.ID{Cell: "cell1", Name: "pooler-0"},
+		func(pooler *clustermetadata.Multipooler) error {
+			pooler.RoutingState.Role = clustermetadata.RoutingRole_ROUTING_ROLE_PRIMARY
+			return nil
+		},
+	); err != nil {
+		t.Fatalf("make pooler primary: %v", err)
+	}
+
+	baseRPC := rpcclient.NewFakeClient()
+	baseRPC.SetStatusResponse(poolerID, &multipoolermanagerdatapb.StatusResponse{
+		Status: &multipoolermanagerdatapb.Status{
+			PostgresStatus: multipoolermanagerdatapb.PostgresStatus_POSTGRES_STATUS_PRIMARY,
+		},
+	})
+	rpc := backupErrorClient{
+		MultipoolerClient: baseRPC,
+		err:               errors.New("backup RPC unavailable"),
+	}
+	pod := postureTestPod()
+	pod.Labels[metadata.LabelAppComponent] = PoolComponentName
+	pod.Labels[metadata.LabelMultigresCell] = "cell1"
+	pod.Labels[metadata.LabelMultigresPool] = "default"
+	r, c := postureTestReconciler(t, shard, rpc, pod)
+	r.CreateTopoStore = func(*multigresv1alpha1.Shard) (topoclient.Store, error) {
+		return store, nil
+	}
+
+	if _, err := r.reconcileDataPlane(t.Context(), shard, renderedConfig{}); err != nil {
+		t.Fatalf("reconcileDataPlane() error = %v", err)
+	}
+	got := &multigresv1alpha1.Shard{}
+	if err := c.Get(t.Context(), client.ObjectKeyFromObject(shard), got); err != nil {
+		t.Fatalf("get updated shard: %v", err)
+	}
+	condition := findPostureCondition(got.Status.Conditions, backuphealth.ConditionHealthy)
+	if condition == nil || condition.Status != metav1.ConditionUnknown ||
+		condition.Reason != reasonBackupCheckUnavailable {
+		t.Errorf("backup condition = %#v, want Unknown/%s", condition, reasonBackupCheckUnavailable)
+	}
+	if got.Status.LastBackupTime == nil || !got.Status.LastBackupTime.Equal(&lastBackup) ||
+		got.Status.LastBackupType != "full" {
+		t.Errorf(
+			"last backup fields changed: time=%v type=%q",
+			got.Status.LastBackupTime,
+			got.Status.LastBackupType,
+		)
+	}
+}
+
+func TestReconcilePostureClearsStaleUnknownReasonDuringDebounce(t *testing.T) {
 	store, poolerID := postureTestStore(t)
 	defer func() { _ = store.Close() }()
 
@@ -493,19 +614,34 @@ func TestReconcilePostureClearsUnavailableReasonDuringDebounce(t *testing.T) {
 			PostgresStatus: multipoolermanagerdatapb.PostgresStatus_POSTGRES_STATUS_PRIMARY,
 		},
 	})
-	r, _ := postureTestReconciler(t, shard, rpc, postureTestPod())
+	for _, previousReason := range []string{
+		reasonPoolerClientUnavailable,
+		reasonAwaitingPoolerRegistration,
+	} {
+		t.Run(previousReason, func(t *testing.T) {
+			shard := postureTestShard()
+			shard.Status.Conditions = []metav1.Condition{{
+				Type:               posture.ConditionConsistent,
+				Status:             metav1.ConditionUnknown,
+				Reason:             previousReason,
+				Message:            "observation unavailable",
+				LastTransitionTime: metav1.Now(),
+			}}
+			r, _ := postureTestReconciler(t, shard, rpc, postureTestPod())
 
-	pending, err := r.reconcilePosture(t.Context(), store, shard, rpc)
-	if err != nil {
-		t.Fatalf("reconcilePosture() error = %v", err)
-	}
-	if !pending {
-		t.Fatal("first recovered unsettled observation did not request debounce requeue")
-	}
-	condition := findPostureCondition(shard.Status.Conditions, posture.ConditionConsistent)
-	if condition == nil || condition.Status != metav1.ConditionUnknown ||
-		condition.Reason != "ObservationPending" {
-		t.Errorf("condition = %#v, want Unknown/ObservationPending", condition)
+			retryAfter, err := r.reconcilePosture(t.Context(), store, shard, rpc)
+			if err != nil {
+				t.Fatalf("reconcilePosture() error = %v", err)
+			}
+			if retryAfter != postureDebounceRequeueDelay {
+				t.Fatal("first recovered unsettled observation did not request debounce requeue")
+			}
+			condition := findPostureCondition(shard.Status.Conditions, posture.ConditionConsistent)
+			if condition == nil || condition.Status != metav1.ConditionUnknown ||
+				condition.Reason != reasonObservationPending {
+				t.Errorf("condition = %#v, want Unknown/ObservationPending", condition)
+			}
+		})
 	}
 }
 
@@ -529,11 +665,11 @@ func TestReconcilePostureRequeuesWhileTopologyHasNoPoolers(t *testing.T) {
 
 	rpc := rpcclient.NewFakeClient()
 	r, _ := postureTestReconciler(t, shard, rpc, postureTestPod())
-	pending, err := r.reconcilePosture(t.Context(), store, shard, rpc)
+	retryAfter, err := r.reconcilePosture(t.Context(), store, shard, rpc)
 	if err != nil {
 		t.Fatalf("reconcilePosture() error = %v", err)
 	}
-	if !pending {
+	if retryAfter != poolerRegistrationRetryDelay {
 		t.Fatal("empty topology did not request a bootstrap requeue")
 	}
 	condition := findPostureCondition(shard.Status.Conditions, posture.ConditionConsistent)
@@ -547,20 +683,20 @@ func TestWithDataPlaneRequeueUsesEarliestDelay(t *testing.T) {
 	tests := []struct {
 		name                    string
 		result                  ctrl.Result
-		posturePending          bool
+		postureRetryAfter       time.Duration
 		poolerClientUnavailable bool
 		want                    time.Duration
 	}{
 		{
 			name:                    "keeps earlier phase retry",
 			result:                  ctrl.Result{RequeueAfter: 2 * time.Second},
-			posturePending:          true,
+			postureRetryAfter:       postureDebounceRequeueDelay,
 			poolerClientUnavailable: true,
 			want:                    2 * time.Second,
 		},
 		{
 			name:                    "posture debounce wins",
-			posturePending:          true,
+			postureRetryAfter:       postureDebounceRequeueDelay,
 			poolerClientUnavailable: true,
 			want:                    postureDebounceRequeueDelay,
 		},
@@ -574,7 +710,7 @@ func TestWithDataPlaneRequeueUsesEarliestDelay(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := withDataPlaneRequeue(
 				tt.result,
-				tt.posturePending,
+				tt.postureRetryAfter,
 				tt.poolerClientUnavailable,
 			)
 			if result.RequeueAfter != tt.want {
@@ -605,6 +741,29 @@ func conditionIsFalse(conditions []metav1.Condition, conditionType string) bool 
 func conditionIsTrue(conditions []metav1.Condition, conditionType string) bool {
 	for _, condition := range conditions {
 		if condition.Type == conditionType && condition.Status == metav1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// drainEvents returns every event currently buffered in the fake recorder.
+func drainEvents(recorder *record.FakeRecorder) []string {
+	var events []string
+	for {
+		select {
+		case event := <-recorder.Events:
+			events = append(events, event)
+		default:
+			return events
+		}
+	}
+}
+
+// containsEventWithReason reports whether any event message mentions reason.
+func containsEventWithReason(events []string, reason string) bool {
+	for _, event := range events {
+		if strings.Contains(event, reason) {
 			return true
 		}
 	}

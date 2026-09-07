@@ -409,6 +409,29 @@ func TestHandleDeletionReleasesPoolerClient(t *testing.T) {
 	})
 }
 
+func TestReconcileNotFoundReleasesPoolerClient(t *testing.T) {
+	key := types.NamespacedName{Name: "missing", Namespace: "test-ns"}
+	forgotten := make(chan types.NamespacedName, 1)
+	r := &MultigresClusterReconciler{
+		Client: fake.NewClientBuilder().WithScheme(setupScheme()).Build(),
+		PoolerClientCache: poolerClientCacheFunc(func(got types.NamespacedName) {
+			forgotten <- got
+		}),
+	}
+
+	if _, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key}); err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+	select {
+	case got := <-forgotten:
+		if got != key {
+			t.Fatalf("forgot cluster %v, want %v", got, key)
+		}
+	default:
+		t.Fatal("pooler client cache was not notified for missing cluster")
+	}
+}
+
 // ============================================================================
 // Main Controller Logic & Lifecycle Tests
 // ============================================================================
