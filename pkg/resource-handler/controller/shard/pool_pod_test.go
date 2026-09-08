@@ -95,6 +95,14 @@ func TestBuildPoolPod_BasicStructure(t *testing.T) {
 	if got := pod.Annotations[metadata.AnnotationProjectRef]; got != "test-cluster" {
 		t.Errorf("annotation %q = %q, want %q", metadata.AnnotationProjectRef, got, "test-cluster")
 	}
+	if len(pod.Spec.ReadinessGates) != 1 ||
+		pod.Spec.ReadinessGates[0].ConditionType != PoolerDataReadyCondition {
+		t.Errorf(
+			"readiness gates = %#v, want %q",
+			pod.Spec.ReadinessGates,
+			PoolerDataReadyCondition,
+		)
+	}
 }
 
 func TestBuildPoolPod_ProjectRefAnnotation(t *testing.T) {

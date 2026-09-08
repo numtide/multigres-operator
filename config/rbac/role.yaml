@@ -35,6 +35,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - admissionregistration.k8s.io
   resourceNames:
   - multigres-operator-mutating-webhook-configuration

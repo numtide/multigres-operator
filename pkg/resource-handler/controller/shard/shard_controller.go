@@ -368,6 +368,20 @@ func (r *ShardReconciler) Reconcile(
 
 	{
 		ctx, childSpan := monitoring.StartChildSpan(ctx, "Shard.ReconcilePools")
+		if err := r.reconcileShardPDB(ctx, shard); err != nil {
+			monitoring.RecordSpanError(childSpan, err)
+			childSpan.End()
+			logger.Error(err, "Failed to reconcile shard PDB")
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"FailedApply",
+				"Failed to reconcile shard PDB: %v",
+				err,
+			)
+			return ctrl.Result{}, err
+		}
+
 		// Shared across every pool in this reconcile pass so that once one
 		// pool initiates a drain, no other pool starts one too in the same
 		// pass
@@ -458,11 +472,6 @@ func (r *ShardReconciler) reconcilePool(
 			rollout,
 		); err != nil {
 			return fmt.Errorf("failed to reconcile pool pods for cell %s: %w", cellName, err)
-		}
-
-		// Reconcile pool PDB for this cell
-		if err := r.reconcilePoolPDB(ctx, shard, poolName, cellName); err != nil {
-			return fmt.Errorf("failed to reconcile pool PDB for cell %s: %w", cellName, err)
 		}
 
 		// Reconcile pool headless Service for this cell

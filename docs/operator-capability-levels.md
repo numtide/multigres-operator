@@ -249,15 +249,27 @@ blocking on unresponsive pods.
 - **Scale up**: New pool pods and PVCs created in parallel within a single
   reconcile pass and registered in topology
 - **Scale down**: Excess pods routed through the drain state machine before
-  deletion. Concurrent drain prevention via `inProgress` flag. PVC deleted if
+  deletion. A shard-wide tracker serializes scale-down with rolling updates,
+  filesystem-resize restarts, and external-deletion handling. PVC deleted if
   `WhenScaled=Delete`
-- **Scale-down safety**: Blocked when pool is already degraded
+- **Scale-down safety**: Blocked when the current pool or any other pool/cell in
+  the shard is already degraded
   (`ScaleDownBlocked` event)
 
 ### PodDisruptionBudgets
 
-Automatically created per pool/cell with `MaxUnavailable=1` to limit voluntary
-evictions during node maintenance.
+Automatically created per shard with integer
+`minAvailable=max(2,totalReplicas-1)` to preserve the two-member durability
+floor and limit voluntary disruption to one pooler. Its selector covers the
+same shard-wide pod set represented by the Shard `/scale` subresource. A
+two-cell `MULTI_CELL_AT_LEAST_2` shard also receives one cell-wide
+`minAvailable=1` PDB per cell. Operator rollouts automatically create and verify
+a temporary same-cell surge pooler before disrupting the last member there.
+External maintenance requests the same protection with the
+`maintenance.multigres.com/requested=true` Pod annotation and waits for
+`maintenance.multigres.com/ready=true` before eviction. Pod health includes
+PostgreSQL readiness and committed cohort eligibility/membership through a
+custom readiness gate.
 
 ### Deletion ordering
 

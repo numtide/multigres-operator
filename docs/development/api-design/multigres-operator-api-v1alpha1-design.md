@@ -67,11 +67,11 @@ The formalized parent/child model addresses these by ensuring:
            └── 📦 [Shard] (Child CR) ← 📄 Uses [ShardTemplate] OR inline [spec]
                 │
                 ├── 🧠 MultiOrch Resources (Deployment per cell)
+                ├── 🛡️ PodDisruptionBudget  ← per shard
                 └── 🏊 Pools (per cell):
                      ├── Pod-0  ← operator-managed, owns data PVC-0
                      ├── Pod-1  ← operator-managed, owns data PVC-1
                      ├── PVC-0, PVC-1  ← operator-managed (data)
-                     ├── PodDisruptionBudget  ← per pool per cell
                      ├── Headless Service  ← for pod DNS resolution
                      ├── ConfigMap  ← spec-hash for drift detection
                      └── Backup PVC (shared, filesystem only)

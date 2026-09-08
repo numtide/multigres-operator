@@ -235,7 +235,7 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				return r.reconcileMultiorchService(ctx, shard, "cell1")
 			},
 		},
-		"PoolPDB": {
+		"ShardPDB": {
 			setupShard: func() *multigresv1alpha1.Shard {
 				return &multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
@@ -245,7 +245,7 @@ func TestReconcile_InvalidScheme(t *testing.T) {
 				}
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
-				return r.reconcilePoolPDB(ctx, shard, "pool1", "cell1")
+				return r.reconcileShardPDB(ctx, shard)
 			},
 		},
 		"PoolHeadlessService": {
@@ -416,7 +416,7 @@ func TestReconcile_PatchError(t *testing.T) {
 				return r.reconcileMultiorchService(ctx, shard, "cell1")
 			},
 		},
-		"PoolPDB": {
+		"ShardPDB": {
 			setupShard: func() *multigresv1alpha1.Shard {
 				return &multigresv1alpha1.Shard{
 					ObjectMeta: metav1.ObjectMeta{
@@ -430,22 +430,19 @@ func TestReconcile_PatchError(t *testing.T) {
 				}
 			},
 			getFailObj: func(s *multigresv1alpha1.Shard) string {
-				// The PDB name formula is from BuildPoolPodDisruptionBudget
+				// The PDB name formula is from BuildShardPodDisruptionBudget.
 				clusterName := s.Labels["multigres.com/cluster"]
 				return name.JoinWithConstraints(
-					name.DefaultConstraints,
+					name.ServiceConstraints,
 					clusterName,
 					string(s.Spec.DatabaseName),
 					string(s.Spec.TableGroupName),
 					string(s.Spec.ShardName),
-					"pool",
-					"pool1",
-					"cell1",
 					"pdb",
 				)
 			},
 			reconcileFunc: func(r *ShardReconciler, ctx context.Context, shard *multigresv1alpha1.Shard) error {
-				return r.reconcilePoolPDB(ctx, shard, "pool1", "cell1")
+				return r.reconcileShardPDB(ctx, shard)
 			},
 		},
 		"PoolHeadlessService": {
@@ -4564,7 +4561,7 @@ func TestReconcile_Deletion(t *testing.T) {
 	}
 }
 
-func TestReconcilePool_PDBError(t *testing.T) {
+func TestReconcileShardPDB_Error(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
@@ -4581,12 +4578,6 @@ func TestReconcilePool_PDBError(t *testing.T) {
 			ShardName:      "s1",
 		},
 	}
-	poolSpec := multigresv1alpha1.PoolSpec{
-		Cells:           []multigresv1alpha1.CellName{"zone1"},
-		ReplicasPerCell: ptr.To(int32(1)),
-		Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
-	}
-
 	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard.DeepCopy()).Build()
 	c := testutil.NewFakeClientWithFailures(base, &testutil.FailureConfig{
 		OnPatch: func(obj client.Object) error {
@@ -4597,11 +4588,11 @@ func TestReconcilePool_PDBError(t *testing.T) {
 		},
 	})
 	r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
-	err := r.reconcilePool(t.Context(), shard, "primary", poolSpec, &shardRolloutTracker{})
+	err := r.reconcileShardPDB(t.Context(), shard)
 	if err == nil {
 		t.Fatal("expected error from PDB reconciliation")
 	}
-	if !strings.Contains(err.Error(), "failed to reconcile pool PDB") {
+	if !strings.Contains(err.Error(), "failed to apply shard PDB") {
 		t.Errorf("expected PDB error, got: %v", err)
 	}
 }

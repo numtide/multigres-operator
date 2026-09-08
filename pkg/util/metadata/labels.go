@@ -146,6 +146,20 @@ const (
 	// was first requested. Used to detect failover timeouts.
 	AnnotationDrainRequestedAt = "drain.multigres.com/requested-at"
 
+	// AnnotationMaintenanceRequested asks the operator to provision enough
+	// same-cell capacity for this pod to be voluntarily evicted. Maintenance
+	// automation must wait for AnnotationMaintenanceReady before calling the
+	// Eviction API.
+	AnnotationMaintenanceRequested = "maintenance.multigres.com/requested"
+
+	// AnnotationMaintenanceReady confirms that another data-ready pooler exists
+	// in the pod's cell. The operator owns this annotation.
+	AnnotationMaintenanceReady = "maintenance.multigres.com/ready"
+
+	// AnnotationMaintenanceSurge marks a temporary pooler created to preserve
+	// cross-cell durability during a rollout or explicit maintenance request.
+	AnnotationMaintenanceSurge = "maintenance.multigres.com/surge"
+
 	// LabelPodRole reflects the pod's topology role (e.g. "DRAINED").
 	// Set by the resource-handler when the topology store reports a notable role.
 	// Used as the durable signal for DRAINED PVC cleanup, since PodRoles may be

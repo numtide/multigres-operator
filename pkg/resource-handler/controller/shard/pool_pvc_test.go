@@ -6,6 +6,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 )
@@ -265,7 +266,7 @@ func TestBuildSharedBackupPVC_NoOwnerRefWithRetainPolicy(t *testing.T) {
 	}
 }
 
-func TestBuildPoolPodDisruptionBudget(t *testing.T) {
+func TestBuildShardPodDisruptionBudget(t *testing.T) {
 	shard := &multigresv1alpha1.Shard{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-shard",
@@ -277,10 +278,11 @@ func TestBuildPoolPodDisruptionBudget(t *testing.T) {
 			DatabaseName:   "postgres",
 			TableGroupName: "default",
 			ShardName:      "0-inf",
+			Replicas:       ptr.To(int32(3)),
 		},
 	}
 
-	pdb, err := BuildPoolPodDisruptionBudget(shard, "main", "z1", testScheme())
+	pdb, err := BuildShardPodDisruptionBudget(shard, testScheme())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -289,18 +291,27 @@ func TestBuildPoolPodDisruptionBudget(t *testing.T) {
 		t.Errorf("namespace = %q, want %q", pdb.Namespace, "default")
 	}
 
-	// maxUnavailable should be 1
-	if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntValue() != 1 {
-		t.Errorf("maxUnavailable = %v, want 1", pdb.Spec.MaxUnavailable)
+	// Three desired members preserve two available members.
+	if pdb.Spec.MinAvailable == nil || pdb.Spec.MinAvailable.IntValue() != 2 {
+		t.Errorf("minAvailable = %v, want 2", pdb.Spec.MinAvailable)
+	}
+	if pdb.Spec.MaxUnavailable != nil {
+		t.Errorf("maxUnavailable = %v, want nil", pdb.Spec.MaxUnavailable)
 	}
 
-	// Selector should match pool labels
+	// Selector should match all pool pods in the shard, not one pool or cell.
 	if pdb.Spec.Selector == nil {
 		t.Fatal("selector is nil")
 	}
 	sel := pdb.Spec.Selector.MatchLabels
-	if sel["multigres.com/cell"] != "z1" {
-		t.Errorf("selector cell = %q, want %q", sel["multigres.com/cell"], "z1")
+	if _, ok := sel["multigres.com/cell"]; ok {
+		t.Errorf("selector must not be scoped to a cell: %#v", sel)
+	}
+	if _, ok := sel["multigres.com/pool"]; ok {
+		t.Errorf("selector must not be scoped to a pool: %#v", sel)
+	}
+	if sel["multigres.com/shard"] != "0-inf" {
+		t.Errorf("selector shard = %q, want %q", sel["multigres.com/shard"], "0-inf")
 	}
 	if sel["app.kubernetes.io/component"] != PoolComponentName {
 		t.Errorf(

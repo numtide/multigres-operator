@@ -28,12 +28,23 @@ const statusRPCTimeout = 5 * time.Second
 // Result holds the computed posture-consistency information.
 type Result struct {
 	Postures          map[string]string
+	Readiness         map[string]Readiness
 	MultiplePrimaries bool
 	Mismatches        []string
 	PrimaryCount      int
 	// Incomplete reports that at least one cell or pooler was not observed.
 	Incomplete bool
 	Message    string
+}
+
+// Readiness is the data-plane availability signal projected onto a Kubernetes
+// Pod readiness gate. A pooler is ready only when PostgreSQL is accepting
+// connections, the pooler is willing to participate, and its committed rule
+// includes it in the shard cohort.
+type Readiness struct {
+	Ready   bool
+	Reason  string
+	Message string
 }
 
 // Evaluate compares each managed pooler's observed postgres state with its
@@ -47,6 +58,13 @@ func Evaluate(
 	managedPodNames []string,
 ) (*Result, error) {
 	postures := make(map[string]string)
+	readiness := make(map[string]Readiness, len(managedPodNames))
+	for _, podName := range managedPodNames {
+		readiness[podName] = Readiness{
+			Reason:  "AwaitingRegistration",
+			Message: "pooler has not registered in the shard topology",
+		}
+	}
 	isTopoPrimary := make(map[string]bool)
 	incomplete := false
 
@@ -71,7 +89,11 @@ func Evaluate(
 			}
 
 			isTopoPrimary[podName] = topo.IsPrimaryPooler(p.Multipooler)
-			postures[podName] = observePosture(ctx, rpcClient, p.Multipooler)
+			postures[podName], readiness[podName] = observePooler(
+				ctx,
+				rpcClient,
+				p.Multipooler,
+			)
 			if postures[podName] == "UNKNOWN" {
 				incomplete = true
 			}
@@ -82,7 +104,7 @@ func Evaluate(
 		return nil, nil
 	}
 
-	result := &Result{Postures: postures, Incomplete: incomplete}
+	result := &Result{Postures: postures, Readiness: readiness, Incomplete: incomplete}
 
 	var primaries []string
 	for podName, observed := range postures {
@@ -128,19 +150,75 @@ func mismatchMessage(mismatches []string) string {
 	)
 }
 
-func observePosture(
+func observePooler(
 	ctx context.Context,
 	rpcClient rpcclient.MultipoolerClient,
 	mp *clustermetadatapb.Multipooler,
-) string {
+) (string, Readiness) {
 	rpcCtx, cancel := context.WithTimeout(ctx, statusRPCTimeout)
 	defer cancel()
 
 	resp, err := rpcClient.Status(rpcCtx, mp, &multipoolermanagerdatapb.StatusRequest{})
 	if err != nil {
-		return "UNKNOWN"
+		return "UNKNOWN", Readiness{
+			Reason:  "StatusUnavailable",
+			Message: fmt.Sprintf("multipooler status RPC failed: %v", err),
+		}
 	}
-	return postureString(resp.GetStatus().GetPostgresStatus())
+	status := resp.GetStatus()
+	posture := postureString(status.GetPostgresStatus())
+	if !status.GetIsInitialized() {
+		return posture, Readiness{
+			Reason:  "NotInitialized",
+			Message: "pooler initialization has not completed",
+		}
+	}
+	if !status.GetPostgresReady() {
+		return posture, Readiness{
+			Reason:  "PostgresNotReady",
+			Message: "PostgreSQL is not accepting connections",
+		}
+	}
+	eligibility := resp.GetAvailabilityStatus().GetCohortEligibilityStatus()
+	if eligibility == nil ||
+		eligibility.GetSignal() !=
+			clustermetadatapb.CohortEligibilitySignal_COHORT_ELIGIBILITY_SIGNAL_ELIGIBLE {
+		return posture, Readiness{
+			Reason:  "CohortIneligible",
+			Message: "pooler is not eligible to participate in the shard cohort",
+		}
+	}
+	if !committedCohortContains(resp, mp.GetId()) {
+		return posture, Readiness{
+			Reason:  "NotCohortMember",
+			Message: "pooler is not a member of its committed shard cohort",
+		}
+	}
+	return posture, Readiness{
+		Ready:   true,
+		Reason:  "DataPlaneReady",
+		Message: "PostgreSQL is ready and the pooler is an eligible shard cohort member",
+	}
+}
+
+func committedCohortContains(
+	resp *multipoolermanagerdatapb.StatusResponse,
+	poolerID *clustermetadatapb.ID,
+) bool {
+	decision := resp.GetConsensusStatus().
+		GetCurrentPosition().
+		GetPosition().
+		GetDecision()
+	if decision == nil || poolerID == nil {
+		return false
+	}
+	poolerKey := topoclient.ClusterIDString(poolerID)
+	for _, member := range decision.GetCohortMembers() {
+		if topoclient.ClusterIDString(member) == poolerKey {
+			return true
+		}
+	}
+	return false
 }
 
 func postureString(s multipoolermanagerdatapb.PostgresStatus) string {
