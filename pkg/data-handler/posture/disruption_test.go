@@ -25,8 +25,13 @@ func TestCheckDisruption(t *testing.T) {
 		stalePrimary  bool
 		rpcError      int
 		topoError     bool
+		leadership    *cm.LeadershipStatus
 	}{
-		{name: "healthy three member cohort"},
+		{name: "healthy primary omits leadership status"},
+		{name: "empty leadership status is not a resignation", leadership: &cm.LeadershipStatus{}},
+		{name: "explicit active leadership is optional", leadership: &cm.LeadershipStatus{
+			LeaderTerm: 2, Signal: cm.LeadershipSignal_LEADERSHIP_SIGNAL_ACTIVE,
+		}},
 		{name: "primary removal with surviving quorum", targetPrimary: true},
 		{name: "stale primary ordering", targetPrimary: true, stalePrimary: true, wantError: true},
 		{name: "two cells survive", cells: []string{"cell1", "cell2", "cell1"}},
@@ -47,10 +52,36 @@ func TestCheckDisruption(t *testing.T) {
 		{name: "two primaries", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
 			r[1].Status.PostgresStatus = md.PostgresStatus_POSTGRES_STATUS_PRIMARY
 		}},
-		{name: "primary resigning", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
-			r[0].AvailabilityStatus.LeadershipStatus.Signal = cm.LeadershipSignal_LEADERSHIP_SIGNAL_REQUESTING_DEMOTION
+		{name: "primary resigning in current term", wantError: true, leadership: &cm.LeadershipStatus{
+			LeaderTerm: 2, Signal: cm.LeadershipSignal_LEADERSHIP_SIGNAL_REQUESTING_DEMOTION,
 		}},
-		{name: "stale leadership signal", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) { r[0].AvailabilityStatus.LeadershipStatus.LeaderTerm = 1 }},
+		{name: "resignation from previous term is stale", leadership: &cm.LeadershipStatus{
+			LeaderTerm: 1, Signal: cm.LeadershipSignal_LEADERSHIP_SIGNAL_REQUESTING_DEMOTION,
+		}},
+		{name: "resignation without a term is not a current term signal", leadership: &cm.LeadershipStatus{
+			Signal: cm.LeadershipSignal_LEADERSHIP_SIGNAL_REQUESTING_DEMOTION,
+		}},
+		{name: "ineligible primary without leadership signal", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[0].AvailabilityStatus.CohortEligibilityStatus.Signal = cm.CohortEligibilitySignal_COHORT_ELIGIBILITY_SIGNAL_INELIGIBLE
+		}},
+		{name: "ineligibility still blocks with stale resignation", wantError: true, leadership: &cm.LeadershipStatus{
+			LeaderTerm: 1, Signal: cm.LeadershipSignal_LEADERSHIP_SIGNAL_REQUESTING_DEMOTION,
+		}, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[0].AvailabilityStatus.CohortEligibilityStatus.Signal = cm.CohortEligibilitySignal_COHORT_ELIGIBILITY_SIGNAL_INELIGIBLE
+		}},
+		{name: "missing primary details still blocks", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[0].Status.PrimaryStatus = nil
+		}},
+		{name: "missing availability is not a healthy primary", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[0].AvailabilityStatus = nil
+		}},
+		{name: "primary identity disagrees with committed rule", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[0].ConsensusStatus.CurrentPosition.Position.Decision.LeaderId = r[1].ConsensusStatus.Id
+		}},
+		{name: "primary has pending proposal", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			p := r[0].ConsensusStatus.CurrentPosition.Position
+			p.Proposal = proto.Clone(p.Decision).(*cm.ShardRule)
+		}},
 		{name: "primary not serving", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) { r[0].Status.PrimaryStatus.Ready = false }},
 		{name: "follower disconnected", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) { r[0].Status.PrimaryStatus.ConnectedFollowers = nil }},
 		{name: "cohort not converged", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
@@ -142,10 +173,9 @@ func TestCheckDisruption(t *testing.T) {
 				Ready:              true,
 				ConnectedFollowers: ids[1:],
 			}
-			responses[0].AvailabilityStatus.LeadershipStatus = &cm.LeadershipStatus{
-				LeaderTerm: 2,
-				Signal:     cm.LeadershipSignal_LEADERSHIP_SIGNAL_ACTIVE,
-			}
+			// The pinned ConsensusManager.LeadershipStatus returns nil when no
+			// resignation is recorded. Only signal-specific cases set this field.
+			responses[0].AvailabilityStatus.LeadershipStatus = tc.leadership
 			names := []string{"p0", "p1", "p2"}
 			if tc.change != nil {
 				tc.change(responses, &names)

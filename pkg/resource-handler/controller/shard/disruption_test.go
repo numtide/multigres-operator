@@ -432,10 +432,7 @@ func observeHealthyDisruption(
 			role = cm.RoutingRole_ROUTING_ROLE_PRIMARY
 			response.Status.PostgresStatus = md.PostgresStatus_POSTGRES_STATUS_PRIMARY
 			response.Status.PrimaryStatus = &md.PrimaryStatus{Ready: true, ConnectedFollowers: ids}
-			response.AvailabilityStatus.LeadershipStatus = &cm.LeadershipStatus{
-				LeaderTerm: 2,
-				Signal:     cm.LeadershipSignal_LEADERSHIP_SIGNAL_ACTIVE,
-			}
+			// Healthy primaries omit leadership status in the pinned server.
 		}
 		store.poolers = append(
 			store.poolers,

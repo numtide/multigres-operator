@@ -123,6 +123,8 @@ Scale-down uses the [drain state machine](#5-drain-state-machine). Extra pods ar
 
 Scale-down, rolling updates, and filesystem-resize restarts also require a fresh data-plane preflight: an active committed primary, recovered cohort members on the same rule, and connected surviving followers. The remaining cohort must satisfy the committed durability policy and Multigres's recruitment quorum. Deleting a pod does not by itself establish recovery: if its membership is still committed, the next removal waits. Missing or inconsistent observations fail closed, emit `DisruptionBlocked` for a failed data-plane check, and retry after five seconds. The operator observes consensus; it does not appoint leaders or rewrite cohort membership. If Multigres cannot safely shrink the cohort, scale-down remains paused.
 
+Healthy primaries omit `leadershipStatus` in the pinned Multigres implementation. The gate requires observed PostgreSQL primary readiness and committed identity, not an `ACTIVE` leadership signal. A current-term resignation blocks disruption; a stale resignation from an earlier term does not. Cohort ineligibility blocks independently of the resignation term. These Status observations are best-effort, not an atomic availability reservation, and connected followers alone do not establish WAL catch-up.
+
 ### External Deletion
 
 When a pod is deleted externally (e.g., `kubectl delete pod`), it enters the drain state machine to ensure etcd cleanup before the pod is fully removed.
