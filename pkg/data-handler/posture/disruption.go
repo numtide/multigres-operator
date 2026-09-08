@@ -19,6 +19,7 @@ import (
 // Kubernetes readiness and cached topology roles alone cannot establish that
 // a previous cohort change or leader election has finished. Missing evidence
 // blocks removal; this function never changes Multigres consensus state.
+// Status is best-effort: this preflight is not an atomic availability reservation.
 func CheckDisruption(
 	ctx context.Context,
 	store topoclient.Store,
@@ -106,9 +107,14 @@ func CheckDisruption(
 		return fmt.Errorf("primary is not an eligible committed cohort member")
 	}
 	leadership := primary.GetAvailabilityStatus().GetLeadershipStatus()
-	if leadership.GetSignal() != clustermetadatapb.LeadershipSignal_LEADERSHIP_SIGNAL_ACTIVE ||
-		leadership.GetLeaderTerm() != rule.GetRuleNumber().GetCoordinatorTerm() ||
-		!primary.GetStatus().GetPrimaryStatus().GetReady() {
+	// The pinned server omits leadership status unless it has recorded a
+	// resignation. Match Multiorch's LeaderNeedsReplacement term qualification:
+	// an old resignation is not evidence that the current primary is resigning.
+	// Pending primary proposals are rejected by the cohort checks below.
+	resigning := leadership.GetSignal() == clustermetadatapb.LeadershipSignal_LEADERSHIP_SIGNAL_REQUESTING_DEMOTION &&
+		leadership.GetLeaderTerm() != 0 &&
+		leadership.GetLeaderTerm() == rule.GetRuleNumber().GetCoordinatorTerm()
+	if resigning || !primary.GetStatus().GetPrimaryStatus().GetReady() {
 		return fmt.Errorf("committed primary is not actively serving")
 	}
 	var remaining []*clustermetadatapb.ID
@@ -155,9 +161,10 @@ func CheckDisruption(
 	); err != nil {
 		return fmt.Errorf("remaining cohort cannot recruit a leader: %w", err)
 	}
-	// Require the current primary to have streaming connections to the remaining
+	// Require the current primary to report connections to the remaining
 	// followers. A locally accepting standby can still be disconnected after a
-	// failover, despite having replicated the same rule earlier.
+	// failover, despite having replicated the same rule earlier. ConnectedFollowers
+	// reports pg_stat_replication membership, not WAL catch-up or streaming state.
 	connected := map[string]bool{topoclient.ClusterIDString(leader): true}
 	for _, follower := range primary.GetStatus().GetPrimaryStatus().GetConnectedFollowers() {
 		connected[topoclient.ClusterIDString(follower)] = true
