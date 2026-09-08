@@ -319,6 +319,11 @@ func (r *ShardReconciler) createMissingResources(
 				if !capacity {
 					continue
 				}
+				if allowed, err := r.canStartDisruption(ctx, shard, pod, disruptions); err != nil {
+					return 0, false, err
+				} else if !allowed {
+					continue
+				}
 				if err := r.initiateDrain(ctx, pod); err != nil {
 					return 0, false, fmt.Errorf(
 						"failed to drain pod %s for filesystem resize: %w",
@@ -405,25 +410,13 @@ func isPoolHealthy(
 }
 
 // isShardHealthy reports whether every declared pool/cell across the whole
-// shard is healthy per isPoolHealthy
+// shard is healthy per isPoolHealthy and no pod, including extras, is draining.
 func (r *ShardReconciler) isShardHealthy(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
 ) (bool, error) {
-	lbls := map[string]string{
-		metadata.LabelMultigresCluster:    shard.Labels[metadata.LabelMultigresCluster],
-		metadata.LabelMultigresDatabase:   string(shard.Spec.DatabaseName),
-		metadata.LabelMultigresTableGroup: string(shard.Spec.TableGroupName),
-		metadata.LabelMultigresShard:      string(shard.Spec.ShardName),
-		metadata.LabelAppComponent:        PoolComponentName,
-	}
-	podList := &corev1.PodList{}
-	if err := r.List(
-		ctx,
-		podList,
-		client.InNamespace(shard.Namespace),
-		client.MatchingLabels(lbls),
-	); err != nil {
+	podList, err := r.listDisruptionPods(ctx, shard)
+	if err != nil {
 		return false, fmt.Errorf("listing pool pods for shard health check: %w", err)
 	}
 
@@ -431,6 +424,11 @@ func (r *ShardReconciler) isShardHealthy(
 	podsByPoolCell := make(map[string]map[string]*corev1.Pod, len(shard.Spec.Pools))
 	for i := range podList.Items {
 		pod := &podList.Items[i]
+		// Extras and surge pods still belong to the shard while they drain.
+		// Check persisted operation state before filtering to desired ordinals.
+		if pod.Annotations[metadata.AnnotationDrainState] != "" || !pod.DeletionTimestamp.IsZero() {
+			return false, nil
+		}
 		key := pod.Labels[metadata.LabelMultigresPool] + "/" + pod.Labels[metadata.LabelMultigresCell]
 		if podsByPoolCell[key] == nil {
 			podsByPoolCell[key] = map[string]*corev1.Pod{}
@@ -574,6 +572,7 @@ func (r *ShardReconciler) handleScaleDown(
 			)
 		}
 		actionTaken = true
+		disruptions.SetStarted()
 	}
 
 	// Drain extra pods (scale-down, skip if another drain is already in progress).
@@ -617,8 +616,25 @@ func (r *ShardReconciler) handleScaleDown(
 			)
 			return actionTaken, inProgress, nil
 		}
-		podToDrain := r.selectPodToDrain(ctx, extraPods, shard)
+		podToDrain, err := r.selectShardScaleDownPod(ctx, shard, extraPods)
+		if err != nil {
+			return actionTaken, inProgress, err
+		}
+		if podToDrain != nil && existingPods[podToDrain.Name] == nil {
+			// The selected replica belongs to another pool/cell. Let its normal
+			// reconciliation own the drain and PVC lifecycle.
+			return actionTaken, inProgress, nil
+		}
 		if podToDrain != nil && podToDrain.Annotations[metadata.AnnotationDrainState] == "" {
+			if allowed, err := r.canStartDisruption(
+				ctx,
+				shard,
+				podToDrain,
+				disruptions,
+			); err != nil ||
+				!allowed {
+				return actionTaken, inProgress, err
+			}
 			capacity, err := r.hasMaintenanceCapacityForPod(
 				ctx,
 				shard,
@@ -660,8 +676,9 @@ func (r *ShardReconciler) handleScaleDown(
 // reconciled later in the same pass cannot start another drain while the
 // controller cache is catching up.
 type shardRolloutTracker struct {
-	started           bool
-	surgeStartedCells map[string]struct{}
+	started            bool
+	waitingForRecovery bool
+	surgeStartedCells  map[string]struct{}
 }
 
 func firstShardRolloutTracker(trackers []*shardRolloutTracker) *shardRolloutTracker {
@@ -739,17 +756,15 @@ func (r *ShardReconciler) handleRollingUpdates(
 
 	// Prevent a new drain if some other pool in this shard already
 	// started one earlier in this same reconcile pass. Checked before
-	// isShardHealthy because that check reads through the controller cache,
-	// which may not yet reflect a drain another pool just initiated moments
-	// ago in this same pass.
+	// isShardHealthy so completion/cleanup in this pass cannot immediately
+	// trigger another operation, even if the deleted pod is already absent.
 	if rollout.HasStarted() {
 		return nil
 	}
 
 	// Prevent a new drain if some other pool/cell in this shard is
-	// already mid-rollout or has not yet come back Ready (from an earlier
-	// reconcile pass — real wall-clock time since then means the cache has
-	// had time to catch up).
+	// already mid-rollout or has not yet come back Ready. This reads uncached
+	// state and includes extra pods left over from scale-down.
 	if healthy, err := r.isShardHealthy(ctx, shard); err != nil {
 		return err
 	} else if !healthy {
@@ -792,6 +807,15 @@ func (r *ShardReconciler) handleRollingUpdates(
 			if !capacity {
 				return nil
 			}
+			if allowed, err := r.canStartDisruption(
+				ctx,
+				shard,
+				pod,
+				rollout,
+			); err != nil ||
+				!allowed {
+				return err
+			}
 			if err := r.initiateDrain(ctx, pod); err != nil {
 				return fmt.Errorf("failed to initiate drain for drifted pod %s: %w", pod.Name, err)
 			}
@@ -826,6 +850,15 @@ func (r *ShardReconciler) handleRollingUpdates(
 		}
 		if !capacity {
 			return nil
+		}
+		if allowed, err := r.canStartDisruption(
+			ctx,
+			shard,
+			waitPrimary,
+			rollout,
+		); err != nil ||
+			!allowed {
+			return err
 		}
 		if err := r.initiateDrain(ctx, waitPrimary); err != nil {
 			return fmt.Errorf(

@@ -1674,16 +1674,18 @@ func TestScaleDown_ExternallyDeletedExtraPod(t *testing.T) {
 		}
 		pod.Annotations[metadata.AnnotationSpecHash] = desiredPod.Annotations[metadata.AnnotationSpecHash]
 
-		// For the extra pod (index 2), simulate an external deletion:
-		// Give it a DeletionTimestamp.
+		// Hold the extra pod after the Delete below sets its deletion timestamp.
 		if i == 2 {
 			pod.Finalizers = []string{"kubernetes.io/test"}
-			now := metav1.Now()
-			pod.DeletionTimestamp = &now
 		}
 
 		if err := c.Create(context.Background(), pod); err != nil {
 			t.Fatalf("failed to create pod: %v", err)
+		}
+		if i == 2 {
+			if err := c.Delete(t.Context(), pod); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -1862,6 +1864,7 @@ func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 		existingPods := make(map[string]*corev1.Pod, len(pods))
 		for _, p := range pods {
@@ -1971,6 +1974,10 @@ func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		shard.Spec.Pools = map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+			multigresv1alpha1.PoolName(poolName): {ReplicasPerCell: ptr.To(int32(2))},
+		}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 		existingPods := make(map[string]*corev1.Pod, len(pods))
 		for _, p := range pods {
@@ -2083,6 +2090,8 @@ func TestRollingUpdateOrder(t *testing.T) {
 			t.Fatalf("failed to set pod status: %v", err)
 		}
 	}
+
+	observeHealthyDisruption(t, r, shardObj, "primary", "zone1")
 
 	// Run reconcile loop
 	err := r.reconcilePoolPods(

@@ -253,8 +253,11 @@ blocking on unresponsive pods.
   filesystem-resize restarts, and external-deletion handling. PVC deleted if
   `WhenScaled=Delete`
 - **Scale-down safety**: Blocked when the current pool or any other pool/cell in
-  the shard is already degraded
-  (`ScaleDownBlocked` event)
+  the shard is degraded or any shard pod is draining/terminating, including
+  extra pods. Candidates are ranked shard-wide, replicas before the primary.
+  Planned drains also wait for a fresh active-primary/cohort observation and
+  sufficient surviving durability and recruitment quorum (`DisruptionBlocked`
+  event). Recovery checks retry after five seconds, including after pod deletion.
 
 ### PodDisruptionBudgets
 

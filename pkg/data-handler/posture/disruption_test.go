@@ -1,0 +1,189 @@
+package posture_test
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/multigres/multigres/go/common/rpcclient"
+	"github.com/multigres/multigres/go/common/topoclient"
+	cm "github.com/multigres/multigres/go/pb/clustermetadata"
+	md "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
+	"google.golang.org/protobuf/proto"
+
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/data-handler/posture"
+)
+
+func TestCheckDisruption(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		change        func([]*md.StatusResponse, *[]string)
+		wantError     bool
+		cells         []string
+		targetPrimary bool
+		stalePrimary  bool
+		rpcError      int
+		topoError     bool
+	}{
+		{name: "healthy three member cohort"},
+		{name: "primary removal with surviving quorum", targetPrimary: true},
+		{name: "stale primary ordering", targetPrimary: true, stalePrimary: true, wantError: true},
+		{name: "two cells survive", cells: []string{"cell1", "cell2", "cell1"}},
+		{name: "last member of second cell", cells: []string{"cell1", "cell1", "cell2"}, wantError: true},
+		{name: "unreachable survivor", rpcError: 1, wantError: true},
+		{name: "unreachable extra can be removed", rpcError: 2},
+		{name: "extra with no consensus status can be removed", change: func(r []*md.StatusResponse, _ *[]string) {
+			r[2].ConsensusStatus = nil
+		}},
+		{name: "lagging extra can be removed", change: func(r []*md.StatusResponse, _ *[]string) {
+			r[2].ConsensusStatus.CurrentPosition.Position.Decision.RuleNumber.CoordinatorTerm--
+		}},
+		{name: "topology unavailable", topoError: true, wantError: true},
+		{name: "deleted member still in committed cohort", wantError: true, change: func(_ []*md.StatusResponse, names *[]string) { *names = (*names)[:1] }},
+		{name: "no primary", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[0].Status.PostgresStatus = md.PostgresStatus_POSTGRES_STATUS_STANDBY
+		}},
+		{name: "two primaries", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[1].Status.PostgresStatus = md.PostgresStatus_POSTGRES_STATUS_PRIMARY
+		}},
+		{name: "primary resigning", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[0].AvailabilityStatus.LeadershipStatus.Signal = cm.LeadershipSignal_LEADERSHIP_SIGNAL_REQUESTING_DEMOTION
+		}},
+		{name: "stale leadership signal", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) { r[0].AvailabilityStatus.LeadershipStatus.LeaderTerm = 1 }},
+		{name: "primary not serving", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) { r[0].Status.PrimaryStatus.Ready = false }},
+		{name: "follower disconnected", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) { r[0].Status.PrimaryStatus.ConnectedFollowers = nil }},
+		{name: "cohort not converged", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[1].ConsensusStatus.CurrentPosition.Position.Decision.RuleNumber.CoordinatorTerm++
+		}},
+		{name: "pending proposal", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			p := r[1].ConsensusStatus.CurrentPosition.Position
+			p.Proposal = proto.Clone(p.Decision).(*cm.ShardRule)
+		}},
+		{name: "pending proposal on target", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			p := r[2].ConsensusStatus.CurrentPosition.Position
+			p.Proposal = proto.Clone(p.Decision).(*cm.ShardRule)
+		}},
+		{name: "target has newer committed rule", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[2].ConsensusStatus.CurrentPosition.Position.Decision.RuleNumber.CoordinatorTerm++
+		}},
+		{name: "rewind recovery incomplete", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[1].ConsensusStatus.RecruitBlockedUntil = &cm.LsnPosition{}
+		}},
+		{name: "missing status", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) { r[1].Status = nil }},
+		{name: "survivor not yet a standby", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			r[1].Status.PostgresStatus = md.PostgresStatus_POSTGRES_STATUS_UNKNOWN
+		}},
+		{name: "two members cannot lose another", wantError: true, change: func(r []*md.StatusResponse, _ *[]string) {
+			for _, response := range r {
+				rule := response.ConsensusStatus.CurrentPosition.Position.Decision
+				rule.CohortMembers = []*cm.ID{rule.CohortMembers[0], rule.CohortMembers[2]}
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			shard := testShard()
+			poolers := []*topoclient.MultipoolerInfo{
+				poolerInfo(
+					"p0",
+					cm.RoutingRole_ROUTING_ROLE_PRIMARY,
+					cm.PoolerLifecycleStatus_LIFECYCLE_ACTIVE,
+				),
+				poolerInfo(
+					"p1",
+					cm.RoutingRole_ROUTING_ROLE_REPLICA,
+					cm.PoolerLifecycleStatus_LIFECYCLE_ACTIVE,
+				),
+				poolerInfo(
+					"p2",
+					cm.RoutingRole_ROUTING_ROLE_REPLICA,
+					cm.PoolerLifecycleStatus_LIFECYCLE_ACTIVE,
+				),
+			}
+			ids := []*cm.ID{poolers[0].Id, poolers[1].Id, poolers[2].Id}
+			rule := &cm.ShardRule{
+				RuleNumber:       &cm.RuleNumber{CoordinatorTerm: 2},
+				LeaderId:         ids[0],
+				CohortMembers:    ids,
+				DurabilityPolicy: topoclient.AtLeastN(2),
+			}
+			if tc.cells != nil {
+				for i, cell := range tc.cells {
+					ids[i].Cell = cell
+				}
+				rule.DurabilityPolicy = topoclient.MultiCellAtLeastN(2)
+				pool := shard.Spec.Pools["default"]
+				pool.Cells = []multigresv1alpha1.CellName{"cell1", "cell2"}
+				shard.Spec.Pools["default"] = pool
+			}
+			responses := make([]*md.StatusResponse, 3)
+			for i := range responses {
+				responses[i] = &md.StatusResponse{
+					Status: &md.Status{
+						IsInitialized:  true,
+						PostgresReady:  true,
+						PostgresStatus: md.PostgresStatus_POSTGRES_STATUS_STANDBY,
+					},
+					AvailabilityStatus: &cm.AvailabilityStatus{
+						CohortEligibilityStatus: &cm.CohortEligibilityStatus{
+							Signal: cm.CohortEligibilitySignal_COHORT_ELIGIBILITY_SIGNAL_ELIGIBLE,
+						},
+					},
+					ConsensusStatus: &cm.ConsensusStatus{
+						Id: ids[i],
+						CurrentPosition: &cm.PoolerPosition{
+							Position: &cm.RulePosition{Decision: proto.Clone(rule).(*cm.ShardRule)},
+						},
+					},
+				}
+			}
+			responses[0].Status.PostgresStatus = md.PostgresStatus_POSTGRES_STATUS_PRIMARY
+			responses[0].Status.PrimaryStatus = &md.PrimaryStatus{
+				Ready:              true,
+				ConnectedFollowers: ids[1:],
+			}
+			responses[0].AvailabilityStatus.LeadershipStatus = &cm.LeadershipStatus{
+				LeaderTerm: 2,
+				Signal:     cm.LeadershipSignal_LEADERSHIP_SIGNAL_ACTIVE,
+			}
+			names := []string{"p0", "p1", "p2"}
+			if tc.change != nil {
+				tc.change(responses, &names)
+			}
+			rpc := rpcclient.NewFakeClient()
+			for i, p := range poolers {
+				rpc.SetStatusResponse(topoclient.ComponentIDString(p.Id), responses[i])
+			}
+			if tc.rpcError > 0 {
+				rpc.Errors[topoclient.ComponentIDString(ids[tc.rpcError])] = fmt.Errorf(
+					"unreachable",
+				)
+			}
+			store := &mockTopoStore{
+				getMultipoolersByCellFunc: func(_ context.Context, cell string, _ *topoclient.GetMultipoolersByCellOptions) ([]*topoclient.MultipoolerInfo, error) {
+					if tc.topoError {
+						return nil, fmt.Errorf("unreachable")
+					}
+					var result []*topoclient.MultipoolerInfo
+					for _, p := range poolers {
+						if p.Id.Cell == cell {
+							result = append(result, p)
+						}
+					}
+					return result, nil
+				},
+			}
+			target := "p2"
+			if tc.targetPrimary {
+				target = "p0"
+				if !tc.stalePrimary {
+					shard.Status.PodRoles = map[string]string{"p0": "PRIMARY"}
+				}
+			}
+			err := posture.CheckDisruption(t.Context(), store, rpc, shard, names, target)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("CheckDisruption() = %v, wantError %v", err, tc.wantError)
+			}
+		})
+	}
+}
