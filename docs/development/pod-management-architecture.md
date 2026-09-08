@@ -119,7 +119,9 @@ The `createMissingResources` function handles pod creation:
 
 ### Deletion (Scale-Down)
 
-Scale-down uses the [drain state machine](#5-drain-state-machine). Extra pods beyond the desired count are identified, and the highest-index non-primary pod is selected for draining. Before initiating a new drain, the operator verifies that all non-draining, non-terminating pods in the pool are Ready. If the pool is already degraded, the scale-down is deferred and a `ScaleDownBlocked` warning event is emitted to prevent cascading failures.
+Scale-down uses the [drain state machine](#5-drain-state-machine). Extra pods are ranked across all pools and cells in the shard, preferring replicas over the primary. Before starting another planned drain, an uncached API read checks every shard pod for drain annotations or termination, including extra and surge pods. Desired pods must be Ready; an unhealthy extra does not block its own removal.
+
+Scale-down, rolling updates, and filesystem-resize restarts also require a fresh data-plane preflight: an active committed primary, recovered cohort members on the same rule, and connected surviving followers. The remaining cohort must satisfy the committed durability policy and Multigres's recruitment quorum. Deleting a pod does not by itself establish recovery: if its membership is still committed, the next removal waits. Missing or inconsistent observations fail closed, emit `DisruptionBlocked` for a failed data-plane check, and retry after five seconds. The operator observes consensus; it does not appoint leaders or rewrite cohort membership. If Multigres cannot safely shrink the cohort, scale-down remains paused.
 
 ### External Deletion
 
@@ -257,7 +259,7 @@ When a pod's spec has drifted from the desired state (detected via spec-hash mis
 2. **Skip if drain in progress** — Rolling updates are deferred if any pod is currently being drained (scale-down takes precedence).
 3. **Update replicas first** — Non-primary drifted pods are selected first.
 4. **Primary last** — When only the primary remains, a controlled switchover is needed before draining and recreating. (Note: the switchover is coordinated via the shard controller using the same drain annotation mechanism.)
-5. **One at a time per shard** — Rolling updates, scale-down, filesystem-resize restarts, and external-deletion handling share one shard-wide disruption tracker. A second pool or cell cannot start another drain while the first change is propagating through the controller cache.
+5. **One at a time per shard** — The in-pass disruption tracker prevents multiple starts within a reconcile. Uncached drain/termination checks prevent overlapping planned drains across reconciles and operator restarts; the data-plane preflight waits for recovery between removals. Already-started external deletions are allowed to finish and block new planned drains. Direct external deletion can bypass PDBs; the operator cannot undo an accepted deletion.
 6. **RollingUpdate status condition** — A `RollingUpdate` condition is set on the Shard to track progress (e.g., `"2/5 pods updated"`).
 
 ---
@@ -405,7 +407,7 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **Topology registration & pruning** | Cell and database registration centralized in MultigresCluster controller; stale entries pruned when `topologyPruning.enabled` (default) |
 | **Backup health reporting** | Shard controller calls `GetBackups` RPC, sets `BackupHealthy` condition and `LastBackupTime` status |
 | **DRAINED pod handling** | DRAINED pods (diverged data, pg_rewind failure) are kept alive for admin investigation. Stand-in replicas created at next index for availability. Admin discards via `kubectl delete pod`, triggering drain + PVC deletion |
-| **Shard-wide drain serialization** | Rolling updates, scale-down, filesystem resize, and external deletion start at most one new drain per shard reconcile |
+| **Shard-wide drain serialization** | Planned drains check all persisted drain/termination state across reconciles and wait for data-plane recovery before the next removal |
 | **Two-cell maintenance surge** | Creates and verifies temporary same-cell capacity before disrupting the final ready member of a two-cell cross-cell shard |
 | **Scale-down health gate** | Drains deferred when either the current pool or another shard pool/cell has non-ready pods |
 | **Data-aware pod readiness** | PostgreSQL readiness plus cohort eligibility/membership feeds a custom Pod readiness gate used by status and PDBs |

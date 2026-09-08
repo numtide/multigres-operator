@@ -1130,6 +1130,10 @@ func TestHandleScaleDown_ConcurrentDrainPrevention(t *testing.T) {
 				Recorder: record.NewFakeRecorder(100),
 			}
 
+			if testName == "no drain in progress allows extra pod drain" {
+				observeHealthyDisruption(t, reconciler, shard, poolName, cellName)
+			}
+
 			existingPods := make(map[string]*corev1.Pod, len(tc.pods))
 			for _, p := range tc.pods {
 				existingPods[p.Name] = p
@@ -3032,6 +3036,7 @@ func TestHandleRollingUpdates(t *testing.T) {
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod).Build()
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 		err := r.handleRollingUpdates(
 			context.Background(), shard, poolName, cellName, poolSpec,
@@ -3123,6 +3128,7 @@ func TestHandleRollingUpdates(t *testing.T) {
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(shard, pod0, pod1).Build()
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 		err := r.handleRollingUpdates(
 			context.Background(), shard, poolName, cellName, poolSpec,
@@ -3181,6 +3187,7 @@ func TestHandleRollingUpdates(t *testing.T) {
 			},
 		})
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 		err := r.handleRollingUpdates(
 			context.Background(), shard, poolName, cellName, poolSpec,
@@ -3211,6 +3218,7 @@ func TestHandleRollingUpdates(t *testing.T) {
 			},
 		})
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 		err := r.handleRollingUpdates(
 			context.Background(), shard, poolName, cellName, poolSpec,
@@ -3799,6 +3807,7 @@ func TestHandleScaleDown_ErrorPaths(t *testing.T) {
 			},
 		})
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 		existingPods := map[string]*corev1.Pod{podName0: pod0, podName1: pod1}
 		_, _, err := r.handleScaleDown(
@@ -4167,6 +4176,7 @@ func TestReconcilePoolPods_ErrorPropagation(t *testing.T) {
 			},
 		})
 		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		observeHealthyDisruption(t, r, shard, poolName, cellName)
 		err := r.reconcilePoolPods(
 			t.Context(),
 			shard,
@@ -4427,6 +4437,7 @@ func TestHandleRollingUpdates_SkipsUpToDatePods(t *testing.T) {
 		WithObjects(shard.DeepCopy(), pod0, pod1).
 		Build()
 	r := &ShardReconciler{Client: base, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+	observeHealthyDisruption(t, r, shard, poolName, cellName)
 
 	existingPods := map[string]*corev1.Pod{pod0Name: pod0, pod1Name: pod1}
 	err := r.handleRollingUpdates(

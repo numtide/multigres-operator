@@ -386,6 +386,13 @@ func (r *ShardReconciler) Reconcile(
 		// pool initiates a drain, no other pool starts one too in the same
 		// pass
 		rollout := &shardRolloutTracker{}
+		defer func() {
+			// Consensus changes do not generate Kubernetes watch events.
+			if err == nil && rollout.waitingForRecovery &&
+				(result.RequeueAfter == 0 || result.RequeueAfter > disruptionRecoveryRequeue) {
+				result.RequeueAfter = disruptionRecoveryRequeue
+			}
+		}()
 		for poolName, pool := range shard.Spec.Pools {
 			if err := r.reconcilePool(ctx, shard, string(poolName), pool, rollout); err != nil {
 				monitoring.RecordSpanError(childSpan, err)

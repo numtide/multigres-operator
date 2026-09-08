@@ -165,6 +165,13 @@ func observePooler(
 			Message: fmt.Sprintf("multipooler status RPC failed: %v", err),
 		}
 	}
+	return poolerReadiness(resp, mp.GetId())
+}
+
+func poolerReadiness(
+	resp *multipoolermanagerdatapb.StatusResponse,
+	id *clustermetadatapb.ID,
+) (string, Readiness) {
 	status := resp.GetStatus()
 	posture := postureString(status.GetPostgresStatus())
 	if !status.GetIsInitialized() {
@@ -188,7 +195,7 @@ func observePooler(
 			Message: "pooler is not eligible to participate in the shard cohort",
 		}
 	}
-	if !committedCohortContains(resp, mp.GetId()) {
+	if !committedCohortContains(resp, id) {
 		return posture, Readiness{
 			Reason:  "NotCohortMember",
 			Message: "pooler is not a member of its committed shard cohort",
