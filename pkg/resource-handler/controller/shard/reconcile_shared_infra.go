@@ -8,7 +8,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
@@ -356,28 +359,72 @@ func (r *ShardReconciler) reconcileSharedBackupPVC(
 	return nil
 }
 
-// reconcilePoolPDB applies the PodDisruptionBudget for the pool in the specific cell.
-func (r *ShardReconciler) reconcilePoolPDB(
+// reconcileShardPDB applies the shard-wide PodDisruptionBudget, any required
+// cell durability budgets, and removes obsolete operator-owned PDBs.
+func (r *ShardReconciler) reconcileShardPDB(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
-	poolName string,
-	cellName string,
 ) error {
-	desired, err := BuildPoolPodDisruptionBudget(shard, poolName, cellName, r.Scheme)
+	desired, err := BuildShardPodDisruptionBudgets(shard, r.Scheme)
 	if err != nil {
-		return fmt.Errorf("failed to build pool PDB: %w", err)
+		return fmt.Errorf("failed to build shard PDBs: %w", err)
+	}
+	poolers := &corev1.PodList{}
+	if err := r.List(
+		ctx,
+		poolers,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(desired[0].Spec.Selector.MatchLabels),
+	); err != nil {
+		return fmt.Errorf("failed to list shard poolers for PDB sizing: %w", err)
+	}
+	var surgeCount int32
+	for i := range poolers.Items {
+		if isMaintenanceSurge(&poolers.Items[i]) {
+			surgeCount++
+		}
+	}
+	minAvailable := intstr.FromInt32(
+		minAvailableForTotal(shardTotalReplicas(shard) + surgeCount),
+	)
+	desired[0].Spec.MinAvailable = &minAvailable
+
+	desiredNames := make(map[string]struct{}, len(desired))
+	for _, pdb := range desired {
+		desiredNames[pdb.Name] = struct{}{}
+		pdb.SetGroupVersionKind(policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudget"))
+		if err := r.Patch(
+			ctx,
+			pdb,
+			client.Apply,
+			client.ForceOwnership,
+			client.FieldOwner("multigres-operator"),
+		); err != nil {
+			return fmt.Errorf("failed to apply shard PDB %s: %w", pdb.Name, err)
+		}
 	}
 
-	// Server Side Apply for PDB
-	desired.SetGroupVersionKind(policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudget"))
-	if err := r.Patch(
+	// Owner references do not garbage-collect obsolete PDBs until the Shard is
+	// deleted. Remove legacy pool-cell budgets and no-longer-required cell
+	// budgets only after every replacement has been applied.
+	pdbs := &policyv1.PodDisruptionBudgetList{}
+	if err := r.List(
 		ctx,
-		desired,
-		client.Apply,
-		client.ForceOwnership,
-		client.FieldOwner("multigres-operator"),
+		pdbs,
+		client.InNamespace(shard.Namespace),
+		client.MatchingLabels(desired[0].Spec.Selector.MatchLabels),
 	); err != nil {
-		return fmt.Errorf("failed to apply pool PDB: %w", err)
+		return fmt.Errorf("failed to list obsolete shard PDBs: %w", err)
+	}
+
+	for i := range pdbs.Items {
+		pdb := &pdbs.Items[i]
+		if _, keep := desiredNames[pdb.Name]; keep || !metav1.IsControlledBy(pdb, shard) {
+			continue
+		}
+		if err := r.Delete(ctx, pdb); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete obsolete shard PDB %s: %w", pdb.Name, err)
+		}
 	}
 
 	return nil

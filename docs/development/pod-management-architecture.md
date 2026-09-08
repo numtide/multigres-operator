@@ -55,7 +55,7 @@ This architectural change was motivated by the fact that multigres has its own i
 | **Drain state machine** | Scale-down coordinates drain and etcd cleanup within the shard controller to safely remove standbys from the sync standby list. |
 | **Rolling updates with primary awareness** | Updates replicas first, primary last, with switchover coordination. |
 | **Parallel creation** | New pods for a pool are all created in a single reconcile pass. This enables faster bootstrap by allowing multiple replicas to restore from backup simultaneously. Rolling updates and scale-down remain strictly one-at-a-time. |
-| **Pod Disruption Budgets** | Per-pool PDBs with `maxUnavailable: 1` protect against voluntary evictions. |
+| **Pod Disruption Budgets** | A shard-wide integer `minAvailable` preserves two members and permits at most one voluntary disruption; two-cell cross-cell shards also keep one member per cell. |
 | **Better observability** | Status aggregation directly from pod readiness conditions; no intermediate StatefulSet `.status` layer. |
 
 ### What We Didn't Lose
@@ -88,21 +88,22 @@ This architectural change was motivated by the fact that multigres has its own i
            └── 📦 [Shard] (Child CR) ← 📄 Uses [ShardTemplate] OR inline [spec]
                 │
                 ├── 🧠 MultiOrch (Deployment + Service, per-cell)
+                ├── 🛡️ PodDisruptionBudget (shard-wide, minAvailable: max(2, replicas-1))
+                ├── 🛡️ PodDisruptionBudget × cell (two-cell cross-cell shards only)
                 └── 🏊 Pools (per pool × per cell):
                      ├── Pod-0  ← operator-managed
                      ├── Pod-1  ← operator-managed
                      ├── PVC-0  ← operator-managed (per-pod data)
                      ├── PVC-1  ← operator-managed (per-pod data)
                      ├── Backup PVC (shared across the shard)
-                     ├── Headless Service (DNS resolution)
-                     └── PodDisruptionBudget (maxUnavailable: 1)
+                     └── Headless Service (DNS resolution)
 ```
 
 Key points:
 - **No StatefulSets** in the resource tree for pool pods.
 - **Headless Service** is still required for DNS resolution. Multigres's `FullyQualifiedHostname()` uses DNS reverse lookup, so pods need resolvable FQDNs.
 - **Shared Backup PVC** is per-shard for filesystem backups; replaced with EmptyDir for S3. **Requires RWX storage or S3 when poolers span multiple cells or replicas** — see [PVC Management § Shared Backup PVC](#shared-backup-pvc).
-- **PDB** is per-pool-per-cell to limit voluntary disruption.
+- **PDB** is per-shard so its selector covers the same replica set reported by the Shard `/scale` subresource.
 
 ---
 
@@ -211,7 +212,8 @@ When choosing which pod to remove during scale-down:
 
 ### Safety Guarantees
 
-- At most **one pod per pool** can be in the drain state at any time.
+- The operator starts at most **one new drain per shard** at a time across all
+  pools and cells.
 - Scale-down and rolling-update operations do not run concurrently — if a drain is in progress, rolling updates are deferred.
 - If the topology store is temporarily unreachable, the drain annotation sits untouched and the shard controller retries on the next reconcile.
 - **Health gate**: Scale-down drains are deferred when any non-draining pod is not Ready, preventing removal of pods from an already degraded pool.
@@ -256,7 +258,7 @@ When a pod's spec has drifted from the desired state (detected via spec-hash mis
 2. **Skip if drain in progress** — Rolling updates are deferred if any pod is currently being drained (scale-down takes precedence).
 3. **Update replicas first** — Non-primary drifted pods are selected first.
 4. **Primary last** — When only the primary remains, a controlled switchover is needed before draining and recreating. (Note: the switchover is coordinated via the shard controller using the same drain annotation mechanism.)
-5. **One at a time** — Only one pod is drained per reconcile cycle. The reconciler returns early after initiating a drain, waiting for the pod to reach `ready-for-deletion` before proceeding to the next.
+5. **One at a time per shard** — Rolling updates, scale-down, filesystem-resize restarts, and external-deletion handling share one shard-wide disruption tracker. A second pool or cell cannot start another drain while the first change is propagating through the controller cache.
 6. **RollingUpdate status condition** — A `RollingUpdate` condition is set on the Shard to track progress (e.g., `"2/5 pods updated"`).
 
 ---
@@ -314,11 +316,41 @@ The operator supports in-place PVC volume expansion for data and backup PVCs. Wh
 
 ## 9. Pod Disruption Budgets
 
-For each pool-cell combination, the operator creates a `PodDisruptionBudget` with:
-- `maxUnavailable: 1` — At most one pod can be voluntarily evicted at a time.
-- Label selector matching pool pods in that cell.
+For each shard, the operator creates a `PodDisruptionBudget` with:
+- Integer `minAvailable: max(2, totalReplicas-1)`. This preserves Multigres's
+  two-member durability floor while permitting at most one voluntary disruption.
+  A two-replica shard intentionally blocks eviction because it cannot remain writable.
+- A label selector matching all pool pods in the shard.
 
-This protects against node drains or Kubernetes upgrades taking down too many replicas simultaneously. The PDB is owned by the Shard CR for garbage collection.
+For `MULTI_CELL_AT_LEAST_2` shards spanning exactly two cells, the operator also
+creates one cell-wide PDB per cell with integer `minAvailable: 1`. Before an
+operator-managed rollout disrupts the last ready pooler in a cell, it creates a
+temporary same-cell surge pooler and waits for full data-plane readiness. The
+surge remains until the original desired pods are current and ready, then exits
+through the normal drain and scale-down path. With three or more cells, the
+shard-wide one-at-a-time budget already leaves members in at least two cells.
+
+External maintenance uses the same mechanism explicitly. Automation annotates
+the target Pod with `maintenance.multigres.com/requested=true`, waits for the
+operator to publish `maintenance.multigres.com/ready=true`, and only then calls
+the Kubernetes Eviction API. If the target is evicted, the surge remains until
+its replacement is ready. If maintenance is cancelled without eviction, the
+request annotation must be removed so the operator can drain the surge.
+
+The shard-wide selector is intentionally aligned with the Shard `/scale`
+subresource, whose `spec.replicas` is the total across every pool and cell.
+Integer `minAvailable` avoids asking the disruption controller to infer a
+cell-local expected replica count from that shard-wide scale value. All PDBs are
+owned by the Shard CR for garbage collection. While temporary surge pods exist,
+the shard PDB raises its integer floor by the same amount so added capacity does
+not accidentally permit multiple simultaneous voluntary disruptions.
+
+Pool pods also use the `multigres.com/pooler-data-ready` readiness gate. The
+operator sets it from multipooler's Status RPC only when PostgreSQL is ready,
+the pooler is cohort-eligible, and its committed shard rule includes it as a
+cohort member. The local postgres readiness probe uses `pg_isready`, while the
+multipooler probe uses `/ready`; process liveness remains separate. Consequently,
+PDB health reflects data-plane eligibility rather than merely live processes.
 
 ---
 
@@ -355,7 +387,7 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **Per-pod data PVCs** | Explicitly created, named by index |
 | **Shared backup PVC** | Per-shard, skipped for S3 |
 | **Headless Service for DNS** | Pod hostname + subdomain for FQDN resolution |
-| **PodDisruptionBudgets** | `maxUnavailable: 1` per pool per cell |
+| **PodDisruptionBudgets** | Integer `minAvailable: max(2, replicas-1)` per shard, plus one-member cell floors for two-cell cross-cell durability |
 | **Drain state machine** | Annotation-based, coordinated within the shard controller |
 | **Pod selection for scale-down** | Primary avoidance, prefer non-ready, highest index |
 | **Rolling updates** | Spec-hash drift detection, replicas first, primary last |
@@ -371,7 +403,10 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **Topology registration & pruning** | Cell and database registration centralized in MultigresCluster controller; stale entries pruned when `topologyPruning.enabled` (default) |
 | **Backup health reporting** | Shard controller calls `GetBackups` RPC, sets `BackupHealthy` condition and `LastBackupTime` status |
 | **DRAINED pod handling** | DRAINED pods (diverged data, pg_rewind failure) are kept alive for admin investigation. Stand-in replicas created at next index for availability. Admin discards via `kubectl delete pod`, triggering drain + PVC deletion |
-| **Scale-down health gate** | Drains deferred when pool has non-ready pods to prevent cascading failures |
+| **Shard-wide drain serialization** | Rolling updates, scale-down, filesystem resize, and external deletion start at most one new drain per shard reconcile |
+| **Two-cell maintenance surge** | Creates and verifies temporary same-cell capacity before disrupting the final ready member of a two-cell cross-cell shard |
+| **Scale-down health gate** | Drains deferred when either the current pool or another shard pool/cell has non-ready pods |
+| **Data-aware pod readiness** | PostgreSQL readiness plus cohort eligibility/membership feeds a custom Pod readiness gate used by status and PDBs |
 | **Observability** | Events, conditions, metrics, tracing spans |
 
 ### Not Yet Implemented (Blocked on Upstream Multigres)
@@ -404,9 +439,10 @@ All pod management code lives in `pkg/resource-handler/controller/shard/`:
 | `reconcile_multiorch.go` | MultiOrch deployment and service reconciliation. |
 | `reconcile_shared_infra.go` | Shared infrastructure: pgBackRest TLS certs, pg_hba ConfigMap, postgres password Secret, shared backup PVC, PDB, headless service. |
 | `reconcile_data_plane.go` | Data-plane reconciliation: pod role reporting, drain state machine execution, backup health evaluation. |
+| `maintenance_surge.go` | Two-cell maintenance surge lifecycle and explicit maintenance-request handshake. |
 | `pool_pod.go` | Pod builder: `BuildPoolPod`, `BuildPoolPodName`, `ComputeSpecHash`. |
 | `pool_pvc.go` | PVC builders: `BuildPoolDataPVC`, `BuildPoolDataPVCName`, `BuildSharedBackupPVC` (with conditional ownerRef support). |
-| `pool_pdb.go` | PDB builder: `BuildPoolPodDisruptionBudget`. |
+| `shard_pdb.go` | PDB builder: `BuildShardPodDisruptionBudget`. |
 | `pool_service.go` | Headless service builder for DNS resolution. |
 | `drain_helpers.go` | Drain utilities: `resolvePodRole` (reads `PodRoles` from shard status), `initiateDrain` (sets drain annotation). |
 | `labels.go` | Label builder: `buildPoolLabelsWithCell` — creates the standard label set for pool resources. |
@@ -463,7 +499,7 @@ backup-data-{cluster}-{db}-{tg}-{shard}-{cell}-{hash}
 ### PDB Names
 
 ```
-{cluster}-{db}-{tg}-{shard}-pool-{pool}-{cell}-{hash}-pdb
+{cluster}-{db}-{tg}-{shard}-{hash}-pdb
 ```
 
 ### Headless Service Names

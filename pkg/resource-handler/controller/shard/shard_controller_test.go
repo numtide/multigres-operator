@@ -662,7 +662,7 @@ func TestShardReconciler_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 
-		"error on Pool PDB patch": {
+		"error on Shard PDB patch": {
 			shard: &multigresv1alpha1.Shard{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-shard",
@@ -1896,6 +1896,54 @@ func TestScaleDown_HealthGateBlocksDrain(t *testing.T) {
 			t.Errorf(
 				"Expected drain annotation %q, got %q",
 				metadata.DrainStateRequested,
+				updated.Annotations[metadata.AnnotationDrainState],
+			)
+		}
+	})
+
+	t.Run("shard tracker blocks a second pool scale-down", func(t *testing.T) {
+		t.Parallel()
+		shard := shardObj.DeepCopy()
+		shard.Status.PodRoles = map[string]string{
+			podName0: "PRIMARY",
+			podName1: "REPLICA",
+			podName2: "REPLICA",
+		}
+		pods := []*corev1.Pod{
+			makePod(podName0, true),
+			makePod(podName1, true),
+			makePod(podName2, true),
+		}
+		objects := []client.Object{shard}
+		for _, pod := range pods {
+			objects = append(objects, pod.DeepCopy())
+		}
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+		r := &ShardReconciler{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+		existingPods := make(map[string]*corev1.Pod, len(pods))
+		for _, pod := range pods {
+			existingPods[pod.Name] = pod
+		}
+		tracker := &shardRolloutTracker{}
+		tracker.SetStarted()
+
+		actionTaken, _, err := r.handleScaleDown(
+			t.Context(), shard, poolName, multigresv1alpha1.PoolSpec{},
+			existingPods, 2, 2, false, tracker,
+		)
+		if err != nil {
+			t.Fatalf("handleScaleDown returned error: %v", err)
+		}
+		if actionTaken {
+			t.Fatal("expected the shard-wide tracker to block a second drain")
+		}
+		updated := &corev1.Pod{}
+		if err := c.Get(t.Context(), client.ObjectKeyFromObject(pods[2]), updated); err != nil {
+			t.Fatalf("get extra pod: %v", err)
+		}
+		if updated.Annotations[metadata.AnnotationDrainState] != "" {
+			t.Errorf(
+				"drain state = %q, want empty",
 				updated.Annotations[metadata.AnnotationDrainState],
 			)
 		}

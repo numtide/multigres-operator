@@ -101,7 +101,7 @@ func TestBuildMultipoolerContainer(t *testing.T) {
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/live",
+							Path: "/ready",
 							Port: intstr.FromInt32(DefaultMultipoolerHTTPPort),
 						},
 					},
@@ -207,7 +207,7 @@ func TestBuildMultipoolerContainer(t *testing.T) {
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/live",
+							Path: "/ready",
 							Port: intstr.FromInt32(DefaultMultipoolerHTTPPort),
 						},
 					},
@@ -333,7 +333,7 @@ func TestBuildMultipoolerContainer(t *testing.T) {
 				ReadinessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
-							Path: "/live",
+							Path: "/ready",
 							Port: intstr.FromInt32(DefaultMultipoolerHTTPPort),
 						},
 					},
@@ -831,8 +831,15 @@ func TestBuildPgctldSidecar(t *testing.T) {
 		if c.LivenessProbe == nil || c.LivenessProbe.HTTPGet.Path != "/live" {
 			t.Errorf("expected LivenessProbe to hit /live, got %v", c.LivenessProbe)
 		}
-		if c.ReadinessProbe == nil || c.ReadinessProbe.HTTPGet.Path != "/live" {
-			t.Errorf("expected ReadinessProbe to hit /live, got %v", c.ReadinessProbe)
+		wantReadinessCommand := []string{"pg_isready", "-h", SocketDirMountPath, "-p", "5432"}
+		if c.ReadinessProbe == nil ||
+			c.ReadinessProbe.Exec == nil ||
+			!assert.ObjectsAreEqual(c.ReadinessProbe.Exec.Command, wantReadinessCommand) {
+			t.Errorf(
+				"expected ReadinessProbe command %v, got %v",
+				wantReadinessCommand,
+				c.ReadinessProbe,
+			)
 		}
 	})
 

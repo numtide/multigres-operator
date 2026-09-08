@@ -73,7 +73,26 @@ func withStatus(
 	rpc.SetStatusResponse(
 		topoclient.ComponentIDString(mp.Id),
 		&multipoolermanagerdata.StatusResponse{
-			Status: &multipoolermanagerdata.Status{PostgresStatus: s},
+			Status: &multipoolermanagerdata.Status{
+				PostgresStatus: s,
+				IsInitialized:  true,
+				PostgresReady:  true,
+			},
+			AvailabilityStatus: &clustermetadata.AvailabilityStatus{
+				CohortEligibilityStatus: &clustermetadata.CohortEligibilityStatus{
+					Signal: clustermetadata.CohortEligibilitySignal_COHORT_ELIGIBILITY_SIGNAL_ELIGIBLE,
+				},
+			},
+			ConsensusStatus: &clustermetadata.ConsensusStatus{
+				Id: mp.Id,
+				CurrentPosition: &clustermetadata.PoolerPosition{
+					Position: &clustermetadata.RulePosition{
+						Decision: &clustermetadata.ShardRule{
+							CohortMembers: []*clustermetadata.ID{mp.Id},
+						},
+					},
+				},
+			},
 		},
 	)
 }
@@ -130,6 +149,69 @@ func TestEvaluate(t *testing.T) {
 		}
 		if result.Message != "postures consistent with topology roles" {
 			t.Errorf("unexpected message: %s", result.Message)
+		}
+		for _, podName := range []string{"primary-pod", "replica-pod"} {
+			if got := result.Readiness[podName]; !got.Ready || got.Reason != "DataPlaneReady" {
+				t.Errorf("readiness[%s] = %#v, want data-plane ready", podName, got)
+			}
+		}
+	})
+
+	t.Run("postgres readiness is required", func(t *testing.T) {
+		t.Parallel()
+		shard := testShard()
+		replica := poolerInfo(
+			"replica-pod", clustermetadata.RoutingRole_ROUTING_ROLE_REPLICA,
+			clustermetadata.PoolerLifecycleStatus_LIFECYCLE_UNKNOWN,
+		)
+		store := &mockTopoStore{
+			getMultipoolersByCellFunc: func(context.Context, string, *topoclient.GetMultipoolersByCellOptions) ([]*topoclient.MultipoolerInfo, error) {
+				return []*topoclient.MultipoolerInfo{replica}, nil
+			},
+		}
+		rpc := rpcclient.NewFakeClient()
+		withStatus(rpc, replica, multipoolermanagerdata.PostgresStatus_POSTGRES_STATUS_STANDBY)
+		response, _ := rpc.Status(
+			t.Context(), replica.Multipooler, &multipoolermanagerdata.StatusRequest{},
+		)
+		response.Status.PostgresReady = false
+		rpc.SetStatusResponse(topoclient.ComponentIDString(replica.Id), response)
+
+		result, err := posture.Evaluate(t.Context(), store, rpc, shard, []string{"replica-pod"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := result.Readiness["replica-pod"]; got.Ready || got.Reason != "PostgresNotReady" {
+			t.Errorf("readiness = %#v, want PostgresNotReady", got)
+		}
+	})
+
+	t.Run("cohort membership is required", func(t *testing.T) {
+		t.Parallel()
+		shard := testShard()
+		replica := poolerInfo(
+			"replica-pod", clustermetadata.RoutingRole_ROUTING_ROLE_REPLICA,
+			clustermetadata.PoolerLifecycleStatus_LIFECYCLE_UNKNOWN,
+		)
+		store := &mockTopoStore{
+			getMultipoolersByCellFunc: func(context.Context, string, *topoclient.GetMultipoolersByCellOptions) ([]*topoclient.MultipoolerInfo, error) {
+				return []*topoclient.MultipoolerInfo{replica}, nil
+			},
+		}
+		rpc := rpcclient.NewFakeClient()
+		withStatus(rpc, replica, multipoolermanagerdata.PostgresStatus_POSTGRES_STATUS_STANDBY)
+		response, _ := rpc.Status(
+			t.Context(), replica.Multipooler, &multipoolermanagerdata.StatusRequest{},
+		)
+		response.ConsensusStatus.CurrentPosition.Position.Decision.CohortMembers = nil
+		rpc.SetStatusResponse(topoclient.ComponentIDString(replica.Id), response)
+
+		result, err := posture.Evaluate(t.Context(), store, rpc, shard, []string{"replica-pod"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := result.Readiness["replica-pod"]; got.Ready || got.Reason != "NotCohortMember" {
+			t.Errorf("readiness = %#v, want NotCohortMember", got)
 		}
 	})
 

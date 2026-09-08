@@ -81,6 +81,9 @@ func (r *ShardReconciler) reconcileDataPlane(
 			// other prior states, report that posture cannot currently be observed.
 			rpcClient = nil
 			poolerClientUnavailable = true
+			if readinessErr := r.reconcilePoolerReadiness(ctx, shard, nil); readinessErr != nil {
+				return ctrl.Result{}, readinessErr
+			}
 			setPostureUnknownUnlessFalse(
 				shard,
 				reasonPoolerClientUnavailable,
@@ -365,6 +368,9 @@ func (r *ShardReconciler) reconcilePosture(
 		return 0, fmt.Errorf("evaluate posture consistency: %w", err)
 	}
 	if result == nil {
+		if err := r.reconcilePoolerReadiness(ctx, shard, nil); err != nil {
+			return 0, err
+		}
 		// An empty topology is expected during bootstrap, but it is not a settled
 		// posture observation. Keep polling until poolers register rather than
 		// leaving a previous transport condition stuck until the periodic resync.
@@ -375,6 +381,9 @@ func (r *ShardReconciler) reconcilePosture(
 			"Waiting for multipoolers to register in topology",
 		)
 		return poolerRegistrationRetryDelay, nil
+	}
+	if err := r.reconcilePoolerReadiness(ctx, shard, result.Readiness); err != nil {
+		return 0, err
 	}
 
 	clusterName := shard.Labels[metadata.LabelMultigresCluster]

@@ -448,9 +448,12 @@ func buildPgctldSidecar(
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/live",
-					Port: intstr.FromInt32(DefaultPgctldHTTPPort),
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"pg_isready",
+						"-h", SocketDirMountPath,
+						"-p", "5432",
+					},
 				},
 			},
 			PeriodSeconds: 5,
@@ -602,7 +605,7 @@ func buildMultipoolerContainer(
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/live",
+					Path: "/ready",
 					Port: intstr.FromInt32(DefaultMultipoolerHTTPPort),
 				},
 			},

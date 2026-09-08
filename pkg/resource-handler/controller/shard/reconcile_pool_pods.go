@@ -78,18 +78,37 @@ func (r *ShardReconciler) reconcilePoolPods(
 		existingPVCs[pvc.Name] = pvc
 	}
 
-	// Phase 0: Sync DRAINED labels and compute effective replicas.
-	// DRAINED pods stay alive for investigation; stand-in replicas compensate.
-	drainedCount := countDrainedPods(shard, existingPods)
-	effectiveReplicas := replicas + drainedCount
-
+	// Phase 0: Sync DRAINED labels and reconcile temporary maintenance capacity.
 	if err := r.syncDrainedLabels(ctx, shard, existingPods); err != nil {
 		return err
 	}
+	drainedCount := countDrainedPods(shard, existingPods)
+	maintenanceSurges, surgeAction, err := r.reconcileCellMaintenanceSurge(
+		ctx,
+		shard,
+		poolName,
+		cellName,
+		poolSpec,
+		existingPods,
+		existingPVCs,
+		replicas,
+		rollout,
+	)
+	if err != nil {
+		return err
+	}
+	if surgeAction {
+		return nil
+	}
+
+	// DRAINED pods stay alive for investigation; stand-in replicas compensate.
+	// Active maintenance surges remain desired until the cell has settled.
+	effectiveReplicas := replicas + drainedCount + maintenanceSurges
 
 	// Phase 1: Create missing resources and handle terminal/deleted pods
 	driftedCount, actionTaken, err := r.createMissingResources(
 		ctx, shard, poolName, cellName, poolSpec, existingPods, existingPVCs, effectiveReplicas,
+		rollout,
 	)
 	if err != nil {
 		return err
@@ -98,6 +117,7 @@ func (r *ShardReconciler) reconcilePoolPods(
 	// Phase 2: Handle scale-down (extra pod draining, ready-for-deletion cleanup)
 	actionTaken, inProgress, err := r.handleScaleDown(
 		ctx, shard, poolName, poolSpec, existingPods, replicas, effectiveReplicas, actionTaken,
+		rollout,
 	)
 	if err != nil {
 		return err
@@ -145,8 +165,10 @@ func (r *ShardReconciler) createMissingResources(
 	existingPods map[string]*corev1.Pod,
 	existingPVCs map[string]*corev1.PersistentVolumeClaim,
 	effectiveReplicas int32,
+	disruptionTrackers ...*shardRolloutTracker,
 ) (driftedCount int, actionTaken bool, err error) {
 	logger := log.FromContext(ctx)
+	disruptions := firstShardRolloutTracker(disruptionTrackers)
 
 	for i := int32(0); i < effectiveReplicas; i++ {
 		podName := BuildPoolPodName(shard, poolName, cellName, int(i))
@@ -255,11 +277,12 @@ func (r *ShardReconciler) createMissingResources(
 
 		// Handle pods being deleted externally
 		if !pod.DeletionTimestamp.IsZero() {
-			if !actionTaken {
+			if !actionTaken && !disruptions.HasStarted() {
 				if handleErr := r.handleExternalDeletion(ctx, shard, pod); handleErr != nil {
 					return 0, false, handleErr
 				}
 				actionTaken = true
+				disruptions.SetStarted()
 			}
 			continue
 		}
@@ -273,8 +296,29 @@ func (r *ShardReconciler) createMissingResources(
 		// Check if the data PVC needs a pod restart for filesystem expansion.
 		// Some CSI drivers require the pod to be restarted after the block device
 		// has been expanded so the filesystem can grow.
-		if !actionTaken && pvcNeedsFilesystemResize(existingPVCs, pvcName) {
+		if !actionTaken &&
+			!disruptions.HasStarted() &&
+			pvcNeedsFilesystemResize(existingPVCs, pvcName) {
 			if pod.Annotations[metadata.AnnotationDrainState] == "" {
+				healthy, healthErr := r.isShardHealthy(ctx, shard)
+				if healthErr != nil {
+					return 0, false, healthErr
+				}
+				if !healthy {
+					continue
+				}
+				capacity, capacityErr := r.hasMaintenanceCapacityForPod(
+					ctx,
+					shard,
+					cellName,
+					pod.Name,
+				)
+				if capacityErr != nil {
+					return 0, false, capacityErr
+				}
+				if !capacity {
+					continue
+				}
 				if err := r.initiateDrain(ctx, pod); err != nil {
 					return 0, false, fmt.Errorf(
 						"failed to drain pod %s for filesystem resize: %w",
@@ -293,6 +337,7 @@ func (r *ShardReconciler) createMissingResources(
 					"Draining pod %s to expand filesystem on PVC %s", pod.Name, pvcName,
 				)
 				actionTaken = true
+				disruptions.SetStarted()
 			}
 		}
 
@@ -462,8 +507,10 @@ func (r *ShardReconciler) handleScaleDown(
 	replicas int32,
 	effectiveReplicas int32,
 	actionTaken bool,
+	disruptionTrackers ...*shardRolloutTracker,
 ) (bool, bool, error) {
 	logger := log.FromContext(ctx)
+	disruptions := firstShardRolloutTracker(disruptionTrackers)
 
 	var extraPods []*corev1.Pod
 	var readyForDeletion []*corev1.Pod
@@ -499,11 +546,12 @@ func (r *ShardReconciler) handleScaleDown(
 	for _, pod := range extraPods {
 		if !pod.DeletionTimestamp.IsZero() &&
 			pod.Annotations[metadata.AnnotationDrainState] == "" {
-			if !actionTaken {
+			if !actionTaken && !disruptions.HasStarted() {
 				if err := r.handleExternalDeletion(ctx, shard, pod); err != nil {
 					return actionTaken, inProgress, err
 				}
 				actionTaken = true
+				disruptions.SetStarted()
 			}
 		}
 	}
@@ -534,10 +582,10 @@ func (r *ShardReconciler) handleScaleDown(
 	// could cause an outage.
 	logger.V(1).
 		Info("Scale-down check", "extraPods", len(extraPods), "actionTaken", actionTaken, "inProgress", inProgress, "desiredReplicas", replicas, "effectiveReplicas", effectiveReplicas)
-	if !actionTaken && !inProgress && len(extraPods) > 0 {
+	if !actionTaken && !inProgress && !disruptions.HasStarted() && len(extraPods) > 0 {
 		if !isPoolHealthy(existingPods, effectiveReplicas, shard) {
 			logger.Info(
-				"Deferring scale-down: pool has non-ready pods",
+				"Deferring scale-down: current pool has non-ready pods",
 				"extraPods",
 				len(extraPods),
 			)
@@ -545,13 +593,44 @@ func (r *ShardReconciler) handleScaleDown(
 				shard,
 				"Warning",
 				"ScaleDownBlocked",
-				"Deferring scale-down of %d extra pod(s): pool has non-ready pods",
+				"Deferring scale-down of %d extra pod(s): current pool has non-ready pods",
+				len(extraPods),
+			)
+			return actionTaken, inProgress, nil
+		}
+		healthy, err := r.isShardHealthy(ctx, shard)
+		if err != nil {
+			return actionTaken, inProgress, err
+		}
+		if !healthy {
+			logger.Info(
+				"Deferring scale-down: shard has non-ready pods",
+				"extraPods",
+				len(extraPods),
+			)
+			r.Recorder.Eventf(
+				shard,
+				"Warning",
+				"ScaleDownBlocked",
+				"Deferring scale-down of %d extra pod(s): shard has non-ready pods",
 				len(extraPods),
 			)
 			return actionTaken, inProgress, nil
 		}
 		podToDrain := r.selectPodToDrain(ctx, extraPods, shard)
 		if podToDrain != nil && podToDrain.Annotations[metadata.AnnotationDrainState] == "" {
+			capacity, err := r.hasMaintenanceCapacityForPod(
+				ctx,
+				shard,
+				podToDrain.Labels[metadata.LabelMultigresCell],
+				podToDrain.Name,
+			)
+			if err != nil {
+				return actionTaken, inProgress, err
+			}
+			if !capacity {
+				return actionTaken, inProgress, nil
+			}
 			if err := r.initiateDrain(ctx, podToDrain); err != nil {
 				return actionTaken, inProgress, fmt.Errorf(
 					"failed to initiate drain for extra pod %s: %w",
@@ -568,6 +647,7 @@ func (r *ShardReconciler) handleScaleDown(
 				podToDrain.Name,
 			)
 			actionTaken = true
+			disruptions.SetStarted()
 		}
 	}
 
@@ -575,11 +655,20 @@ func (r *ShardReconciler) handleScaleDown(
 }
 
 // shardRolloutTracker records, within a single Shard reconcile pass, whether
-// any pool has already initiated a drain. handleRollingUpdates checks this
-// before starting a new one so that a pool reconciled later in the same pass
-// doesn't rely on isShardHealthy's cached read having caught up
+// any pool has already initiated a disruption. Scale-down, filesystem resize,
+// external-deletion handling, and rolling updates all consult it so a pool
+// reconciled later in the same pass cannot start another drain while the
+// controller cache is catching up.
 type shardRolloutTracker struct {
-	started bool
+	started           bool
+	surgeStartedCells map[string]struct{}
+}
+
+func firstShardRolloutTracker(trackers []*shardRolloutTracker) *shardRolloutTracker {
+	if len(trackers) > 0 && trackers[0] != nil {
+		return trackers[0]
+	}
+	return &shardRolloutTracker{}
 }
 
 func (t *shardRolloutTracker) HasStarted() bool {
@@ -588,6 +677,18 @@ func (t *shardRolloutTracker) HasStarted() bool {
 
 func (t *shardRolloutTracker) SetStarted() {
 	t.started = true
+}
+
+func (t *shardRolloutTracker) HasSurgeStarted(cellName string) bool {
+	_, ok := t.surgeStartedCells[cellName]
+	return ok
+}
+
+func (t *shardRolloutTracker) SetSurgeStarted(cellName string) {
+	if t.surgeStartedCells == nil {
+		t.surgeStartedCells = make(map[string]struct{})
+	}
+	t.surgeStartedCells[cellName] = struct{}{}
 }
 
 // handleRollingUpdates drains drifted pods one at a time (replicas first, primary last).
@@ -654,7 +755,6 @@ func (r *ShardReconciler) handleRollingUpdates(
 	} else if !healthy {
 		return nil
 	}
-
 	// Sort pods for deterministic ordering
 	podNames := make([]string, 0, len(existingPods))
 	for k := range existingPods {
@@ -680,6 +780,18 @@ func (r *ShardReconciler) handleRollingUpdates(
 
 		isPrimary := resolvePodRole(shard, pod.Name) == "PRIMARY"
 		if !isPrimary {
+			capacity, err := r.hasMaintenanceCapacityForPod(
+				ctx,
+				shard,
+				cellName,
+				pod.Name,
+			)
+			if err != nil {
+				return err
+			}
+			if !capacity {
+				return nil
+			}
 			if err := r.initiateDrain(ctx, pod); err != nil {
 				return fmt.Errorf("failed to initiate drain for drifted pod %s: %w", pod.Name, err)
 			}
@@ -703,6 +815,18 @@ func (r *ShardReconciler) handleRollingUpdates(
 
 	// If the only pod that needs updating is the PRIMARY, initiate a switchover.
 	if waitPrimary != nil && waitPrimary.Annotations[metadata.AnnotationDrainState] == "" {
+		capacity, err := r.hasMaintenanceCapacityForPod(
+			ctx,
+			shard,
+			cellName,
+			waitPrimary.Name,
+		)
+		if err != nil {
+			return err
+		}
+		if !capacity {
+			return nil
+		}
 		if err := r.initiateDrain(ctx, waitPrimary); err != nil {
 			return fmt.Errorf(
 				"failed to request drain for primary pod %s: %w",

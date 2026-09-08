@@ -26,6 +26,12 @@ const (
 
 	// DefaultPoolReplicas is the default number of replicas for a pool cell if not specified.
 	DefaultPoolReplicas int32 = 1
+
+	// PoolerDataReadyCondition is the readiness-gate condition maintained from
+	// multipooler's PostgreSQL and consensus status. The headless Service
+	// publishes not-ready addresses, so making data health truthful does not
+	// make the control plane or pod DNS unreachable.
+	PoolerDataReadyCondition corev1.PodConditionType = "multigres.com/pooler-data-ready"
 )
 
 // BuildPoolPodName constructs the deterministic name for a pool pod at the
@@ -106,6 +112,9 @@ func BuildPoolPod(
 		Spec: corev1.PodSpec{
 			SecurityContext:               buildPoolPodSecurityContext(poolSpec),
 			TerminationGracePeriodSeconds: ptr.To(defaultTerminationGracePeriod),
+			ReadinessGates: []corev1.PodReadinessGate{
+				{ConditionType: PoolerDataReadyCondition},
+			},
 			// pgctld is the native sidecar so it outlives multipooler on pod
 			// termination, see docs/development/pod-management-design.md §6.
 			InitContainers: []corev1.Container{
