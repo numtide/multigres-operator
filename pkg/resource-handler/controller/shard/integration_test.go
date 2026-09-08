@@ -5,11 +5,17 @@ package shard_test
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/multigres/multigres/go/common/rpcclient"
+	"github.com/multigres/multigres/go/common/topoclient"
+	"github.com/multigres/multigres/go/common/topoclient/memorytopo"
+	cm "github.com/multigres/multigres/go/pb/clustermetadata"
+	md "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,12 +24,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/data-handler/poolerclient"
 	shardcontroller "github.com/multigres/multigres-operator/pkg/resource-handler/controller/shard"
 	"github.com/multigres/multigres-operator/pkg/testutil"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
@@ -1518,13 +1526,34 @@ func TestShardReconciliation_DanglingPostgresInitSecretsRef(t *testing.T) {
 // context) moves the spec-hash and makes the controller initiate a drain — the
 // recreation trigger.
 //
-// The reload SIGHUP itself needs a live multipooler + topology, so it is not
-// exercised here (that is the e2e suite and the reconcileReloadState unit
-// tests); this test guards the no-recreate-vs-recreate decision the split is
-// responsible for.
+// Topology and Status responses model a committed Multigres cohort. No actual
+// PostgreSQL processes run, so applying SIGHUP remains an e2e concern.
 func TestReloadVsRestartRollout(t *testing.T) {
 	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		replicas      int32
+		missingStatus bool
+		blockedReason string
+	}{
+		{name: "healthy cohort", replicas: 3},
+		{name: "missing status", replicas: 3, missingStatus: true, blockedReason: "no matching consensus identity"},
+		{name: "insufficient quorum", replicas: 2, blockedReason: "remaining cohort cannot satisfy durability"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testReloadVsRestartRollout(t, tc.replicas, tc.missingStatus, tc.blockedReason)
+		})
+	}
+}
 
+func testReloadVsRestartRollout(
+	t *testing.T,
+	replicas int32,
+	missingStatus bool,
+	blockedReason string,
+) {
+	t.Helper()
 	scheme := runtime.NewScheme()
 	_ = multigresv1alpha1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -1534,16 +1563,10 @@ func TestReloadVsRestartRollout(t *testing.T) {
 	mgr := testutil.SetUpEnvtestManager(t, scheme,
 		testutil.WithCRDPaths(filepath.Join("../../../../", "config", "crd", "bases")),
 	)
-	if err := (&shardcontroller.ShardReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("shard-controller"),
-	}).SetupWithManager(mgr, controller.Options{SkipNameValidation: ptr.To(true)}); err != nil {
-		t.Fatalf("Failed to create controller: %v", err)
-	}
-
 	ctx := t.Context()
-	k8sClient := mgr.GetClient()
+	// Test writes use fresh resource versions while the reconciler exercises
+	// its normal cache. Data-plane observations also update Shard status.
+	k8sClient := testutil.SetUpClient(t, mgr.GetConfig(), scheme)
 
 	const (
 		shardName   = "test-shard-reload-rollout"
@@ -1560,10 +1583,17 @@ func TestReloadVsRestartRollout(t *testing.T) {
 			DatabaseName:   "testdb",
 			TableGroupName: "default",
 			ShardName:      "0",
+			Replicas:       ptr.To(replicas),
 			LogLevels: multigresv1alpha1.ComponentLogLevels{
-				Pgctld: "info", Multipooler: "info", Multiorch: "info", Multiadmin: "info", Multigateway: "info",
+				Pgctld:       "info",
+				Multipooler:  "info",
+				Multiorch:    "info",
+				Multiadmin:   "info",
+				Multigateway: "info",
 			},
-			Multiorch: multigresv1alpha1.MultiorchSpec{Cells: []multigresv1alpha1.CellName{"zone1"}},
+			Multiorch: multigresv1alpha1.MultiorchSpec{
+				Cells: []multigresv1alpha1.CellName{"zone1"},
+			},
 			Images: multigresv1alpha1.ShardImages{
 				Multiorch:   "ghcr.io/multigres/multigres:main",
 				Multipooler: "ghcr.io/multigres/multigres:main",
@@ -1577,15 +1607,35 @@ func TestReloadVsRestartRollout(t *testing.T) {
 				"primary": {
 					Cells:           []multigresv1alpha1.CellName{"zone1"},
 					Type:            "readWrite",
-					ReplicasPerCell: ptr.To(int32(1)),
+					ReplicasPerCell: ptr.To(replicas),
 					Storage:         multigresv1alpha1.StorageSpec{Size: "10Gi"},
 				},
 			},
 			Backup: &multigresv1alpha1.BackupConfig{
-				Type:       multigresv1alpha1.BackupTypeFilesystem,
-				Filesystem: &multigresv1alpha1.FilesystemBackupConfig{Path: "/backups", Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"}},
+				Type: multigresv1alpha1.BackupTypeFilesystem,
+				Filesystem: &multigresv1alpha1.FilesystemBackupConfig{
+					Path:    "/backups",
+					Storage: multigresv1alpha1.StorageSpec{Size: "10Gi"},
+				},
 			},
 		},
+	}
+
+	rpc, topoFactory, registerPoolers := rolloutDataPlane(t, shard, replicas, missingStatus)
+	recorder := &rolloutEventRecorder{
+		EventRecorder: mgr.GetEventRecorderFor("shard-controller"),
+		blocked:       make(chan string, 1),
+		started:       make(chan string, 1),
+	}
+	if err := (&shardcontroller.ShardReconciler{
+		Client:          mgr.GetClient(),
+		APIReader:       mgr.GetAPIReader(),
+		Scheme:          mgr.GetScheme(),
+		Recorder:        recorder,
+		PoolerClients:   poolerclient.Static(rpc),
+		CreateTopoStore: topoFactory,
+	}).SetupWithManager(mgr, controller.Options{SkipNameValidation: ptr.To(true)}); err != nil {
+		t.Fatalf("Failed to create controller: %v", err)
 	}
 
 	setTestPostgresPasswordSecretRef(shard)
@@ -1602,33 +1652,224 @@ func TestReloadVsRestartRollout(t *testing.T) {
 		metadata.LabelAppComponent:     shardcontroller.PoolComponentName,
 	}
 
-	// Wait for the pool pod and capture its identity + spec-hash.
-	orig := waitForPoolPod(t, ctx, k8sClient, poolSelector)
-	origUID := orig.UID
-	origSpecHash := orig.Annotations[metadata.AnnotationSpecHash]
-	if origSpecHash == "" {
-		t.Fatal("pool pod has no spec-hash annotation")
-	}
+	// Wait for every desired member before testing either configuration change.
+	var original corev1.PodList
+	require.Eventually(t, func() bool {
+		if err := mgr.GetClient().List(
+			ctx,
+			&original,
+			client.InNamespace("default"),
+			poolSelector,
+		); err != nil ||
+			len(original.Items) != int(replicas) {
+			return false
+		}
+		for _, pod := range original.Items {
+			if pod.Annotations[metadata.AnnotationSpecHash] == "" || !podReadyForRolloutTest(&pod) {
+				return false
+			}
+		}
+		return true
+	}, 30*time.Second, 200*time.Millisecond, "wait for the complete ready cohort")
+	// Multipoolers register only after their pods exist. Registering before
+	// the controller cache sees them lets dead-pooler cleanup mark them shut down.
+	registerPoolers()
 
 	// --- Reload-only change: work_mem (user context) must NOT recreate the pod. ---
 	setInlineConfig(t, ctx, k8sClient, shardName, "work_mem", "8MB")
 	// Wait until the rendered ConfigMap reflects the change (reconcile processed it).
 	waitForConfigMapContains(t, ctx, k8sClient, shardName, "work_mem = '8MB'")
+	// Reaching the reload RPC proves the controller processed the pool rollout
+	// decision, not merely the earlier ConfigMap write.
+	require.Eventually(t, func() bool {
+		for _, call := range rpc.GetCallLog() {
+			if strings.HasPrefix(call, "ReloadConfig") {
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second, 100*time.Millisecond, "reload-only change did not reach ReloadConfig")
 
-	got := getPoolPod(t, ctx, k8sClient, poolSelector)
-	if got.UID != origUID {
-		t.Errorf("reload-only change recreated the pod: UID %s -> %s", origUID, got.UID)
+	assertUnchanged := func() {
+		t.Helper()
+		for _, orig := range original.Items {
+			var got corev1.Pod
+			require.NoError(t, mgr.GetAPIReader().Get(ctx, client.ObjectKeyFromObject(&orig), &got))
+			require.Equal(t, orig.UID, got.UID, "pod %s was recreated", orig.Name)
+			require.Empty(
+				t,
+				got.Annotations[metadata.AnnotationDrainState],
+				"pod %s was drained",
+				orig.Name,
+			)
+			require.Equal(
+				t,
+				orig.Annotations[metadata.AnnotationSpecHash],
+				got.Annotations[metadata.AnnotationSpecHash],
+			)
+		}
 	}
-	if ds := got.Annotations[metadata.AnnotationDrainState]; ds != "" {
-		t.Errorf("reload-only change drained the pod (drain state %q)", ds)
-	}
-	if h := got.Annotations[metadata.AnnotationSpecHash]; h != origSpecHash {
-		t.Errorf("reload-only change moved the spec-hash: %s -> %s", origSpecHash, h)
-	}
+	assertUnchanged()
 
 	// --- Restart change: shared_buffers (postmaster context) must trigger recreation. ---
 	setInlineConfig(t, ctx, k8sClient, shardName, "shared_buffers", "256MB")
-	waitForPoolPodDraining(t, ctx, k8sClient, poolSelector)
+	if blockedReason != "" {
+		// Observe an actual failed preflight, not merely the absence of a drain
+		// before the controller processes the config update.
+		require.Eventually(t, func() bool {
+			select {
+			case message := <-recorder.blocked:
+				return strings.Contains(message, blockedReason)
+			default:
+				return false
+			}
+		}, 40*time.Second, 200*time.Millisecond, "did not observe a blocked disruption: %s", blockedReason)
+		assertUnchanged()
+		return
+	}
+	// A drain can advance through all annotations between polling intervals in
+	// envtest. Observe its initiation directly instead of racing pod deletion.
+	require.Eventually(t, func() bool {
+		select {
+		case message := <-recorder.started:
+			return strings.Contains(message, "Initiated drain for drifted replica pod")
+		default:
+			return false
+		}
+	}, 40*time.Second, 100*time.Millisecond, "restart change did not initiate a replica drain")
+	var pods corev1.PodList
+	require.NoError(
+		t,
+		k8sClient.List(ctx, &pods, client.InNamespace(shard.Namespace), poolSelector),
+	)
+	draining := 0
+	for _, pod := range pods.Items {
+		if pod.Annotations[metadata.AnnotationDrainState] != "" {
+			draining++
+		}
+	}
+	require.LessOrEqual(t, draining, 1, "restart initiated overlapping drains")
+}
+
+// Observe preflight events without depending on the API event broadcaster's
+// rate limit, and without blocking the controller when nobody is listening.
+type rolloutEventRecorder struct {
+	record.EventRecorder
+	blocked chan string
+	started chan string
+}
+
+func (r *rolloutEventRecorder) Eventf(
+	object runtime.Object,
+	eventType, reason, messageFmt string,
+	args ...interface{},
+) {
+	if reason == "DisruptionBlocked" {
+		select {
+		case r.blocked <- fmt.Sprintf(messageFmt, args...):
+		default:
+		}
+	}
+	if reason == "PodUpdated" {
+		select {
+		case r.started <- fmt.Sprintf(messageFmt, args...):
+		default:
+		}
+	}
+	r.EventRecorder.Eventf(object, eventType, reason, messageFmt, args...)
+}
+
+// rolloutDataPlane registers the same members the controller will create and
+// supplies their committed rule, eligibility, PostgreSQL role and connections.
+// Healthy leadership status is intentionally omitted, matching Multigres.
+func rolloutDataPlane(
+	t *testing.T,
+	shard *multigresv1alpha1.Shard,
+	replicas int32,
+	missingStatus bool,
+) (*rpcclient.FakeClient, func(*multigresv1alpha1.Shard) (topoclient.Store, error), func()) {
+	t.Helper()
+	store, factory := memorytopo.NewServerAndFactory(t.Context(), "zone1")
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	ids := make([]*cm.ID, replicas)
+	for i := range ids {
+		ids[i] = &cm.ID{
+			Cell: "zone1",
+			Name: shardcontroller.BuildPoolPodName(shard, "primary", "zone1", i),
+		}
+	}
+	leader := ids[len(ids)-1]
+	rule := &cm.ShardRule{
+		RuleNumber:       &cm.RuleNumber{CoordinatorTerm: 2},
+		LeaderId:         leader,
+		CohortMembers:    ids,
+		DurabilityPolicy: topoclient.AtLeastN(2),
+	}
+	rpc := rpcclient.NewFakeClient()
+	var poolers []*cm.Multipooler
+	for _, id := range ids {
+		role := cm.RoutingRole_ROUTING_ROLE_REPLICA
+		response := &md.StatusResponse{
+			Status: &md.Status{
+				IsInitialized:  true,
+				PostgresReady:  true,
+				PostgresStatus: md.PostgresStatus_POSTGRES_STATUS_STANDBY,
+			},
+			AvailabilityStatus: &cm.AvailabilityStatus{
+				CohortEligibilityStatus: &cm.CohortEligibilityStatus{
+					Signal: cm.CohortEligibilitySignal_COHORT_ELIGIBILITY_SIGNAL_ELIGIBLE,
+				},
+			},
+			ConsensusStatus: &cm.ConsensusStatus{
+				Id:              id,
+				CurrentPosition: &cm.PoolerPosition{Position: &cm.RulePosition{Decision: rule}},
+			},
+		}
+		if id == leader {
+			role = cm.RoutingRole_ROUTING_ROLE_PRIMARY
+			response.Status.PostgresStatus = md.PostgresStatus_POSTGRES_STATUS_PRIMARY
+			response.Status.PrimaryStatus = &md.PrimaryStatus{
+				Ready:              true,
+				ConnectedFollowers: ids[:len(ids)-1],
+			}
+		}
+		poolers = append(poolers, &cm.Multipooler{
+			Id:       id,
+			Hostname: id.Name,
+			ShardKey: &cm.ShardKey{
+				Database:   string(shard.Spec.DatabaseName),
+				TableGroup: string(shard.Spec.TableGroupName),
+				Shard:      string(shard.Spec.ShardName),
+			},
+			RoutingState: &cm.RoutingState{Role: role},
+		})
+		// Missing primary Status must block every possible removal, including
+		// when Kubernetes still reports the pods Ready.
+		if !missingStatus || id != leader {
+			rpc.SetStatusResponse(topoclient.ComponentIDString(id), response)
+		}
+	}
+	return rpc, func(*multigresv1alpha1.Shard) (topoclient.Store, error) {
+			return topoclient.NewWithFactory(
+				factory,
+				"",
+				[]string{""},
+				topoclient.NewDefaultTopoConfig(),
+			), nil
+		}, func() {
+			for _, pooler := range poolers {
+				require.NoError(t, store.RegisterMultipooler(t.Context(), pooler, false))
+			}
+		}
+}
+
+func podReadyForRolloutTest(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 // markPoolPodsReady keeps every pool pod for the cluster marked Ready so the
@@ -1649,17 +1890,23 @@ func markPoolPodsReady(ctx context.Context, c client.Client, clusterName string)
 			}
 			for i := range list.Items {
 				p := &list.Items[i]
-				ready := false
-				for _, cond := range p.Status.Conditions {
-					if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-						ready = true
-						break
-					}
-				}
-				if !ready {
+				if !podReadyForRolloutTest(p) {
 					p.Status.Phase = corev1.PodRunning
-					p.Status.Conditions = []corev1.PodCondition{
-						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+					found := false
+					for j := range p.Status.Conditions {
+						if p.Status.Conditions[j].Type == corev1.PodReady {
+							p.Status.Conditions[j].Status = corev1.ConditionTrue
+							found = true
+						}
+					}
+					if !found {
+						p.Status.Conditions = append(
+							p.Status.Conditions,
+							corev1.PodCondition{
+								Type:   corev1.PodReady,
+								Status: corev1.ConditionTrue,
+							},
+						)
 					}
 					_ = c.Status().Update(ctx, p)
 				}
@@ -1668,62 +1915,48 @@ func markPoolPodsReady(ctx context.Context, c client.Client, clusterName string)
 	}
 }
 
-func waitForPoolPod(t *testing.T, ctx context.Context, c client.Client, sel client.MatchingLabels) *corev1.Pod {
-	t.Helper()
-	for range 150 {
-		list := &corev1.PodList{}
-		if err := c.List(ctx, list, client.InNamespace("default"), sel); err == nil {
-			for i := range list.Items {
-				if list.Items[i].DeletionTimestamp.IsZero() &&
-					list.Items[i].Annotations[metadata.AnnotationSpecHash] != "" {
-					return &list.Items[i]
-				}
-			}
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for pool pod with a spec-hash")
-	return nil
-}
-
-func getPoolPod(t *testing.T, ctx context.Context, c client.Client, sel client.MatchingLabels) *corev1.Pod {
-	t.Helper()
-	list := &corev1.PodList{}
-	if err := c.List(ctx, list, client.InNamespace("default"), sel); err != nil {
-		t.Fatalf("list pool pods: %v", err)
-	}
-	for i := range list.Items {
-		if list.Items[i].DeletionTimestamp.IsZero() {
-			return &list.Items[i]
-		}
-	}
-	t.Fatal("no live pool pod found")
-	return nil
-}
-
-func setInlineConfig(t *testing.T, ctx context.Context, c client.Client, shardName, key, val string) {
+func setInlineConfig(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	shardName, key, val string,
+) {
 	t.Helper()
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		s := &multigresv1alpha1.Shard{}
-		if err := c.Get(ctx, types.NamespacedName{Name: shardName, Namespace: "default"}, s); err != nil {
+		if err := c.Get(
+			ctx,
+			types.NamespacedName{Name: shardName, Namespace: "default"},
+			s,
+		); err != nil {
 			return err
 		}
 		if s.Spec.PostgresConfig == nil {
 			s.Spec.PostgresConfig = map[string]string{}
 		}
+		base := s.DeepCopy()
 		s.Spec.PostgresConfig[key] = val
-		return c.Update(ctx, s)
+		return c.Patch(ctx, s, client.MergeFrom(base))
 	}); err != nil {
 		t.Fatalf("update shard inline config %s=%s: %v", key, val, err)
 	}
 }
 
-func waitForConfigMapContains(t *testing.T, ctx context.Context, c client.Client, shardName, want string) {
+func waitForConfigMapContains(
+	t *testing.T,
+	ctx context.Context,
+	c client.Client,
+	shardName, want string,
+) {
 	t.Helper()
 	name := shardcontroller.PostgresConfigMapName(shardName)
 	for range 200 {
 		cm := &corev1.ConfigMap{}
-		if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, cm); err == nil {
+		if err := c.Get(
+			ctx,
+			types.NamespacedName{Name: name, Namespace: "default"},
+			cm,
+		); err == nil {
 			if strings.Contains(cm.Data[shardcontroller.PostgresConfigMapKey], want) {
 				return
 			}
@@ -1731,20 +1964,4 @@ func waitForConfigMapContains(t *testing.T, ctx context.Context, c client.Client
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for ConfigMap %s to contain %q", name, want)
-}
-
-func waitForPoolPodDraining(t *testing.T, ctx context.Context, c client.Client, sel client.MatchingLabels) {
-	t.Helper()
-	for range 200 {
-		list := &corev1.PodList{}
-		if err := c.List(ctx, list, client.InNamespace("default"), sel); err == nil {
-			for i := range list.Items {
-				if list.Items[i].Annotations[metadata.AnnotationDrainState] != "" {
-					return
-				}
-			}
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for a restart change to drain-initiate the pool pod")
 }

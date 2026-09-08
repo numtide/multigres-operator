@@ -25,13 +25,6 @@ import (
 func TestTopoServerReconciler_Reconcile(t *testing.T) {
 	t.Parallel()
 
-	scheme := runtime.NewScheme()
-	_ = multigresv1alpha1.AddToScheme(scheme)
-	_ = appsv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-	_ = policyv1.AddToScheme(scheme)
-	_ = storagev1.AddToScheme(scheme)
-
 	tests := map[string]struct {
 		toposerver      *multigresv1alpha1.TopoServer
 		existingObjects []client.Object
@@ -374,6 +367,15 @@ func TestTopoServerReconciler_Reconcile(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			// Fake clients register unstructured certificate types lazily. Each
+			// parallel subtest must own its scheme to avoid concurrent mutation.
+			scheme := runtime.NewScheme()
+			_ = multigresv1alpha1.AddToScheme(scheme)
+			_ = appsv1.AddToScheme(scheme)
+			_ = corev1.AddToScheme(scheme)
+			_ = policyv1.AddToScheme(scheme)
+			_ = storagev1.AddToScheme(scheme)
 
 			// Create base fake client
 			baseClient := fake.NewClientBuilder().
