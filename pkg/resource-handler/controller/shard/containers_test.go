@@ -831,7 +831,9 @@ func TestBuildPgctldSidecar(t *testing.T) {
 		if c.LivenessProbe == nil || c.LivenessProbe.HTTPGet.Path != "/live" {
 			t.Errorf("expected LivenessProbe to hit /live, got %v", c.LivenessProbe)
 		}
-		wantReadinessCommand := []string{"pg_isready", "-h", SocketDirMountPath, "-p", "5432"}
+		wantReadinessCommand := []string{
+			"pg_isready", "-h", "/var/lib/pooler/pg_sockets", "-p", "5432",
+		}
 		if c.ReadinessProbe == nil ||
 			c.ReadinessProbe.Exec == nil ||
 			!assert.ObjectsAreEqual(c.ReadinessProbe.Exec.Command, wantReadinessCommand) {

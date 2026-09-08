@@ -31,11 +31,18 @@ const (
 	// and pgctld derives postgres data directory as <pooler-dir>/pg_data
 	PoolerDirMountPath = "/var/lib/pooler"
 
+	// PostgresSocketDir is pgctld's canonical Unix socket directory. pgctld
+	// derives it from --pooler-dir and passes it to PostgreSQL as
+	// unix_socket_directories, independently of the base image's defaults.
+	PostgresSocketDir  = PoolerDirMountPath + "/pg_sockets"
+	PostgresSocketPath = PostgresSocketDir + "/.s.PGSQL.5432"
+
 	// SocketDirVolumeName is the name of the shared volume for unix sockets
 	SocketDirVolumeName = "socket-dir"
 
-	// SocketDirMountPath is the mount path for unix sockets (postgres and pgctld communicate here)
-	// We use /var/run/postgresql because that is the default socket directory for the official postgres image.
+	// SocketDirMountPath preserves the conventional PostgreSQL runtime directory
+	// for image compatibility. pgctld places its managed PostgreSQL socket under
+	// PostgresSocketDir instead.
 	SocketDirMountPath = "/var/run/postgresql"
 
 	// BackupVolumeName is the name of the backup volume for pgbackrest
@@ -451,7 +458,7 @@ func buildPgctldSidecar(
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"pg_isready",
-						"-h", SocketDirMountPath,
+						"-h", PostgresSocketDir,
 						"-p", "5432",
 					},
 				},
@@ -533,8 +540,8 @@ func buildMultipoolerContainer(
 		"--http-port=15200",
 		"--grpc-port=15270",
 		"--pooler-dir=" + PoolerDirMountPath,
-		"--socket-file=" + PoolerDirMountPath + "/pg_sockets/.s.PGSQL.5432", // Unix socket path; auth is controlled by pg_hba.
-		"--service-map=grpc-pooler",                                         // Only enable grpc-pooler service (disables auto-restore service)
+		"--socket-file=" + PostgresSocketPath, // Unix socket path; auth is controlled by pg_hba.
+		"--service-map=grpc-pooler",           // Only enable grpc-pooler service (disables auto-restore service)
 		"--topo-global-server-addresses=" + shard.Spec.GlobalTopoServer.Address,
 		"--topo-global-root=" + shard.Spec.GlobalTopoServer.RootPath,
 		"--cell=" + cellName,
