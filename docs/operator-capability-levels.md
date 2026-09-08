@@ -262,10 +262,11 @@ Automatically created per shard with integer
 `minAvailable=max(2,totalReplicas-1)` to preserve the two-member durability
 floor and limit voluntary disruption to one pooler. Its selector covers the
 same shard-wide pod set represented by the Shard `/scale` subresource. A
-two-cell `MULTI_CELL_AT_LEAST_2` shard also receives one cell-wide
-`minAvailable=1` PDB per cell. Operator rollouts automatically create and verify
-a temporary same-cell surge pooler before disrupting the last member there.
-External maintenance requests the same protection with the
+two-cell `MULTI_CELL_AT_LEAST_2` shard uses the maintenance workflow, rather
+than an overlapping cell PDB, to preserve one ready member per cell. Operator
+rollouts automatically create and verify a temporary same-cell surge pooler
+before disrupting the last member there. External maintenance requests the
+same protection with the
 `maintenance.multigres.com/requested=true` Pod annotation and waits for
 `maintenance.multigres.com/ready=true` before eviction. Pod health includes
 PostgreSQL readiness and committed cohort eligibility/membership through a

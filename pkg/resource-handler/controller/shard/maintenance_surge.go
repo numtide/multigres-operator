@@ -55,6 +55,22 @@ func (r *ShardReconciler) reconcileCellMaintenanceSurge(
 			readyCount++
 		}
 		if isMaintenanceSurge(pod) {
+			if isDesiredPooler(shard, pod) {
+				base := pod.DeepCopy()
+				delete(pod.Annotations, metadata.AnnotationMaintenanceSurge)
+				if err := r.Patch(ctx, pod, client.MergeFrom(base)); err != nil {
+					return 0, false, fmt.Errorf(
+						"promote maintenance surge %s to desired capacity: %w",
+						pod.Name,
+						err,
+					)
+				}
+				if localPod := existingPods[pod.Name]; localPod != nil {
+					delete(localPod.Annotations, metadata.AnnotationMaintenanceSurge)
+				}
+				actionTaken = true
+				continue
+			}
 			surges = append(surges, pod)
 			continue
 		}
@@ -295,7 +311,7 @@ func (r *ShardReconciler) hasMaintenanceCapacityForPod(
 	readyInCellAfterDisruption := 0
 	for i := range poolers.Items {
 		pod := &poolers.Items[i]
-		if isMaintenanceSurge(pod) {
+		if isActiveMaintenanceSurge(shard, pod) {
 			surgeCount++
 		}
 		if pod.Name == excludedPodName || !isAvailablePooler(pod) {
@@ -362,6 +378,32 @@ func findPodByName(pods []corev1.Pod, name string) *corev1.Pod {
 func isMaintenanceSurge(pod *corev1.Pod) bool {
 	return pod != nil &&
 		pod.Annotations[metadata.AnnotationMaintenanceSurge] == maintenanceAnnotationTrue
+}
+
+// isActiveMaintenanceSurge distinguishes temporary capacity from a surge Pod
+// whose deterministic index has since entered the desired replica range after
+// a scale-up. The latter is ordinary desired capacity even before its stale
+// annotation is removed from the API object.
+func isActiveMaintenanceSurge(shard *multigresv1alpha1.Shard, pod *corev1.Pod) bool {
+	return isMaintenanceSurge(pod) && !isDesiredPooler(shard, pod)
+}
+
+func isDesiredPooler(shard *multigresv1alpha1.Shard, pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	poolName := pod.Labels[metadata.LabelMultigresPool]
+	cellName := pod.Labels[metadata.LabelMultigresCell]
+	pool, ok := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]
+	if !ok || !poolUsesCell(pool, cellName) {
+		return false
+	}
+	for index := int32(0); index < poolReplicas(pool); index++ {
+		if pod.Name == BuildPoolPodName(shard, poolName, cellName, int(index)) {
+			return true
+		}
+	}
+	return false
 }
 
 func isAvailablePooler(pod *corev1.Pod) bool {

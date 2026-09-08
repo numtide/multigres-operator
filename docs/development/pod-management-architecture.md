@@ -55,7 +55,7 @@ This architectural change was motivated by the fact that multigres has its own i
 | **Drain state machine** | Scale-down coordinates drain and etcd cleanup within the shard controller to safely remove standbys from the sync standby list. |
 | **Rolling updates with primary awareness** | Updates replicas first, primary last, with switchover coordination. |
 | **Parallel creation** | New pods for a pool are all created in a single reconcile pass. This enables faster bootstrap by allowing multiple replicas to restore from backup simultaneously. Rolling updates and scale-down remain strictly one-at-a-time. |
-| **Pod Disruption Budgets** | A shard-wide integer `minAvailable` preserves two members and permits at most one voluntary disruption; two-cell cross-cell shards also keep one member per cell. |
+| **Pod Disruption Budgets** | A shard-wide integer `minAvailable` preserves two members and permits at most one voluntary disruption; the maintenance handshake preserves cell placement. |
 | **Better observability** | Status aggregation directly from pod readiness conditions; no intermediate StatefulSet `.status` layer. |
 
 ### What We Didn't Lose
@@ -89,7 +89,6 @@ This architectural change was motivated by the fact that multigres has its own i
                 │
                 ├── 🧠 MultiOrch (Deployment + Service, per-cell)
                 ├── 🛡️ PodDisruptionBudget (shard-wide, minAvailable: max(2, replicas-1))
-                ├── 🛡️ PodDisruptionBudget × cell (two-cell cross-cell shards only)
                 └── 🏊 Pools (per pool × per cell):
                      ├── Pod-0  ← operator-managed
                      ├── Pod-1  ← operator-managed
@@ -322,13 +321,16 @@ For each shard, the operator creates a `PodDisruptionBudget` with:
   A two-replica shard intentionally blocks eviction because it cannot remain writable.
 - A label selector matching all pool pods in the shard.
 
-For `MULTI_CELL_AT_LEAST_2` shards spanning exactly two cells, the operator also
-creates one cell-wide PDB per cell with integer `minAvailable: 1`. Before an
-operator-managed rollout disrupts the last ready pooler in a cell, it creates a
-temporary same-cell surge pooler and waits for full data-plane readiness. The
-surge remains until the original desired pods are current and ready, then exits
-through the normal drain and scale-down path. With three or more cells, the
-shard-wide one-at-a-time budget already leaves members in at least two cells.
+For `MULTI_CELL_AT_LEAST_2` shards spanning exactly two cells, the operator
+preserves cell placement through maintenance coordination rather than another
+PDB. A pooler cannot match both a shard and cell PDB because the Kubernetes
+Eviction API rejects evictions covered by multiple budgets. Before an
+operator-managed rollout disrupts the last ready pooler in a cell, the operator
+creates a temporary same-cell surge pooler and waits for full data-plane
+readiness. The surge remains until the original desired pods are current and
+ready, then exits through the normal drain and scale-down path. With three or
+more cells, the shard-wide one-at-a-time budget already leaves members in at
+least two cells.
 
 External maintenance uses the same mechanism explicitly. Automation annotates
 the target Pod with `maintenance.multigres.com/requested=true`, waits for the
@@ -340,7 +342,7 @@ request annotation must be removed so the operator can drain the surge.
 The shard-wide selector is intentionally aligned with the Shard `/scale`
 subresource, whose `spec.replicas` is the total across every pool and cell.
 Integer `minAvailable` avoids asking the disruption controller to infer a
-cell-local expected replica count from that shard-wide scale value. All PDBs are
+cell-local expected replica count from that shard-wide scale value. The PDB is
 owned by the Shard CR for garbage collection. While temporary surge pods exist,
 the shard PDB raises its integer floor by the same amount so added capacity does
 not accidentally permit multiple simultaneous voluntary disruptions.
@@ -387,7 +389,7 @@ Metrics are emitted per pool via `monitoring.SetShardPoolReplicas()`. A `PoolEmp
 | **Per-pod data PVCs** | Explicitly created, named by index |
 | **Shared backup PVC** | Per-shard, skipped for S3 |
 | **Headless Service for DNS** | Pod hostname + subdomain for FQDN resolution |
-| **PodDisruptionBudgets** | Integer `minAvailable: max(2, replicas-1)` per shard, plus one-member cell floors for two-cell cross-cell durability |
+| **PodDisruptionBudgets** | One shard-wide integer `minAvailable: max(2, replicas-1)` budget; two-cell placement is protected by the maintenance handshake |
 | **Drain state machine** | Annotation-based, coordinated within the shard controller |
 | **Pod selection for scale-down** | Primary avoidance, prefer non-ready, highest index |
 | **Rolling updates** | Spec-hash drift detection, replicas first, primary last |
