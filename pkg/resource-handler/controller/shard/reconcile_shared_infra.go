@@ -359,8 +359,8 @@ func (r *ShardReconciler) reconcileSharedBackupPVC(
 	return nil
 }
 
-// reconcileShardPDB applies the shard-wide PodDisruptionBudget, any required
-// cell durability budgets, and removes obsolete operator-owned PDBs.
+// reconcileShardPDB applies the shard-wide PodDisruptionBudget and removes
+// obsolete operator-owned PDBs.
 func (r *ShardReconciler) reconcileShardPDB(
 	ctx context.Context,
 	shard *multigresv1alpha1.Shard,
@@ -380,7 +380,7 @@ func (r *ShardReconciler) reconcileShardPDB(
 	}
 	var surgeCount int32
 	for i := range poolers.Items {
-		if isMaintenanceSurge(&poolers.Items[i]) {
+		if isActiveMaintenanceSurge(shard, &poolers.Items[i]) {
 			surgeCount++
 		}
 	}

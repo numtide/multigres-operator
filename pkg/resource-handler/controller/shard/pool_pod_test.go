@@ -999,6 +999,64 @@ func TestComputeSpecHash_Deterministic(t *testing.T) {
 	}
 }
 
+func TestPodNeedsUpdateWhenReadinessProtectionsChange(t *testing.T) {
+	shard := newTestShard()
+	pool := newTestPoolSpec()
+	desired, err := BuildPoolPod(shard, "main", "z1", pool, 0, testScheme())
+	require.NoError(t, err)
+
+	legacy := desired.DeepCopy()
+	legacy.Spec.ReadinessGates = nil
+	for i := range legacy.Spec.InitContainers {
+		legacy.Spec.InitContainers[i].ReadinessProbe = nil
+	}
+	for i := range legacy.Spec.Containers {
+		legacy.Spec.Containers[i].ReadinessProbe = nil
+	}
+	legacy.Annotations[metadata.AnnotationSpecHash] = ComputeSpecHash(legacy)
+
+	if !podNeedsUpdate(legacy, shard, "main", "z1", pool, 0, testScheme()) {
+		t.Fatal("pod without the current readiness gates and probes must be replaced")
+	}
+}
+
+func TestComputeSpecHashIncludesReadinessGatesAndProbes(t *testing.T) {
+	desired, err := BuildPoolPod(
+		newTestShard(),
+		"main",
+		"z1",
+		newTestPoolSpec(),
+		0,
+		testScheme(),
+	)
+	require.NoError(t, err)
+	wantHash := ComputeSpecHash(desired)
+
+	tests := map[string]func(*corev1.Pod){
+		"readiness gate": func(pod *corev1.Pod) {
+			pod.Spec.ReadinessGates = nil
+		},
+		"startup probe": func(pod *corev1.Pod) {
+			pod.Spec.Containers[0].StartupProbe = nil
+		},
+		"liveness probe": func(pod *corev1.Pod) {
+			pod.Spec.Containers[0].LivenessProbe = nil
+		},
+		"readiness probe": func(pod *corev1.Pod) {
+			pod.Spec.Containers[0].ReadinessProbe = nil
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			changed := desired.DeepCopy()
+			mutate(changed)
+			if got := ComputeSpecHash(changed); got == wantHash {
+				t.Fatalf("spec hash did not change when %s changed", name)
+			}
+		})
+	}
+}
+
 func TestComputeSpecHash_ChangesOnDrift(t *testing.T) {
 	pool := newTestPoolSpec()
 	pod1, _ := BuildPoolPod(newTestShard(), "main", "z1", pool, 0, testScheme())

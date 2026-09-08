@@ -43,7 +43,7 @@ func TestShardMinAvailable(t *testing.T) {
 	}
 }
 
-func TestBuildShardPodDisruptionBudgetsForMultiCellPolicy(t *testing.T) {
+func TestBuildShardPodDisruptionBudgetsDoNotOverlap(t *testing.T) {
 	t.Parallel()
 	scheme := runtime.NewScheme()
 	if err := multigresv1alpha1.AddToScheme(scheme); err != nil {
@@ -78,23 +78,18 @@ func TestBuildShardPodDisruptionBudgetsForMultiCellPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build PDBs: %v", err)
 	}
-	if len(pdbs) != 3 {
-		t.Fatalf("PDB count = %d, want 3", len(pdbs))
+	if len(pdbs) != 1 {
+		t.Fatalf("PDB count = %d, want one shard-wide budget", len(pdbs))
 	}
 	if got := pdbs[0].Spec.MinAvailable.IntValue(); got != 3 {
 		t.Errorf("shard minAvailable = %d, want 3", got)
 	}
-	for i, cell := range []string{"zone-a", "zone-b"} {
-		pdb := pdbs[i+1]
-		if got := pdb.Spec.Selector.MatchLabels[metadata.LabelMultigresCell]; got != cell {
-			t.Errorf("cell PDB %d selector = %q, want %q", i, got, cell)
-		}
-		if _, scopedToPool := pdb.Spec.Selector.MatchLabels[metadata.LabelMultigresPool]; scopedToPool {
-			t.Errorf("cell PDB must not select a pool: %#v", pdb.Spec.Selector.MatchLabels)
-		}
-		if got := pdb.Spec.MinAvailable.IntValue(); got != 1 {
-			t.Errorf("cell PDB minAvailable = %d, want 1", got)
-		}
+	selector := pdbs[0].Spec.Selector.MatchLabels
+	if _, scopedToCell := selector[metadata.LabelMultigresCell]; scopedToCell {
+		t.Errorf("shard PDB must not select a cell: %#v", selector)
+	}
+	if _, scopedToPool := selector[metadata.LabelMultigresPool]; scopedToPool {
+		t.Errorf("shard PDB must not select a pool: %#v", selector)
 	}
 }
 

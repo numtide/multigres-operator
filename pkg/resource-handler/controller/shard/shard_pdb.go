@@ -67,57 +67,11 @@ func BuildShardPodDisruptionBudget(
 	return pdb, nil
 }
 
-// BuildCellPodDisruptionBudget keeps at least one pooler available in cellName.
-// It is used only for a two-cell MULTI_CELL_AT_LEAST_2 shard, where losing the
-// last pooler in either cell would make cross-cell durability impossible. An
-// integer minAvailable is intentional: unlike maxUnavailable, it does not ask
-// the Shard /scale subresource for a cell-local expected replica count.
-func BuildCellPodDisruptionBudget(
-	shard *multigresv1alpha1.Shard,
-	cellName string,
-	scheme *runtime.Scheme,
-) (*policyv1.PodDisruptionBudget, error) {
-	clusterName := shard.Labels[metadata.LabelMultigresCluster]
-	pdbName := nameutil.JoinWithConstraints(
-		nameutil.ServiceConstraints,
-		clusterName,
-		string(shard.Spec.DatabaseName),
-		string(shard.Spec.TableGroupName),
-		string(shard.Spec.ShardName),
-		"cell",
-		cellName,
-		"pdb",
-	)
-
-	labels := shardPDBLabels(shard)
-	metadata.AddCellLabel(labels, multigresv1alpha1.CellName(cellName))
-	selectorLabels := metadata.GetSelectorLabels(labels)
-	minAvailable := intstr.FromInt32(1)
-
-	pdb := &policyv1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pdbName,
-			Namespace: shard.Namespace,
-			Labels:    labels,
-		},
-		Spec: policyv1.PodDisruptionBudgetSpec{
-			MinAvailable: &minAvailable,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: selectorLabels,
-			},
-		},
-	}
-
-	if err := ctrl.SetControllerReference(shard, pdb, scheme); err != nil {
-		return nil, fmt.Errorf("failed to set controller reference: %w", err)
-	}
-
-	return pdb, nil
-}
-
-// BuildShardPodDisruptionBudgets returns every PDB required by the shard. A
-// two-cell cross-cell durability policy gets one additional integer budget per
-// cell so Kubernetes cannot evict the final available member of either cell.
+// BuildShardPodDisruptionBudgets returns the single PDB required by the shard.
+// A pooler must never match more than one PDB because the Kubernetes Eviction
+// API rejects evictions covered by multiple budgets. Cell placement safety is
+// therefore coordinated by the maintenance surge handshake rather than an
+// overlapping cell-scoped PDB.
 func BuildShardPodDisruptionBudgets(
 	shard *multigresv1alpha1.Shard,
 	scheme *runtime.Scheme,
@@ -126,20 +80,7 @@ func BuildShardPodDisruptionBudgets(
 	if err != nil {
 		return nil, err
 	}
-	desired := []*policyv1.PodDisruptionBudget{shardPDB}
-
-	cells := shardCells(shard)
-	if shard.Spec.DurabilityPolicy != multiCellAtLeast2Policy || len(cells) != 2 {
-		return desired, nil
-	}
-	for _, cell := range cells {
-		cellPDB, err := BuildCellPodDisruptionBudget(shard, cell, scheme)
-		if err != nil {
-			return nil, err
-		}
-		desired = append(desired, cellPDB)
-	}
-	return desired, nil
+	return []*policyv1.PodDisruptionBudget{shardPDB}, nil
 }
 
 func shardPDBLabels(shard *multigresv1alpha1.Shard) map[string]string {

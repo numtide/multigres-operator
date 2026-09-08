@@ -296,7 +296,8 @@ func buildHeadlessServiceName(shard *multigresv1alpha1.Shard, poolName, cellName
 // managed pod spec fields that should trigger a rolling update when changed.
 //
 // Fields included: images, commands, args, env vars, resources, volume mounts,
-// container security contexts, pod affinity, and node selector.
+// probes, container security contexts, pod readiness gates, pod affinity, and
+// node selector.
 //
 // Hash write errors are discarded throughout because hash.Hash.Write never returns an error
 // per the hash.Hash interface contract (it panics on failure instead).
@@ -306,6 +307,12 @@ func ComputeSpecHash(pod *corev1.Pod) string {
 
 	hashContainers(h, spec.InitContainers)
 	hashContainers(h, spec.Containers)
+
+	if len(spec.ReadinessGates) > 0 {
+		if b, err := json.Marshal(spec.ReadinessGates); err == nil {
+			_, _ = fmt.Fprintf(h, "readinessGates=%s", b)
+		}
+	}
 
 	for _, v := range spec.Volumes {
 		if b, err := json.Marshal(v); err == nil {
@@ -387,6 +394,21 @@ func hashContainers(h hash.Hash32, containers []corev1.Container) {
 		if c.SecurityContext != nil {
 			if b, err := json.Marshal(c.SecurityContext); err == nil {
 				_, _ = fmt.Fprintf(h, "sc=%s", b)
+			}
+		}
+		for _, probe := range []struct {
+			name  string
+			value *corev1.Probe
+		}{
+			{name: "startup", value: c.StartupProbe},
+			{name: "liveness", value: c.LivenessProbe},
+			{name: "readiness", value: c.ReadinessProbe},
+		} {
+			if probe.value == nil {
+				continue
+			}
+			if b, err := json.Marshal(probe.value); err == nil {
+				_, _ = fmt.Fprintf(h, "%sProbe=%s", probe.name, b)
 			}
 		}
 	}

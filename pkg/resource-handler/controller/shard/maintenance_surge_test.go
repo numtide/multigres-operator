@@ -198,6 +198,89 @@ func TestExplicitMaintenanceRequestWaitsForSurge(t *testing.T) {
 	}
 }
 
+func TestScaleUpPromotesMaintenanceSurgesToDesiredCapacity(t *testing.T) {
+	t.Parallel()
+	scheme := maintenanceSurgeTestScheme(t)
+	shard := maintenanceSurgeTestShard()
+	poolName := "primary"
+	pool := shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)]
+	pool.ReplicasPerCell = ptr.To(int32(2))
+	shard.Spec.Pools[multigresv1alpha1.PoolName(poolName)] = pool
+	shard.Spec.Replicas = ptr.To(int32(4))
+
+	objects := []client.Object{shard}
+	for _, cellName := range []string{"zone-a", "zone-b"} {
+		for index := 0; index < 2; index++ {
+			pod, err := BuildPoolPod(shard, poolName, cellName, pool, index, scheme)
+			if err != nil {
+				t.Fatalf("build pooler %s/%d: %v", cellName, index, err)
+			}
+			if index == 1 {
+				pod.Annotations[metadata.AnnotationMaintenanceSurge] = maintenanceAnnotationTrue
+			}
+			setReady(pod, true)
+			objects = append(objects, pod)
+		}
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&corev1.Pod{}).
+		WithObjects(objects...).
+		Build()
+	r := &ShardReconciler{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	// The PDB must treat deterministic indices 0 and 1 as the four desired
+	// replicas immediately, even before stale surge annotations are cleaned up.
+	if err := r.reconcileShardPDB(t.Context(), shard); err != nil {
+		t.Fatalf("reconcile shard PDB: %v", err)
+	}
+	pdb, err := BuildShardPodDisruptionBudget(shard, scheme)
+	if err != nil {
+		t.Fatalf("build shard PDB: %v", err)
+	}
+	if err := c.Get(t.Context(), client.ObjectKeyFromObject(pdb), pdb); err != nil {
+		t.Fatalf("get shard PDB: %v", err)
+	}
+	if got := pdb.Spec.MinAvailable.IntValue(); got != 3 {
+		t.Fatalf("minAvailable after scale-up = %d, want 3", got)
+	}
+
+	localPods, localPVCs := getLocalPoolObjects(t, c, shard, poolName, "zone-a")
+	active, acted, err := r.reconcileCellMaintenanceSurge(
+		t.Context(),
+		shard,
+		poolName,
+		"zone-a",
+		pool,
+		localPods,
+		localPVCs,
+		2,
+		&shardRolloutTracker{},
+	)
+	if err != nil {
+		t.Fatalf("promote surge after scale-up: %v", err)
+	}
+	if !acted || active != 0 {
+		t.Fatalf("promotion result = active %d, acted %v; want 0, true", active, acted)
+	}
+	promoted := &corev1.Pod{}
+	key := types.NamespacedName{
+		Name:      BuildPoolPodName(shard, poolName, "zone-a", 1),
+		Namespace: shard.Namespace,
+	}
+	if err := c.Get(t.Context(), key, promoted); err != nil {
+		t.Fatalf("get promoted pooler: %v", err)
+	}
+	if isMaintenanceSurge(promoted) {
+		t.Fatal("desired pooler retained the maintenance surge annotation")
+	}
+}
+
 func maintenanceSurgeTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
