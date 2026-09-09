@@ -101,6 +101,9 @@ func MustLoadCoreTemplate(repoRelPath, namespace string) *multigresv1alpha1.Core
 		if tmpl.Spec.Multiadmin != nil {
 			tmpl.Spec.Multiadmin.Resources = CIResources()
 		}
+		if tmpl.Spec.MultiadminWeb != nil {
+			tmpl.Spec.MultiadminWeb.Resources = CIResources()
+		}
 		return tmpl
 	}
 	panic(fmt.Sprintf("%s: no *CoreTemplate found", repoRelPath))

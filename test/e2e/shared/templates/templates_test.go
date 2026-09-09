@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"github.com/multigres/multigres-operator/test/e2e/framework"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,9 +63,14 @@ func testVerifyPropagation(t *testing.T) {
 		t.Fatalf("list Shards: %v", err)
 	}
 	shard := shards.Items[0]
+	require.Len(t, shard.Spec.Pools, len(shardTmpl.Spec.Pools))
 
 	// Pool storage from ShardTemplate should be 1Gi.
 	for poolName, pool := range shard.Spec.Pools {
+		require.Equal(
+			t, shardTmpl.Spec.Pools[poolName].ReplicasPerCell, pool.ReplicasPerCell,
+			"pool %s must inherit the template's failure-safe replica count", poolName,
+		)
 		if pool.Storage.Size != "1Gi" {
 			t.Errorf("pool %s storage = %s, want 1Gi (from ShardTemplate)", poolName, pool.Storage.Size)
 		}
@@ -71,6 +78,25 @@ func testVerifyPropagation(t *testing.T) {
 
 	// Wait for all pods to come up.
 	cluster.WaitForAllPodsReady(t, ns)
+
+	// Check actual resolution, not values that could also come from defaults.
+	live := framework.GetCluster(t, c, ns, cr.Name)
+	require.NotNil(t, live.Status.ResolvedTemplates)
+	require.ElementsMatch(
+		t,
+		[]multigresv1alpha1.TemplateRef{"e2e-core"},
+		live.Status.ResolvedTemplates.CoreTemplates,
+	)
+	require.ElementsMatch(
+		t,
+		[]multigresv1alpha1.TemplateRef{"e2e-cell"},
+		live.Status.ResolvedTemplates.CellTemplates,
+	)
+	require.ElementsMatch(
+		t,
+		[]multigresv1alpha1.TemplateRef{"e2e-shard"},
+		live.Status.ResolvedTemplates.ShardTemplates,
+	)
 }
 
 func testPartialOverride(t *testing.T) {

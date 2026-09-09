@@ -90,32 +90,48 @@ func CIContainerConfig() multigresv1alpha1.ContainerConfig {
 // Synthetic pools use a failure-safe bootstrap cohort; existing replica counts
 // and deployment topology are preserved.
 func WithCIResources(spec *multigresv1alpha1.MultigresClusterSpec) {
-	// Etcd
-	if spec.GlobalTopoServer == nil {
+	// Template-backed components get CI resources from the template loaders.
+	// Do not add an inline spec that would shadow a default or conflict with
+	// an explicit template reference (or an external topology server).
+	coreTemplate := spec.TemplateDefaults.CoreTemplate
+	if spec.GlobalTopoServer == nil && coreTemplate == "" {
 		spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{}
 	}
-	if spec.GlobalTopoServer.Etcd == nil {
-		spec.GlobalTopoServer.Etcd = &multigresv1alpha1.EtcdSpec{}
+	if topo := spec.GlobalTopoServer; topo != nil && topo.External == nil &&
+		topo.TemplateRef == "" {
+		if topo.Etcd == nil && coreTemplate == "" {
+			topo.Etcd = &multigresv1alpha1.EtcdSpec{}
+		}
+		if topo.Etcd != nil {
+			topo.Etcd.Resources = CIResources()
+		}
 	}
-	spec.GlobalTopoServer.Etcd.Resources = CIResources()
 
 	// Multiadmin
-	if spec.Multiadmin == nil {
+	if spec.Multiadmin == nil && coreTemplate == "" {
 		spec.Multiadmin = &multigresv1alpha1.MultiadminConfig{}
 	}
-	if spec.Multiadmin.Spec == nil {
-		spec.Multiadmin.Spec = &multigresv1alpha1.StatelessSpec{}
+	if admin := spec.Multiadmin; admin != nil && admin.TemplateRef == "" {
+		if admin.Spec == nil && coreTemplate == "" {
+			admin.Spec = &multigresv1alpha1.StatelessSpec{}
+		}
+		if admin.Spec != nil {
+			admin.Spec.Resources = CIResources()
+		}
 	}
-	spec.Multiadmin.Spec.Resources = CIResources()
 
 	// Multiadmin Web
-	if spec.MultiadminWeb == nil {
+	if spec.MultiadminWeb == nil && coreTemplate == "" {
 		spec.MultiadminWeb = &multigresv1alpha1.MultiadminWebConfig{}
 	}
-	if spec.MultiadminWeb.Spec == nil {
-		spec.MultiadminWeb.Spec = &multigresv1alpha1.StatelessSpec{}
+	if web := spec.MultiadminWeb; web != nil && web.TemplateRef == "" {
+		if web.Spec == nil && coreTemplate == "" {
+			web.Spec = &multigresv1alpha1.StatelessSpec{}
+		}
+		if web.Spec != nil {
+			web.Spec.Resources = CIResources()
+		}
 	}
-	spec.MultiadminWeb.Spec.Resources = CIResources()
 
 	// Cells → gateway
 	for i := range spec.Cells {
@@ -125,6 +141,10 @@ func WithCIResources(spec *multigresv1alpha1.MultigresClusterSpec) {
 		// zone-scoped pods land on the same node.
 		spec.Cells[i].ZoneID = "us-central1-a"
 		spec.Cells[i].Region = ""
+		if spec.Cells[i].Overrides != nil || (spec.Cells[i].Spec == nil &&
+			spec.EffectiveCellTemplate(spec.Cells[i].CellTemplate) != "") {
+			continue
+		}
 		if spec.Cells[i].Spec == nil {
 			spec.Cells[i].Spec = &multigresv1alpha1.CellInlineSpec{}
 		}
@@ -145,24 +165,29 @@ func WithCIResources(spec *multigresv1alpha1.MultigresClusterSpec) {
 		}
 		for j := range spec.Databases[i].TableGroups {
 			if len(spec.Databases[i].TableGroups[j].Shards) == 0 {
-				failureSafeReplicas := int32(3)
-				spec.Databases[i].TableGroups[j].Shards = []multigresv1alpha1.ShardConfig{{
-					Name: "0-inf",
-					Spec: &multigresv1alpha1.ShardInlineSpec{
-						Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
-							"default": {
-								Type:            "readWrite",
-								ReplicasPerCell: &failureSafeReplicas,
+				spec.Databases[i].TableGroups[j].Shards = []multigresv1alpha1.ShardConfig{
+					{Name: "0-inf"},
+				}
+				if spec.TemplateDefaults.ShardTemplate == "" {
+					failureSafeReplicas := int32(3)
+					spec.Databases[i].TableGroups[j].Shards = []multigresv1alpha1.ShardConfig{{
+						Name: "0-inf",
+						Spec: &multigresv1alpha1.ShardInlineSpec{
+							Pools: map[multigresv1alpha1.PoolName]multigresv1alpha1.PoolSpec{
+								"default": {
+									Type:            "readWrite",
+									ReplicasPerCell: &failureSafeReplicas,
+								},
 							},
 						},
-					},
-				}}
+					}}
+				}
 			}
 			for k := range spec.Databases[i].TableGroups[j].Shards {
 				shard := &spec.Databases[i].TableGroups[j].Shards[k]
-				// Shards with overrides get resources from their template —
-				// setting Spec here would violate the "spec XOR overrides" rule.
-				if shard.Overrides != nil {
+				// Preserve template selection and the spec/overrides union.
+				if shard.Overrides != nil || (shard.Spec == nil &&
+					(shard.ShardTemplate != "" || spec.TemplateDefaults.ShardTemplate != "")) {
 					continue
 				}
 				if shard.Spec == nil {
