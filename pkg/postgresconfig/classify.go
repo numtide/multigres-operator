@@ -2,19 +2,33 @@ package postgresconfig
 
 import "strings"
 
-// restartContexts are the pg_settings "context" values whose parameters only
-// take effect after a full PostgreSQL restart. A configuration reload (SIGHUP)
-// does not apply them:
+// restartContexts are the pg_settings "context" values whose parameters do not
+// take effect for the running data plane on a configuration reload (SIGHUP), so
+// the operator must recreate the pods to apply them:
 //
 //   - postmaster: settable only at server start (e.g. shared_buffers,
 //     max_connections, wal_level).
 //   - internal: compiled-in / read-only (e.g. block_size); never reloadable.
+//   - backend / superuser-backend: fixed at backend start. A SIGHUP updates the
+//     value the postmaster hands to SUBSEQUENTLY-started backends, but existing
+//     backends keep their start-time value (PostgreSQL does not re-read the
+//     config file mid-session; see set_config_option's PGC_BACKEND handling).
+//     Because the multipooler fronts PostgreSQL with long-lived pooled backends,
+//     no new backend is started on a reload, so params like log_connections /
+//     log_disconnections would silently never take effect until the pods are
+//     recreated. Classifying them as restart recycles those backends so the
+//     change actually applies. (The pooler's ReloadConfig would even report the
+//     reload as succeeded — pg_file_settings.applied is true for these — so
+//     without this the operator would mark the change done while it had no
+//     effect.)
 //
-// Every other context (sighup, superuser, user, backend, superuser-backend) is
-// applied by a reload without a restart.
+// Every other context (sighup, superuser, user) is applied by a reload without a
+// restart.
 var restartContexts = map[string]bool{
-	"postmaster": true,
-	"internal":   true,
+	"postmaster":        true,
+	"internal":          true,
+	"backend":           true,
+	"superuser-backend": true,
 }
 
 // RequiresRestart reports whether changing the given parameter requires a
