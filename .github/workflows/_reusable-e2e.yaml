@@ -100,6 +100,9 @@ jobs:
           restore-keys: |
             go-e2e-${{ runner.os }}-
 
+      - name: Verify e2e fixtures and helpers
+        run: go test -tags=e2e ./test/e2e/framework -count=1
+
       - name: Install Kind
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:

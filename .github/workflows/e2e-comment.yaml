@@ -77,14 +77,59 @@ jobs:
               target_url: `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
 
-  e2e:
-    name: E2E tests
+  e2e-build:
+    name: E2E build
     needs: check-comment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      ref: ${{ steps.source.outputs.ref }}
+      tests: ${{ steps.source.outputs.tests }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.check-comment.outputs.ref }}
+          persist-credentials: false
+      - name: Record source and discover test packages
+        id: source
+        shell: bash
+        run: |
+          # Every test job must use the exact source used to build the image,
+          # even if the PR's merge ref changes while the workflow is running.
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          tests=$(find test/e2e/shared -name '*_test.go' -exec dirname {} \; |
+            sort -u | sed 's|^test/e2e/shared/||' |
+            jq -Rsc 'split("\n") | map(select(length > 0))')
+          jq -e 'length > 0 and all(.[]; test("^[a-z0-9][a-z0-9_-]*$"))' <<< "$tests"
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
+      - name: Build operator image
+        run: make container
+      - name: Save operator image
+        run: docker save "$(make -s print-img)" -o /tmp/operator-image.tar
+      - name: Upload operator image
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: operator-image
+          path: /tmp/operator-image.tar
+          retention-days: 1
+
+  e2e:
+    name: "E2E (${{ matrix.test }})"
+    needs: e2e-build
+    strategy:
+      fail-fast: false
+      matrix:
+        test: ${{ fromJSON(needs.e2e-build.outputs.tests) }}
     permissions:
       contents: read
     uses: ./.github/workflows/_reusable-e2e.yaml
     with:
-      ref: ${{ needs.check-comment.outputs.ref }}
+      ref: ${{ needs.e2e-build.outputs.ref }}
+      test-spec: ${{ matrix.test }}
+      mode: shared
+      operator-image-artifact: operator-image
 
   report:
     name: Report status

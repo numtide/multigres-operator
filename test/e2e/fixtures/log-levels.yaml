@@ -34,8 +34,7 @@ spec:
                   default:
                     type: readWrite
                     cells: ["zone-a"]
-                    # 1 replica for CI resource constraints. Only operator
-                    # behavior is tested; data-plane correctness needs more.
-                    replicasPerCell: 1
+                    # AT_LEAST_2 bootstrap must tolerate losing one cohort member.
+                    replicasPerCell: 3
                     storage:
                       size: "1Gi"

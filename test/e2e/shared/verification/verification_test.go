@@ -9,9 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -208,26 +212,69 @@ func testPDB(t *testing.T) {
 	}
 
 	cr := framework.MustLoadCluster("test/e2e/fixtures/base.yaml", ns)
+	// Four members across two pools and cells must share one shard-wide budget.
+	cr.Spec.Cells = append(cr.Spec.Cells, multigresv1alpha1.CellConfig{
+		Name: "zone-b", ZoneID: "us-central1-a",
+	})
+	pools := cr.Spec.Databases[0].TableGroups[0].Shards[0].Spec.Pools
+	basePool := pools["default"]
+	extra := basePool.DeepCopy()
+	extra.ReplicasPerCell = ptr.To(int32(1))
+	extra.Cells = []multigresv1alpha1.CellName{"zone-b"}
+	pools["extra"] = *extra
 	if err := c.Create(context.Background(), cr); err != nil {
 		t.Fatalf("create MultigresCluster: %v", err)
 	}
+	poolLabels := client.MatchingLabels{
+		metadata.LabelAppComponent: shardcontroller.PoolComponentName,
+	}
+	framework.WaitForPodCount(t, c, ns, poolLabels, 4, "poolers across both pools")
 	cluster.WaitForAllPodsReady(t, ns)
+	shards := &multigresv1alpha1.ShardList{}
+	require.NoError(t, c.List(context.Background(), shards, client.InNamespace(ns)))
+	require.Len(t, shards.Items, 1)
+	poolers := &corev1.PodList{}
+	require.NoError(t, c.List(context.Background(), poolers, client.InNamespace(ns), poolLabels))
+	require.Len(t, poolers.Items, 4)
 
-	// Verify at least 1 PDB exists.
 	pdbs := framework.ListPDBs(t, c, ns)
-	if len(pdbs) == 0 {
-		t.Fatal("expected at least 1 PDB, got 0")
-	}
-
-	// Verify PDB has a selector and maxUnavailable.
+	var shardPDBs []policyv1.PodDisruptionBudget
 	for _, pdb := range pdbs {
-		if pdb.Spec.Selector == nil || len(pdb.Spec.Selector.MatchLabels) == 0 {
-			t.Errorf("PDB %s has no selector", pdb.Name)
-		}
-		if pdb.Spec.MaxUnavailable == nil {
-			t.Errorf("PDB %s has no maxUnavailable", pdb.Name)
+		if owner := metav1.GetControllerOf(&pdb); owner != nil && owner.UID == shards.Items[0].UID {
+			shardPDBs = append(shardPDBs, pdb)
 		}
 	}
+	require.Len(t, shardPDBs, 1)
+	pdb := &shardPDBs[0]
+	minimum := intstr.FromInt32(3)
+	require.Equal(t, &minimum, pdb.Spec.MinAvailable)
+	require.Nil(t, pdb.Spec.MaxUnavailable)
+	require.NotNil(t, pdb.Spec.Selector)
+	selector, err := metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
+	require.NoError(t, err)
+	for _, pod := range poolers.Items {
+		require.True(
+			t, selector.Matches(labels.Set(pod.Labels)), "shard PDB must cover %s", pod.Name,
+		)
+		matches := 0
+		for _, candidate := range pdbs {
+			selector, err := metav1.LabelSelectorAsSelector(candidate.Spec.Selector)
+			require.NoError(t, err)
+			if selector.Matches(labels.Set(pod.Labels)) {
+				matches++
+			}
+		}
+		require.Equal(t, 1, matches, "pooler %s must not match overlapping PDBs", pod.Name)
+	}
+	// Verify the Kubernetes disruption controller agrees with the desired budget.
+	require.Eventually(t, func() bool {
+		if err := c.Get(context.Background(), client.ObjectKeyFromObject(pdb), pdb); err != nil {
+			return false
+		}
+		return pdb.Status.ObservedGeneration == pdb.Generation &&
+			pdb.Status.CurrentHealthy == 4 && pdb.Status.DesiredHealthy == 3 &&
+			pdb.Status.DisruptionsAllowed == 1
+	}, time.Minute, time.Second)
 }
 
 func testMultiadminWeb(t *testing.T) {
