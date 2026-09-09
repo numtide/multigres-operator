@@ -61,6 +61,7 @@ func (r *ShardReconciler) canStartDisruption(
 		return false, fmt.Errorf("list ongoing shard disruptions: %w", err)
 	}
 	var available []string
+	disruptionTarget := posture.DisruptionTarget{Name: target.Name}
 	for i := range pods.Items {
 		pod := &pods.Items[i]
 		if pod.Annotations[metadata.AnnotationDrainState] != "" || !pod.DeletionTimestamp.IsZero() {
@@ -68,6 +69,16 @@ func (r *ShardReconciler) canStartDisruption(
 		}
 		if isAvailablePooler(pod) {
 			available = append(available, pod.Name)
+		}
+		if pod.Name == target.Name && pod.UID == target.UID {
+			disruptionTarget.Unscheduled = pod.Spec.NodeName == "" &&
+				pod.Status.Phase == corev1.PodPending
+			for _, condition := range pod.Status.Conditions {
+				if condition.Type == corev1.PodScheduled &&
+					condition.Status == corev1.ConditionTrue {
+					disruptionTarget.Unscheduled = false
+				}
+			}
 		}
 	}
 	if r.PoolerClients == nil {
@@ -82,7 +93,14 @@ func (r *ShardReconciler) canStartDisruption(
 		return false, nil
 	}
 	defer func() { _ = store.Close() }()
-	if err := posture.CheckDisruption(ctx, store, rpc, shard, available, target.Name); err != nil {
+	if err := posture.CheckDisruption(
+		ctx,
+		store,
+		rpc,
+		shard,
+		available,
+		disruptionTarget,
+	); err != nil {
 		if r.Recorder != nil {
 			r.Recorder.Eventf(
 				shard,

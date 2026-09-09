@@ -15,6 +15,14 @@ import (
 	"github.com/multigres/multigres-operator/pkg/data-handler/topo"
 )
 
+// DisruptionTarget describes the pod being removed.
+type DisruptionTarget struct {
+	Name string
+	// Unscheduled must come from a fresh Kubernetes observation. Only a pod
+	// that has never scheduled may be removed without a topology registration.
+	Unscheduled bool
+}
+
 // CheckDisruption observes the data plane afresh before a planned removal.
 // Kubernetes readiness and cached topology roles alone cannot establish that
 // a previous cohort change or leader election has finished. Missing evidence
@@ -26,8 +34,9 @@ func CheckDisruption(
 	rpc rpcclient.MultipoolerClient,
 	shard *multigresv1alpha1.Shard,
 	availablePodNames []string,
-	targetName string,
+	targetPod DisruptionTarget,
 ) error {
+	targetName := targetPod.Name
 	observed := map[string]*multipoolermanagerdatapb.StatusResponse{}
 	var leader *clustermetadatapb.ID
 	var target *clustermetadatapb.ID
@@ -81,7 +90,7 @@ func CheckDisruption(
 			}
 		}
 	}
-	if target == nil || leader == nil || rule.GetRuleNumber() == nil ||
+	if (target == nil && !targetPod.Unscheduled) || leader == nil || rule.GetRuleNumber() == nil ||
 		!proto.Equal(rule.GetLeaderId(), leader) {
 		return fmt.Errorf("awaiting a registered target and a committed primary")
 	}
@@ -118,6 +127,9 @@ func CheckDisruption(
 		return fmt.Errorf("committed primary is not actively serving")
 	}
 	var remaining []*clustermetadatapb.ID
+	// An unregistered, unscheduled target has no identity to exclude. Require
+	// observations for every committed member in that case: a stale membership
+	// for this pod (or any other missing member) must still block cleanup.
 	for _, member := range rule.GetCohortMembers() {
 		if proto.Equal(member, target) && !proto.Equal(member, leader) {
 			continue
