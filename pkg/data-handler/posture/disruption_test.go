@@ -26,8 +26,14 @@ func TestCheckDisruption(t *testing.T) {
 		rpcError      int
 		topoError     bool
 		leadership    *cm.LeadershipStatus
+		unregistered  bool
+		unscheduled   bool
+		stillInCohort bool
 	}{
 		{name: "healthy primary omits leadership status"},
+		{name: "unregistered unscheduled extra can be removed", unregistered: true, unscheduled: true},
+		{name: "unregistered scheduled extra remains blocked", unregistered: true, wantError: true},
+		{name: "unregistered unscheduled pod still in cohort remains blocked", unregistered: true, unscheduled: true, stillInCohort: true, wantError: true},
 		{name: "empty leadership status is not a resignation", leadership: &cm.LeadershipStatus{}},
 		{name: "explicit active leadership is optional", leadership: &cm.LeadershipStatus{
 			LeaderTerm: 2, Signal: cm.LeadershipSignal_LEADERSHIP_SIGNAL_ACTIVE,
@@ -180,6 +186,15 @@ func TestCheckDisruption(t *testing.T) {
 			if tc.change != nil {
 				tc.change(responses, &names)
 			}
+			if tc.unregistered {
+				poolers = poolers[:2]
+				if !tc.stillInCohort {
+					for _, response := range responses {
+						rule := response.ConsensusStatus.CurrentPosition.Position.Decision
+						rule.CohortMembers = rule.CohortMembers[:2]
+					}
+				}
+			}
 			rpc := rpcclient.NewFakeClient()
 			for i, p := range poolers {
 				rpc.SetStatusResponse(topoclient.ComponentIDString(p.Id), responses[i])
@@ -210,7 +225,16 @@ func TestCheckDisruption(t *testing.T) {
 					shard.Status.PodRoles = map[string]string{"p0": "PRIMARY"}
 				}
 			}
-			err := posture.CheckDisruption(t.Context(), store, rpc, shard, names, target)
+			err := posture.CheckDisruption(
+				t.Context(),
+				store,
+				rpc,
+				shard,
+				names,
+				posture.DisruptionTarget{
+					Name: target, Unscheduled: tc.unscheduled,
+				},
+			)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("CheckDisruption() = %v, wantError %v", err, tc.wantError)
 			}

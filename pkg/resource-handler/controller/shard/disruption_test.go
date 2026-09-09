@@ -11,6 +11,7 @@ import (
 	md "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -91,6 +92,162 @@ func fourToTwoFixture(
 		rpc.SetStatusResponse(topoclient.ComponentIDString(response.ConsensusStatus.Id), response)
 	}
 	return r, shard, groups, rpc, responses
+}
+
+func TestScaleDownUnregisteredExtra(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		nodeName      string
+		scheduled     bool
+		stillInCohort bool
+		wantAction    bool
+	}{
+		{name: "unscheduled extra is cleaned up", wantAction: true},
+		{name: "bound pod still needs registration", nodeName: "worker"},
+		{name: "scheduled condition still needs registration", scheduled: true},
+		{name: "missing committed member blocks cleanup", stillInCohort: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, shard, groups, rpc, responses := fourToTwoFixture(t)
+			name := BuildPoolPodName(shard, "main", "b", 1)
+			key := client.ObjectKey{Namespace: shard.Namespace, Name: name}
+			pod := &corev1.Pod{}
+			if err := r.Get(t.Context(), key, pod); err != nil {
+				t.Fatal(err)
+			}
+			pod.Status.Phase = corev1.PodPending
+			pod.Status.Conditions = []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionFalse},
+			}
+			if err := r.Status().Update(t.Context(), pod); err != nil {
+				t.Fatal(err)
+			}
+			groups["b"][name] = pod.DeepCopy()
+			// Keep the caller's pod stale: scheduling evidence must come from
+			// the uncached API reader used by the disruption preflight.
+			pod.Spec.NodeName = tc.nodeName
+			if err := r.Update(t.Context(), pod); err != nil {
+				t.Fatal(err)
+			}
+			if tc.scheduled {
+				pod.Status.Conditions = append(pod.Status.Conditions, corev1.PodCondition{
+					Type: corev1.PodScheduled, Status: corev1.ConditionTrue,
+				})
+				if err := r.Status().Update(t.Context(), pod); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r.APIReader = r.Client
+			store, err := r.CreateTopoStore(shard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			topo := store.(*disruptionTopo)
+			topo.poolers = slices.DeleteFunc(
+				topo.poolers,
+				func(p *topoclient.MultipoolerInfo) bool {
+					return p.Id.Name == name
+				},
+			)
+			if !tc.stillInCohort {
+				for _, response := range responses {
+					rule := response.ConsensusStatus.CurrentPosition.Position.Decision
+					rule.CohortMembers = slices.DeleteFunc(
+						rule.CohortMembers,
+						func(id *cm.ID) bool { return id.Name == name },
+					)
+					rpc.SetStatusResponse(
+						topoclient.ComponentIDString(response.ConsensusStatus.Id),
+						response,
+					)
+				}
+			}
+			allowed, err := r.canStartDisruption(
+				t.Context(),
+				shard,
+				groups["b"][name],
+				&shardRolloutTracker{},
+			)
+			if err != nil || allowed != tc.wantAction {
+				t.Fatalf(
+					"preflight with stale target: allowed=%v err=%v; want %v",
+					allowed,
+					err,
+					tc.wantAction,
+				)
+			}
+			tracker := &shardRolloutTracker{}
+			action, _, err := r.handleScaleDown(
+				t.Context(),
+				shard,
+				"main",
+				shard.Spec.Pools["main"],
+				groups["b"],
+				1,
+				1,
+				false,
+				tracker,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if action != tc.wantAction || tracker.waitingForRecovery == tc.wantAction {
+				t.Fatalf(
+					"action=%v waitingForRecovery=%v; want action=%v",
+					action,
+					tracker.waitingForRecovery,
+					tc.wantAction,
+				)
+			}
+			if !tc.wantAction {
+				return
+			}
+			if !tracker.HasStarted() {
+				t.Fatal("cleanup must reserve this pass's disruption")
+			}
+			// Complete the ordinary drain/PVC cleanup path, then ensure the
+			// other cell's excess primary is no longer blocked by this pod.
+			for range 3 {
+				if _, err := r.reconcileDrainState(t.Context(), store, shard); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := r.Get(t.Context(), key, pod); err != nil {
+				t.Fatal(err)
+			}
+			groups["b"][name] = pod
+			if _, _, err := r.handleScaleDown(
+				t.Context(),
+				shard,
+				"main",
+				shard.Spec.Pools["main"],
+				groups["b"],
+				1,
+				1,
+				false,
+				&shardRolloutTracker{},
+			); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Get(t.Context(), key, &corev1.Pod{}); !apierrors.IsNotFound(err) {
+				t.Fatalf("excess pod was not deleted: %v", err)
+			}
+			action, _, err = r.handleScaleDown(
+				t.Context(),
+				shard,
+				"main",
+				shard.Spec.Pools["main"],
+				groups["a"],
+				1,
+				1,
+				false,
+				&shardRolloutTracker{},
+			)
+			if err != nil || !action {
+				t.Fatalf("next scale-down did not resume: action=%v err=%v", action, err)
+			}
+		})
+	}
 }
 
 func TestScaleDownWaitsForOtherCellsExtraPodDrain(t *testing.T) {
