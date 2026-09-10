@@ -6,10 +6,6 @@ import (
 	"context"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/multigres/multigres-operator/test/e2e/framework"
 )
 
@@ -52,23 +48,10 @@ func TestLogConnectionsTakesEffect(t *testing.T) {
 	// does not set it, so this proves the "on" below is our change taking effect.
 	framework.WaitForPsqlValue(t, cluster, ns, gw, "SHOW log_connections", "off")
 
-	poolPodUIDs := func() map[string]types.UID {
-		pods := &corev1.PodList{}
-		if err := c.List(ctx, pods, client.InNamespace(ns),
-			client.MatchingLabels{"app.kubernetes.io/component": "shard-pool"}); err != nil {
-			t.Fatalf("list pool pods: %v", err)
-		}
-		uids := map[string]types.UID{}
-		for i := range pods.Items {
-			uids[pods.Items[i].Name] = pods.Items[i].UID
-		}
-		return uids
-	}
-
 	// Change log_connections on a settled cluster so the rollout is not raced by
 	// the initial config still converging.
 	framework.WaitForShardConfigSettled(t, c, ns)
-	before := poolPodUIDs()
+	before := poolPodUIDs(t, ctx, c, ns)
 	if len(before) == 0 {
 		t.Fatal("no pool pods found before enabling log_connections")
 	}
@@ -95,7 +78,7 @@ func TestLogConnectionsTakesEffect(t *testing.T) {
 	// It takes effect because the pods were recreated: a backend-context GUC that a
 	// reload cannot apply to existing pooled backends goes through the restart
 	// path. Changed pool-pod UIDs prove Postgres was actually restarted.
-	after := poolPodUIDs()
+	after := poolPodUIDs(t, ctx, c, ns)
 	recreated := false
 	for name, uid := range before {
 		if after[name] != uid {
