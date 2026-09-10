@@ -168,7 +168,7 @@ func (r *Resolver) ResolveGlobalTopo(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (*multigresv1alpha1.GlobalTopoServerSpec, error) {
-	roots, err := topology.NewRoots(cluster.Annotations, cluster.Namespace, cluster.Name)
+	roots, err := topology.ForCluster(cluster)
 	if err != nil {
 		return nil, fmt.Errorf("deriving global topology root: %w", err)
 	}

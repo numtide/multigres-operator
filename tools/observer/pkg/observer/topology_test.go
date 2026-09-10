@@ -5,6 +5,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -20,6 +21,25 @@ func TestGlobalTopologyRoot(t *testing.T) {
 		objects []client.Object
 		want    string
 	}{
+		"uses bounded fallback for topology TLS": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster-abcdefghijklmnop", Namespace: "namespace-abcdefghijklmnopqrstu",
+				},
+				Spec: multigresv1alpha1.MultigresClusterSpec{
+					TopoTLS: &multigresv1alpha1.TopoTLSConfig{Enabled: ptr.To(true)},
+				},
+			},
+			want: "/multigres-fallback/b-Tmo_r9oWzDWEuz_6f6LFOAmYO7ve1i4ksIy7qa9ac/global",
+		},
+		"preserves long plaintext fallback": {
+			cluster: &multigresv1alpha1.MultigresCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster-abcdefghijklmnop", Namespace: "namespace-abcdefghijklmnopqrstu",
+				},
+			},
+			want: "/multigres/namespace-abcdefghijklmnopqrstu/cluster-abcdefghijklmnop/global",
+		},
 		"uses canonical project root by default": {
 			cluster: &multigresv1alpha1.MultigresCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -67,7 +87,12 @@ func TestGlobalTopologyRoot(t *testing.T) {
 			if err := multigresv1alpha1.AddToScheme(scheme); err != nil {
 				t.Fatal(err)
 			}
-			o := &Observer{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()}
+			o := &Observer{
+				client: fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(tc.objects...).
+					Build(),
+			}
 
 			got, err := o.globalTopologyRoot(t.Context(), tc.cluster)
 			if err != nil {

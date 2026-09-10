@@ -97,7 +97,7 @@ func (r *MultigresClusterReconciler) reconcileTopology(
 		// stays not ready is visible without reading the operator logs.
 		r.Recorder.Eventf(cluster, "Warning", "TopoConnectFailed",
 			"Failed to connect to topology server: %v", err)
-		r.markTopologyConnectFailed(ctx, cluster, err, logger)
+		r.markTopologyFailed(ctx, cluster, "TopoConnectFailed", err, logger)
 		return ctrl.Result{}, fmt.Errorf("failed to open topology store: %w", err)
 	}
 	defer func() { _ = store.Close() }()
@@ -200,20 +200,19 @@ func (r *MultigresClusterReconciler) reconcileTopology(
 // server with the configured credentials.
 const conditionTopologyReady = "TopologyReady"
 
-// markTopologyConnectFailed records a topology connection failure in the
-// cluster status: a Degraded phase, a message carrying the error, and a
-// TopologyReady=False condition. The status write is best effort, since the
-// reconcile already returns the error and will retry.
-func (r *MultigresClusterReconciler) markTopologyConnectFailed(
+// markTopologyFailed sets Degraded and TopologyReady=False.
+// Status write failures are logged; reconciliation will retry the original error.
+func (r *MultigresClusterReconciler) markTopologyFailed(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
+	reason string,
 	cause error,
 	logger interface{ Error(error, string, ...any) },
 ) {
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 		Type:               conditionTopologyReady,
 		Status:             metav1.ConditionFalse,
-		Reason:             "TopoConnectFailed",
+		Reason:             reason,
 		Message:            cause.Error(),
 		ObservedGeneration: cluster.Generation,
 		LastTransitionTime: metav1.Now(),
@@ -221,7 +220,7 @@ func (r *MultigresClusterReconciler) markTopologyConnectFailed(
 	cluster.Status.Phase = multigresv1alpha1.PhaseDegraded
 	cluster.Status.Message = cause.Error()
 	if err := r.Status().Update(ctx, cluster); err != nil {
-		logger.Error(err, "Failed to persist topology connection failure to status")
+		logger.Error(err, "Failed to persist topology failure to status")
 	}
 }
 

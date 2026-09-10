@@ -22,6 +22,7 @@ func RegisterCell(
 	store topoclient.Store,
 	recorder record.EventRecorder,
 	cell *multigresv1alpha1.Cell,
+	topoTLS bool,
 ) error {
 	logger := log.FromContext(ctx)
 
@@ -30,6 +31,7 @@ func RegisterCell(
 		cell.Annotations,
 		cell.Namespace,
 		cell.Labels[metadata.LabelMultigresCluster],
+		topoTLS,
 	)
 	if err != nil {
 		return fmt.Errorf("deriving topology roots for cell %q: %w", cellName, err)

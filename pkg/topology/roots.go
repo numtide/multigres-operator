@@ -3,24 +3,41 @@
 package topology
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strings"
 
+	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 const rootPrefix = "/multigres"
+
+// maxTLSRootBytes is the X.509 common name limit.
+const maxTLSRootBytes = 64
 
 // Roots builds canonical, disjoint topology roots for one Multigres cluster.
 type Roots struct {
 	clusterRoot string
 }
 
-// NewRoots uses the downstream project reference as the stable cluster
-// identity when it is present. Otherwise namespace and cluster name form the
-// identity, preventing equal names in different namespaces from colliding.
-func NewRoots(annotations map[string]string, namespace, clusterName string) (Roots, error) {
+// ForCluster applies the CN length limit only to managed topology TLS.
+func ForCluster(cluster *multigresv1alpha1.MultigresCluster) (Roots, error) {
+	managedTLS := cluster.Spec.TopoTLS.IsEnabled() &&
+		(cluster.Spec.GlobalTopoServer == nil || cluster.Spec.GlobalTopoServer.External == nil)
+	return NewRoots(cluster.Annotations, cluster.Namespace, cluster.Name, managedTLS)
+}
+
+// NewRoots uses the project ref, or namespace/name if absent.
+// With topoTLS, fallbacks over the CN limit are hashed. Explicit refs and
+// plaintext roots are unchanged.
+func NewRoots(
+	annotations map[string]string,
+	namespace, clusterName string,
+	topoTLS bool,
+) (Roots, error) {
 	if projectRef := annotations[metadata.AnnotationProjectRef]; projectRef != "" {
 		encoded, err := encodeSegment("project reference", projectRef)
 		if err != nil {
@@ -37,7 +54,14 @@ func NewRoots(annotations map[string]string, namespace, clusterName string) (Roo
 	if err != nil {
 		return Roots{}, err
 	}
-	return Roots{clusterRoot: rootPrefix + "/" + encodedNamespace + "/" + encodedClusterName}, nil
+	clusterRoot := rootPrefix + "/" + encodedNamespace + "/" + encodedClusterName
+	if topoTLS && len(clusterRoot) > maxTLSRootBytes {
+		// Keep hashes outside /multigres/ so existing prefixes cannot authorize them.
+		// Hashing the escaped path preserves namespace/name boundaries.
+		digest := sha256.Sum256([]byte(clusterRoot))
+		clusterRoot = rootPrefix + "-fallback/" + base64.RawURLEncoding.EncodeToString(digest[:])
+	}
+	return Roots{clusterRoot: clusterRoot}, nil
 }
 
 // ClusterRoot returns the prefix that encloses every topology record this

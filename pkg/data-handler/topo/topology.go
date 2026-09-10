@@ -8,7 +8,6 @@ import (
 
 	"github.com/multigres/multigres/go/common/topoclient"
 	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -120,7 +119,7 @@ func RegisterCellFromSpec(
 	ctx context.Context,
 	store topoclient.Store,
 	recorder record.EventRecorder,
-	owner runtime.Object,
+	owner *multigresv1alpha1.MultigresCluster,
 	cellConfig multigresv1alpha1.CellConfig,
 	localTopo *multigresv1alpha1.LocalTopoServerSpec,
 	topoRef multigresv1alpha1.GlobalTopoServerRef,
@@ -134,15 +133,7 @@ func RegisterCellFromSpec(
 		managedAddress = managedTopoAddress[0]
 	}
 
-	ownerMeta, err := meta.Accessor(owner)
-	if err != nil {
-		return fmt.Errorf("accessing cluster metadata for cell %q: %w", cellName, err)
-	}
-	roots, err := topology.NewRoots(
-		ownerMeta.GetAnnotations(),
-		ownerMeta.GetNamespace(),
-		ownerMeta.GetName(),
-	)
+	roots, err := topology.ForCluster(owner)
 	if err != nil {
 		return fmt.Errorf("deriving topology roots for cell %q: %w", cellName, err)
 	}
