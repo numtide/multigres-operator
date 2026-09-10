@@ -40,7 +40,8 @@ func TestBaselineWinsOverRefForResourceDerivedKeys(t *testing.T) {
 	if want := "192MB"; got != want {
 		t.Errorf(
 			"effective_cache_size = %q, want %q: the operator's resource-derived baseline must win over the deprecated PostgresConfigRef (only inline spec.postgresConfig should override it)",
-			got, want,
+			got,
+			want,
 		)
 	}
 }
