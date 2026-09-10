@@ -408,21 +408,24 @@ func TestReconcilePostgresConfig_MergesRefContent(t *testing.T) {
 		t.Fatalf("operator ConfigMap not created: %v", err)
 	}
 	rendered := got.Data[PostgresConfigMapKey]
-	// Baseline present, and the ref override appended after it.
+	// Baseline present, and the ref rendered BEFORE it so the operator's
+	// resource-derived baseline wins last-write-wins: the baseline's
+	// shared_buffers = 64MB must override the ref's 8GB. The deprecated ref must
+	// not override the operator's sizing math — only inline spec.postgresConfig.
 	if !strings.Contains(rendered, "shared_buffers = 64MB") {
 		t.Errorf("rendered config missing baseline:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "shared_buffers = '8GB'") {
-		t.Errorf("rendered config missing ref override:\n%s", rendered)
+		t.Errorf("rendered config missing ref content:\n%s", rendered)
 	}
 	if strings.Index(
 		rendered,
 		"shared_buffers = '8GB'",
-	) < strings.Index(
+	) > strings.Index(
 		rendered,
 		"shared_buffers = 64MB",
 	) {
-		t.Errorf("ref override should follow the baseline:\n%s", rendered)
+		t.Errorf("ref content should precede the baseline so the baseline wins:\n%s", rendered)
 	}
 }
 
