@@ -21,7 +21,7 @@ jobs:
       ref: ${{ steps.pr.outputs.ref }}
     steps:
       - name: Check permissions
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -35,7 +35,7 @@ jobs:
             }
 
       - name: Add reaction
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
@@ -47,7 +47,7 @@ jobs:
 
       - name: Get PR details
         id: pr
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({
@@ -64,7 +64,7 @@ jobs:
             core.setOutput('ref', `refs/pull/${context.issue.number}/merge`);
 
       - name: Set commit status to pending
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.repos.createCommitStatus({
@@ -88,7 +88,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.check-comment.outputs.ref }}
           persist-credentials: false
@@ -109,7 +109,7 @@ jobs:
       - name: Save operator image
         run: docker save "$(make -s print-img)" -o /tmp/operator-image.tar
       - name: Upload operator image
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: operator-image
           path: /tmp/operator-image.tar
@@ -141,7 +141,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Set commit status
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const state = '${{ needs.e2e.result }}' === 'success' ? 'success' : 'failure';
@@ -156,7 +156,7 @@ jobs:
             });
 
       - name: Comment result on PR
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const result = '${{ needs.e2e.result }}';

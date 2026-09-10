@@ -26,6 +26,11 @@ func TestRequiresRestart(t *testing.T) {
 		{"random_page_cost", false},
 		// superuser context → reload
 		{"session_preload_libraries", false},
+		// backend / superuser-backend context → restart: fixed at backend start, so
+		// a reload never reaches the multipooler's long-lived pooled backends.
+		{"log_connections", true},
+		{"log_disconnections", true},
+		{"post_auth_delay", true},
 		// case-insensitive
 		{"Work_Mem", false},
 		{"SHARED_BUFFERS", true},
