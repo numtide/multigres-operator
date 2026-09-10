@@ -7,16 +7,165 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/multigres/multigres/go/common/topoclient"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
+	"github.com/multigres/multigres-operator/pkg/resolver"
 	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
+
+func TestTopologyTLSLongFallbackUsesSameRoot(t *testing.T) {
+	cluster := topoTLSCluster("cluster-abcdefghijklmnop", "namespace-abcdefghijklmnopqrstu", nil)
+	cluster.Spec.Cells = []multigresv1alpha1.CellConfig{{Name: "zone-a"}}
+	scheme := setupScheme()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+	store := newClusterTopologyMemoryStore(t)
+	r := &MultigresClusterReconciler{
+		Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10),
+		CreateTopoStore: func(ref multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+			assert.Equal(
+				t,
+				"/multigres-fallback/b-Tmo_r9oWzDWEuz_6f6LFOAmYO7ve1i4ksIy7qa9ac/global",
+				ref.RootPath,
+			)
+			return noCloseStore{Store: store}, nil
+		},
+	}
+	require.NoError(t, r.reconcileCertificate(t.Context(), cluster))
+	cert := &unstructured.Unstructured{}
+	cert.SetGroupVersionKind(certGVK)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKey{
+		Namespace: cluster.Namespace, Name: multigresv1alpha1.TopoClientCertName(cluster.Name),
+	}, cert))
+	subject, _, err := unstructured.NestedString(cert.Object, "spec", "literalSubject")
+	require.NoError(t, err)
+	cn, ok := parseCommonName(subject)
+	require.True(t, ok)
+	assert.Equal(t, "/multigres-fallback/b-Tmo_r9oWzDWEuz_6f6LFOAmYO7ve1i4ksIy7qa9ac", cn)
+
+	res := resolver.NewResolver(c, cluster.Namespace)
+	result, err := r.reconcileTopology(t.Context(), cluster, res)
+	require.NoError(t, err)
+	assert.Zero(t, result.RequeueAfter)
+	cell, err := store.GetCell(t.Context(), "zone-a")
+	require.NoError(t, err)
+	assert.Equal(t, cn+"/global", cell.Root)
+
+	cluster.Spec.Cells[0].Spec = &multigresv1alpha1.CellInlineSpec{
+		LocalTopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+			Etcd: &multigresv1alpha1.EtcdSpec{},
+		},
+	}
+	_, _, local, err := res.ResolveCell(t.Context(), cluster, &cluster.Spec.Cells[0])
+	require.NoError(t, err)
+	assert.Equal(t, cn+"/zone-a", local.Etcd.RootPath)
+}
+
+func TestReconcileOversizedProjectRefStatusAndRecovery(t *testing.T) {
+	for _, ref := range []string{strings.Repeat("p", 55), strings.Repeat("/", 19)} {
+		t.Run(ref, func(t *testing.T) {
+			cluster := topoTLSCluster(
+				"cluster",
+				"default",
+				map[string]string{metadata.AnnotationProjectRef: ref},
+			)
+			cluster.Generation = 3
+			scheme := setupScheme()
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).
+				WithStatusSubresource(cluster).Build()
+			r := &MultigresClusterReconciler{
+				Client:   c,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(100),
+				CreateTopoStore: func(_ multigresv1alpha1.GlobalTopoServerRef) (topoclient.Store, error) {
+					return noCloseStore{Store: newClusterTopologyMemoryStore(t)}, nil
+				},
+			}
+			key := client.ObjectKeyFromObject(cluster)
+			_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
+			require.ErrorContains(t, err, "64 byte certificate common name limit")
+			require.NoError(t, c.Get(t.Context(), key, cluster))
+			assert.Equal(t, multigresv1alpha1.PhaseDegraded, cluster.Status.Phase)
+			condition := meta.FindStatusCondition(cluster.Status.Conditions, conditionTopologyReady)
+			require.NotNil(t, condition)
+			assert.Equal(t, metav1.ConditionFalse, condition.Status)
+			assert.Equal(t, "TopoCertificateFailed", condition.Reason)
+			assert.Equal(t, cluster.Generation, condition.ObservedGeneration)
+			assert.Contains(
+				t,
+				condition.Message,
+				"shorten annotation multigres.com/project-ref to at most 53 bytes after path escaping",
+			)
+
+			cluster.Annotations[metadata.AnnotationProjectRef] = strings.Repeat("p", 53)
+			require.NoError(t, c.Update(t.Context(), cluster))
+			_, err = r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
+			require.NoError(t, err)
+			require.NoError(t, c.Get(t.Context(), key, cluster))
+			condition = meta.FindStatusCondition(cluster.Status.Conditions, conditionTopologyReady)
+			require.NotNil(t, condition)
+			assert.Equal(t, metav1.ConditionTrue, condition.Status)
+			assert.Equal(t, "TopoConnected", condition.Reason)
+			assert.NotContains(t, cluster.Status.Message, "certificate common name limit")
+		})
+	}
+}
+
+func TestReconcileCertificatePreservesExplicitLongRoot(t *testing.T) {
+	cluster := topoTLSCluster("cluster-abcdefghijklmnop", "namespace-abcdefghijklmnopqrstu", nil)
+	const explicitRoot = "/multigres/namespace-abcdefghijklmnopqrstu/cluster-abcdefghijklmnop/global"
+	cluster.Spec.GlobalTopoServer = &multigresv1alpha1.GlobalTopoServerSpec{
+		Etcd: &multigresv1alpha1.EtcdSpec{RootPath: explicitRoot},
+	}
+	scheme := setupScheme()
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster).
+		WithStatusSubresource(cluster).
+		Build()
+	r := &MultigresClusterReconciler{
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+	}
+	require.ErrorContains(
+		t,
+		r.reconcileCertificate(t.Context(), cluster),
+		"outside certificate identity",
+	)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(cluster), cluster))
+	assert.Equal(t, explicitRoot, cluster.Spec.GlobalTopoServer.Etcd.RootPath)
+	condition := meta.FindStatusCondition(cluster.Status.Conditions, conditionTopologyReady)
+	require.NotNil(t, condition)
+	assert.Equal(t, "TopoCertificateFailed", condition.Reason)
+	assert.Contains(t, condition.Message, "migrate any existing topology data")
+
+	cluster.Spec.GlobalTopoServer.Etcd.RootPath = ""
+	cluster.Spec.Cells = []multigresv1alpha1.CellConfig{{
+		Name: "zone-a",
+		Spec: &multigresv1alpha1.CellInlineSpec{
+			LocalTopoServer: &multigresv1alpha1.LocalTopoServerSpec{
+				Etcd: &multigresv1alpha1.EtcdSpec{RootPath: explicitRoot + "/zone-a"},
+			},
+		},
+	}}
+	require.NoError(t, c.Update(t.Context(), cluster))
+	require.ErrorContains(
+		t,
+		r.reconcileCertificate(t.Context(), cluster),
+		`cell "zone-a" topology root`,
+	)
+}
 
 func topoTLSCluster(
 	name, namespace string,

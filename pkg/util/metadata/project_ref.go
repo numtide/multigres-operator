@@ -1,8 +1,8 @@
 package metadata
 
 const (
-	// AnnotationProjectRef carries the downstream-facing project identity used
-	// by observability collectors. When absent, cluster name is the fallback.
+	// AnnotationProjectRef identifies the project for observability and topology.
+	// If absent, observability uses the cluster name; topology uses namespace/name.
 	AnnotationProjectRef = "multigres.com/project-ref"
 
 	// Prometheus scrape annotations for autodiscovery of exporter endpoints.

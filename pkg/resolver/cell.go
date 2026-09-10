@@ -35,7 +35,7 @@ func (r *Resolver) ResolveCell(
 
 	// Note: We do NOT default LocalTopo here because it is optional.
 	if localTopo != nil {
-		roots, err := topology.NewRoots(cluster.Annotations, cluster.Namespace, cluster.Name)
+		roots, err := topology.ForCluster(cluster)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf(
 				"deriving topology roots for cell %q: %w",

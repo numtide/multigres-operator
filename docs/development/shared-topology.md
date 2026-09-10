@@ -20,6 +20,25 @@ The `multigres.com/project-ref` annotation is the preferred stable
 different namespaces cannot collide. Values that are not safe path segments
 are percent-encoded.
 
+With managed topology and `topoTLS` enabled, the cluster root is also the
+client certificate's common name and must fit within 64 bytes. If the
+namespace/name fallback exceeds that limit, it becomes
+`/multigres-fallback/<hash>`, where `<hash>` is the unpadded base64url SHA-256
+digest of the original escaped cluster root. Shorter roots, plaintext roots,
+and external topology roots keep their existing paths. The `topoTLS` setting
+is immutable, so this does not move running plaintext clusters to another
+keyspace.
+
+If an explicit global or cell root points outside the shortened identity, the
+operator reports a certificate failure instead of changing it. Align the
+configured root and migrate any existing topology data before retrying.
+
+Explicit project refs are never shortened. With managed topology TLS, they
+must fit within 53 bytes after percent-encoding. An oversized ref prevents
+certificate creation and sets `TopologyReady=False` with reason
+`TopoCertificateFailed`, including the root length and limit. The condition
+clears after a successful topology connection.
+
 For example, a cluster annotated with project ref `proj_123` and containing
 cells `zone-a` and `zone-b` uses:
 

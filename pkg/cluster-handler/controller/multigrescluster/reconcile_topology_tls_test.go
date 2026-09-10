@@ -40,7 +40,7 @@ func TestMarkTopologyConnectFailed_SurfacesInStatus(t *testing.T) {
 	cause := errors.New(
 		`reading topology client TLS Secret "test-cluster-topo-client-tls" in namespace "supabase": not found`,
 	)
-	r.markTopologyConnectFailed(context.Background(), cluster, cause, testLogger{})
+	r.markTopologyFailed(context.Background(), cluster, "TopoConnectFailed", cause, testLogger{})
 
 	got := &multigresv1alpha1.MultigresCluster{}
 	if err := c.Get(
