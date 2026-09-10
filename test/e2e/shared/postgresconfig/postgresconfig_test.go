@@ -10,7 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
@@ -113,20 +112,7 @@ func TestPostgresConfigManagement(t *testing.T) {
 		// racing the primary-last restart still converging the initial config.
 		framework.WaitForShardConfigSettled(t, c, ns)
 
-		poolPodUIDs := func() map[string]types.UID {
-			pods := &corev1.PodList{}
-			if err := c.List(ctx, pods, client.InNamespace(ns),
-				client.MatchingLabels{"app.kubernetes.io/component": "shard-pool"}); err != nil {
-				t.Fatalf("list pool pods: %v", err)
-			}
-			uids := map[string]types.UID{}
-			for i := range pods.Items {
-				uids[pods.Items[i].Name] = pods.Items[i].UID
-			}
-			return uids
-		}
-
-		before := poolPodUIDs()
+		before := poolPodUIDs(t, ctx, c, ns)
 		if len(before) == 0 {
 			t.Fatal("no pool pods found before reload-safe change")
 		}
@@ -144,7 +130,7 @@ func TestPostgresConfigManagement(t *testing.T) {
 
 		// The pods must be the very same objects — a reload-safe change must not
 		// recreate them. Stable UIDs prove Postgres was never restarted.
-		after := poolPodUIDs()
+		after := poolPodUIDs(t, ctx, c, ns)
 		if len(after) != len(before) {
 			t.Errorf("pool pod set changed across a reload-safe change: before=%v after=%v", before, after)
 		}
@@ -173,19 +159,6 @@ func TestPostgresConfigManagement(t *testing.T) {
 	t.Run("removing a reload-safe setting reverts it in place", func(t *testing.T) {
 		framework.WaitForShardConfigSettled(t, c, ns)
 
-		poolPodUIDs := func() map[string]types.UID {
-			pods := &corev1.PodList{}
-			if err := c.List(ctx, pods, client.InNamespace(ns),
-				client.MatchingLabels{"app.kubernetes.io/component": "shard-pool"}); err != nil {
-				t.Fatalf("list pool pods: %v", err)
-			}
-			uids := map[string]types.UID{}
-			for i := range pods.Items {
-				uids[pods.Items[i].Name] = pods.Items[i].UID
-			}
-			return uids
-		}
-
 		// Add cpu_tuple_cost via the inline map and confirm it reloads in.
 		live := framework.GetCluster(t, c, ns, cr.Name)
 		live.Spec.Databases[0].TableGroups[0].Shards[0].Spec.PostgresConfig["cpu_tuple_cost"] = "0.05"
@@ -194,7 +167,7 @@ func TestPostgresConfigManagement(t *testing.T) {
 		}))
 		framework.WaitForPsqlValue(t, cluster, ns, gw, "SHOW cpu_tuple_cost", "0.05")
 
-		before := poolPodUIDs()
+		before := poolPodUIDs(t, ctx, c, ns)
 		if len(before) == 0 {
 			t.Fatal("no pool pods found before the removal")
 		}
@@ -211,7 +184,7 @@ func TestPostgresConfigManagement(t *testing.T) {
 		framework.WaitForPsqlValue(t, cluster, ns, gw, "SHOW cpu_tuple_cost", "0.01")
 
 		// The removal was applied by an in-place reload — no pod recreation.
-		after := poolPodUIDs()
+		after := poolPodUIDs(t, ctx, c, ns)
 		if len(after) != len(before) {
 			t.Errorf("pool pod set changed across a reload-safe removal: before=%v after=%v", before, after)
 		}
