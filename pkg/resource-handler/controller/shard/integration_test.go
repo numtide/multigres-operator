@@ -1935,7 +1935,6 @@ func setInlineConfig(
 		if s.Spec.PostgresConfig == nil {
 			s.Spec.PostgresConfig = map[string]string{}
 		}
-		base := s.DeepCopy()
 		s.Spec.PostgresConfig[key] = val
 		return c.Patch(ctx, s, client.MergeFrom(base))
 	}); err != nil {
