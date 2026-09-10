@@ -21,7 +21,7 @@ jobs:
       ref: ${{ steps.pr.outputs.ref }}
     steps:
       - name: Check permissions
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -35,7 +35,7 @@ jobs:
             }
 
       - name: Add reaction
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
@@ -47,7 +47,7 @@ jobs:
 
       - name: Get PR details
         id: pr
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({
@@ -64,7 +64,7 @@ jobs:
             core.setOutput('ref', `refs/pull/${context.issue.number}/merge`);
 
       - name: Set commit status to pending
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.repos.createCommitStatus({
@@ -141,7 +141,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Set commit status
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const state = '${{ needs.e2e.result }}' === 'success' ? 'success' : 'failure';
@@ -156,7 +156,7 @@ jobs:
             });
 
       - name: Comment result on PR
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const result = '${{ needs.e2e.result }}';
