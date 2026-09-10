@@ -33,13 +33,14 @@ func TestPostgresConfigManagement(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// Legacy postgresConfigRef ConfigMap: sets random_page_cost (not in the
-	// inline map, to prove the ref is honored) and work_mem (which the inline map
-	// overrides, to prove precedence).
+	// Legacy postgresConfigRef ConfigMap: sets seq_page_cost (a key the operator's
+	// baseline does NOT set and that is not in the inline map, to prove the ref is
+	// honored for keys the baseline leaves alone) and work_mem (which the inline
+	// map overrides, to prove precedence).
 	refCM := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-ref", Namespace: ns},
 		Data: map[string]string{
-			"custom.conf": "random_page_cost = '2.5'\nwork_mem = '64MB'",
+			"custom.conf": "seq_page_cost = '2.5'\nwork_mem = '64MB'",
 		},
 	}
 	if err := c.Create(ctx, refCM); err != nil {
@@ -78,8 +79,11 @@ func TestPostgresConfigManagement(t *testing.T) {
 	})
 
 	t.Run("legacy postgresConfigRef is still honored", func(t *testing.T) {
-		// random_page_cost is only in the ref (not the map), so it must apply.
-		framework.WaitForPsqlValue(t, cluster, ns, gw, "SHOW random_page_cost", "2.5")
+		// seq_page_cost is set only by the ref — not by the operator baseline and
+		// not by the inline map — so the ref value must apply. (The baseline is now
+		// rendered after the ref, so this proves the ref is still layered in for
+		// keys the baseline does not set, rather than being discarded.)
+		framework.WaitForPsqlValue(t, cluster, ns, gw, "SHOW seq_page_cost", "2.5")
 	})
 
 	t.Run("operator renders a per-shard ConfigMap", func(t *testing.T) {
