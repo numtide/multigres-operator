@@ -73,7 +73,7 @@ func (o *Observer) globalTopologyRoot(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (string, error) {
-	roots, err := topology.NewRoots(cluster.Annotations, cluster.Namespace, cluster.Name)
+	roots, err := topology.ForCluster(cluster)
 	if err != nil {
 		return "", err
 	}
@@ -125,7 +125,10 @@ func (o *Observer) globalTopologyRoot(
 	return rootPath, nil
 }
 
-func (o *Observer) findEtcdAddress(ctx context.Context, cluster *multigresv1alpha1.MultigresCluster) string {
+func (o *Observer) findEtcdAddress(
+	ctx context.Context,
+	cluster *multigresv1alpha1.MultigresCluster,
+) string {
 	// Check external etcd endpoints first.
 	if cluster.Spec.GlobalTopoServer != nil &&
 		cluster.Spec.GlobalTopoServer.External != nil &&

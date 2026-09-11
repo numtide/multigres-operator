@@ -7,11 +7,13 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	multigresv1alpha1 "github.com/multigres/multigres-operator/api/v1alpha1"
 	"github.com/multigres/multigres-operator/pkg/resolver"
 	"github.com/multigres/multigres-operator/pkg/topology"
 	"github.com/multigres/multigres-operator/pkg/util/certs"
+	"github.com/multigres/multigres-operator/pkg/util/metadata"
 )
 
 const (
@@ -173,7 +175,7 @@ func buildTopoClientCertificate(
 	cluster *multigresv1alpha1.MultigresCluster,
 	scheme *runtime.Scheme,
 ) (*unstructured.Unstructured, error) {
-	roots, err := topology.NewRoots(cluster.Annotations, cluster.Namespace, cluster.Name)
+	roots, err := topology.ForCluster(cluster)
 	if err != nil {
 		return nil, fmt.Errorf("deriving topology root for client certificate: %w", err)
 	}
@@ -181,8 +183,12 @@ func buildTopoClientCertificate(
 	commonName := roots.ClusterRoot()
 	if len(commonName) > certs.MaxCommonNameBytes {
 		return nil, fmt.Errorf(
-			"topology root %q is %d bytes, over the %d byte certificate common name limit",
-			commonName, len(commonName), certs.MaxCommonNameBytes,
+			"topology root %q is %d bytes, over the %d byte certificate common name limit; shorten annotation %s to at most %d bytes after path escaping",
+			commonName,
+			len(commonName),
+			certs.MaxCommonNameBytes,
+			metadata.AnnotationProjectRef,
+			certs.MaxCommonNameBytes-len("/multigres/"),
 		)
 	}
 
@@ -202,10 +208,9 @@ func buildTopoClientCertificate(
 	})
 }
 
-// topologyIsManaged reports whether the cluster's resolved global topology is a
-// managed etcd server the operator runs and issues a serving certificate for,
-// as opposed to an external topology server the user operates.
-func (r *MultigresClusterReconciler) topologyIsManaged(
+// managedTopologyForCertificate reports whether topology is managed and
+// checks configured roots against the shortened certificate prefix.
+func (r *MultigresClusterReconciler) managedTopologyForCertificate(
 	ctx context.Context,
 	cluster *multigresv1alpha1.MultigresCluster,
 ) (bool, error) {
@@ -215,6 +220,62 @@ func (r *MultigresClusterReconciler) topologyIsManaged(
 		return false, fmt.Errorf(
 			"failed to resolve global topology for client certificate: %w", err,
 		)
+	}
+	if spec.Etcd != nil {
+		roots, err := topology.ForCluster(cluster)
+		if err != nil {
+			return false, fmt.Errorf("deriving topology certificate identity: %w", err)
+		}
+		unbounded, err := topology.NewRoots(
+			cluster.Annotations,
+			cluster.Namespace,
+			cluster.Name,
+			false,
+		)
+		if err != nil {
+			return false, fmt.Errorf("deriving unbounded topology root: %w", err)
+		}
+		// Changing a saved root would abandon its existing keys.
+		// Reject roots outside the certificate prefix.
+		if roots == unbounded {
+			return true, nil
+		}
+		if !strings.HasPrefix(spec.Etcd.RootPath, roots.KeyPrefix()) {
+			return false, fmt.Errorf(
+				"configured topology root %q is outside certificate identity %q; set the global topology root to %q and migrate any existing topology data",
+				spec.Etcd.RootPath,
+				roots.ClusterRoot(),
+				roots.Global(),
+			)
+		}
+		for _, cell := range cluster.Spec.Cells {
+			cell.CellTemplate = cluster.Spec.EffectiveCellTemplate(cell.CellTemplate)
+			_, _, local, err := res.ResolveCell(ctx, cluster, &cell)
+			if err != nil {
+				return false, fmt.Errorf(
+					"resolving cell %q topology for certificate: %w",
+					cell.Name,
+					err,
+				)
+			}
+			if local == nil {
+				continue
+			}
+			var localRoot string
+			if local.Etcd != nil {
+				localRoot = local.Etcd.RootPath
+			} else if local.External != nil {
+				localRoot = local.External.RootPath
+			}
+			if localRoot != "" && !strings.HasPrefix(localRoot, roots.KeyPrefix()) {
+				return false, fmt.Errorf(
+					"cell %q topology root %q is outside certificate identity %q; align the cell topology root and migrate any existing topology data",
+					cell.Name,
+					localRoot,
+					roots.ClusterRoot(),
+				)
+			}
+		}
 	}
 	return spec.Etcd != nil, nil
 }
@@ -274,8 +335,9 @@ func (r *MultigresClusterReconciler) reconcileCertificate(
 		desiredCerts = append(desiredCerts, internalCerts...)
 	}
 	if cluster.Spec.TopoTLS.IsEnabled() {
-		managed, err := r.topologyIsManaged(ctx, cluster)
+		managed, err := r.managedTopologyForCertificate(ctx, cluster)
 		if err != nil {
+			r.markTopologyFailed(ctx, cluster, "TopoCertificateFailed", err, log.FromContext(ctx))
 			return err
 		}
 		// An external topology server brings its own CA and client Secrets, so a
@@ -286,6 +348,13 @@ func (r *MultigresClusterReconciler) reconcileCertificate(
 		if managed {
 			topoClientCert, err := buildTopoClientCertificate(cluster, r.Scheme)
 			if err != nil {
+				r.markTopologyFailed(
+					ctx,
+					cluster,
+					"TopoCertificateFailed",
+					err,
+					log.FromContext(ctx),
+				)
 				return fmt.Errorf(
 					"failed to build topology client cert-manager Certificate: %w", err,
 				)

@@ -94,7 +94,7 @@ func TestRegisterCell(t *testing.T) {
 		// Register a different cell name to ensure it's not already in topo
 		cell := newTestCell("cell2")
 
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -128,7 +128,7 @@ func TestRegisterCell(t *testing.T) {
 		cell := newTestCell("cell2")
 		cell.Spec.Metadata = `{"zoneId":"use1-az1","custom":"value"}`
 
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -153,12 +153,12 @@ func TestRegisterCell(t *testing.T) {
 		cell := newTestCell("cell1")
 		cell.Spec.Metadata = `{"zoneId":"use1-az1"}`
 
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("first registration failed: %v", err)
 		}
 
 		cell.Spec.Metadata = `{"zoneId":"use1-az2"}`
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("re-registration failed: %v", err)
 		}
 
@@ -182,7 +182,7 @@ func TestRegisterCell(t *testing.T) {
 		recorder := record.NewFakeRecorder(10)
 		cell := newTestCell("cell1")
 
-		err := topo.RegisterCell(context.Background(), store, recorder, cell)
+		err := topo.RegisterCell(t.Context(), store, recorder, cell, false)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -199,10 +199,10 @@ func TestRegisterCell(t *testing.T) {
 		recorder := record.NewFakeRecorder(10)
 		cell := newTestCell("cell1")
 
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("first registration failed: %v", err)
 		}
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("second registration should succeed (idempotent), got: %v", err)
 		}
 	})
@@ -229,7 +229,7 @@ func TestRegisterCell(t *testing.T) {
 			t.Fatalf("seeding stale cell: %v", err)
 		}
 
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("re-registration should update stale cell, got: %v", err)
 		}
 
@@ -260,7 +260,7 @@ func TestRegisterCell(t *testing.T) {
 		cell := newTestCell("cell2")
 		cell.Spec.TopoServer = nil
 
-		if err := topo.RegisterCell(context.Background(), store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(t.Context(), store, recorder, cell, false); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -289,7 +289,7 @@ func TestRegisterCell(t *testing.T) {
 		cell.Spec.TopoServer.External.RootPath = ""
 
 		if err := topo.RegisterCell(
-			context.Background(), store, record.NewFakeRecorder(10), cell,
+			context.Background(), store, record.NewFakeRecorder(10), cell, false,
 		); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -319,7 +319,7 @@ func TestUnregisterCell(t *testing.T) {
 		cell := newTestCell("cell1")
 		ctx := context.Background()
 
-		if err := topo.RegisterCell(ctx, store, recorder, cell); err != nil {
+		if err := topo.RegisterCell(ctx, store, recorder, cell, false); err != nil {
 			t.Fatalf("registration failed: %v", err)
 		}
 		if err := topo.UnregisterCell(ctx, store, recorder, cell); err != nil {
