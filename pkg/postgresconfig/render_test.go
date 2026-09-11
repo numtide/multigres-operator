@@ -41,7 +41,7 @@ func TestRender(t *testing.T) {
 		}
 	})
 
-	t.Run("ref content appended verbatim after the baseline", func(t *testing.T) {
+	t.Run("ref content emitted verbatim before the baseline", func(t *testing.T) {
 		ref := "shared_buffers = '8GB'\n# a comment"
 		got, err := Render(Defaults(), ref, nil)
 		if err != nil {
@@ -50,9 +50,12 @@ func TestRender(t *testing.T) {
 		if !strings.Contains(got, ref) {
 			t.Errorf("ref content not emitted verbatim, got:\n%s", got)
 		}
-		// Ref must come after the baseline so it wins last-write-wins.
-		if strings.Index(got, ref) < strings.Index(got, "shared_buffers = 64MB") {
-			t.Errorf("ref content should follow the baseline, got:\n%s", got)
+		// Ref must come BEFORE the baseline so the operator's resource-derived
+		// baseline wins last-write-wins: here the baseline's shared_buffers = 64MB
+		// must override the ref's 8GB. The deprecated ref may not override the
+		// operator's sizing math — only inline spec.postgresConfig can.
+		if strings.Index(got, ref) > strings.Index(got, "shared_buffers = 64MB") {
+			t.Errorf("ref content should precede the baseline, got:\n%s", got)
 		}
 	})
 

@@ -1,9 +1,13 @@
 // Package postgresconfig renders the effective postgresql.conf the operator
-// mounts into pgctld. The operator owns config generation end-to-end: a static
-// baseline it defines, followed by the user's legacy PostgresConfigRef content
-// and the inline spec.postgresConfig map, each appended so it overrides earlier
-// layers (PostgreSQL applies later assignments last-write-wins). Resource-
-// derived sizing is baked into the Config before rendering.
+// mounts into pgctld. The operator owns config generation end-to-end. Layers are
+// appended in order of increasing precedence (PostgreSQL applies later
+// assignments last-write-wins): first the user's legacy PostgresConfigRef content
+// (deprecated), then the operator's static, resource-derived baseline, then the
+// inline spec.postgresConfig map. The baseline is rendered AFTER the ref on
+// purpose: the ref is opaque raw text that may transitively `include` an external
+// file the operator never sees, so it must never override the operator's own
+// sizing math — only inline spec.postgresConfig may deviate from the baseline.
+// Resource-derived sizing is baked into the Config before rendering.
 package postgresconfig
 
 import (
@@ -90,21 +94,25 @@ func Defaults() Config {
 	}
 }
 
-// Render produces the effective postgresql.conf: the baseline template rendered
-// with cfg, followed by the user's legacy PostgresConfigRef content (verbatim)
-// and the inline spec.postgresConfig map, each appended so it overrides earlier
-// layers. refContent is the body of the user's PostgresConfigRef key, or empty
-// when no ref is set; inline may be nil.
+// Render produces the effective postgresql.conf. Layers are appended in order of
+// increasing precedence (last-write-wins): the user's legacy PostgresConfigRef
+// content (verbatim), then the baseline template rendered with cfg, then the
+// inline spec.postgresConfig map. The baseline is rendered after the ref so the
+// operator's resource-derived values always win over the deprecated ref; only
+// inline overrides the baseline. refContent is the body of the user's
+// PostgresConfigRef key, or empty when no ref is set; inline may be nil.
 func Render(cfg Config, refContent string, inline map[string]string) (string, error) {
 	var b strings.Builder
-	if err := parsedBaseTemplate.Execute(&b, cfg); err != nil {
-		return "", fmt.Errorf("rendering postgres config template: %w", err)
+
+	// The deprecated ref is rendered first so the baseline (next) overrides it.
+	if trimmed := strings.TrimRight(refContent, "\n"); trimmed != "" {
+		b.WriteString("# postgresConfigRef\n")
+		b.WriteString(trimmed)
+		b.WriteString("\n\n")
 	}
 
-	if trimmed := strings.TrimRight(refContent, "\n"); trimmed != "" {
-		b.WriteString("\n# postgresConfigRef\n")
-		b.WriteString(trimmed)
-		b.WriteString("\n")
+	if err := parsedBaseTemplate.Execute(&b, cfg); err != nil {
+		return "", fmt.Errorf("rendering postgres config template: %w", err)
 	}
 
 	if len(inline) > 0 {
