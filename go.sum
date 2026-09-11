@@ -241,8 +241,8 @@ go.etcd.io/etcd/client/v3 v3.6.14 h1:3hjJbZCFJ3nFR47dZ/jjVu1/z6BRUHN1AA34pRbUW8Q
 go.etcd.io/etcd/client/v3 v3.6.14/go.mod h1:rQqHPE7ju1B1nmaqpGdhRgBHqOTiVaUeymlY1/ATcoM=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
-go.opentelemetry.io/contrib/bridges/otelslog v0.19.0 h1:5RgvxieNq9tS3ewrV1vnODvbHPfKUIJcYtF9Cvz+6aQ=
-go.opentelemetry.io/contrib/bridges/otelslog v0.19.0/go.mod h1:iTBIdNwx/xmUhfgJs6+84S4dIK059811cO1eUBjKcHY=
+go.opentelemetry.io/contrib/bridges/otelslog v0.20.1 h1:5sHc4ToTFjfSZCtGAAM6jPunICAmJX73htv372T4ipc=
+go.opentelemetry.io/contrib/bridges/otelslog v0.20.1/go.mod h1:oa6kgvyz/3GYW04dohd0++xJIH4xdQY8PAbpeCMaM8M=
 go.opentelemetry.io/contrib/bridges/prometheus v0.71.0 h1:9qgxsFLskbDMXl8WMqThoF6w8yGJgCumn9qRc67OmnI=
 go.opentelemetry.io/contrib/bridges/prometheus v0.71.0/go.mod h1:2rCjF4F2siiTeLCzJsaGZ3CK0XIoimCSKXEBPdv+Je0=
 go.opentelemetry.io/contrib/exporters/autoexport v0.71.0 h1:VCsJbp0YLyPtx2tu5Vgv2a2/qLoaMCj8hT2uZ34+Mx0=
